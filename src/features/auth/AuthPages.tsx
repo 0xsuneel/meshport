@@ -284,24 +284,30 @@ export function LoginPage() {
             className="w-full flex items-center justify-center gap-3 bg-brand text-white font-semibold py-4 rounded-2xl active:scale-95 transition-transform shadow-elevation-2 border border-black/10 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
             <Mail className="w-5 h-5" /> Continue with Email OTP
           </button>
-          <div className="flex items-center gap-3 my-1">
-            <div className="flex-1 h-px bg-text-primary/10" />
-            <span className="text-xs text-text-secondary">OR</span>
-            <div className="flex-1 h-px bg-text-primary/10" />
-          </div>
-          {/* A brand-new wallet never has an account - Create account only. */}
-          {!login && (
-            <button onClick={() => agreed && navigate('/auth/passcode?next=create')}
-              disabled={!agreed}
-              className="w-full flex items-center justify-center gap-3 bg-surface border border-border text-text-primary font-semibold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
-              <Sparkles className="w-5 h-5" /> Create New Wallet
-            </button>
+          {/* Business accounts sign in with Google or email only; creating or
+              importing a wallet is for personal accounts. */}
+          {!isBiz && (
+            <>
+              <div className="flex items-center gap-3 my-1">
+                <div className="flex-1 h-px bg-text-primary/10" />
+                <span className="text-xs text-text-secondary">OR</span>
+                <div className="flex-1 h-px bg-text-primary/10" />
+              </div>
+              {/* A brand-new wallet never has an account - Create account only. */}
+              {!login && (
+                <button onClick={() => agreed && navigate('/auth/passcode?next=create')}
+                  disabled={!agreed}
+                  className="w-full flex items-center justify-center gap-3 bg-surface border border-border text-text-primary font-semibold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
+                  <Sparkles className="w-5 h-5" /> Create New Wallet
+                </button>
+              )}
+              <button onClick={() => agreed && navigate('/auth/passcode?next=import')}
+                disabled={!agreed}
+                className="w-full flex items-center justify-center gap-3 bg-surface border border-border text-text-primary font-semibold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
+                <Download className="w-5 h-5" /> {login ? 'Log in with Wallet' : 'Import Existing Wallet'}
+              </button>
+            </>
           )}
-          <button onClick={() => agreed && navigate('/auth/passcode?next=import')}
-            disabled={!agreed}
-            className="w-full flex items-center justify-center gap-3 bg-surface border border-border text-text-primary font-semibold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
-            <Download className="w-5 h-5" /> {login ? 'Log in with Wallet' : 'Import Existing Wallet'}
-          </button>
           <div className="flex items-center justify-center gap-2 pt-2">
             <motion.span
               animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}

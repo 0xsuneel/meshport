@@ -60,12 +60,6 @@ export interface WalletRpc {
   unlock: [{ address: string; passcode?: string }, { unlocked: boolean; lockedForMs: number }]
   /** Re-encrypt this device's copy under a new passcode (key must be open). */
   'set-passcode': [{ address: string; passcode: string; oldPasscode?: string }, { ok: true }]
-  /** Lock the open key with a passkey's PRF secret; returns the ciphertext to store. */
-  'passkey:wrap': [{ address: string; prf: Uint8Array; salt: Uint8Array }, { ct: Uint8Array; iv: Uint8Array }]
-  /** Open a passkey-locked ciphertext; the key then stays in the frame. */
-  'passkey:open': [{ address: string; prf: Uint8Array; salt: Uint8Array; ct: Uint8Array; iv: Uint8Array }, { ok: true }]
-  'recovery:create': [{ address: string; password: string }, { payload: string }]
-  'recovery:open': [{ address: string; payload: string; password: string }, { ok: true }]
   /** Confirm-word check after backup: { wordIndex: word }. */
   'mnemonic:check': [{ address: string; answers: Record<number, string> }, { ok: boolean; wrong: number[] }]
   /**

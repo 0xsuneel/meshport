@@ -17,8 +17,6 @@ function buildProfileUpdateMessage(
 }
 import { handBiometricPasscode } from '@/lib/biometricHandoff'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
-import { WalletSecuritySection, SecSectionLabel, SecRow } from '@/features/auth/SecureWalletPage'
-import { knownSecured } from '@/lib/socialWallet'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import {
   ArrowLeft, Shield, ShieldAlert, Fingerprint, Lock, KeyRound, ChevronRight,
@@ -42,6 +40,25 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { WalletSecretFrame } from '@/components/wallet/WalletSecretFrame'
 
+/** Small uppercase heading above a Security page card. */
+function SecSectionLabel({ children }: { children: React.ReactNode }) {
+  return <p className="text-[12px] font-semibold uppercase tracking-wide text-text-secondary px-1 mb-2">{children}</p>
+}
+
+/** One Security page row: tinted icon, title + subtitle, optional right side. */
+function SecRow({ icon, title, sub, right }: { icon: React.ReactNode; title: React.ReactNode; sub?: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3.5">
+      <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center flex-shrink-0">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-text-primary truncate">{title}</p>
+        {sub ? <p className="text-xs text-text-secondary truncate mt-0.5">{sub}</p> : null}
+      </div>
+      {right}
+    </div>
+  )
+}
+
 // ─── Security (same for all users) ────────────────────────────────────────────
 export function SecurityPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -55,10 +72,6 @@ export function SecurityPage() {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const storedPasscode = useAuthStore(s => s.passcode)
   const lock = useAuthStore(s => s.lock)
-  const isSocialWallet = useAuthStore(s => s.loginType === 'social' && s.walletSource === 'social-auto')
-  const userId = useAuthStore(s => s.user?.id)
-  // Google / email wallets need a passkey or Recovery QR to count as secured.
-  const secured = !isSocialWallet || (!!userId && knownSecured(userId))
   // Admin Panel → Features → Security. When an admin turns this off, App.tsx
   // (global effect) forces biometricEnabled to false for every session
   // immediately - this local gate additionally locks the toggle itself so
@@ -122,21 +135,15 @@ export function SecurityPage() {
       </div>
       <div className="px-4 space-y-5">
         {/* Status */}
-        <div className={`rounded-2xl p-4 flex items-center gap-3.5 border ${secured ? 'bg-success/10 border-success/25' : 'bg-warning/10 border-warning/30'}`}>
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${secured ? 'bg-success/15' : 'bg-warning/15'}`}>
-            {secured ? <Shield className="w-6 h-6 text-success" /> : <ShieldAlert className="w-6 h-6 text-warning" />}
+        <div className="rounded-2xl p-4 flex items-center gap-3.5 border bg-success/10 border-success/25">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 bg-success/15">
+            <Shield className="w-6 h-6 text-success" />
           </div>
           <div className="min-w-0">
-            <p className={`text-[15px] font-bold ${secured ? 'text-success' : 'text-warning'}`}>{secured ? 'Account secured' : 'Secure your wallet'}</p>
-            <p className="text-xs text-text-secondary mt-0.5">
-              {secured
-                ? (isSocialWallet ? 'Passcode, passkey and Recovery QR keep your wallet safe' : 'Your passcode keeps your wallet safe')
-                : 'Add a passkey or Recovery QR so you never lose access'}
-            </p>
+            <p className="text-[15px] font-bold text-success">Account secured</p>
+            <p className="text-xs text-text-secondary mt-0.5">Your passcode keeps your wallet safe</p>
           </div>
         </div>
-
-        {isSocialWallet && <WalletSecuritySection />}
 
         <div>
           <SecSectionLabel>App lock</SecSectionLabel>
@@ -431,15 +438,14 @@ export function ChangePasscodePage() {
 
 // ─── Backup - routes based on loginType and walletSource ───────────────────────
 // Route map:
-//   social login             → Secure Your Wallet (passkeys + Recovery QR)
+//   social login             → nothing to back up: the wallet comes back with the sign-in
 //   create (generated seed)  → BackupRecoveryPhrasePage  (Seed + Private Key tabs)
 //   import-seed              → BackupRecoveryPhrasePage  (Seed + Private Key tabs)
 //   import-privkey           → BackupPrivateKeyOnlyPage  (Private Key only - no seed)
 export function BackupPage() {
   const loginType = useAuthStore(s => s.loginType)
   const walletSource = useAuthStore(s => s.walletSource)
-  // Google / email wallets: passkeys + encrypted Recovery QR (no key export).
-  if (loginType === 'social') return <Navigate to="/auth/secure-wallet?manage=1" replace />
+  if (loginType === 'social') return <Navigate to="/security" replace />
   if (walletSource === 'import-privkey') return <BackupPrivateKeyOnlyPage />
   // 'create' and 'import-seed' both use BackupRecoveryPhrasePage with both tabs visible
   return <BackupRecoveryPhrasePage />

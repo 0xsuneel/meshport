@@ -20,8 +20,6 @@ import {
   type PasskeyRequest, type PasskeyOutcome,
 } from '@/wallet/protocol'
 import * as keys from './keys'
-import { createRecoveryPayload, openRecoveryPayload, RecoveryError } from '@/lib/recoveryQr'
-import { wrapWithPrf, openWithPrf } from '@/lib/passkeyWrap'
 import { deriveChatSeed } from '@/lib/chatIdentity'
 import * as vault from './vault'
 import { VaultError } from './vault'
@@ -148,32 +146,6 @@ const handlers: Handlers = {
   async 'set-passcode'({ address, passcode, oldPasscode }) {
     await vault.setPasscode(address, passcode, oldPasscode)
     return { ok: true as const }
-  },
-
-  async 'passkey:wrap'({ address, prf, salt }) {
-    try { return await wrapWithPrf(vault.keyFor(address), prf, salt) } finally { prf.fill(0) }
-  },
-
-  async 'passkey:open'({ address, prf, salt, ct, iv }) {
-    const k = await openWithPrf(prf, salt, ct, iv).finally(() => prf.fill(0))
-    if (!k) throw new RpcError('decrypt', "This passkey couldn't unlock the wallet")
-    await vault.openRecovered(address, k)
-    return { ok: true as const }
-  },
-
-  async 'recovery:create'({ address, password }) {
-    return { payload: await createRecoveryPayload(vault.keyFor(address), address, password) }
-  },
-
-  async 'recovery:open'({ address, payload, password }) {
-    try {
-      const { privateKey } = await openRecoveryPayload(payload, password, address)
-      await vault.openRecovered(address, privateKey)
-      return { ok: true as const }
-    } catch (e) {
-      if (e instanceof RecoveryError) throw new RpcError(e.code === 'mismatch' ? 'mismatch' : e.code === 'decrypt' ? 'decrypt' : 'invalid', e.message)
-      throw e
-    }
   },
 
   async 'mnemonic:check'({ address, answers }) {

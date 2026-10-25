@@ -11,10 +11,13 @@
  * phrase on its servers, in any form. The frame keeps a passcode-encrypted
  * copy on this device; otherwise the user re-enters the phrase / key.
  *
- * social-auto (Google AND Email-OTP accounts) - SELF-CUSTODIAL. The frame
- * keeps a copy sealed to this browser; another device opens the wallet with
- * the account's passkey (lib/walletPasskey.ts) or Recovery QR
- * (lib/recoveryQr.ts). The app passcode is an APP LOCK ONLY for these.
+ * privy (Google / email accounts made since Privy) - Privy opens it for the
+ * signed-in account (wallet/privy.ts); nothing is kept on the device.
+ *
+ * social-auto (older Google / email accounts) - the frame keeps a copy
+ * sealed to this browser, opened without a prompt; there is no other copy
+ * (passkey and Recovery QR backups were removed), so another device can't
+ * open it. The app passcode is an APP LOCK ONLY for these.
  *
  * Priority order:
  * 1. Already open → done
@@ -25,8 +28,6 @@
  *    from the app's origin (wallet/index.ts migrateLegacyKey).
  * 4. create / import-*: the frame's passcode copy, with the passcode the
  *    caller has (just typed / stashed). Never for social-auto.
- * 5. social-auto with no copy here: needsSocialUnlock() → the Unlock screen
- *    (passkey / Recovery QR), which needs a tap and so never runs from here.
  *
  * If none of these work, `walletRecoveryNeeded` is set on the UI store,
  * which drives a persistent, app-wide banner (see
@@ -40,11 +41,6 @@ import { useAuthStore, useUIStore } from '@/store'
 // firing automatically on mount. Sharing one in-flight attempt avoids
 // redundant concurrent network calls when multiple components ask at once.
 let inFlightRestore: Promise<boolean> | null = null
-
-// Google / email wallet with no copy on this device and none on the server:
-// it opens only with the passkey or Recovery QR (/auth/recover-wallet).
-let socialUnlockNeeded = false
-export function needsSocialUnlock(): boolean { return socialUnlockNeeded }
 
 // PERF FIX (transaction-speed audit, 2026-09-17): `silent`, used by
 // PaySendPage/ChatPage/SwapPage/MultichainTransferPage/MultichainClaimPage
@@ -144,7 +140,6 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
   try {
     const open = await wallet.unlockWallet(walletAddress)
     if (open) {
-      socialUnlockNeeded = false
       setWallet(walletAddress, open, walletSource || undefined)
       // Finish moving an old app-side passcode copy once a passcode is known.
       if (passcodes.length) void wallet.migrateLegacyKey(walletAddress, walletSource, passcodes).catch(() => {})
@@ -161,7 +156,6 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
   try {
     const moved = await wallet.migrateLegacyKey(walletAddress, walletSource, passcodes)
     if (moved) {
-      socialUnlockNeeded = false
       setWallet(walletAddress, moved, walletSource || undefined)
       return true
     }
@@ -177,12 +171,6 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
       // try only extends the wait.
       if (e instanceof wallet.WalletFrameError && e.code === 'rate-limited') break
     }
-  }
-
-  // ── 5. social-auto without a copy here: passkey or Recovery QR ────────────
-  if (walletSource === 'social-auto') {
-    socialUnlockNeeded = true
-    return false
   }
 
   console.warn('[Restore] No recovery path available - walletSource:', walletSource, '- user needs to re-enter their recovery phrase or private key.')

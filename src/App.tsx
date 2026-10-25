@@ -78,8 +78,6 @@ const PasscodeSetupPage     = lazyRetry(() => import('./features/auth/PasscodeSe
 const PasscodeLockPage      = lazyRetry(() => import('./features/auth/PasscodeSetup').then(m => ({ default: m.PasscodeLockPage })), 'PasscodeLockPage')
 const EnableBiometricPage   = lazyRetry(() => import('./features/auth/EnableBiometricPage').then(m => ({ default: m.EnableBiometricPage })), 'EnableBiometricPage')
 const AutoWalletPage        = lazyRetry(() => import('./features/auth/AutoWalletPage').then(m => ({ default: m.AutoWalletPage })), 'AutoWalletPage')
-const SecureWalletPage      = lazyRetry(() => import('./features/auth/SecureWalletPage').then(m => ({ default: m.SecureWalletPage })), 'SecureWalletPage')
-const RecoverWalletPage     = lazyRetry(() => import('./features/auth/SecureWalletPage').then(m => ({ default: m.RecoverWalletPage })), 'RecoverWalletPage')
 const LandingPage           = lazyRetry(() => import('./features/landing/LandingPage').then(m => ({ default: m.LandingPage })), 'LandingPage')
 // PayPage is the one route that most benefits from being kept as light as
 // possible - it's the page a brand-new visitor (no session, nothing cached)
@@ -309,8 +307,7 @@ function RequireNoPasscode({ children }: { children: React.ReactNode }) {
     && new URLSearchParams(window.location.search).get('returning') === '1'
   if (isReturning) {
     // Setting a NEW passcode over an existing one is only allowed straight
-    // after a fresh sign-in (that flow also wipes this device's wallet copy,
-    // so the wallet must then be unlocked with the passkey or Recovery QR).
+    // after a fresh sign-in (that flow also wipes this device's wallet copy).
     // Otherwise anyone holding a locked phone could open this URL, pick a new
     // PIN and get past the lock.
     let fresh = false
@@ -331,16 +328,6 @@ function RequireNoWallet({ children }: { children: React.ReactNode }) {
   if (!s.passcode) return <Navigate to="/auth/passcode" replace />
   if (isFullyOnboarded(s)) return <Navigate to="/" replace />
   if (s.walletAddress) return <Navigate to="/auth/claim-username" replace />
-  return <>{children}</>
-}
-
-function RequireSocialWallet({ children }: { children: React.ReactNode }) {
-  const s = useAuthStore.getState()
-  if (!s.isAuthenticated || !s.walletAddress) return <Navigate to="/auth" replace />
-  if (s.loginType !== 'social' || s.walletSource !== 'social-auto') return <Navigate to="/" replace />
-  // A locked app must be unlocked first - these pages can export the key
-  // (Recovery QR) or bind a new passkey to it.
-  if (s.isLocked) return <Navigate to="/auth/lock" replace />
   return <>{children}</>
 }
 
@@ -381,10 +368,6 @@ const router = createBrowserRouter([
   { path: '/auth/enable-biometric', element: <AuthShell><RequireUnlocked><EnableBiometricPage /></RequireUnlocked></AuthShell> },
   { path: '/auth/lock',           element: <AuthShell><PasscodeLockPage /></AuthShell> },
   { path: '/auth/auto-wallet',    element: <AuthShell><RequireNoWallet><AutoWalletPage /></RequireNoWallet></AuthShell> },
-  // Google / email wallets (self-custodial): passkey + Recovery QR setup, and
-  // unlocking on a device that doesn't have the wallet yet.
-  { path: '/auth/secure-wallet',  element: <AuthShell><RequireSocialWallet><SecureWalletPage /></RequireSocialWallet></AuthShell> },
-  { path: '/auth/recover-wallet', element: <AuthShell><RequireSocialWallet><RecoverWalletPage /></RequireSocialWallet></AuthShell> },
   { path: '/auth/wallet-setup',   element: <AuthShell><RequireNoWallet><WalletSetupPage /></RequireNoWallet></AuthShell> },
   { path: '/auth/create-wallet',  element: <AuthShell><CreateWalletPage /></AuthShell> },
   { path: '/auth/import-wallet',  element: <AuthShell><ImportWalletPage /></AuthShell> },
