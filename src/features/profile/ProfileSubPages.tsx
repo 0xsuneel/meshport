@@ -340,12 +340,13 @@ export function ChangePasscodePage() {
       // unlock, or signing a transaction). Never a separate/new passcode -
       // both are just re-encrypted copies of this same new value.
       const { walletAddress, signer, walletSource, biometricEnabled } = useAuthStore.getState()
-      if (walletAddress && signer && walletSource !== 'social-auto') {
+      const { setWalletPasscode, keyInWalletFrame } = await import('@/wallet')
+      if (walletAddress && signer && walletSource !== 'social-auto' && keyInWalletFrame(walletSource)) {
         // create / import-seed / import-privkey wallets only - social-auto
-        // wallets are never encrypted with the passcode. The wallet frame
-        // re-encrypts the key AND the recovery phrase (opened with the
+        // wallets are never encrypted with the passcode, and Privy / Circle
+        // wallets have no key in the frame (it failed for them). The wallet
+        // frame re-encrypts the key AND the recovery phrase (opened with the
         // just-verified old passcode) under the new one.
-        const { setWalletPasscode } = await import('@/wallet')
         await setWalletPasscode(walletAddress, newPass, storedPasscode ? oldPass : newPass)
       }
       if (walletAddress && biometricEnabled) {

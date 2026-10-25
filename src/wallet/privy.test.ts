@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // transaction shape Privy gets, and how quickly a non-Privy account is told so.
 
 vi.stubEnv('VITE_PRIVY_APP_ID', 'test-app-id')
+// Reports (slow / stuck / failed Privy requests) are recorded, not sent.
+vi.mock('@/lib/errorReport', () => ({ reportClientError: vi.fn() }))
 const privy = await import('./privy')
 const { setPrivyBridge, privyAccount, ensurePrivyWallet, restorePrivyAccount, jsonTypedData } = privy
 
@@ -19,6 +21,7 @@ function fakeBridge(over: Partial<Bridge> = {}): Bridge & { calls: unknown[][] }
     signMessage: async (m, a) => { calls.push(['msg', m, a]); return '0xsig' },
     signTypedData: async (t, a) => { calls.push(['typed', t, a]); return '0xtyped' },
     solanaWallets: [],
+    solanaReady: true,
     createSolanaWallet: async () => { calls.push(['create-solana']); return 'SoLanaAddr1111111111111111111111111111111111' },
     signSolanaTransaction: async (t, a) => { calls.push(['sol-tx', t, a]); return t },
     ...over,
@@ -116,5 +119,26 @@ describe('Solana wallet', () => {
     const b = fakeBridge(); setPrivyBridge(b)
     expect(await privy.ensurePrivySolanaWallet()).toBe('SoLanaAddr1111111111111111111111111111111111')
     expect(b.calls).toEqual([['create-solana']])
+  })
+})
+
+describe('a Privy request that never answers', () => {
+  it('is reported while waiting, then given up on - so a screen never hangs', async () => {
+    vi.useFakeTimers()
+    const { reportClientError } = await import('@/lib/errorReport')
+    const spy = vi.mocked(reportClientError)
+    spy.mockClear()
+    setPrivyBridge(fakeBridge({ signTransaction: () => new Promise<never>(() => {}) }))
+    const p = privyAccount(ADDR).signTransaction({ to: ADDR, value: 1n, gas: 21000n, nonce: 1, chainId: 5042002, maxFeePerGas: 1n, maxPriorityFeePerGas: 1n, type: 'eip1559' } as any)
+    const settled = p.then(() => 'signed', (e: Error) => e.message)
+    await vi.advanceTimersByTimeAsync(privy.PRIVY_STILL_WAITING_MS + 10)
+    await vi.advanceTimersByTimeAsync(privy.PRIVY_GIVE_UP_MS)
+    expect(await settled).toBe(privy.PRIVY_NO_ANSWER)
+    vi.useRealTimers()
+    await new Promise(r => setTimeout(r, 50)) // the reports are sent from a dynamic import
+    const reports = spy.mock.calls.map(c => (c[1] as Error).message)
+    expect(reports.some(r => r.includes('[privy signTransaction] still waiting'))).toBe(true)
+    expect(reports.some(r => r.includes('[privy signTransaction] failed') && r.includes(privy.PRIVY_NO_ANSWER))).toBe(true)
+
   })
 })
