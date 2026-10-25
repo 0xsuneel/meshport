@@ -174,3 +174,11 @@ describe('chat key for a Privy wallet', () => {
     await expect(privy.privyChatSeed(OTHER)).rejects.toThrow(/stable chat key/)
   })
 })
+
+describe("Privy giving up on its own request", () => {
+  it('shows as "nothing was sent", not "signal is aborted without reason"', async () => {
+    setPrivyBridge(fakeBridge({ signTransaction: async () => { throw new DOMException('signal is aborted without reason', 'AbortError') } }))
+    await expect(privyAccount(ADDR).signTransaction({ to: ADDR, value: 1n, gas: 21000n, nonce: 1, chainId: 5042002, maxFeePerGas: 1n, maxPriorityFeePerGas: 1n, type: 'eip1559' } as any))
+      .rejects.toThrow(privy.PRIVY_NO_ANSWER)
+  })
+})

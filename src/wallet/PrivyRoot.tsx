@@ -28,8 +28,14 @@ import { useSupabaseSession } from './PrivyGate'
 // MeshPort's registry with a verified chain id (Multichain transfers and
 // bridges sign there). Privy's own screens are off, so the native-currency
 // label is never shown; the RPCs are the registry's.
+// Arc's RPC as a full URL: the app's own list is the relative '/api/arc-rpc',
+// which points nowhere outside MeshPort's pages.
+const ARC_FOR_PRIVY: Chain = typeof window === 'undefined' ? arcTestnet : {
+  ...arcTestnet,
+  rpcUrls: { default: { http: [`${window.location.origin}/api/arc-rpc`] }, public: { http: [`${window.location.origin}/api/arc-rpc`] } },
+}
 const SUPPORTED_CHAINS: [Chain, ...Chain[]] = [
-  arcTestnet,
+  ARC_FOR_PRIVY,
   ...Object.entries(EXTERNAL_CHAINS)
     .filter(([, c]) => c.chainId && c.chainId !== arcTestnet.id)
     .map(([key, c]) => defineChain({
@@ -48,7 +54,7 @@ function PrivyBridgeSync() {
     getExternalJwt: async () => (await supabase.auth.getSession()).data.session?.access_token,
   })
 
-  const { ready, authenticated, user } = usePrivy()
+  const { ready, authenticated, user, getAccessToken } = usePrivy()
   const { wallets } = useWallets()
   const { createWallet } = useCreateWallet()
   const { signTransaction } = useSignTransaction()
@@ -117,8 +123,39 @@ function PrivyBridgeSync() {
     if (!addresses.toLowerCase().split(',').includes(walletAddress.toLowerCase())) return
     setWallet(walletAddress, privyAccount(walletAddress), 'privy')
   }, [ready, authenticated, addresses])
+  // Keep Privy warm: when the app comes back to the foreground (or the
+  // wallet is unlocked) refresh Privy's session right away, so the first
+  // payment after a resume isn't the one that waits for it.
+  useEffect(() => {
+    if (!ready || !authenticated) return
+    const warm = () => { if (document.visibilityState === 'visible') void getAccessToken().catch(() => {}) }
+    document.addEventListener('visibilitychange', warm)
+    window.addEventListener('meshport:wallet-unlocked', warm)
+    return () => { document.removeEventListener('visibilitychange', warm); window.removeEventListener('meshport:wallet-unlocked', warm) }
+  }, [ready, authenticated, getAccessToken])
+  // Start-up timeline (client_errors), once per page load when it was slow:
+  // where a cold start spends its time - Privy loaded, signed in, wallet listed.
+  useEffect(() => {
+    if (ready) markPrivy('ready')
+    if (ready && authenticated) markPrivy('signedIn')
+    if (addresses) markPrivy('walletListed')
+  }, [ready, authenticated, addresses])
   useEffect(() => () => setPrivyBridge(null), [])
   return null
+}
+
+const privyMarks: Record<string, number> = { mounted: performance.now() }
+let timelineSent = false
+function markPrivy(name: 'ready' | 'signedIn' | 'walletListed') {
+  if (privyMarks[name] == null) privyMarks[name] = performance.now()
+  if (timelineSent || privyMarks.walletListed == null) return
+  timelineSent = true
+  const s = (v?: number) => (v == null ? '-' : (v / 1000).toFixed(1))
+  const total = privyMarks.walletListed
+  if (total < 3_000) return
+  void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
+    `[privy timeline] since page load: privy code ran ${s(privyMarks.mounted)} s, ready ${s(privyMarks.ready)} s, signed in ${s(privyMarks.signedIn)} s, wallet listed ${s(privyMarks.walletListed)} s`,
+  ))).catch(() => {})
 }
 
 export default function PrivyRoot() {
@@ -127,7 +164,7 @@ export default function PrivyRoot() {
       appId={privyAppId()}
       config={{
         embeddedWallets: { ethereum: { createOnLogin: 'off' }, solana: { createOnLogin: 'off' }, showWalletUIs: false },
-        defaultChain: arcTestnet,
+        defaultChain: ARC_FOR_PRIVY,
         supportedChains: SUPPORTED_CHAINS,
         solana: {
           rpcs: {

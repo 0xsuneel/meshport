@@ -6,9 +6,11 @@
 
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/store'
 import { privyConfigured } from './privy'
 
-const PrivyRoot = lazy(() => import('./PrivyRoot'))
+const loadPrivyRoot = () => import('./PrivyRoot')
+const PrivyRoot = lazy(loadPrivyRoot)
 
 export type SupabaseSessionState = { session: { token: string; anonymous: boolean } | null; loading: boolean }
 
@@ -25,6 +27,10 @@ export function useSupabaseSession(): SupabaseSessionState {
 }
 
 export function PrivyGate() {
+  // A Google / email account on this device: start loading Privy's code now,
+  // alongside the session read, instead of after it.
+  const isPrivy = useAuthStore(s => s.walletSource === 'privy')
+  useEffect(() => { if (isPrivy && privyConfigured()) void loadPrivyRoot().catch(() => {}) }, [isPrivy])
   const { session } = useSupabaseSession()
   if (!privyConfigured() || !session || session.anonymous) return null
   return <Suspense fallback={null}><PrivyRoot /></Suspense>
