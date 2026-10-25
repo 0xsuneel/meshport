@@ -89,6 +89,7 @@ export const CHAIN_UB_FEATURE_MAP: Record<string, string> = {
   sonic:    'sonic_ub_enabled',
   unichain: 'unichain_ub_enabled',
   world:    'world_chain_ub_enabled',
+  sol:      'solana_ub_enabled',
 }
 
 export const CHAIN_CCTP_OVERRIDE_FEATURE_MAP: Record<string, string> = {
@@ -103,7 +104,13 @@ export const CHAIN_CCTP_OVERRIDE_FEATURE_MAP: Record<string, string> = {
   sonic:    'sonic_cctp_enabled',
   unichain: 'unichain_cctp_enabled',
   world:    'world_chain_cctp_enabled',
+  sol:      'solana_cctp_enabled',
 }
+
+// Chains whose CCTP route is ON until an admin row says otherwise. Solana
+// (added after the seed) starts with both routes, as the live UB chains are
+// set (supabase/migrations/20261025090000_solana_routes_seed.sql).
+const CCTP_DEFAULT_ON = new Set(['sol'])
 
 // Resolves the EFFECTIVE mechanism for a chain that statically supports UB
 // (i.e. its CHAINS entry has ub: true). Defaults reproduce today's exact
@@ -148,7 +155,7 @@ export function resolveAvailableMechanisms(settings: SettingsMap, chainId: strin
 
   const cctpFeature = CHAIN_CCTP_OVERRIDE_FEATURE_MAP[chainId]
   const cctpRow = cctpFeature ? settings[cctpFeature] : undefined
-  const cctpEnabled = cctpRow ? cctpRow.enabled : false // default OFF, preserves current behavior
+  const cctpEnabled = cctpRow ? cctpRow.enabled : CCTP_DEFAULT_ON.has(chainId) // default OFF (Solana: ON)
 
   const mechanisms: Array<'ub' | 'cctp'> = []
   if (ubEnabled) mechanisms.push('ub')

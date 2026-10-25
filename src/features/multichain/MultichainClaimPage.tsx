@@ -49,7 +49,7 @@ import {
   kickClaimWorker,
   type Claim as ServerClaim,
 } from '@/lib/claimService'
-import { isGaslessBridgeAvailable, quoteGaslessBridge, bringFundsGasless } from '@/lib/gaslessBridge'
+import { isGaslessBridgeAvailable, canBringOverCctp, quoteGaslessBridge, bringFundsGasless } from '@/lib/gaslessBridge'
 import { isSolanaChain } from '@/lib/solana'
 
 import { relayedProviderFor } from '@/lib/relayedProvider'
@@ -129,9 +129,6 @@ const CHAIN_META: Record<string, { label: string; color: string; short: string; 
   // Not EVM: brought over CCTP by lib/solanaBridge.ts (MeshPort pays the SOL fee).
   Solana_Devnet:       { label: 'Solana',      color: '#9945FF', short: 'SOL',  logo: '/logos/chains/solana.svg' },
 }
-
-/** Chains Bring Funds moves over CCTP: a gasless router chain, or Solana. */
-const bringsByCctp = (chainId: string) => isGaslessBridgeAvailable(chainId) || isSolanaChain(chainId)
 
 // Bring Funds timing on CCTP: Fast Transfer attests before source finality
 // (docs.arc.io: attestation typically ~60 s), then the relayer mints on Arc.
@@ -1284,7 +1281,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
           // ── Unified Balance route (Gateway): deposit on source → spend to Arc ──
           const sdkId = toSdkChainId(chain.chainId)
-          if (!merchantMode && (claimRoute === 'ub' || !bringsByCctp(chain.chainId)) && UB_CLAIM_CHAINS.has(sdkId)) {
+          if (!merchantMode && (claimRoute === 'ub' || !canBringOverCctp(chain.chainId)) && UB_CLAIM_CHAINS.has(sdkId)) {
             const { AppKit } = sdkRef.current ?? await loadSdk()
             const kit = new AppKit({ disableErrorReporting: true } as any)
             const adapter = await buildAdapter(wallet.signer)
@@ -1496,7 +1493,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // Merchants never get the Unified Balance route - CCTP only.
   const ubAvailable = !merchantMode && UB_CLAIM_CHAINS.has(selectedSdkId)
   // CCTP here is the gasless router; a chain without one is Unified Balance only.
-  const cctpAvailable = !!selected && bringsByCctp(selected)
+  const cctpAvailable = !!selected && canBringOverCctp(selected)
   const effectiveRoute: 'cctp' | 'ub' = !ubAvailable ? 'cctp' : !cctpAvailable ? 'ub' : claimRoute
   const reviewEnabled = claimAmt >= MIN_CLAIM_AMOUNT && claimAmt <= (selectedChain?.claimable ?? 0) && (effectiveRoute === 'ub' || estimateReady)
   // Unified Balance route: Circle Gateway's fee quote for this exact claim
@@ -1651,7 +1648,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     .filter(c => c.claimable > 0 || c.pending > 0)
     // Only chains Bring Funds can actually move: a gasless router, or Unified
     // Balance. Merchants: gasless router (CCTP) chains only.
-    .filter(c => bringsByCctp(c.chainId) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(c.chainId))))
+    .filter(c => canBringOverCctp(c.chainId) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(c.chainId))))
     // `chains` only ever contains enabled chains to begin with - scan()
     // above reads via readExternalBalances, which is already settings-aware
     // and never even fetches a disabled chain's balance. This filter is now
@@ -1673,7 +1670,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // to (mis)count here.
   const disabledClaimChains = Object.keys(CHAIN_META)
     .filter(id => !isChainEnabledForClaim(settingsMap, id))
-    .filter(id => bringsByCctp(id) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(id))))
+    .filter(id => canBringOverCctp(id) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(id))))
     .map(id => ({
       chainId: id,
       // Lets an admin set a specific reason per chain by putting text in
@@ -2185,7 +2182,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             const chainId = cp0?.chainId ?? trackRec?.chainId
             // Same route decision claimOneChain makes.
             const isUbRoute = !!cp0 && (ubClaimChains.includes(cp0.chainId)
-              || (!merchantMode && (claimRoute === 'ub' || !bringsByCctp(cp0.chainId)) && UB_CLAIM_CHAINS.has(toSdkChainId(cp0.chainId))))
+              || (!merchantMode && (claimRoute === 'ub' || !canBringOverCctp(cp0.chainId)) && UB_CLAIM_CHAINS.has(toSdkChainId(cp0.chainId))))
             const route = isUbRoute ? 'ub' : 'cctp'
             const srcLabel = chainId ? getMeta(chainId).label : 'source chain'
             const steps = moveSteps({

@@ -47,6 +47,17 @@ export interface SolanaBring {
 /** Circle's fees for bringing `amount` (base units) from Solana to Arc. */
 export { quoteSolanaToArc }
 
+/** Bring `amountUsdc` of the signed-in account's Solana USDC to its Arc address `arcAddress`. */
+export async function bringAccountSolanaToArc(arcAddress: string, amountUsdc: number): Promise<SolanaBring> {
+  const { getSolanaAddress, signSolanaTransaction } = await import('@/wallet/solana')
+  const r = await bringSolanaToArc({ owner: await getSolanaAddress(), arcRecipient: arcAddress, amount: BigInt(Math.round(amountUsdc * 1e6)), sign: signSolanaTransaction })
+  import('@/lib/ActivityService').then(({ Activity }) => Activity.bridge({
+    walletAddress: arcAddress, txHash: r.signature, amount: amountUsdc,
+    sourceChain: 'Solana_Devnet', destinationChain: 'Arc_Testnet', destinationAddress: arcAddress,
+  })).catch(() => {})
+  return r
+}
+
 /**
  * Bring `amount` (base units) of the account's Solana USDC to its Arc address.
  * `sign` signs the transaction as the account's Solana wallet (wallet/solana.ts).

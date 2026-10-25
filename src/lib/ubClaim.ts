@@ -231,6 +231,7 @@ export const GATEWAY_SELF_MINT_CHAINS = new Set(['Sei_Testnet', ...FORWARDER_MIN
 
 /** Mint a Gateway spend to `sdk` ourselves: listed above, or the forwarder failed there recently (forwarderMintFailing). */
 export function gatewaySelfMintsTo(sdk: string): boolean {
+  if (sdk === 'Solana_Devnet') return false // MeshPort's relayer can't mint on Solana: Circle's forwarder only
   return GATEWAY_SELF_MINT_CHAINS.has(sdk) || forwarderMintFailing(sdk)
 }
 
@@ -727,14 +728,24 @@ export async function merchantClaimAll(p: {
   const step = (chainId: string, state: ClaimAllStep['state'], msg: string, claimId?: string) => p.onStep?.({ chainId, state, msg, claimId })
   const out = { cctp: 0, failed: [] as string[] }
   try {
-    const [{ isGaslessBridgeAvailable, bringFundsGasless }, { submitClaim }] = await Promise.all([
+    const [{ canBringOverCctp, bringFundsGasless }, { submitClaim }] = await Promise.all([
       import('./gaslessBridge'), import('./claimService'),
     ])
-    const due = p.chains.filter(c => c.balance >= CLAIM_ALL_MIN_CHAIN && isGaslessBridgeAvailable(c.chainId))
+    const due = p.chains.filter(c => c.balance >= CLAIM_ALL_MIN_CHAIN && canBringOverCctp(c.chainId))
     for (const c of due) {
       const amount = Math.floor(c.balance * 1e6) / 1e6
       step(c.chainId, 'working', 'Signing…')
       try {
+        // Solana: one burn signed by the account's Solana wallet, MeshPort
+        // pays the SOL; Circle's forwarder mints on Arc (no claims row -
+        // claim-worker reads EVM chains only).
+        if (c.chainId === 'Solana_Devnet') {
+          const { bringAccountSolanaToArc } = await import('./solanaBridge')
+          await bringAccountSolanaToArc(p.walletAddress, amount)
+          out.cctp += amount
+          step(c.chainId, 'done', 'On its way to Arc · about a minute')
+          continue
+        }
         const r = await bringFundsGasless({
           chainId: c.chainId, amountUsdc: amount, signer: p.signer, walletAddress: p.walletAddress,
           onStatus: msg => step(c.chainId, 'working', msg === 'Submitting…' || msg === 'Confirming…' ? 'MeshPort is sending the transfer…' : msg),
