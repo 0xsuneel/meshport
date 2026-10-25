@@ -182,6 +182,9 @@ async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b
     return out
   } catch (e) {
     report(`failed after ${s(performance.now() - started)} s (${parts()}): ${e instanceof Error ? e.message : String(e)}`)
+    // Privy gives up on its own request with an AbortError ("signal is
+    // aborted without reason") - nothing was signed, so nothing was sent.
+    if (e instanceof Error && (e.name === 'AbortError' || /signal is aborted|aborted/i.test(e.message))) throw new Error(PRIVY_NO_ANSWER)
     throw e
   } finally {
     clearTimeout(watchdog)

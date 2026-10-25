@@ -331,7 +331,11 @@ export const useAuthStore = create<AuthStore>()(
         import('@/lib/security').then(({ clearSessionPrivateKey, forgetVerifiedPasscodes }) => { clearSessionPrivateKey(addr); forgetVerifiedPasscodes() }).catch(() => {})
         import('@/wallet').then(({ lockWallet }) => lockWallet(addr ?? undefined)).catch(() => {})
       },
-      unlock: () => set({ isLocked: false, lastActivityAt: Date.now() }),
+      unlock: () => {
+        set({ isLocked: false, lastActivityAt: Date.now() })
+        // Lets a wallet provider warm up right away (wallet/PrivyRoot.tsx).
+        try { window.dispatchEvent(new Event('meshport:wallet-unlocked')) } catch { /* no window (tests) */ }
+      },
       touchActivity: () => set({ lastActivityAt: Date.now() }),
     }),
     {
