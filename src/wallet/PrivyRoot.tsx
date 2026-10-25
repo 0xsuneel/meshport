@@ -6,7 +6,7 @@
 // src/wallet/privy.ts a bridge to create wallets and sign. Privy's own
 // confirmation modals are off: the app's passcode / biometric is the approval.
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   PrivyProvider, usePrivy, useWallets, useCreateWallet, useSignTransaction, useSignMessage, useSignTypedData,
   useSubscribeToJwtAuthWithFlag,
@@ -45,7 +45,7 @@ const SUPPORTED_CHAINS: [Chain, ...Chain[]] = [
     })),
 ]
 
-function PrivyBridgeSync() {
+function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => void }) {
   const { session, loading } = useSupabaseSession()
   const signedIn = !!session && !session.anonymous
   useSubscribeToJwtAuthWithFlag({
@@ -62,6 +62,11 @@ function PrivyBridgeSync() {
   const { signTypedData } = useSignTypedData()
   const embedded = wallets.filter(w => w.walletClientType === 'privy')
   const addresses = embedded.map(w => w.address).join(',')
+  // The account HAS a Privy wallet (Privy's record) - whether or not Privy's
+  // wallet iframe has connected it yet (until then `wallets` is empty and
+  // signing waits until Privy aborts it).
+  const hasLinkedWallet = !!(user?.linkedAccounts as Array<{ type?: string; chainType?: string; walletClientType?: string }> | undefined)
+    ?.some(a => a.type === 'wallet' && a.chainType === 'ethereum' && a.walletClientType === 'privy')
   // Solana (docs/SOLANA.md): Privy's own embedded wallets only, not external ones.
   // Privy loads the Solana wallets after the Ethereum ones: until `solanaReady`
   // an empty list doesn't mean "none" (creating one then fails with "User
@@ -140,8 +145,33 @@ function PrivyBridgeSync() {
     if (ready && authenticated) markPrivy('signedIn')
     if (addresses) markPrivy('walletListed')
   }, [ready, authenticated, addresses])
+  // Privy's wallet iframe stuck: signed in, the account has a wallet, but it
+  // isn't connected 8 s later (seen: "ready=true authenticated=true
+  // wallets=0" for 23 s, and signing aborted after 21 s). Privy never
+  // rebuilds a dead iframe by itself; PrivyRoot rebuilds Privy (a new iframe).
+  const stuckRef = useRef(onWalletStuck)
+  stuckRef.current = onWalletStuck
+  useEffect(() => {
+    if (!ready || !authenticated || !hasLinkedWallet || addresses) return
+    const t = setTimeout(() => stuckRef.current('wallet not connected 8 s after sign-in'), 8_000)
+    return () => clearTimeout(t)
+  }, [ready, authenticated, hasLinkedWallet, addresses])
   useEffect(() => () => setPrivyBridge(null), [])
   return null
+}
+
+// When the app was last in the background (a resume often finds Privy's iframe dead).
+let lastHiddenAt = 0
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') lastHiddenAt = performance.now() })
+  // Privy reports a failed iframe only to the console - send it to client_errors too.
+  const warn = console.warn.bind(console)
+  console.warn = (...args: unknown[]) => {
+    if (typeof args[0] === 'string' && args[0].startsWith('Privy iframe failed to load')) {
+      void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[privy iframe] failed to load: ${String(args[1] ?? '').slice(0, 160)}`))).catch(() => {})
+    }
+    warn(...args)
+  }
 }
 
 const privyMarks: Record<string, number> = { mounted: performance.now() }
@@ -158,9 +188,25 @@ function markPrivy(name: 'ready' | 'signedIn' | 'walletListed') {
   ))).catch(() => {})
 }
 
+// Rebuilds of Privy this page load (a stuck wallet iframe) - at most 2.
+const MAX_PRIVY_REBUILDS = 2
+let privyRebuilds = 0
+
 export default function PrivyRoot() {
+  const [generation, setGeneration] = useState(0)
+  const onWalletStuck = (why: string) => {
+    const sinceHidden = lastHiddenAt ? `${((performance.now() - lastHiddenAt) / 1000).toFixed(0)} s after the app was last in the background` : 'no background since page load'
+    const willRebuild = privyRebuilds < MAX_PRIVY_REBUILDS
+    void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
+      `[privy iframe] ${why} (${sinceHidden}, page up ${(performance.now() / 1000).toFixed(0)} s) - ${willRebuild ? `rebuilding Privy (#${privyRebuilds + 1})` : 'not rebuilding again'}`,
+    ))).catch(() => {})
+    if (!willRebuild) return
+    privyRebuilds++
+    setGeneration(g => g + 1)
+  }
   return (
     <PrivyProvider
+      key={generation}
       appId={privyAppId()}
       config={{
         embeddedWallets: { ethereum: { createOnLogin: 'off' }, solana: { createOnLogin: 'off' }, showWalletUIs: false },
@@ -176,7 +222,7 @@ export default function PrivyRoot() {
         },
       }}
     >
-      <PrivyBridgeSync />
+      <PrivyBridgeSync onWalletStuck={onWalletStuck} />
     </PrivyProvider>
   )
 }
