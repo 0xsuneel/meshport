@@ -31,7 +31,8 @@ describe('FORWARDER_SUPPORTED_SDK_CHAINS coverage', () => {
     }
   })
 
-  it('the allow-list has exactly 18 entries (21 claim chains minus the 3 known gaps)', () => {
-    expect(FORWARDER_SUPPORTED_SDK_CHAINS.size).toBe(18)
+  it('the allow-list has exactly 19 entries (21 EVM claim chains minus the 3 known gaps, plus Solana)', () => {
+    expect(FORWARDER_SUPPORTED_SDK_CHAINS.size).toBe(19)
+    expect(FORWARDER_SUPPORTED_SDK_CHAINS.has('Solana_Devnet')).toBe(true)
   })
 })

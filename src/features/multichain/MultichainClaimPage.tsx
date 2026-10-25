@@ -50,6 +50,7 @@ import {
   type Claim as ServerClaim,
 } from '@/lib/claimService'
 import { isGaslessBridgeAvailable, quoteGaslessBridge, bringFundsGasless } from '@/lib/gaslessBridge'
+import { isSolanaChain } from '@/lib/solana'
 
 import { relayedProviderFor } from '@/lib/relayedProvider'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -125,7 +126,12 @@ const CHAIN_META: Record<string, { label: string; color: string; short: string; 
   Codex_Testnet:       { label: 'Codex',       color: '#5B5FDE', short: 'CDX',  logo: '/logos/chains/codex.svg' },
   Edge_Testnet:        { label: 'EDGE',        color: '#FFB800', short: 'EDGE', logo: '/logos/chains/edge.svg' },
   Injective_Testnet:   { label: 'Injective',   color: '#00D4FF', short: 'INJ',  logo: '/logos/chains/injective.svg' },
+  // Not EVM: brought over CCTP by lib/solanaBridge.ts (MeshPort pays the SOL fee).
+  Solana_Devnet:       { label: 'Solana',      color: '#9945FF', short: 'SOL',  logo: '/logos/chains/solana.svg' },
 }
+
+/** Chains Bring Funds moves over CCTP: a gasless router chain, or Solana. */
+const bringsByCctp = (chainId: string) => isGaslessBridgeAvailable(chainId) || isSolanaChain(chainId)
 
 // Bring Funds timing on CCTP: Fast Transfer attests before source finality
 // (docs.arc.io: attestation typically ~60 s), then the relayer mints on Arc.
@@ -935,6 +941,18 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     setFeeEstimate(prev => ({ ...prev, loading: true, error: '' }))
     // Gasless chains: the relayer's own quote - the exact fees the claim
     // will sign, so what's shown here is what's charged.
+    // Solana: Circle's fee only - MeshPort pays the SOL network fee.
+    if (isSolanaChain(chainId)) {
+      try {
+        const { quoteSolanaToArc } = await import('@/lib/solanaBridge')
+        const q = await quoteSolanaToArc(BigInt(Math.round(amount * 1e6)))
+        const bridgeFee = Number(q.maxFee) / 1e6
+        setFeeEstimate({ loading: false, error: '', totalFee: bridgeFee, receiverGets: Math.max(0, amount - bridgeFee), forKey: key, networkFee: 0, bridgeFee })
+      } catch (e: any) {
+        setFeeEstimate({ loading: false, error: e?.message || 'Fee estimate unavailable', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0 })
+      }
+      return
+    }
     if (isGaslessBridgeAvailable(chainId)) {
       try {
         const q = await quoteGaslessBridge(chainId, amount)
@@ -1266,7 +1284,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
           // ── Unified Balance route (Gateway): deposit on source → spend to Arc ──
           const sdkId = toSdkChainId(chain.chainId)
-          if (!merchantMode && (claimRoute === 'ub' || !isGaslessBridgeAvailable(chain.chainId)) && UB_CLAIM_CHAINS.has(sdkId)) {
+          if (!merchantMode && (claimRoute === 'ub' || !bringsByCctp(chain.chainId)) && UB_CLAIM_CHAINS.has(sdkId)) {
             const { AppKit } = sdkRef.current ?? await loadSdk()
             const kit = new AppKit({ disableErrorReporting: true } as any)
             const adapter = await buildAdapter(wallet.signer)
@@ -1324,6 +1342,49 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 setConfirmPhase(phase => phase === 'processing' ? 'submitted' : phase)
               }
             })
+          }
+
+          // ── Solana (lib/solanaBridge.ts) ──
+          // The account's Solana wallet signs one burn with Circle's
+          // forwarding hook; MeshPort pays the SOL fee and Circle mints on
+          // Arc. Followed through Circle (Iris) by the burn's signature.
+          if (isSolanaChain(chain.chainId)) {
+            const [{ bringSolanaToArc }, { getSolanaAddress, signSolanaTransaction }, { fetchCctpProgress: progressOf }] = await Promise.all([
+              import('@/lib/solanaBridge'), import('@/wallet/solana'), import('@/lib/cctpTracker'),
+            ])
+            setChain(chain.chainId, 'approving', 'Signing the USDC transfer…', 25)
+            const r = await bringSolanaToArc({
+              owner: await getSolanaAddress(), arcRecipient: wallet.addr,
+              amount: BigInt(Math.round(claimAmount * 1e6)), sign: signSolanaTransaction,
+            })
+            burned = true
+            setClaimFees(prev => ({ ...prev, [chain.chainId]: { meshport: 0, circleCap: Number(r.maxFee) / 1e6 } }))
+            setIsSubmitted(true)
+            setChain(chain.chainId, 'attesting', 'Burn confirmed - Circle processing…', 65, { txHash: r.signature })
+            notifyExternalBalanceChanged(chain.chainId, wallet.addr, { spent: claimAmount })
+            import('@/lib/ActivityService').then(({ Activity }) => Activity.bridge({
+              walletAddress: wallet.addr, txHash: r.signature, amount: claimAmount,
+              sourceChain: chain.chainId, destinationChain: ARC_CHAIN_KEY, destinationAddress: wallet.addr,
+            })).catch(() => {})
+            // Circle's Forwarding Service mints on Arc; follow it until it lands.
+            void (async () => {
+              for (let i = 0; i < 200; i++) {
+                await new Promise(res => setTimeout(res, 4000))
+                const p = await progressOf(chain.chainId, r.signature)
+                if (!p) continue
+                if (p.stage === 'minting') setChain(chain.chainId, 'minting', 'Circle is minting on Arc…', 85, { txHash: r.signature })
+                if (p.stage === 'error') { setChain(chain.chainId, 'error', p.msg ?? 'Circle could not deliver this transfer', 0, { txHash: r.signature }); return }
+                if (p.stage === 'done') {
+                  setChain(chain.chainId, 'done', 'Arrived on Arc', 100, { txHash: r.signature, mintTxHash: p.mintTxHash })
+                  setConfirmPhase(phase => (phase === 'processing' || phase === 'submitted' || phase === 'tracking') ? 'done' : phase)
+                  refreshBalancesAfterTx(wallet.addr)
+                  refreshScope({ kind: 'external', wallet: wallet.addr, chains: [chain.chainId] })
+                  notifyExternalBalanceChanged(chain.chainId, wallet.addr)
+                  return
+                }
+              }
+            })()
+            return { chainId: chain.chainId, amount: claimAmount }
           }
 
           // ── Gasless route (MeshPortBridgeRouter) ──
@@ -1435,7 +1496,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // Merchants never get the Unified Balance route - CCTP only.
   const ubAvailable = !merchantMode && UB_CLAIM_CHAINS.has(selectedSdkId)
   // CCTP here is the gasless router; a chain without one is Unified Balance only.
-  const cctpAvailable = !!selected && isGaslessBridgeAvailable(selected)
+  const cctpAvailable = !!selected && bringsByCctp(selected)
   const effectiveRoute: 'cctp' | 'ub' = !ubAvailable ? 'cctp' : !cctpAvailable ? 'ub' : claimRoute
   const reviewEnabled = claimAmt >= MIN_CLAIM_AMOUNT && claimAmt <= (selectedChain?.claimable ?? 0) && (effectiveRoute === 'ub' || estimateReady)
   // Unified Balance route: Circle Gateway's fee quote for this exact claim
@@ -1590,7 +1651,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     .filter(c => c.claimable > 0 || c.pending > 0)
     // Only chains Bring Funds can actually move: a gasless router, or Unified
     // Balance. Merchants: gasless router (CCTP) chains only.
-    .filter(c => isGaslessBridgeAvailable(c.chainId) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(c.chainId))))
+    .filter(c => bringsByCctp(c.chainId) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(c.chainId))))
     // `chains` only ever contains enabled chains to begin with - scan()
     // above reads via readExternalBalances, which is already settings-aware
     // and never even fetches a disabled chain's balance. This filter is now
@@ -1612,7 +1673,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // to (mis)count here.
   const disabledClaimChains = Object.keys(CHAIN_META)
     .filter(id => !isChainEnabledForClaim(settingsMap, id))
-    .filter(id => isGaslessBridgeAvailable(id) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(id))))
+    .filter(id => bringsByCctp(id) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(id))))
     .map(id => ({
       chainId: id,
       // Lets an admin set a specific reason per chain by putting text in
@@ -2124,7 +2185,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             const chainId = cp0?.chainId ?? trackRec?.chainId
             // Same route decision claimOneChain makes.
             const isUbRoute = !!cp0 && (ubClaimChains.includes(cp0.chainId)
-              || (!merchantMode && (claimRoute === 'ub' || !isGaslessBridgeAvailable(cp0.chainId)) && UB_CLAIM_CHAINS.has(toSdkChainId(cp0.chainId))))
+              || (!merchantMode && (claimRoute === 'ub' || !bringsByCctp(cp0.chainId)) && UB_CLAIM_CHAINS.has(toSdkChainId(cp0.chainId))))
             const route = isUbRoute ? 'ub' : 'cctp'
             const srcLabel = chainId ? getMeta(chainId).label : 'source chain'
             const steps = moveSteps({

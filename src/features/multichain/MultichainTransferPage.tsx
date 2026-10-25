@@ -324,6 +324,7 @@ const CHAIN_LOGOS: Record<string, string> = {
   codex       : '/logos/chains/codex.svg',
   edge        : '/logos/chains/edge.svg',
   injective   : '/logos/chains/injective.svg',
+  sol         : '/logos/chains/solana.svg',
 }
 
 // Fallback bg colors per chain for when logo fails to load
@@ -349,6 +350,7 @@ const CHAIN_FALLBACK: Record<string, { bg: string; text: string; label: string }
   codex:     { bg: '#5B5FDE22', text: '#5B5FDE', label: 'CDX'  },
   edge:      { bg: '#FFB80022', text: '#FFB800', label: 'EDGE' },
   injective: { bg: '#00d4ff22', text: '#00d4ff', label: 'INJ' },
+  sol:       { bg: '#9945FF22', text: '#9945FF', label: 'SOL' },
 }
 
 // Point at parameter t (0-1) along a quadratic bezier - used to position
@@ -419,6 +421,9 @@ const ALL_CHAINS = [
   { id: 'arb',       name: 'Arbitrum',    testnet: 'Arbitrum Sepolia',    sdk: 'Arbitrum_Sepolia',      emoji: '🔷', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(27,74,221,0.15)',  tc: '#60a5fa', ub: true,  popular: true,  layer: 'L2' },
   { id: 'pol',       name: 'Polygon',     testnet: 'Polygon PoS Amoy',    sdk: 'Polygon_Amoy_Testnet',  emoji: '⬡',  gasToken: 'POL',  minGas: 0.01,  time: '<10s',  bg: 'rgba(130,71,229,0.15)', tc: '#a78bfa', ub: true,  popular: true,  layer: 'L2' },
   { id: 'op',        name: 'Optimism',    testnet: 'OP Sepolia',          sdk: 'Optimism_Sepolia',      emoji: '🔴', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(255,4,32,0.12)',   tc: '#f87171', ub: true,  popular: true,  layer: 'L2' },
+  // Not EVM: recipient is a Solana address; Circle's forwarder mints there and
+  // MeshPort opens the recipient's USDC account first (lib/solanaBridge.ts).
+  { id: 'sol',       name: 'Solana',      testnet: 'Solana Devnet',       sdk: 'Solana_Devnet',         emoji: '◎',  gasToken: 'SOL',  minGas: 0,     time: '<30s',  bg: 'rgba(153,69,255,0.15)', tc: '#a78bfa', ub: false, popular: true,  layer: 'L1' },
   { id: 'avax',      name: 'Avalanche',   testnet: 'Avalanche Fuji',      sdk: 'Avalanche_Fuji',        emoji: '🔺', gasToken: 'AVAX', minGas: 0.01,  time: '<15s',  bg: 'rgba(232,65,66,0.12)',  tc: '#f87171', ub: true,  popular: true,  layer: 'L1' },
   { id: 'hyperevm',  name: 'HyperEVM',    testnet: 'HyperEVM Testnet',    sdk: 'HyperEVM_Testnet',      emoji: '⚡', gasToken: 'HYPE', minGas: 0.01,  time: '<10s',  bg: 'rgba(250,204,21,0.12)', tc: '#fbbf24', ub: true,  popular: false, layer: 'L2' },
   { id: 'sei',       name: 'Sei',         testnet: 'Sei Testnet',         sdk: 'Sei_Testnet',           emoji: '🌊', gasToken: 'SEI',  minGas: 0.1,   time: '<10s',  bg: 'rgba(157,34,53,0.15)',  tc: '#22d3ee', ub: true,  popular: false, layer: 'L1' },
@@ -471,6 +476,8 @@ type SpeedId = typeof SPEEDS[number]['id']
 
 function isEVMAddress(v: string) { return /^0x[0-9a-fA-F]{40}$/.test(v) }
 function isSolanaAddress(v: string) { return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) }
+/** The address fits the chain: a Solana address for Solana, an EVM one for every other chain. */
+function addressFitsChain(v: string, sdk: string) { return sdk === 'Solana_Devnet' ? isSolanaAddress(v) : isEVMAddress(v) }
 
 const STEP_DEFS = [
   { key: 'approve',     label: 'Approve',       pendingMsg: 'Waiting for approval…',           activeMsg: 'Approving USDC on Arc…' },
@@ -1196,8 +1203,19 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     setGasWarning('')
     if (!val) { setAddrHint({ type: '', text: 'Enter wallet address on destination chain' }); return }
     if (/\.arc/i.test(val)) { setAddrHint({ type: 'error', text: '⚠ .arc usernames not supported - enter wallet address' }); return }
-    if (isEVMAddress(val)) { setAddrHint({ type: 'ok', text: `🔗 EVM address - will receive on ${chain.name}` }); return }
-    if (isSolanaAddress(val)) { setAddrHint({ type: 'ok', text: '◎ Solana address detected' }); return }
+    // A Solana address can only receive on Solana (and an EVM one never on
+    // Solana): switch the chain to match what was pasted.
+    if (isEVMAddress(val)) {
+      if (chain.sdk === 'Solana_Devnet') { const evm = ENABLED_CHAINS.find(c => c.sdk !== 'Solana_Devnet'); if (evm) setSelectedChain(evm.id) }
+      setAddrHint({ type: 'ok', text: chain.sdk === 'Solana_Devnet' ? '🔗 EVM address - pick the chain to receive on' : `🔗 EVM address - will receive on ${chain.name}` }); return
+    }
+    if (isSolanaAddress(val)) {
+      if (chain.sdk !== 'Solana_Devnet') {
+        if (!ENABLED_CHAINS.some(c => c.sdk === 'Solana_Devnet')) { setAddrHint({ type: 'error', text: '⚠ Solana is not available right now' }); return }
+        setSelectedChain('sol')
+      }
+      setAddrHint({ type: 'ok', text: '◎ Solana address - will receive on Solana' }); return
+    }
     if (val.startsWith('0x') && val.length < 42) { setAddrHint({ type: 'warn', text: `Address: ${val.length}/42 characters` }); return }
     if (val.length > 10) { setAddrHint({ type: 'error', text: '⚠ Invalid address format' }); return }
     setAddrHint({ type: '', text: 'Keep typing…' })
@@ -1217,7 +1235,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // Basic form validity. Deliberately does NOT depend on any fee estimate -
   // fees are no longer fetched while the user is on the amount-entry form at
   // all, so Continue only needs to know the typed amount/address are sane.
-  const formValid = (isEVMAddress(address) || isSolanaAddress(address)) && numAmount >= MIN_AMOUNT && numAmount <= balance
+  const formValid = addressFitsChain(address, chain.sdk) && numAmount >= MIN_AMOUNT && numAmount <= balance
   const canContinue = formValid
 
   // If a silent background refresh (see the Review polling effect below)
@@ -2421,6 +2439,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: 'maxFee clamped below amount', data: { from: maxFee, to: clampedMaxFee.toFixed(6), amount: numAmount } })
       }
       maxFee = clampedMaxFee.toFixed(6)
+
+      // Solana: Circle mints into the recipient's USDC account, which has to
+      // exist first - MeshPort opens it (and pays its rent) if it doesn't.
+      if (chain.sdk === 'Solana_Devnet') {
+        const { ensureSolanaUsdcAccount } = await import('@/lib/solanaBridge')
+        await ensureSolanaUsdcAccount(address)
+      }
 
       let result = await Promise.race([
         kit.bridge({

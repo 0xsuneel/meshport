@@ -33,7 +33,14 @@ export const CCTP_DOMAINS: Record<string, number> = {
   Linea_Sepolia: 11, Codex_Testnet: 12, Sonic_Testnet: 13, World_Chain_Sepolia: 14,
   Monad_Testnet: 15, Sei_Testnet: 16, XDC_Apothem: 18, HyperEVM_Testnet: 19,
   Ink_Testnet: 21, Plume_Testnet: 22, Arc_Testnet: 26, Edge_Testnet: 28,
-  Injective_Testnet: 29, Morph_Testnet: 30, Pharos_Testnet: 31,
+  Injective_Testnet: 29, Morph_Testnet: 30, Pharos_Testnet: 31, Solana_Devnet: 5,
+}
+
+/** A burn's id on its chain: an EVM tx hash, or a Solana signature (base58). */
+export function isBurnTxId(srcChain: string, id: string): boolean {
+  return srcChain === 'Solana_Devnet' || srcChain === 'Solana'
+    ? /^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(id)
+    : /^0x[0-9a-fA-F]{64}$/.test(id)
 }
 
 export type CctpStage = 'burning' | 'attesting' | 'minting' | 'done' | 'error'
@@ -74,7 +81,7 @@ export function progressFromIris(msg: IrisMessage | null | undefined, knownMintT
 /** The raw Iris record for a burn, or null (not seen yet / network trouble). */
 export async function fetchIrisMessage(srcChain: string, burnTxHash: string): Promise<IrisMessage | null> {
   const domain = CCTP_DOMAINS[srcChain]
-  if (domain === undefined || !/^0x[0-9a-fA-F]{64}$/.test(burnTxHash)) return null
+  if (domain === undefined || !isBurnTxId(srcChain, burnTxHash)) return null
   // Testnet burns are only known to Circle's sandbox Iris and mainnet burns
   // only to production - try the configured one, then the other, so a
   // mis-set VITE_IRIS_ENV can't hide a burn that's ready to finish.
@@ -93,7 +100,7 @@ export async function fetchIrisMessage(srcChain: string, burnTxHash: string): Pr
 export async function fetchCctpProgress(srcChain: string, burnTxHash: string, knownMintTx?: string): Promise<CctpProgress | null> {
   if (knownMintTx) return progressFromIris(null, knownMintTx)
   const domain = CCTP_DOMAINS[srcChain]
-  if (domain === undefined || !/^0x[0-9a-fA-F]{64}$/.test(burnTxHash)) return null
+  if (domain === undefined || !isBurnTxId(srcChain, burnTxHash)) return null
   try {
     const res = await fetch(`${IRIS}/v2/messages/${domain}?transactionHash=${burnTxHash}`)
     if (res.status === 404) return progressFromIris(null)

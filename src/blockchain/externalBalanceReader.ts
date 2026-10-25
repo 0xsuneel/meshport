@@ -35,6 +35,7 @@
 import { isChainEnabledForClaim } from '@/lib/featureFilters'
 import type { SettingsMap } from '@/lib/adminSupabase'
 import { EXTERNAL_CHAINS, resolveRpcList } from './chains'
+import { SOLANA_CHAIN, getSolanaUsdcBalance } from '@/lib/solana'
 import { normalizeAddress } from './types'
 import { dedupe, peek, put } from './cache'
 import { countRequest, countError, countDedupeHit } from './rpcMetrics'
@@ -100,7 +101,7 @@ const lastKnown = new Map<string, number>()
  */
 function settingsSignature(settings: SettingsMap, settingsLoaded: boolean): string {
   if (!settingsLoaded) return 'unloaded'
-  const enabled = Object.keys(EXTERNAL_CHAINS)
+  const enabled = [...Object.keys(EXTERNAL_CHAINS), SOLANA_CHAIN]
     .filter(id => isChainEnabledForClaim(settings, id))
     .sort()
   return enabled.join(',')
@@ -118,6 +119,7 @@ function settingsSignature(settings: SettingsMap, settingsLoaded: boolean): stri
  * chains move behind the proxy.
  */
 export async function readChainUSDCBalance(chainId: string, walletAddress: string): Promise<number> {
+  if (chainId === SOLANA_CHAIN) return readSolanaUSDC(walletAddress)
   const cfg = EXTERNAL_CHAINS[chainId]
   if (!cfg) return 0
 
@@ -174,6 +176,32 @@ export async function readChainUSDCBalance(chainId: string, walletAddress: strin
   if (value === null) return lastKnown.get(`${walletAddress.toLowerCase()}:${chainId}`) ?? 0
   lastKnown.set(`${walletAddress.toLowerCase()}:${chainId}`, value)
   return value
+}
+
+/**
+ * Solana: the USDC of this account's Solana wallet (wallet/solana.ts). Only
+ * the signed-in account's own wallet has a known Solana address; any other
+ * wallet reads 0. Loaded on demand so Solana code stays out of app start.
+ */
+async function readSolanaUSDC(walletAddress: string): Promise<number> {
+  const key = `${walletAddress.toLowerCase()}:${SOLANA_CHAIN}`
+  try {
+    const [{ useAuthStore }, { getSolanaAddress, knownSolanaAddress }] = await Promise.all([import('@/store'), import('@/wallet/solana')])
+    const me = useAuthStore.getState().walletAddress
+    if (!me || me.toLowerCase() !== walletAddress.toLowerCase()) return 0
+    countRequest(SOLANA_CHAIN, 'eth_call')
+    // Privy can take a few seconds to come up after a reload - don't hold the whole scan for it.
+    const owner = knownSolanaAddress() ?? await Promise.race([
+      getSolanaAddress(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Solana wallet not open yet')), 8_000)),
+    ])
+    const value = Number(await getSolanaUsdcBalance(owner))
+    lastKnown.set(key, value)
+    return value
+  } catch {
+    countError()
+    return lastKnown.get(key) ?? 0
+  }
 }
 
 /**
@@ -251,7 +279,7 @@ export function externalBalanceReader(
   }
 
   return dedupe(key, async () => {
-    const chainIds = Object.keys(EXTERNAL_CHAINS).filter(id => isChainEnabledForClaim(settings, id))
+    const chainIds = [...Object.keys(EXTERNAL_CHAINS), SOLANA_CHAIN].filter(id => isChainEnabledForClaim(settings, id))
 
     const wallet = addr.toLowerCase()
     // One request for every chain (the server reads them - /api/portfolio).

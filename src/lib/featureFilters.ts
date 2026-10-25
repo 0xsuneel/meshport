@@ -16,6 +16,7 @@ export const COIN_FEATURE_MAP: Record<string, string> = {
 // vice versa.
 export const CHAIN_TRANSFER_FEATURE_MAP: Record<string, string> = {
   eth:       'ethereum_transfer_enabled',
+  sol:       'solana_transfer_enabled',
   base:      'base_transfer_enabled',
   arb:       'arbitrum_transfer_enabled',
   pol:       'polygon_transfer_enabled',
@@ -43,6 +44,7 @@ export const CHAIN_TRANSFER_FEATURE_MAP: Record<string, string> = {
 // internally (e.g. `Ethereum_Sepolia`). Independent from Transfer - see above.
 export const CHAIN_CLAIM_FEATURE_MAP: Record<string, string> = {
   Ethereum_Sepolia:      'ethereum_claim_enabled',
+  Solana_Devnet:         'solana_claim_enabled',
   Base_Sepolia:          'base_claim_enabled',
   Arbitrum_Sepolia:      'arbitrum_claim_enabled',
   Polygon_Sepolia:       'polygon_claim_enabled',
