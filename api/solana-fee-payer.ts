@@ -1,17 +1,20 @@
 // api/solana-fee-payer.ts - MeshPort pays Solana network fees (docs/SOLANA.md).
 //
 // POST { transaction } - a Solana transaction (base64 wire format) whose fee
-// payer is MeshPort's key and which the sender's Privy wallet has already
-// signed. server/solana/feePayer.ts checks it (USDC transfers and opening USDC
-// accounts only), MeshPort co-signs as fee payer, and it is sent to Solana
-// devnet. → { signature, confirmed }. GET → { feePayer } (the address to use).
+// payer is MeshPort's key and which the sender's Solana wallet has already
+// signed. server/solana/feePayer.ts checks it (USDC transfers, opening USDC
+// accounts, CCTP burns to Arc only), MeshPort co-signs as fee payer, and it is
+// sent to Solana devnet. → { signature, confirmed }.
+// POST { openAccount: <Solana wallet> } - MeshPort opens that wallet's USDC
+// account if it has none (Arc → Solana transfers need it). → { account, created }.
+// GET → { feePayer } (the address to use).
 //
-// Only signed-in Google / email accounts (Supabase session, not anonymous),
-// rate-limited per account and per IP. Env: SOLANA_FEE_PAYER_SECRET (base58,
+// Only signed-in MeshPort accounts (a Supabase session; Google / email or a
+// wallet login), rate-limited per account and per IP. Env: SOLANA_FEE_PAYER_SECRET (base58,
 // 64-byte secret key; sensitive), SUPABASE_URL, SUPABASE_SERVICE_KEY.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getBase64EncodedWireTransaction, getSignatureFromTransaction } from '@solana/kit'
-import { checkFeePayerTransaction, coSign, FeePayerError, feePayerKeys } from '../server/solana/feePayer'
+import { checkFeePayerTransaction, coSign, FeePayerError, feePayerKeys, openUsdcAccountTransaction, usdcTokenAccount } from '../server/solana/feePayer'
 
 const SOLANA_RPC = 'https://api.devnet.solana.com'
 const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
@@ -37,7 +40,8 @@ async function caller(req: VercelRequest): Promise<{ uid: string; anonymous: boo
   return u?.id ? { uid: u.id, anonymous: u.is_anonymous === true } : null
 }
 
-// Per warm instance: 10 a minute and 100 an hour per account, 30 a minute per IP.
+// Per warm instance: 10 a minute and 100 an hour per account, 30 a minute per
+// IP; opening USDC accounts also 30 a day per account and per IP.
 const recent = new Map<string, number[]>()
 function allow(key: string, max: number, windowMs: number): boolean {
   const now = Date.now()
@@ -74,12 +78,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const who = await caller(req)
   if (!who) return send(401, { error: 'Sign in to MeshPort first' })
-  if (who.anonymous) return send(403, { error: 'Sign in with Google or email to use Solana' })
   if (!allow('ip:' + clientIp(req), 30, 60_000) || !allow('m:' + who.uid, 10, 60_000) || !allow('h:' + who.uid, 100, 3_600_000)) {
     return send(429, { error: 'Too many Solana transactions - try again shortly' })
   }
 
-  const b64 = (req.body as { transaction?: unknown } | undefined)?.transaction
+  const body = (req.body ?? {}) as { transaction?: unknown; openAccount?: unknown }
+  if (typeof body.openAccount === 'string') {
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(body.openAccount)) return send(400, { error: 'Not a Solana address' })
+    // Opening an account costs MeshPort its rent (~0.002 SOL): 30 a day per account and per IP.
+    if (!allow('od:' + who.uid, 30, 86_400_000) || !allow('oi:' + clientIp(req), 30, 86_400_000)) {
+      return send(429, { error: 'Too many new Solana accounts today - try again tomorrow' })
+    }
+    try {
+      const { keys, address } = await getPayer()
+      const account = await usdcTokenAccount(body.openAccount)
+      const info = await rpc<{ value: unknown | null }>('getAccountInfo', [account, { encoding: 'base64', commitment: 'confirmed' }])
+      if (info.value) return send(200, { account, created: false }, ' open: exists')
+      const lt = await rpc<{ value: { blockhash: string; lastValidBlockHeight: number } }>('getLatestBlockhash', [{ commitment: 'confirmed' }])
+      const tx = await openUsdcAccountTransaction(body.openAccount, keys, address, { blockhash: lt.value.blockhash, lastValidBlockHeight: BigInt(lt.value.lastValidBlockHeight) })
+      const signature = getSignatureFromTransaction(tx)
+      await rpc('sendTransaction', [getBase64EncodedWireTransaction(tx), { encoding: 'base64', preflightCommitment: 'confirmed' }])
+      for (let i = 0; i < 20; i++) {
+        await new Promise(r => setTimeout(r, 750))
+        const st = await rpc<{ value: Array<{ confirmationStatus?: string; err?: unknown } | null> }>('getSignatureStatuses', [[signature]]).catch(() => null)
+        const s = st?.value?.[0]
+        if (s?.err) return send(422, { error: "Couldn't open the USDC account on Solana", signature }, ' open: failed')
+        if (s?.confirmationStatus === 'confirmed' || s?.confirmationStatus === 'finalized') return send(200, { account, created: true, signature }, ' open: created')
+      }
+      return send(200, { account, created: true, signature, confirmed: false }, ' open: sent')
+    } catch (e) {
+      console.error('[solana-fee-payer] open', e instanceof Error ? e.message : e)
+      return send(502, { error: 'Solana is not reachable right now - try again' })
+    }
+  }
+
+  const b64 = body.transaction
   if (typeof b64 !== 'string' || b64.length > 4000) return send(400, { error: 'transaction is missing' })
 
   try {
@@ -97,7 +130,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (s?.err) return send(422, { error: 'The transaction failed on Solana', signature }, ' failed on-chain')
       confirmed = s?.confirmationStatus === 'confirmed' || s?.confirmationStatus === 'finalized'
     }
-    return send(200, { signature, confirmed }, ` usdc=${checked.usdcUnits} opened=${checked.accountsOpened}`)
+    return send(200, { signature, confirmed }, ` usdc=${checked.usdcUnits} opened=${checked.accountsOpened} burn=${checked.burnUnits}`)
   } catch (e) {
     if (e instanceof FeePayerError) return send(400, { error: e.message }, ' refused')
     console.error('[solana-fee-payer]', e instanceof Error ? e.message : e)

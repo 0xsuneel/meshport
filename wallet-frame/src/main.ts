@@ -21,6 +21,7 @@ import {
 } from '@/wallet/protocol'
 import * as keys from './keys'
 import { deriveChatSeed } from '@/lib/chatIdentity'
+import { solanaPublicKey, solanaSign, solanaHexToBytes } from '@/lib/solanaKey'
 import * as vault from './vault'
 import { VaultError } from './vault'
 
@@ -181,6 +182,18 @@ const handlers: Handlers = {
   async 'chat:seed'({ address }) {
     const seed = deriveChatSeed(vault.keyFor(address))
     try { return { seed: bytesToHex(seed) } } finally { seed.fill(0) }
+  },
+
+  async 'solana:key'({ address }) {
+    return { publicKey: bytesToHex(solanaPublicKey(vault.keyFor(address))) }
+  },
+
+  async 'solana:sign'({ address, message }) {
+    let bytes: Uint8Array
+    try { bytes = solanaHexToBytes(String(message)) } catch { throw new RpcError('invalid', 'Solana message must be hex') }
+    // A Solana transaction message fits in one packet (1232 bytes).
+    if (bytes.length < 3 || bytes.length > 1232) throw new RpcError('invalid', 'Not a Solana transaction message')
+    return { signature: bytesToHex(solanaSign(vault.keyFor(address), bytes)) }
   },
 
   async lock({ address }) { vault.lock(address); return { ok: true as const } },

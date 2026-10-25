@@ -78,6 +78,12 @@ export async function ensurePrivyWallet(timeoutMs = 30_000): Promise<Hex> {
   return (b.wallets[0] ?? await b.createWallet()) as Hex
 }
 
+/** Sign a Solana transaction (wire format) with this account's Privy Solana wallet. */
+export async function privySignSolana(wire: Uint8Array, address: string, timeoutMs = 30_000): Promise<Uint8Array> {
+  const b = await whenBridge(() => true, timeoutMs)
+  return b.signSolanaTransaction(wire, address)
+}
+
 /** This account's Privy Solana address, creating the Solana wallet the first time. */
 export async function ensurePrivySolanaWallet(timeoutMs = 30_000): Promise<string> {
   const b = await whenBridge(() => true, timeoutMs)

@@ -10,6 +10,9 @@ export const SOLANA_RPC = 'https://api.devnet.solana.com'
 /** USDC on Solana devnet (Circle). */
 export const SOLANA_USDC_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'
 export const SOLANA_EXPLORER = 'https://explorer.solana.com'
+/** Solana's chain id across MeshPort (the same name Circle's App Kit uses). */
+export const SOLANA_CHAIN = 'Solana_Devnet'
+export const isSolanaChain = (chainId: string | null | undefined) => chainId === SOLANA_CHAIN
 
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 

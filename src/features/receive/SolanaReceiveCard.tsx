@@ -1,6 +1,6 @@
 // Receive → Solana: this account's Solana (devnet) address and USDC balance
-// (docs/SOLANA.md). Shown only to Privy accounts once their Solana wallet
-// exists; nothing renders otherwise.
+// (docs/SOLANA.md). Every account has one (wallet/solana.ts); nothing renders
+// until the wallet is open.
 
 import { useState } from 'react'
 import { Check, Copy, ExternalLink } from 'lucide-react'

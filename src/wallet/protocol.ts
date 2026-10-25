@@ -72,6 +72,10 @@ export interface WalletRpc {
   'sign:transaction': [{ address: string; transaction: FrameTransaction }, { serialized: Hex }]
   /** This wallet's chat identity seed (derived, domain-separated - not the wallet key). */
   'chat:seed': [{ address: string }, { seed: Hex }]
+  /** This wallet's Solana public key (32 bytes; derived, domain-separated - lib/solanaKey.ts). */
+  'solana:key': [{ address: string }, { publicKey: Hex }]
+  /** ed25519-sign a Solana transaction's message bytes with this wallet's Solana key. */
+  'solana:sign': [{ address: string; message: Hex }, { signature: Hex }]
   /** Close the open key(s) in memory and this tab's session copy. */
   lock: [{ address?: string }, { ok: true }]
   /** Logout: also delete this browser's sealed device copy. Passcode copies stay. */

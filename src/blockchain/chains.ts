@@ -476,6 +476,8 @@ export const FORWARDER_SUPPORTED_SDK_CHAINS = new Set<string>([
   'Optimism_Sepolia', 'Polygon_Amoy_Testnet', 'Sei_Testnet', 'Sonic_Testnet',
   'Unichain_Sepolia', 'World_Chain_Sepolia',
   'Codex_Testnet', 'Edge_Testnet', 'Plume_Testnet', 'XDC_Apothem',
+  // Not EVM: Circle's forwarder is the only way MeshPort mints there.
+  'Solana_Devnet',
 ])
 
 export function chainSupportsForwarder(sdk: string): boolean {
@@ -513,7 +515,7 @@ function learnedForwarderFailures(now = Date.now()): Record<string, number> {
 
 /** Record that Circle's forwarder failed to mint on `sdk` (no-op for chains it doesn't serve). */
 export function noteForwarderMintFailed(sdk: string, now = Date.now()): void {
-  if (!chainSupportsForwarder(sdk)) return
+  if (!chainSupportsForwarder(sdk) || sdk === 'Solana_Devnet') return
   try {
     if (typeof localStorage === 'undefined') return
     const next = { ...learnedForwarderFailures(now), [sdk]: now + FORWARDER_FAILURE_MEMORY_MS }
@@ -528,6 +530,8 @@ export function forwarderMintFailing(sdk: string, now = Date.now()): boolean {
 
 /** True when Circle's forwarder should submit the destination mint for `sdk`. */
 export function circleForwarderMintsTo(sdk: string): boolean {
+  // Solana: MeshPort's relayer can't mint there, so it is always Circle's forwarder.
+  if (sdk === 'Solana_Devnet') return true
   return chainSupportsForwarder(sdk) && !forwarderMintFailing(sdk)
 }
 

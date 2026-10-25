@@ -85,6 +85,8 @@ const TX_PATH_OVERRIDE: Record<string, string> = {
 /** Build a transaction explorer link for `chainId`, or null if unknown/no hash. */
 export function explorerTxUrl(chainId: string, txHash: string | undefined | null): string | null {
   if (!txHash) return null
+  // Solana: a base58 signature on Solana Explorer (devnet).
+  if (chainId === 'Solana_Devnet') return `https://explorer.solana.com/tx/${txHash}?cluster=devnet`
   const base = EXPLORER_BASE[chainId]
   if (!base) return null
   const segment = TX_PATH_OVERRIDE[chainId] ?? 'tx'
