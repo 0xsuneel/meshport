@@ -155,3 +155,22 @@ describe('opening a known Privy wallet after the app resumes', () => {
     expect((await known)?.address.toLowerCase()).toBe(ADDR)
   })
 })
+
+describe('chat key for a Privy wallet', () => {
+  it('comes from its signature: the same every time, once per session', async () => {
+    let calls = 0
+    setPrivyBridge(fakeBridge({ signMessage: async () => { calls++; return '0x' + 'ab'.repeat(65) as `0x${string}` } }))
+    const a = await privy.privyChatSeed(ADDR)
+    const b = await privy.privyChatSeed(ADDR.toUpperCase().replace('0X', '0x'))
+    expect(a).toHaveLength(32)
+    expect(Buffer.from(a)).toEqual(Buffer.from(b))
+    expect(calls).toBe(2) // signed twice (the check), then cached
+  })
+
+  it('is refused when Privy signatures differ - the chat key would not be stable', async () => {
+    const OTHER = '0xcccccccccccccccccccccccccccccccccccccccc'
+    let n = 0
+    setPrivyBridge(fakeBridge({ wallets: [OTHER], signMessage: async () => ('0x' + (n++ ? 'cd' : 'ef').repeat(65)) as `0x${string}` }))
+    await expect(privy.privyChatSeed(OTHER)).rejects.toThrow(/stable chat key/)
+  })
+})
