@@ -252,7 +252,7 @@ export function PinKeypad({
           return (
             <div
               key={i}
-              className="rounded-full transition-all duration-150"
+              className="rounded-full transition duration-150"
               style={{
                 width: '14px',
                 height: '14px',

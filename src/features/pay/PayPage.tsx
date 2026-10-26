@@ -253,7 +253,7 @@ export function PayPage() {
             while a Personal QR payer has another network picked. */}
         {onArc && (
           <button onClick={handlePay}
-            className="w-full flex items-center gap-4 active:scale-[.98] transition-all"
+            className="w-full flex items-center gap-4 active:scale-[.98] transition"
             style={{
               background: 'var(--brand)',
               border: '1px solid color-mix(in srgb, black 12%, transparent)',

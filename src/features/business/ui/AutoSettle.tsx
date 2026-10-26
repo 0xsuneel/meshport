@@ -45,7 +45,7 @@ export function AutoSettleCard({
             type="button"
             onClick={() => onSchedule(s.id)}
             className={[
-              'flex-1 h-9 rounded-xl text-sm font-medium transition-all',
+              'flex-1 h-9 rounded-xl text-sm font-medium transition',
               schedule === s.id
                 ? 'bg-brand text-white shadow-sm'
                 : 'text-text-secondary hover:text-text-primary',

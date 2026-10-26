@@ -106,7 +106,7 @@ export function AutoWalletPage() {
         </div>
       ) : (
         <div className="text-center space-y-4">
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ duration: 0.22, ease: EASE_OUT, delay: 0.1 }}
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.22, ease: EASE_OUT, delay: 0.1 }}
             className="w-20 h-20 bg-success/15 rounded-full flex items-center justify-center mx-auto">
             <CheckCircle className="w-12 h-12 text-success" />
           </motion.div>

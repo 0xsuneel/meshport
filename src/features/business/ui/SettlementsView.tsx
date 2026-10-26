@@ -62,7 +62,7 @@ function ChainBalanceRow({
       {chain.onSettle && (
         <button type="button" onClick={chain.onSettle} disabled={chain.settleDisabled}
           aria-label={`Settle ${chain.label} to Arc`}
-          className="shrink-0 min-h-[36px] px-3.5 rounded-full text-xs font-semibold bg-brand text-white active:scale-95 transition-all disabled:bg-border/60 disabled:text-text-muted">
+          className="shrink-0 min-h-[36px] px-3.5 rounded-full text-xs font-semibold bg-brand text-white active:scale-95 transition disabled:bg-border/60 disabled:text-text-muted">
           Settle
         </button>
       )}
@@ -178,7 +178,7 @@ export function SettlementsView({
             type="button"
             disabled={!settle.enabled}
             onClick={onSettle}
-            className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold bg-brand text-white hover:bg-brand/90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold bg-brand text-white hover:bg-brand/90 active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <ArrowDownToLine className="size-4" />
             {settle.label}

@@ -106,7 +106,7 @@ const STEPS: { key: StepKey; label: string }[] = [
 ]
 const STEP_H = 40
 const CLAIM_PROGRESS_CSS = `
-@keyframes rwOkIn{0%{transform:scale(0)}70%{transform:scale(1.08)}100%{transform:scale(1)}}
+@keyframes rwOkIn{0%{transform:scale(0.9);opacity:0}70%{transform:scale(1.08)}100%{transform:scale(1)}}
 @keyframes rwDraw{from{stroke-dashoffset:60}to{stroke-dashoffset:0}}
 @keyframes rwFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes rwTickIn{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}

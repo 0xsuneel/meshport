@@ -193,7 +193,7 @@ export function HelpView({
           type="button"
           disabled={!txHash.trim() || busy}
           onClick={onCheck}
-          className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 bg-brand text-white text-sm font-semibold hover:bg-brand/90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed min-h-[52px]"
+          className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 bg-brand text-white text-sm font-semibold hover:bg-brand/90 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed min-h-[52px]"
         >
           {busy && <Loader2 className="size-4 animate-spin" />}
           {busy ? 'Checking…' : 'Check & attach'}

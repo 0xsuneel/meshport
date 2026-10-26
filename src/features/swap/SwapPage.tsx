@@ -1494,7 +1494,7 @@ export function SwapPage() {
               <div className="flex gap-2">
                 {[100,300,500].map(b => (
                   <button key={b} onClick={() => setSlippage(b)}
-                    className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all"
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold transition"
                     style={{ background: slippage===b ? 'var(--brand)' : 'color-mix(in srgb, var(--text-primary) 5%, transparent)', color: slippage===b ? '#fff' : 'var(--text-secondary)' }}>
                     {b/100}%
                   </button>

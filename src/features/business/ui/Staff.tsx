@@ -114,7 +114,7 @@ export function StaffView({ staff, onInvite, onEdit, onRemove }: StaffViewProps)
                     type="button"
                     aria-label={`Edit ${member.name}`}
                     onClick={() => onEdit(member.id)}
-                    className="size-9 rounded-xl text-text-muted hover:text-text-secondary hover:bg-border/30 flex items-center justify-center transition-all"
+                    className="size-9 rounded-xl text-text-muted hover:text-text-secondary hover:bg-border/30 flex items-center justify-center transition"
                   >
                     <Pencil className="size-4" />
                   </button>
@@ -122,7 +122,7 @@ export function StaffView({ staff, onInvite, onEdit, onRemove }: StaffViewProps)
                     type="button"
                     aria-label={`Remove ${member.name}`}
                     onClick={() => onRemove(member.id)}
-                    className="size-9 rounded-xl text-text-muted hover:text-danger hover:bg-danger/10 flex items-center justify-center transition-all"
+                    className="size-9 rounded-xl text-text-muted hover:text-danger hover:bg-danger/10 flex items-center justify-center transition"
                   >
                     <Trash2 className="size-4" />
                   </button>
@@ -136,7 +136,7 @@ export function StaffView({ staff, onInvite, onEdit, onRemove }: StaffViewProps)
       <button
         type="button"
         onClick={onInvite}
-        className="w-full h-12 rounded-2xl border border-dashed border-border text-text-secondary text-sm font-medium flex items-center justify-center gap-2 hover:border-brand/40 hover:text-brand-text transition-all"
+        className="w-full h-12 rounded-2xl border border-dashed border-border text-text-secondary text-sm font-medium flex items-center justify-center gap-2 hover:border-brand/40 hover:text-brand-text transition"
       >
         <UserPlus className="size-4.5" />
         Invite staff
@@ -201,7 +201,7 @@ export function StaffForm({
               type="button"
               onClick={() => onRole(r)}
               className={[
-                'flex-1 h-9 rounded-xl text-sm font-medium capitalize transition-all',
+                'flex-1 h-9 rounded-xl text-sm font-medium capitalize transition',
                 role === r ? 'bg-brand text-white' : 'text-text-secondary hover:text-text-primary',
               ].join(' ')}
             >
@@ -223,7 +223,7 @@ export function StaffForm({
                 type="button"
                 onClick={() => onStore(s.id)}
                 className={[
-                  'flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition-all text-sm',
+                  'flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition text-sm',
                   store === s.id
                     ? 'border-brand bg-brand/5 text-text-primary font-medium'
                     : 'border-border text-text-secondary hover:border-border',

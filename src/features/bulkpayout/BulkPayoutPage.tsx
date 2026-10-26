@@ -391,11 +391,11 @@ export function BulkPayoutPage() {
             Template link drops to its icon. */}
         <div className="flex gap-1.5 min-[360px]:gap-2 mt-3">
           <button onClick={() => setEntryMode('manual')}
-            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${entryMode === 'manual' ? 'bg-brand text-white border border-brand' : 'text-text-secondary border border-border'}`}>
+            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition ${entryMode === 'manual' ? 'bg-brand text-white border border-brand' : 'text-text-secondary border border-border'}`}>
             <Plus className="w-3.5 h-3.5" /> Manual Entry
           </button>
           <button onClick={() => setEntryMode('csv')}
-            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${entryMode === 'csv' ? 'bg-brand text-white border border-brand' : 'text-text-secondary border border-border'}`}>
+            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition ${entryMode === 'csv' ? 'bg-brand text-white border border-brand' : 'text-text-secondary border border-border'}`}>
             <Upload className="w-3.5 h-3.5" /> Upload CSV
           </button>
           <button onClick={downloadCSVTemplate} aria-label="Download CSV template" title="Download CSV template"
@@ -562,7 +562,7 @@ export function BulkPayoutPage() {
                 {field}
                 <button onClick={handleRowAdd}
                   disabled={!rowAmount || parseFloat(rowAmount) <= 0}
-                  className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand-text rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition-all">
+                  className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand-text rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition">
                   <Plus className="w-4 h-4" /> Add Recipient
                 </button>
               </>
@@ -577,7 +577,7 @@ export function BulkPayoutPage() {
                 )}
                 <button onClick={() => { setShowBulkAmountPad(false); handleRowAdd() }}
                   disabled={!rowAmount || parseFloat(rowAmount) <= 0 || overRemaining}
-                  className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand-text rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition-all">
+                  className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand-text rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition">
                   <Plus className="w-4 h-4" /> Add Recipient
                 </button>
               </div>
@@ -590,7 +590,7 @@ export function BulkPayoutPage() {
         <div className={isDesktop ? "p-4 space-y-3 flex-shrink-0" : "p-4 space-y-3"}>
           <input ref={fileRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleCSV} />
           <button onClick={() => fileRef.current?.click()}
-            className="w-full flex flex-col items-center justify-center gap-2 py-8 border-2 border-dashed border-border rounded-2xl text-text-secondary hover:text-text-primary hover:border-brand/30 transition-all">
+            className="w-full flex flex-col items-center justify-center gap-2 py-8 border-2 border-dashed border-border rounded-2xl text-text-secondary hover:text-text-primary hover:border-brand/30 transition">
             <Upload className="w-8 h-8" />
             <p className="text-sm font-medium">Click to upload CSV</p>
             <p className="text-xs text-text-muted">Format: username,amount  or  wallet_address,amount</p>

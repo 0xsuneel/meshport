@@ -756,7 +756,7 @@ export function InsightsPage() {
                 style={{
                   padding: '5px 10px', borderRadius: 7, border: 'none',
                   fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
-                  cursor: 'pointer', transition: 'all .15s',
+                  cursor: 'pointer', transition: 'background-color .15s, color .15s',
                   background: actTab === t ? 'var(--brand)' : 'transparent',
                   color: actTab === t ? '#fff' : 'var(--text-secondary)',
                 }}

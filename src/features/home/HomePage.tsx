@@ -2267,6 +2267,7 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
     <div
       role="button"
       aria-label={`${hub(b.title)}: ${b.text}`}
+      className={docked ? undefined : 'mp-press'}
       onClick={() => onOpen(b.path)}
       onTouchStart={e => { touchX.current = e.touches[0].clientX }}
       onTouchEnd={e => {
@@ -2284,7 +2285,7 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
         position: 'relative', overflow: 'hidden', height, borderRadius: 16, cursor: 'pointer',
         background: `linear-gradient(${110 + idx * 25}deg, var(--brand) 0%, color-mix(in srgb, var(--brand) 55%, #06110F) 100%)`,
         display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px',
-        transition: 'background 0.5s ease',
+        transition: 'background 0.5s ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1)',
       }}>
       {docked ? (
         <>
@@ -2301,7 +2302,7 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
       )}
 
       {/* Slides in only when the banner changes - not when Home first opens. */}
-      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 0.35s ease' : undefined }}>
+      <div key={idx} className={docked ? 'mp-press' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 0.35s ease' : undefined }}>
         <div style={{ width: docked ? 48 : 40, height: docked ? 48 : 40, borderRadius: docked ? '50%' : 12, background: docked ? 'rgba(140,225,205,0.16)' : 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <BannerIcon kind={b.icon} />
         </div>
@@ -4244,7 +4245,7 @@ export function HomePage() {
           ].map(a => (
             <div key={a.label}
               onClick={() => a.path ? navigate(a.path) : setShowMore(true)}
-              className="transition-[box-shadow,transform] duration-200 hover:shadow-elevation-2"
+              className="mp-press hover:shadow-elevation-2"
               style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center',
                 gap: 8, cursor: 'pointer',

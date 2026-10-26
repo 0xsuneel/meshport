@@ -133,7 +133,7 @@ export function StatementView({
         <button
           type="button"
           onClick={onCsv}
-          className="flex-1 flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium border border-border text-text-secondary hover:border-text-muted active:scale-[0.98] transition-all min-h-[48px]"
+          className="flex-1 flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium border border-border text-text-secondary hover:border-text-muted active:scale-[0.98] transition min-h-[48px]"
         >
           <Download className="size-4" />
           Download CSV
@@ -141,7 +141,7 @@ export function StatementView({
         <button
           type="button"
           onClick={onPdf}
-          className="flex-1 flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold bg-brand text-white hover:bg-brand/90 active:scale-[0.98] transition-all min-h-[48px]"
+          className="flex-1 flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold bg-brand text-white hover:bg-brand/90 active:scale-[0.98] transition min-h-[48px]"
         >
           <Share2 className="size-4" />
           Share PDF

@@ -3239,7 +3239,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   )
   const reviewButton = (
     <button disabled={!canContinue} onClick={handleContinue}
-      className="active:scale-[.98] transition-all"
+      className="active:scale-[.98] transition"
       style={{ width: '100%', height: 56, borderRadius: 18, fontSize: 16, fontWeight: 700, border: 'none', color: '#fff',
         background: 'var(--brand)', cursor: canContinue ? 'pointer' : 'not-allowed', opacity: canContinue ? 1 : 0.45 }}>
       {numAmount >= MIN_AMOUNT ? `Review ${formatAmount(numAmount)} USDC transfer` : 'Review'}
@@ -3291,7 +3291,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 {formTitle}
                 {formBalance}
                 <button onClick={() => setFormSheet(1)}
-                  className="active:scale-[.98] transition-all"
+                  className="active:scale-[.98] transition"
                   style={{ width: '100%', padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, border: 'none',
                     cursor: 'pointer', color: '#fff', background: 'var(--brand)' }}>
                   Transfer Funds
@@ -3785,7 +3785,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               {/* Two equal buttons, same size as the form's Cancel / Review. */}
               <div className="flex" style={{ gap: 10, paddingTop: 12, ...(isDesktopMq ? {} : { marginTop: 'auto' }) }}>
                 <button onClick={() => { setStep('form'); setFeeChangedNotice('') }}
-                  className="active:scale-[.98] transition-all"
+                  className="active:scale-[.98] transition"
                   style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 600, cursor: 'pointer',
                     color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
                   Back

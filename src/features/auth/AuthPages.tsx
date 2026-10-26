@@ -845,7 +845,7 @@ export function CreateWalletPage() {
       <div className="flex gap-1.5 mb-8">
         {(['generate','backup','confirm','success'] as const).map((s, i) => {
           const idx = ['generate','backup','confirm','success'].indexOf(step)
-          return <div key={s} className={`flex-1 h-1 rounded-full transition-all ${idx >= i ? 'bg-brand' : 'bg-text-primary/10'}`} />
+          return <div key={s} className={`flex-1 h-1 rounded-full transition ${idx >= i ? 'bg-brand' : 'bg-text-primary/10'}`} />
         })}
       </div>
       {/* Steps push like pages, and back reverses (no fade-out to an empty
