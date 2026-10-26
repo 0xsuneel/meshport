@@ -34,7 +34,7 @@ export function StoreSwitcher({ stores, onSwitch, onManage }: StoreSwitcherProps
           type="button"
           onClick={() => onSwitch(store.id)}
           className={[
-            'flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all text-left',
+            'flex items-center gap-3 px-4 py-3.5 rounded-2xl transition text-left',
             store.active ? 'bg-brand/10' : 'hover:bg-card',
           ].join(' ')}
         >
@@ -175,7 +175,7 @@ export function StoresView({ stores, onAdd, onEdit, onQr, onSetPrimary, addLocke
       ) : <button
         type="button"
         onClick={onAdd}
-        className="w-full h-12 rounded-2xl border border-dashed border-border text-text-secondary text-sm font-medium flex items-center justify-center gap-2 hover:border-brand/40 hover:text-brand-text transition-all"
+        className="w-full h-12 rounded-2xl border border-dashed border-border text-text-secondary text-sm font-medium flex items-center justify-center gap-2 hover:border-brand/40 hover:text-brand-text transition"
       >
         <Plus className="size-4.5" />
         Add store

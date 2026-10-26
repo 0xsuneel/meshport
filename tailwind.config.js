@@ -13,6 +13,9 @@ function withOpacity(variableName) {
 
 /** @type {import('tailwindcss').Config} */
 export default {
+  // Hover styles only where a real pointer hovers: on a phone a tap would
+  // otherwise leave them stuck on (raised buttons, shadows) after it.
+  future: { hoverOnlyWhenSupported: true },
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",

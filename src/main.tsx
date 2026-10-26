@@ -26,6 +26,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
 
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { MotionConfig } from 'framer-motion'
 // Before App (and its router): the leave guard's Back listener must be added
 // ahead of React Router's - window listeners run in the order they're added.
 import './lib/leaveGuard'
@@ -102,6 +103,10 @@ void import('./lib/swUpdate').then(m => {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    {/* Phone set to reduce motion: framer animations drop their movement
+        (slides, grows) and keep fades - the CSS side is in index.css. */}
+    <MotionConfig reducedMotion="user">
+      <App />
+    </MotionConfig>
   </React.StrictMode>,
 )

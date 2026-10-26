@@ -293,7 +293,7 @@ export function AmountKeypad({
           background: canProceed ? 'var(--brand)' : 'color-mix(in srgb, var(--text-primary) 12%, transparent)',
           color: canProceed ? '#FFFFFF' : 'var(--text-secondary)',
           opacity: canProceed ? 1 : 0.5,
-          transition: 'all 0.15s',
+          transition: 'background-color 0.15s, color 0.15s, opacity 0.15s',
         }}
       >
         {doneLabel}

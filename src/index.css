@@ -436,7 +436,7 @@
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-secondary);
-  transition: all 0.15s;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
 }
 .chip.active {
   background: color-mix(in srgb, var(--brand) 14%, transparent);
@@ -474,6 +474,10 @@
    Keypad keys (amount keypad, PIN keypad, passcode setup): one press. */
 .mp-key { transition: transform 0.1s ease, background-color 0.1s ease; -webkit-tap-highlight-color: transparent; }
 .mp-key:active { transform: scale(0.95); }
+/* Anything else pressable (Home action buttons, the promo banner): a small
+   shrink the moment it is touched, so the tap is felt before the next page opens. */
+.mp-press { transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1); -webkit-tap-highlight-color: transparent; }
+.mp-press:active { transform: scale(0.97); }
 
 /* Error / alert messages: one entrance, and long text (addresses, hashes,
    API messages) always wraps inside the screen instead of running off it. */

@@ -138,7 +138,7 @@ export function RequestRow({
                   type="button"
                   onClick={a.onClick}
                   disabled={a.disabled}
-                  className={`rounded-xl px-4 py-2.5 text-xs font-semibold transition-all active:scale-[0.97] min-h-[40px] disabled:opacity-40 disabled:cursor-not-allowed ${ACTION_STYLES[a.tone]}`}
+                  className={`rounded-xl px-4 py-2.5 text-xs font-semibold transition active:scale-[0.97] min-h-[40px] disabled:opacity-40 disabled:cursor-not-allowed ${ACTION_STYLES[a.tone]}`}
                 >
                   {a.label}
                 </button>

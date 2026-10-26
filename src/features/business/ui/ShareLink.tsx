@@ -39,7 +39,7 @@ export function ShareLink({ url, copied, onCopy, onShare, channels }: ShareLinkP
       <button
         type="button"
         onClick={onShare}
-        className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 bg-brand text-white text-sm font-semibold hover:bg-brand/90 active:scale-[0.98] transition-all"
+        className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 bg-brand text-white text-sm font-semibold hover:bg-brand/90 active:scale-[0.98] transition"
       >
         <Share2 className="size-4" />
         Share link

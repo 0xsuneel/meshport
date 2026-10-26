@@ -1816,7 +1816,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                         alignItems: 'center',
                         gap: SPACING.lg,
                         cursor: isSelectable ? 'pointer' : 'default',
-                        transition: 'all 0.2s ease',
+                        transition: 'background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease',
                       }}
                     >
                       <ChainLogo chainId={c.chainId} size={40}/>
@@ -2077,7 +2077,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     handleClaimTap()
                   }}
                   disabled={!bringEnabled}
-                  className="active:scale-[.98] transition-all"
+                  className="active:scale-[.98] transition"
                   style={{ width: '100%', height: 56, borderRadius: 18, fontSize: 16, fontWeight: 700, border: 'none', color: '#fff',
                     background: COLORS.primary, cursor: bringEnabled ? 'pointer' : 'not-allowed', opacity: bringEnabled ? 1 : 0.45 }}>
                   {claimAmt > 0 ? `Bring ${formatAmount(claimAmt)} USDC` : 'Bring'}

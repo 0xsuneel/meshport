@@ -1010,7 +1010,7 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
           const cfg = typeConfig[n.type] || defaultConfig
           return (
             <button key={n.id} onClick={() => handleNotifTap(n)}
-              className={`w-full p-4 rounded-2xl border text-left transition-all active:scale-[.98] ${
+              className={`w-full p-4 rounded-2xl border text-left transition active:scale-[.98] ${
                 n.isRead
                   ? 'bg-surface border-border hover:border-border'
                   : 'bg-brand/5 border-brand/20 hover:border-brand/35'

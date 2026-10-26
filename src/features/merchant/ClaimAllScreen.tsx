@@ -15,7 +15,7 @@ import type { ClaimAllStep } from '@/lib/ubClaim'
 export type ClaimAllChain = { chainId: string; label: string; balance: number }
 
 const CSS = `
-@keyframes caOkIn{0%{transform:scale(0)}70%{transform:scale(1.08)}100%{transform:scale(1)}}
+@keyframes caOkIn{0%{transform:scale(0.9);opacity:0}70%{transform:scale(1.08)}100%{transform:scale(1)}}
 @keyframes caDraw{from{stroke-dashoffset:60}to{stroke-dashoffset:0}}
 @keyframes caTick{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
 .ca-ok{animation:caOkIn .45s cubic-bezier(.32,.72,0,1) both}

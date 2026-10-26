@@ -39,8 +39,8 @@ export function PaymentReceivedOverlay({
               {/* Animated tick */}
               <motion.div
                 className="flex items-center justify-center size-20 rounded-full bg-success/15"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
                 transition={{ duration: 0.3, ease: EASE_OUT, delay: 0.1 }}
               >
                 <CheckCircle2 className="size-10 text-success" strokeWidth={1.8} />
@@ -78,7 +78,7 @@ export function PaymentReceivedOverlay({
               <button
                 type="button"
                 onClick={onDone}
-                className="mt-2 w-full rounded-2xl py-4 bg-brand text-white text-sm font-semibold hover:bg-brand/90 active:scale-[0.98] transition-all"
+                className="mt-2 w-full rounded-2xl py-4 bg-brand text-white text-sm font-semibold hover:bg-brand/90 active:scale-[0.98] transition"
               >
                 Done
               </button>

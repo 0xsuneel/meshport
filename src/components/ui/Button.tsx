@@ -36,7 +36,7 @@ export function Button({
   return (
     <button
       className={cn(
-        'font-semibold transition-all duration-150 flex items-center justify-center gap-2 active:scale-[0.98] hover:scale-[1.01]',
+        'font-semibold transition duration-150 flex items-center justify-center gap-2 active:scale-[0.98] hover:scale-[1.01]',
         variants[variant],
         sizes[size],
         fullWidth && 'w-full',

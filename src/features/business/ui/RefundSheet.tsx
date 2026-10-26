@@ -192,7 +192,7 @@ export function RefundSheet({
             type="button"
             disabled={!reason || busy || badAmount || !!blocked}
             onClick={onConfirm}
-            className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold border-2 border-danger text-danger hover:bg-danger/10 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold border-2 border-danger text-danger hover:bg-danger/10 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {busy && <Loader2 className="size-4 animate-spin" />}
             {busy ? 'Refunding…' : 'Confirm refund'}

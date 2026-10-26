@@ -32,7 +32,7 @@ export function DateRangeBar({ value, customLabel, onChange, onCustom }: DateRan
           type="button"
           onClick={() => onChange(c.id)}
           className={[
-            'shrink-0 h-9 px-4 rounded-full text-sm font-medium transition-all',
+            'shrink-0 h-9 px-4 rounded-full text-sm font-medium transition',
             value === c.id
               ? 'bg-brand text-white'
               : 'bg-card border border-border text-text-secondary hover:border-brand/40',
@@ -47,7 +47,7 @@ export function DateRangeBar({ value, customLabel, onChange, onCustom }: DateRan
         type="button"
         onClick={onCustom}
         className={[
-          'shrink-0 h-9 px-4 rounded-full text-sm font-medium flex items-center gap-1.5 transition-all',
+          'shrink-0 h-9 px-4 rounded-full text-sm font-medium flex items-center gap-1.5 transition',
           value === 'custom'
             ? 'bg-brand text-white'
             : 'bg-card border border-border text-text-secondary hover:border-brand/40',
@@ -90,7 +90,7 @@ export function DateRangeSheet({
               key={p.id}
               type="button"
               onClick={() => onPreset(p.id)}
-              className="h-8 px-3 rounded-full text-sm bg-card border border-border text-text-secondary hover:border-brand/40 transition-all"
+              className="h-8 px-3 rounded-full text-sm bg-card border border-border text-text-secondary hover:border-brand/40 transition"
             >
               {p.label}
             </button>

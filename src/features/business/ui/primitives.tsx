@@ -100,7 +100,7 @@ export function IconBtn({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className={`inline-flex items-center justify-center size-11 rounded-2xl text-text-secondary hover:bg-border/30 active:scale-95 transition-all ${className}`}
+      className={`inline-flex items-center justify-center size-11 rounded-2xl text-text-secondary hover:bg-border/30 active:scale-95 transition ${className}`}
     >
       {children}
     </button>
@@ -154,7 +154,7 @@ export function PrimaryBtn({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`w-full rounded-2xl py-4 text-sm font-semibold text-white bg-brand hover:bg-brand/90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
+      className={`w-full rounded-2xl py-4 text-sm font-semibold text-white bg-brand hover:bg-brand/90 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
     >
       {children}
     </button>
@@ -179,7 +179,7 @@ export function GhostBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`w-full rounded-2xl py-3.5 text-sm font-medium text-text-secondary border border-border hover:border-text-muted active:scale-[0.98] transition-all disabled:opacity-40 ${className}`}
+      className={`w-full rounded-2xl py-3.5 text-sm font-medium text-text-secondary border border-border hover:border-text-muted active:scale-[0.98] transition disabled:opacity-40 ${className}`}
     >
       {children}
     </button>

@@ -100,7 +100,7 @@ export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with M
                   animate={{ opacity: 1, scale: 1 }}
                   transition={springs.snappy}
                 >
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ ...springs.snappy, delay: 0.05 }}>
+                  <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ ...springs.snappy, delay: 0.05 }}>
                     <CheckCircle2 className="size-14 text-success" strokeWidth={1.5} />
                   </motion.div>
                   <p className="text-sm font-semibold text-success">Payment received</p>
