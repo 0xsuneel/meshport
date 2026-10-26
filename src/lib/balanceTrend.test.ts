@@ -37,6 +37,23 @@ describe('Home balance bars', () => {
     expect(t.values[4]).toBeCloseTo(25.86 - 4.76)
   })
 
+  it('USDC only: a USDC→EURC swap lowers USDC by what went in (no fake gain)', () => {
+    // Swapped 1 USDC for 1.377 EURC yesterday; USDC is 20 now.
+    const swap = rec(1, 'swap', 1, { tokenSymbol: 'USDC', metadata: { tokenIn: 'USDC', amountIn: '1', tokenOut: 'EURC', amountOut: '1.377' } })
+    const t = balanceTrend([swap], 20, NOW, 7, { asset: 'USDC' })
+    expect(t.values[4]).toBeCloseTo(21)   // before the swap
+    expect(t.values[6]).toBe(20)
+    expect(t.change).toBeCloseTo(-1)
+  })
+
+  it('USDC only: EURC→USDC counts the USDC that came in; EURC payments are ignored', () => {
+    const swapIn = rec(2, 'swap', 12.12, { tokenSymbol: 'EURC', metadata: { tokenIn: 'EURC', amountIn: '12.12', tokenOut: 'USDC', amountOut: '14.72' } })
+    const eurcPay = rec(1, 'send', 3, { tokenSymbol: 'EURC' })
+    const t = balanceTrend([swapIn, eurcPay], 30, NOW, 7, { asset: 'USDC' })
+    expect(t.values[3]).toBeCloseTo(30 - 14.72)
+    expect(t.values[5]).toBe(30)
+  })
+
   it('no activity: a flat week at the current balance', () => {
     const t = balanceTrend([], 12.5, NOW)
     expect(new Set(t.values)).toEqual(new Set([12.5]))
