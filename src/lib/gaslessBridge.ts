@@ -24,6 +24,7 @@
 import { encodeAbiParameters, keccak256, toHex, pad, getAddress, type Hex } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
+import { hasGaslessRouter } from './gaslessRouters'
 import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 export const ARC_DOMAIN = 26
@@ -76,7 +77,7 @@ export function gaslessRouter(chainId: string): Hex | null {
   return configuredRouters()[chainId] ?? null
 }
 export function isGaslessBridgeAvailable(chainId: string): boolean {
-  return !!gaslessRouter(chainId)
+  return hasGaslessRouter(chainId)
 }
 
 /**

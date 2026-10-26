@@ -70,6 +70,12 @@ export default defineConfig({
         // and parsed the whole Circle SDK + ethers (~1.4 MB) before the first
         // screen - even though only Multichain/Swap use them.
         manualChunks(id) {
+          // Vite's dynamic-import preload helper: every lazy import goes
+          // through it, so Rollup put it in a chunk the entry shares with a
+          // lazy screen - the viem chunk - and every app open downloaded all
+          // of viem just for this one tiny function. Keep it with the
+          // polyfills, which load at start anyway.
+          if (id.includes('vite/preload-helper')) return 'polyfills'
           if (!id.includes('node_modules')) return undefined
           if (/node_modules\/(buffer|base64-js|ieee754|process|vite-plugin-node-polyfills)\//.test(id)) return 'polyfills'
           if (/node_modules\/viem\//.test(id)) return 'viem'

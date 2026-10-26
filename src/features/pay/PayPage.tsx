@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Zap, Copy, CheckCircle, ArrowRight, ArrowLeft, Home, Globe, Lock, DollarSign } from 'lucide-react'
@@ -7,16 +7,30 @@ import { useAuthStore, useUIStore } from '@/store'
 import { Avatar } from '@/components/ui/Avatar'
 import { copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { WalletPayPanel } from './WalletPayPanel'
-import { SolanaPayPanel } from './SolanaPayPanel'
+import { lazyRetry } from '@/lib/lazyRetry'
+import { Skeleton } from '@/components/ui/Skeleton'
+// The payment panels carry the wallet library (viem) - they load on their own,
+// in parallel, so this page (in the app's first bundle for cold visitors from a
+// payment link) shows at once without pulling viem into everyone's first load.
+const WalletPayPanel = lazyRetry(() => import('./WalletPayPanel').then(m => ({ default: m.WalletPayPanel })), 'WalletPayPanel')
+const SolanaPayPanel = lazyRetry(() => import('./SolanaPayPanel').then(m => ({ default: m.SolanaPayPanel })), 'SolanaPayPanel')
+function PayPanelSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading payment" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Skeleton className="h-12 w-full rounded-2xl" />
+      <Skeleton className="h-44 w-full rounded-2xl" />
+      <Skeleton className="h-12 w-full rounded-2xl" />
+    </div>
+  )
+}
 import { SOLANA_PAY_OPTION } from '@/lib/solanaPay'
 import { TokenLogo } from '@/components/ui/TokenLogo'
 import { ShopPayPage } from './ShopPayPage'
 import { getShopInfo, type ShopInfo } from '@/lib/shop'
 import { AnimatePresence } from 'framer-motion'
 import { TokenMenu } from '@/components/ui/TokenMenu'
-import { MERCHANT_QR_CHAINS, MERCHANT_QR_EXTERNAL, merchantQrChain } from '@/lib/merchantQr'
-import { ARC_PAY_CHAIN, type PayChain } from '@/lib/merchantPay'
+import { MERCHANT_QR_CHAINS, MERCHANT_QR_EXTERNAL, merchantQrChain } from '@/lib/merchantQrChains'
+import { ARC_PAY_CHAIN, type PayChain } from '@/lib/merchantPayBasics'
 
 const APP_URL = 'https://meshport.xyz'
 
@@ -244,9 +258,12 @@ export function PayPage() {
             </p>
           </div>
         )}
-        {!isAuthenticated && recipient.wallet_address && token === 'USDC' && (personal && onSolana && recipientSolana
-          ? <SolanaPayPanel key="solana" to={recipientSolana} amount={requestedAmount ? Number(requestedAmount) : null} label={displayName} />
-          : <WalletPayPanel key={personal ? netId : 'arc'} to={recipient.wallet_address} amount={requestedAmount ? Number(requestedAmount) : null} chain={personal ? payChain : undefined} />
+        {!isAuthenticated && recipient.wallet_address && token === 'USDC' && (
+          <Suspense fallback={<PayPanelSkeleton />}>
+            {personal && onSolana && recipientSolana
+              ? <SolanaPayPanel key="solana" to={recipientSolana} amount={requestedAmount ? Number(requestedAmount) : null} label={displayName} />
+              : <WalletPayPanel key={personal ? netId : 'arc'} to={recipient.wallet_address} amount={requestedAmount ? Number(requestedAmount) : null} chain={personal ? payChain : undefined} />}
+          </Suspense>
         )}
 
         {/* Pay button - Option C. MeshPort pays on Arc only, so it's left out

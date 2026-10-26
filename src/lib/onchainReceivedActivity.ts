@@ -30,7 +30,7 @@
 // regardless) remains fully functional either way. This is a pure
 // enhancement layer, never a single point of failure for the page itself.
 
-import { P2P_ESCROW_CONTRACT_ADDRESS } from './p2pEscrowContract'
+import { P2P_ESCROW_CONTRACT_ADDRESS } from './p2pEscrowAddress'
 
 import { ARC_EXPLORER } from './chainExplorers'
 const ARC_EXPLORER_API = `${ARC_EXPLORER}/api/v2`

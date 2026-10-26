@@ -34,7 +34,6 @@
  *
  * TESTNET ONLY - same Arc Testnet tokens and endpoint as the legacy readers.
  */
-import { readUSDCBalanceOrThrow, readEURCBalanceOrThrow, readCirBtcBalanceOrThrow } from '@/lib/arcService'
 import { ARC_CHAIN_ID } from './chains'
 import { balanceKey, normalizeAddress } from './types'
 import { swr, peek, put } from './cache'
@@ -54,10 +53,13 @@ export type ArcAsset = 'USDC' | 'EURC' | 'CIRBTC'
  * connection came back. Failures are now never cached; readArcBalance()
  * below still turns them into 0 for callers that want that contract.
  */
+// arcService (and the wallet library under it) loads with the first read,
+// not with the app's first bundle - the cached balance shows meanwhile.
+const arc = () => import('@/lib/arcService')
 const FETCHERS: Record<ArcAsset, (address: string) => Promise<number>> = {
-  USDC:   readUSDCBalanceOrThrow,
-  EURC:   readEURCBalanceOrThrow,
-  CIRBTC: readCirBtcBalanceOrThrow,
+  USDC:   async a => (await arc()).readUSDCBalanceOrThrow(a),
+  EURC:   async a => (await arc()).readEURCBalanceOrThrow(a),
+  CIRBTC: async a => (await arc()).readCirBtcBalanceOrThrow(a),
 }
 
 /**

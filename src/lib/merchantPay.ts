@@ -35,7 +35,8 @@ export function paymentStageLabel(p: { method: string; status: PaymentStage }): 
  */
 export const isArriving = (p: { method: string; status: PaymentStage }) => p.method === 'external_ub' && p.status === 'in_ledger'
 
-export type PayChain = { id: string; label: string; chainId: number; usdc: string; route: 'direct' | 'ub' }
+import type { PayChain } from './merchantPayBasics'
+export type { PayChain } from './merchantPayBasics'
 
 /** One line on a bill. The server recomputes totals from qty × price. */
 export type InvoiceItem = { name: string; qty: number; price: number; total?: number }
@@ -151,13 +152,9 @@ export function orderPayLink(code: string, orderNumber?: string | null): string 
 // Set when this device creates a payment request, so the generic "Received
 // from" notification defers to the order's own notification (see
 // lib/notifications.ts) for non-merchants too.
-const PAYREQ_KEY = 'meshport-payreq-at'
-export function markPaymentRequestCreated() {
-  try { localStorage.setItem(PAYREQ_KEY, String(Date.now())) } catch { /* ignore */ }
-}
-export function hasRecentPaymentRequest(days = 8): boolean {
-  try { return Date.now() - Number(localStorage.getItem(PAYREQ_KEY) || 0) < days * 864e5 } catch { return false }
-}
+// In merchantPayBasics.ts (no viem - notifications loads at app start).
+export { markPaymentRequestCreated, hasRecentPaymentRequest } from './merchantPayBasics'
+import { markPaymentRequestCreated } from './merchantPayBasics'
 
 /** Short, human bill / request number (first 6 of the code) - only a
  *  fallback for requests created before order numbers existed. */
@@ -638,7 +635,8 @@ export async function ensureChain(w: BrowserWallet, chain: PayChain) {
 }
 
 /** Arc Testnet as a pay chain (USDC is the native coin). */
-export const ARC_PAY_CHAIN: PayChain = { id: 'Arc_Testnet', label: 'Arc', chainId: 5042002, usdc: '0x3600000000000000000000000000000000000000', route: 'direct' }
+export { ARC_PAY_CHAIN } from './merchantPayBasics'
+import { ARC_PAY_CHAIN } from './merchantPayBasics'
 
 /**
  * Pay on Arc from the wallet this page is open in (MetaMask / OKX / Trust /

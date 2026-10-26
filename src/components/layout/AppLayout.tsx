@@ -15,7 +15,6 @@ import { PageTransition } from '@/components/ui/PageTransition'
 import { onReconnect, useOnReconnect, isSlowNetwork, whenNetworkOk } from '@/lib/connectivity'
 import { ModeToggle } from '@/components/admin/ModeToggle'
 import { useAuthStore, useP2PTradesCountStore, useWalletStore, useUIStore } from '@/store'
-import { fetchMyTrades, subscribeToMyTrades, isTradeExpired } from '@/lib/p2pService'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useVisibleFrame, useFrameScrollGuard, visibleFrame } from '@/hooks/useVisibleViewportHeight'
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen'
@@ -606,11 +605,18 @@ export function AppLayout() {
     if (!userId) { setOngoingP2PCount(0); return }
     let cancelled = false
     const terminal = new Set(['released', 'completed', 'cancelled', 'expired'])
-    const refresh = () => fetchMyTrades(userId).then(trades => {
+    // Loaded on demand: p2pService carries the escrow contract code and the
+    // wallet library, which the app's first screen doesn't need.
+    const p2p = import('@/lib/p2pService')
+    const refresh = () => p2p.then(({ fetchMyTrades, isTradeExpired }) => fetchMyTrades(userId).then(trades => {
       if (!cancelled) setOngoingP2PCount(trades.filter(t => !terminal.has(t.status) && !isTradeExpired(t)).length)
-    })
+    })).catch(() => {})
     refresh()
-    const unsubscribe = subscribeToMyTrades(userId, refresh)
+    let unsubscribe = () => {}
+    p2p.then(({ subscribeToMyTrades }) => {
+      if (cancelled) return
+      unsubscribe = subscribeToMyTrades(userId, refresh)
+    }).catch(() => {})
     // Backup for the live feed: while a trade is still open, re-count every
     // so often (screen on), so the ongoing-trade dot clears after it's done
     // even if the realtime connection dropped.
