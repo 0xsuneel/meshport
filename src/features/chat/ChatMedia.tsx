@@ -453,7 +453,7 @@ export function ChatImageViewer({ items, startId, convKey, onClose, onReply, onF
         {/* The photo strip: previous · current · next, side by side. */}
         <div onTransitionEnd={onGlideEnd}
           style={{ position: 'absolute', inset: 0, transform: `translate3d(${slideX}px, 0, 0)`,
-            transition: gliding ? 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)' : 'none', willChange: 'transform' }}>
+            transition: gliding ? 'transform 0.3s var(--ease-out)' : 'none', willChange: 'transform' }}>
           {[idx - 1, idx, idx + 1].map(i => {
             const it = items[i]
             if (!it) return null

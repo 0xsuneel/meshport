@@ -110,11 +110,11 @@ const CLAIM_PROGRESS_CSS = `
 @keyframes rwDraw{from{stroke-dashoffset:60}to{stroke-dashoffset:0}}
 @keyframes rwFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes rwTickIn{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
-.rw-ok{animation:rwOkIn .45s cubic-bezier(.32,.72,0,1) both}
+.rw-ok{animation:rwOkIn .45s var(--ease-out) both}
 .rw-ok path{stroke-dasharray:60;stroke-dashoffset:60;animation:rwDraw .45s .25s ease-out forwards}
 .rw-fade{animation:rwFade .35s .2s ease-out both}
 .rw-tick{animation:rwTickIn .25s ease-out both}
-.rw-trav{transition:transform .55s cubic-bezier(.32,.72,0,1)}
+.rw-trav{transition:transform .55s var(--ease-out)}
 @media (prefers-reduced-motion: reduce){.rw-ok,.rw-ok path,.rw-fade,.rw-tick{animation:none;stroke-dashoffset:0}.rw-trav{transition:none}}
 `
 export interface ClaimProgress {
@@ -199,7 +199,7 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
         {/* Steps with the travelling check */}
         <div style={{ position: 'relative', textAlign: 'left', margin: '18px 0 0' }}>
           <div style={{ position: 'absolute', left: 13, top: 12, width: 2, height: STEP_H * (STEPS.length - 1), background: 'var(--border)' }} />
-          <div style={{ position: 'absolute', left: 13, top: 12, width: 2, height: STEP_H * Math.min(doneIdx, STEPS.length - 1), background: 'var(--success)', transition: 'height .55s cubic-bezier(.32,.72,0,1)' }} />
+          <div style={{ position: 'absolute', left: 13, top: 12, width: 2, height: STEP_H * Math.min(doneIdx, STEPS.length - 1), background: 'var(--success)', transition: 'height .55s var(--ease-out)' }} />
           {p.phase === 'running' && (
             <div className="rw-trav" aria-hidden style={{ position: 'absolute', left: 0, top: 6, width: 28, height: 28, borderRadius: '50%', zIndex: 3, transform: `translateY(${travIdx * STEP_H}px)`,
               background: 'var(--success)', color: '#fff', fontWeight: 900, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',

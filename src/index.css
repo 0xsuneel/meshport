@@ -81,6 +81,9 @@
    :root (no attribute) mirrors the dark palette as a safety-net fallback
    so nothing can ever render fully unthemed. ───────────────────────────── */
 :root {
+  /* The app's one ease-out curve (lib/motion.ts EASE_OUT): iOS-style
+     deceleration. Every CSS animation / transition uses it. */
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
   /* Popups (DesktopDialogFrame / Sheet): lifted card edge + layered shadow */
   --popup-edge: color-mix(in srgb, var(--text-primary) 8%, transparent);
   --popup-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 28px 64px -16px rgba(16,24,32,0.34), 0 10px 24px -10px rgba(16,24,32,0.18);
@@ -480,7 +483,7 @@
 .mp-key:active { transform: scale(0.95); }
 /* Anything else pressable (Home action buttons, the promo banner): a small
    shrink the moment it is touched, so the tap is felt before the next page opens. */
-.mp-press { transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1); -webkit-tap-highlight-color: transparent; }
+.mp-press { transition: transform 160ms var(--ease-out); -webkit-tap-highlight-color: transparent; }
 .mp-press:active { transform: scale(0.97); }
 
 /* Error / alert messages: one entrance, and long text (addresses, hashes,
@@ -490,7 +493,7 @@
   word-break: break-word;
   min-width: 0;
   max-width: 100%;
-  animation: mpAlertIn 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+  animation: mpAlertIn 0.2s var(--ease-out);
 }
 @keyframes mpAlertIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 
@@ -503,15 +506,15 @@
 .qr-fade-in { animation: mpFadeIn 0.2s ease-out; }
 /* Same pop as DIALOG_CARD (lib/motion.ts): solid within the first few frames, then a soft grow into place. */
 @keyframes mpDialogIn { from { opacity: 0.85; transform: translateY(10px) scale(0.94); } 25% { opacity: 1; } to { opacity: 1; transform: none; } }
-.mp-dialog-in { animation: mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1); }
+.mp-dialog-in { animation: mpDialogIn 0.26s var(--ease-out); }
 /* Desktop: the quick fade + tiny zoom desktop apps use (lib/motion.ts). */
 @keyframes mpDesktopPopIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
 @media (min-width: 980px) {
-  .mp-dialog-in { animation: mpDesktopPopIn 0.18s cubic-bezier(0.32, 0.72, 0, 1); }
+  .mp-dialog-in { animation: mpDesktopPopIn 0.18s var(--ease-out); }
 }
-.mp-sheet-up { animation: mpSheetUp 0.42s cubic-bezier(0.32, 0.72, 0, 1); }
-.mp-drawer-in { animation: mpDrawerIn 0.42s cubic-bezier(0.32, 0.72, 0, 1); }
-.mp-fade-in { animation: mpFadeIn 0.22s cubic-bezier(0.32, 0.72, 0, 1); }
+.mp-sheet-up { animation: mpSheetUp 0.42s var(--ease-out); }
+.mp-drawer-in { animation: mpDrawerIn 0.42s var(--ease-out); }
+.mp-fade-in { animation: mpFadeIn 0.22s var(--ease-out); }
 
 /* ── Popups ─────────────────────────────────────────────────────────────
    One look for every centred popup (pickers, menus, profiles, confirms):
@@ -649,7 +652,7 @@ html.mp-locking #root { visibility: hidden; }
    until the swap lands. */
 .mp-swap-live { animation: mp-swap-live 1s ease-in-out infinite; }
 @keyframes mp-swap-live { 50% { opacity: .25; } }
-.mp-swap-arrow { animation: mp-swap-arrow 1.2s ease-in infinite; }
+.mp-swap-arrow { animation: mp-swap-arrow 1.2s linear infinite; } /* a steady flow, not a speed-up */
 @keyframes mp-swap-arrow {
   0% { transform: translateY(-20px); opacity: 0; }
   30%, 70% { opacity: 1; }
