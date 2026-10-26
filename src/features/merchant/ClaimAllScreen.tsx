@@ -18,7 +18,7 @@ const CSS = `
 @keyframes caOkIn{0%{transform:scale(0.9);opacity:0}70%{transform:scale(1.08)}100%{transform:scale(1)}}
 @keyframes caDraw{from{stroke-dashoffset:60}to{stroke-dashoffset:0}}
 @keyframes caTick{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
-.ca-ok{animation:caOkIn .45s cubic-bezier(.32,.72,0,1) both}
+.ca-ok{animation:caOkIn .45s var(--ease-out) both}
 .ca-ok path{stroke-dasharray:60;stroke-dashoffset:60;animation:caDraw .45s .25s ease-out forwards}
 .ca-tick{animation:caTick .25s ease-out both}
 @media (prefers-reduced-motion: reduce){.ca-ok,.ca-ok path,.ca-tick{animation:none;stroke-dashoffset:0}}

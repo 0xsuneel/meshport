@@ -2289,7 +2289,7 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
         position: 'relative', overflow: 'hidden', height, borderRadius: 16, cursor: 'pointer',
         background: `linear-gradient(${110 + idx * 25}deg, var(--brand) 0%, color-mix(in srgb, var(--brand) 55%, #06110F) 100%)`,
         display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px',
-        transition: 'background 0.5s ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1)',
+        transition: 'background 0.5s ease, transform 160ms var(--ease-out)',
       }}>
       {docked ? (
         <>
@@ -2306,7 +2306,7 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
       )}
 
       {/* Slides in only when the banner changes - not when Home first opens. */}
-      <div key={idx} className={docked ? 'mp-press' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 220ms cubic-bezier(0.23, 1, 0.32, 1)' : undefined }}>
+      <div key={idx} className={docked ? 'mp-press' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 220ms var(--ease-out)' : undefined }}>
         <div style={{ width: docked ? 48 : 40, height: docked ? 48 : 40, borderRadius: docked ? '50%' : 12, background: docked ? 'rgba(140,225,205,0.16)' : 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <BannerIcon kind={b.icon} />
         </div>
