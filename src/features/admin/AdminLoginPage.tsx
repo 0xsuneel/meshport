@@ -61,7 +61,7 @@ export function AdminLoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="owner@meshport.app"
                 autoComplete="username"
-                style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 14 }}
+                style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 'max(var(--fs-field, 0px), 14px)' }}
               />
             </div>
           </div>
@@ -80,7 +80,7 @@ export function AdminLoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 autoComplete="current-password"
-                style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 14 }}
+                style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 'max(var(--fs-field, 0px), 14px)' }}
               />
               <button type="button" onClick={() => setShowPw((v) => !v)} style={{ background: 'none', border: 'none', display: 'flex', flexShrink: 0, padding: 8, margin: -8 }}>
                 {showPw ? <EyeOff size={16} color="var(--text-secondary)" /> : <Eye size={16} color="var(--text-secondary)" />}

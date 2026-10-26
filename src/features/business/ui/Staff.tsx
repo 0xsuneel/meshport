@@ -186,7 +186,7 @@ export function StaffForm({
           onChange={e => onUsername(e.target.value)}
           placeholder="ravi.arc"
           autoCapitalize="none"
-          className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand/40"
+          className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] font-mono focus:outline-none focus:ring-2 focus:ring-brand/40"
         />
         {problem && <span className={`text-[12px] px-0.5 ${problem.tone === 'danger' ? 'text-danger font-semibold' : 'text-text-muted'}`} role={problem.tone === 'danger' ? 'alert' : undefined}>{problem.text}</span>}
       </label>

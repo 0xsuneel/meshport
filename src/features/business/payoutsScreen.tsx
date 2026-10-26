@@ -540,7 +540,7 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
                   <span className="flex-1 min-w-0">
                     <span className="block text-[14px] font-semibold text-text-primary truncate">{r.name}</span>
                     <input value={r.label} onChange={e => setRow(i, { label: e.target.value.slice(0, 30) })} placeholder="Role (optional)" aria-label={`Role for ${r.name}`}
-                      className="w-full bg-transparent text-xs text-text-secondary placeholder:text-text-muted focus:outline-none" />
+                      className="w-full bg-transparent text-xs ![font-size:max(var(--fs-field,0px),0.75rem)] text-text-secondary placeholder:text-text-muted focus:outline-none" />
                   </span>
                   <AmountChip value={r.amount} ariaLabel={`Amount for ${r.name}`} onChange={v => setRow(i, { amount: amountInput(v) })}
                     onTap={isDesktop ? undefined : () => { (document.activeElement as HTMLElement | null)?.blur?.(); setPadIdx(i); revealRow(`Amount for ${r.name}`) }}

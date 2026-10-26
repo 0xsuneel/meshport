@@ -165,7 +165,7 @@ export function RefundSheet({
               placeholder="Add a note for your records..."
               value={note}
               onChange={(e) => onNote(e.target.value)}
-              className="w-full bg-transparent border-b border-border py-2 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-text-secondary transition-colors"
+              className="w-full bg-transparent border-b border-border py-2 text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] text-text-primary placeholder:text-text-muted outline-none focus:border-text-secondary transition-colors"
             />
           </div>
   

@@ -105,7 +105,7 @@ export function CategoryTogglePage({ sections }: CategoryTogglePageProps) {
                         placeholder="6"
                         style={{
                           width: '100%', marginTop: 6, background: 'var(--bg)', border: '1px solid var(--border)',
-                          borderRadius: 10, padding: '8px 10px', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'inherit',
+                          borderRadius: 10, padding: '8px 10px', color: 'var(--text-primary)', fontSize: 'max(var(--fs-field, 0px), 13px)', fontFamily: 'inherit',
                         }}
                       />
                     </div>
@@ -123,7 +123,7 @@ export function CategoryTogglePage({ sections }: CategoryTogglePageProps) {
                         placeholder="e.g. Bridge upgrading - back Thursday"
                         style={{
                           width: '100%', marginTop: 6, background: 'var(--bg)', border: '1px solid var(--border)',
-                          borderRadius: 10, padding: '8px 10px', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'inherit',
+                          borderRadius: 10, padding: '8px 10px', color: 'var(--text-primary)', fontSize: 'max(var(--fs-field, 0px), 13px)', fontFamily: 'inherit',
                         }}
                       />
                       {savingReason[row.feature] && (

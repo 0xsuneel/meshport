@@ -59,7 +59,7 @@ export function AdminSettingsPage() {
 
   const inputStyle: CSSProperties = {
     width: '100%', background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)',
-    borderRadius: 14, padding: '11px 12px', color: 'var(--text-primary)', fontSize: 14, outline: 'none',
+    borderRadius: 14, padding: '11px 12px', color: 'var(--text-primary)', fontSize: 'max(var(--fs-field, 0px), 14px)', outline: 'none',
     boxSizing: 'border-box', marginTop: 8,
   }
   const btnStyle: CSSProperties = {

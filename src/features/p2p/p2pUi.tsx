@@ -82,7 +82,7 @@ export function MerchantLine({ name, verified, stats, compact }: { name: string;
 
 const inputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid transparent',
-  borderRadius: 12, padding: '12px 14px', fontSize: 14.5, color: 'var(--text-primary)', outline: 'none',
+  borderRadius: 12, padding: '12px 14px', fontSize: 'max(var(--fs-field, 0px), 14.5px)', color: 'var(--text-primary)', outline: 'none',
 }
 
 /** The P2P sheets' shell: the app's bottom sheet (phone) / centred dialog

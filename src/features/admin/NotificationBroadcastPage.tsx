@@ -121,7 +121,7 @@ export function NotificationBroadcastPage() {
               maxLength={80}
               style={{
                 width: '100%', marginTop: 6, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)',
-                borderRadius: 14, padding: '12px 14px', color: 'var(--text-primary)', fontSize: 14,
+                borderRadius: 14, padding: '12px 14px', color: 'var(--text-primary)', fontSize: 'max(var(--fs-field, 0px), 14px)',
               }}
             />
           </div>
@@ -135,7 +135,7 @@ export function NotificationBroadcastPage() {
               maxLength={200}
               style={{
                 width: '100%', marginTop: 6, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)',
-                borderRadius: 14, padding: '12px 14px', color: 'var(--text-primary)', fontSize: 14, resize: 'vertical', fontFamily: 'inherit',
+                borderRadius: 14, padding: '12px 14px', color: 'var(--text-primary)', fontSize: 'max(var(--fs-field, 0px), 14px)', resize: 'vertical', fontFamily: 'inherit',
               }}
             />
             <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0', textAlign: 'right' }}>{body.length}/200</p>

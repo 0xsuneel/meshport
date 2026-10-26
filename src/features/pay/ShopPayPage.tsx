@@ -99,7 +99,7 @@ export function ShopPayPage({ shop, initialAmount }: { shop: ShopInfo; initialAm
               onChange={(e) => setNote(e.target.value)}
               placeholder="Add a note (optional)"
               maxLength={60}
-              className="w-full bg-transparent text-sm text-center text-text-secondary placeholder:text-text-muted border-b border-border pb-1.5 outline-none focus:border-brand-text transition-colors"
+              className="w-full bg-transparent text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] text-center text-text-secondary placeholder:text-text-muted border-b border-border pb-1.5 outline-none focus:border-brand-text transition-colors"
               aria-label="Payment note"
             />
           </div>

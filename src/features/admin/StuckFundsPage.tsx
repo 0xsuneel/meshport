@@ -395,7 +395,7 @@ export function StuckFundsPage() {
           <Search size={14} color="var(--text-secondary)" />
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search user, wallet or tx hash"
             aria-label="Search stuck funds"
-            style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 13 }} />
+            style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 'max(var(--fs-field, 0px), 13px)' }} />
         </label>
       </div>
 

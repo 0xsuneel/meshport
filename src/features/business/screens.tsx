@@ -774,7 +774,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
             <Field label="Why do you need a business account?" hint={`${reason.trim().length}/10 characters minimum`}>
               <textarea value={reason} onChange={e => setReason(e.target.value)} maxLength={500} rows={4}
                 placeholder="e.g. I run a bakery and want customers to pay in USDC at the counter."
-                className="w-full rounded-2xl bg-surface border border-border px-4 py-3 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-brand resize-none" />
+                className="w-full rounded-2xl bg-surface border border-border px-4 py-3 text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] text-text-primary placeholder:text-text-muted outline-none focus:border-brand resize-none" />
             </Field>
             <Field label="Contact (optional)"><TextInput value={contact} onChange={e => setContact(e.target.value)} maxLength={120} placeholder="Phone or email" /></Field>
             <Field label="Registration number (optional)"><TextInput value={registration} onChange={e => setRegistration(e.target.value)} maxLength={40} placeholder="GST, VAT, EIN, ABN or business licence number" /></Field>

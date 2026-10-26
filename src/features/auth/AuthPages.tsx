@@ -1162,7 +1162,7 @@ export function ImportWalletPage() {
             </div>
             <textarea value={input} onChange={e => { setInput(e.target.value); setError('') }}
               placeholder="word1 word2 word3 ... word12" rows={4}
-              className="w-full bg-surface border border-border rounded-2xl px-4 py-3 text-text-primary placeholder-gray-600 focus:outline-none focus:border-brand resize-none text-sm" />
+              className="w-full bg-surface border border-border rounded-2xl px-4 py-3 text-text-primary placeholder-gray-600 focus:outline-none focus:border-brand resize-none text-sm ![font-size:max(var(--fs-field,0px),0.875rem)]" />
           </div>
         ) : (
           <Input label="Private Key" type={showKey ? 'text' : 'password'} placeholder="0x..."

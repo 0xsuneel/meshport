@@ -106,7 +106,7 @@ export function DateRangeSheet({
             type="date"
             value={from}
             onChange={e => onFrom(e.target.value)}
-            className="h-12 px-3 rounded-2xl bg-card border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
+            className="h-12 px-3 rounded-2xl bg-card border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] focus:outline-none focus:ring-2 focus:ring-brand/40"
           />
         </label>
         <label className="flex-1 flex flex-col gap-1">
@@ -115,7 +115,7 @@ export function DateRangeSheet({
             type="date"
             value={to}
             onChange={e => onTo(e.target.value)}
-            className="h-12 px-3 rounded-2xl bg-card border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
+            className="h-12 px-3 rounded-2xl bg-card border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] focus:outline-none focus:ring-2 focus:ring-brand/40"
           />
         </label>
       </div>

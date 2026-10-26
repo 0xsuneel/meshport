@@ -313,7 +313,7 @@ export function CashOutChat({ messages, draft, onDraft, onSend, onClose }: {
       <div className="flex gap-2 px-5 pt-2 pb-5 border-t border-border">
         <input type="text" value={draft} onChange={e => onDraft(e.target.value)} onKeyDown={e => e.key === 'Enter' && onSend()}
           placeholder="Message the buyer…" aria-label="Message the buyer"
-          className="flex-1 h-11 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-brand-text" />
+          className="flex-1 h-11 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] placeholder:text-text-muted focus:outline-none focus:border-brand-text" />
         <button type="button" aria-label="Send message" onClick={onSend} disabled={!draft.trim()}
           className="size-11 rounded-2xl bg-brand text-white inline-flex items-center justify-center disabled:opacity-40">
           <Send className="size-4" />

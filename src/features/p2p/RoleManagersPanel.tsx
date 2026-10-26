@@ -581,7 +581,7 @@ export function RoleManagersPanel() {
 
         <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.text, marginBottom: 6 }}>Propose a new Admin</div>
         <input value={newAdminInput} onChange={e => setNewAdminInput(e.target.value)} placeholder="New admin address 0x…"
-          style={{ width: '100%', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13.5, fontFamily: 'monospace', boxSizing: 'border-box', marginBottom: 10 }} />
+          style={{ width: '100%', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 'max(var(--fs-field, 0px), 13.5px)', fontFamily: 'monospace', boxSizing: 'border-box', marginBottom: 10 }} />
         <button onClick={handleProposeAdminRotation} disabled={!connectedWallet || proposingAdmin}
           style={{ width: '100%', padding: '11px 0', borderRadius: 12, border: 'none', background: COLORS.warning, color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', opacity: (!connectedWallet || proposingAdmin) ? 0.6 : 1 }}>
           {proposingAdmin ? 'Signing…' : 'Propose Admin Replacement (signs as 1st confirmation)'}
@@ -592,12 +592,12 @@ export function RoleManagersPanel() {
       <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 14, marginBottom: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text, marginBottom: 10 }}>Propose a role change</div>
         <select value={action} onChange={e => setAction(e.target.value as RoleAction)}
-          style={{ width: '100%', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13.5, marginBottom: 10 }}>
+          style={{ width: '100%', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 'max(var(--fs-field, 0px), 13.5px)', marginBottom: 10 }}>
           {ROLE_ACTIONS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
         </select>
         {ROLE_ACTIONS.find(a => a.value === action)?.needsTarget && (
           <input value={target} onChange={e => setTarget(e.target.value)} placeholder="Target address 0x…"
-            style={{ width: '100%', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13.5, fontFamily: 'monospace', boxSizing: 'border-box', marginBottom: 10 }} />
+            style={{ width: '100%', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 'max(var(--fs-field, 0px), 13.5px)', fontFamily: 'monospace', boxSizing: 'border-box', marginBottom: 10 }} />
         )}
         {overlapWarning && (
           <div style={{ marginBottom: 10, padding: 10, borderRadius: 10, background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 35%, transparent)' }}>
@@ -625,11 +625,11 @@ export function RoleManagersPanel() {
           confirmation; the new address can't already be one of the 3 current signers.
         </p>
         <select value={rotateIndex} onChange={e => setRotateIndex(Number(e.target.value))}
-          style={{ width: '100%', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13.5, marginBottom: 10 }}>
+          style={{ width: '100%', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 'max(var(--fs-field, 0px), 13.5px)', marginBottom: 10 }}>
           {[0, 1, 2].map(i => <option key={i} value={i}>Slot {i + 1} {signerAddresses[i] ? `(${shortAddr(signerAddresses[i])})` : ''}</option>)}
         </select>
         <input value={rotateTarget} onChange={e => setRotateTarget(e.target.value)} placeholder="New signer address 0x…"
-          style={{ width: '100%', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 13.5, fontFamily: 'monospace', boxSizing: 'border-box', marginBottom: 10 }} />
+          style={{ width: '100%', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 'max(var(--fs-field, 0px), 13.5px)', fontFamily: 'monospace', boxSizing: 'border-box', marginBottom: 10 }} />
         <button onClick={handleRotate} disabled={!connectedWallet || rotating}
           style={{ width: '100%', padding: '11px 0', borderRadius: 12, border: `1px solid ${COLORS.border}`, background: 'transparent', color: COLORS.text, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', opacity: (!connectedWallet || rotating) ? 0.6 : 1 }}>
           {rotating ? 'Signing…' : 'Propose Rotation (signs as 1st confirmation)'}

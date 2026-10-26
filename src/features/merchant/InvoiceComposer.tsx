@@ -242,7 +242,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
                     <input value={r.qty} inputMode="decimal" aria-label={`Item ${idx + 1} quantity`} enterKeyHint="next"
                       onChange={e => update(r.id, { qty: decimal(e.target.value, 3) })}
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); priceRefs.current.get(r.id)?.focus() } }}
-                      className="text-center font-bold bg-transparent outline-none" style={{ width: Math.max(24, r.qty.length * 10 + 8), border: 'none', fontSize: 14.5, color: 'var(--text-primary)' }} />
+                      className="text-center font-bold bg-transparent outline-none" style={{ width: Math.max(24, r.qty.length * 10 + 8), border: 'none', fontSize: 'max(var(--fs-field, 0px), 14.5px)', color: 'var(--text-primary)' }} />
                     <button type="button" onClick={() => step(r, 1)} aria-label="One more"
                       style={{ width: 32, height: 32, border: 'none', background: 'none', color: 'var(--brand-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer' }}>+</button>
                   </div>
