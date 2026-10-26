@@ -70,13 +70,15 @@
    (see src/store/themeStore.ts + the pre-paint bootstrap script in
    index.html - nothing here decides the theme, it only defines the two
    value sets).
-   Dark palette uses a Binance-style near-black surface hierarchy
-   (#0B0E11 page / #181A20 elevated surface / #2B3139 border) instead of
-   pure #000000 - pure black gives every card/border/icon the same flat
-   value, so surfaces stop reading as separate elevated layers and icons
-   drawn in a fixed white lose their intended contrast the moment they sit
-   on anything lighter than the page. This mirrors how professional dark-mode
-   fintech UIs (Binance, etc.) avoid true black for the same reason.
+   Both palettes come from values measured on real wallet screens (the
+   taste-skill app library), with MeshPort teal as the one brand hue:
+   - Light: neutral off-white page (#F3F5F7), white cards, near-black ink,
+     quiet money colours.
+   - Dark: true black page (#000000) with cards one lightness step up
+     (#111111); elevation is lightness alone, borders (#1F1F1F) barely show.
+   The brand fill is the same in both, the text tiers keep one order
+   (primary > secondary > muted), and every text colour holds 4.5:1 on the
+   page and on cards.
    :root (no attribute) mirrors the dark palette as a safety-net fallback
    so nothing can ever render fully unthemed. ───────────────────────────── */
 :root {
@@ -92,34 +94,34 @@
   --popup-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 28px 64px -16px rgba(16,24,32,0.34), 0 10px 24px -10px rgba(16,24,32,0.18);
   color-scheme: dark;
   --brand:          #12665F;
-  --mesh-loader:    #5CD6CB;  /* moving logo: bright brand teal on dark so it never looks dim */
-  --brand-text:     #53C6BC;  /* brand-coloured TEXT (links, highlights): light shade of brand teal, readable on dark */
-  --brand-text-rgb: 83 198 188;
-  --nav-idle:       #C4C9D0;  /* inactive bottom-bar tabs */
+  --mesh-loader:    #5CCFC4;  /* moving logo: bright brand teal on dark so it never looks dim */
+  --brand-text:     #5CCFC4;  /* brand-coloured TEXT (links, highlights): light shade of brand teal, readable on dark */
+  --brand-text-rgb: 92 207 196;
+  --nav-idle:       #B4B4B4;  /* inactive bottom-bar tabs */
   --nav-active-bg:  var(--brand);   /* selected tab: brand teal, white icon */
   --nav-active-fg:  #FFFFFF;
   --header:         #12665F;
   --header-text:    #FFFFFF;
   --header-subtext: #CDEDE2;
   --accent:         #1E9488;  /* brand teal family */
-  --accent-text:    #53C6BC;
-  --success:        #1FB88A;
-  --warning:        #F59E0B;
-  --danger:         #EF4444;
+  --accent-text:    #5CCFC4;
+  --success:        #15806B;
+  --warning:        #E5A93B;
+  --danger:         #D63B40;
   /* Status colours as TEXT: the fills above are bright tones for dots,
      badges and tints; as text they need >=4.5:1 on cards and the page. */
-  --success-text:   #1FB88A;
-  --warning-text:   #F59E0B;
-  --danger-text:    #F26B6B;
-  --success-text-rgb: 31 184 138;  --warning-text-rgb: 245 158 11; --danger-text-rgb: 242 107 107;
-  --text-primary:   #EAECEF;
-  --text-secondary: #9CA3AE;
-  --text-muted:     #848B97;
-  --bg:             #0B0E11;
-  --surface:        #181A20;
-  --card:           #181A20;
-  --border:         #2B3139;
-  --link:           #53C6BC;
+  --success-text:   #5CCFC4;
+  --warning-text:   #E5A93B;
+  --danger-text:    #F0686C;
+  --success-text-rgb: 92 207 196;  --warning-text-rgb: 229 169 59; --danger-text-rgb: 240 104 108;
+  --text-primary:   #FFFFFF;
+  --text-secondary: #B4B4B4;
+  --text-muted:     #949494;
+  --bg:             #000000;
+  --surface:        #111111;
+  --card:           #111111;
+  --border:         #1F1F1F;
+  --link:           #5CCFC4;
   --avatar-1: #1D9E75; --avatar-2: #97C459; --avatar-3: #7F77DD; --avatar-4: #F0997B;
   --usdc-bg:   #0C447C33;
   --usdc-icon: #85B7EB;
@@ -134,11 +136,11 @@
      these are purely additive for the Tailwind color config. */
   --brand-rgb: 18 102 95;      --header-rgb: 18 102 95;
   --header-text-rgb: 255 255 255; --header-subtext-rgb: 205 237 226;
-  --accent-rgb: 30 148 136;    --accent-text-rgb: 83 198 188;
-  --success-rgb: 31 184 138;   --warning-rgb: 245 158 11; --danger-rgb: 239 68 68;
-  --text-primary-rgb: 234 236 239; --text-secondary-rgb: 156 163 174; --text-muted-rgb: 132 139 151;
-  --bg-rgb: 11 14 17; --surface-rgb: 24 26 32; --card-rgb: 24 26 32; --border-rgb: 43 49 57;
-  --link-rgb: 83 198 188;
+  --accent-rgb: 30 148 136;    --accent-text-rgb: 92 207 196;
+  --success-rgb: 21 128 107;   --warning-rgb: 229 169 59; --danger-rgb: 214 59 64;
+  --text-primary-rgb: 255 255 255; --text-secondary-rgb: 180 180 180; --text-muted-rgb: 148 148 148;
+  --bg-rgb: 0 0 0; --surface-rgb: 17 17 17; --card-rgb: 17 17 17; --border-rgb: 31 31 31;
+  --link-rgb: 92 207 196;
   --avatar-1-rgb: 29 158 117; --avatar-2-rgb: 151 196 89; --avatar-3-rgb: 127 119 221; --avatar-4-rgb: 240 153 123;
   --usdc-icon-rgb: 133 183 235;
   /* Soft elevation - no glow anywhere. Alpha-black shadows read correctly
@@ -159,44 +161,44 @@
   --popup-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 28px 64px -16px rgba(0,0,0,0.75), 0 10px 24px -10px rgba(0,0,0,0.5);
   color-scheme: dark;
   --brand:          #12665F;
-  --mesh-loader:    #5CD6CB;  /* moving logo: bright brand teal on dark so it never looks dim */
-  --brand-text:     #53C6BC;  /* brand-coloured TEXT (links, highlights): light shade of brand teal, readable on dark */
-  --brand-text-rgb: 83 198 188;
-  --nav-idle:       #C4C9D0;  /* inactive bottom-bar tabs */
+  --mesh-loader:    #5CCFC4;  /* moving logo: bright brand teal on dark so it never looks dim */
+  --brand-text:     #5CCFC4;  /* brand-coloured TEXT (links, highlights): light shade of brand teal, readable on dark */
+  --brand-text-rgb: 92 207 196;
+  --nav-idle:       #B4B4B4;  /* inactive bottom-bar tabs */
   --nav-active-bg:  var(--brand);   /* selected tab: brand teal, white icon */
   --nav-active-fg:  #FFFFFF;
   --header:         #12665F;
   --header-text:    #FFFFFF;
   --header-subtext: #CDEDE2;
   --accent:         #1E9488;  /* brand teal family */
-  --accent-text:    #53C6BC;
-  --success:        #1FB88A;
-  --warning:        #F59E0B;
-  --danger:         #EF4444;
+  --accent-text:    #5CCFC4;
+  --success:        #15806B;
+  --warning:        #E5A93B;
+  --danger:         #D63B40;
   /* Status colours as TEXT: the fills above are bright tones for dots,
      badges and tints; as text they need >=4.5:1 on cards and the page. */
-  --success-text:   #1FB88A;
-  --warning-text:   #F59E0B;
-  --danger-text:    #F26B6B;
-  --success-text-rgb: 31 184 138;  --warning-text-rgb: 245 158 11; --danger-text-rgb: 242 107 107;
-  --text-primary:   #EAECEF;
-  --text-secondary: #9CA3AE;
-  --text-muted:     #848B97;
-  --bg:             #0B0E11;
-  --surface:        #181A20;
-  --card:           #181A20;
-  --border:         #2B3139;
-  --link:           #53C6BC;
+  --success-text:   #5CCFC4;
+  --warning-text:   #E5A93B;
+  --danger-text:    #F0686C;
+  --success-text-rgb: 92 207 196;  --warning-text-rgb: 229 169 59; --danger-text-rgb: 240 104 108;
+  --text-primary:   #FFFFFF;
+  --text-secondary: #B4B4B4;
+  --text-muted:     #949494;
+  --bg:             #000000;
+  --surface:        #111111;
+  --card:           #111111;
+  --border:         #1F1F1F;
+  --link:           #5CCFC4;
   --avatar-1: #1D9E75; --avatar-2: #97C459; --avatar-3: #7F77DD; --avatar-4: #F0997B;
   --usdc-bg:   #0C447C33;
   --usdc-icon: #85B7EB;
   --brand-rgb: 18 102 95;      --header-rgb: 18 102 95;
   --header-text-rgb: 255 255 255; --header-subtext-rgb: 205 237 226;
-  --accent-rgb: 30 148 136;    --accent-text-rgb: 83 198 188;
-  --success-rgb: 31 184 138;   --warning-rgb: 245 158 11; --danger-rgb: 239 68 68;
-  --text-primary-rgb: 234 236 239; --text-secondary-rgb: 156 163 174; --text-muted-rgb: 132 139 151;
-  --bg-rgb: 11 14 17; --surface-rgb: 24 26 32; --card-rgb: 24 26 32; --border-rgb: 43 49 57;
-  --link-rgb: 83 198 188;
+  --accent-rgb: 30 148 136;    --accent-text-rgb: 92 207 196;
+  --success-rgb: 21 128 107;   --warning-rgb: 229 169 59; --danger-rgb: 214 59 64;
+  --text-primary-rgb: 255 255 255; --text-secondary-rgb: 180 180 180; --text-muted-rgb: 148 148 148;
+  --bg-rgb: 0 0 0; --surface-rgb: 17 17 17; --card-rgb: 17 17 17; --border-rgb: 31 31 31;
+  --link-rgb: 92 207 196;
   --avatar-1-rgb: 29 158 117; --avatar-2-rgb: 151 196 89; --avatar-3-rgb: 127 119 221; --avatar-4-rgb: 240 153 123;
   --usdc-icon-rgb: 133 183 235;
   --shadow-1: 0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.24);
@@ -213,44 +215,44 @@
   --popup-edge: color-mix(in srgb, var(--text-primary) 8%, transparent);
   --popup-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 28px 64px -16px rgba(16,24,32,0.34), 0 10px 24px -10px rgba(16,24,32,0.18);
   color-scheme: light;
-  --brand:          #0F5C57;
-  --mesh-loader:    #0F5C57;  /* moving logo: brand teal on light */
+  --brand:          #12665F;
+  --mesh-loader:    #12665F;  /* moving logo: brand teal on light */
   --brand-text:     #0F5C57;  /* brand-coloured TEXT (links, highlights): readable on this background */
   --brand-text-rgb: 15 92 87;
-  --nav-idle:       #5B6169;  /* inactive bottom-bar tabs */
+  --nav-idle:       #5C6064;  /* inactive bottom-bar tabs */
   --nav-active-bg:  var(--brand);   /* selected tab: brand teal, white icon */
   --nav-active-fg:  #FFFFFF;
-  --header:         #0F5C57;
+  --header:         #12665F;
   --header-text:    #FFFFFF;
   --header-subtext: #CDEDE2;
   --accent:         #1E9488;  /* brand teal family */
   --accent-text:    #0F5C57;
-  --success:        #1FB88A;
-  --warning:        #F59E0B;
-  --danger:         #EF4444;
+  --success:        #2F7A45;
+  --warning:        #C27A12;
+  --danger:         #C41C29;
   /* Status colours as TEXT: the fills above are bright tones for dots,
      badges and tints; as text they need >=4.5:1 on cards and the page. */
-  --success-text:   #0E7A55;
-  --warning-text:   #9A5B00;
-  --danger-text:    #C42B2B;
-  --success-text-rgb: 14 122 85;   --warning-text-rgb: 154 91 0;   --danger-text-rgb: 196 43 43;
-  --text-primary:   #1A1A1A;
-  --text-secondary: #666B73;
-  --text-muted:     #5F5E5A;
-  --bg:             #F5F6F8;
+  --success-text:   #2F7A45;
+  --warning-text:   #92400E;
+  --danger-text:    #C41C29;
+  --success-text-rgb: 47 122 69;   --warning-text-rgb: 146 64 14;   --danger-text-rgb: 196 28 41;
+  --text-primary:   #1B1D1F;
+  --text-secondary: #45494D;
+  --text-muted:     #5C6064;
+  --bg:             #F3F5F7;
   --surface:        #FFFFFF;
   --card:           #FFFFFF;
-  --border:         #D8DBE0;
+  --border:         #E6E6E6;
   --link:           #0F5C57;
   --avatar-1: #1D9E75; --avatar-2: #639922; --avatar-3: #534AB7; --avatar-4: #D85A30;
   --usdc-bg:   #E6F1FB;
   --usdc-icon: #0C447C;
-  --brand-rgb: 15 92 87;       --header-rgb: 15 92 87;
+  --brand-rgb: 18 102 95;       --header-rgb: 18 102 95;
   --header-text-rgb: 255 255 255; --header-subtext-rgb: 205 237 226;
   --accent-rgb: 30 148 136;    --accent-text-rgb: 15 92 87;
-  --success-rgb: 31 184 138;   --warning-rgb: 245 158 11; --danger-rgb: 239 68 68;
-  --text-primary-rgb: 26 26 26; --text-secondary-rgb: 102 107 115; --text-muted-rgb: 95 94 90;
-  --bg-rgb: 245 246 248; --surface-rgb: 255 255 255; --card-rgb: 255 255 255; --border-rgb: 216 219 224;
+  --success-rgb: 47 122 69;   --warning-rgb: 194 122 18; --danger-rgb: 196 28 41;
+  --text-primary-rgb: 27 29 31; --text-secondary-rgb: 69 73 77; --text-muted-rgb: 92 96 100;
+  --bg-rgb: 243 245 247; --surface-rgb: 255 255 255; --card-rgb: 255 255 255; --border-rgb: 230 230 230;
   --link-rgb: 15 92 87;
   --avatar-1-rgb: 29 158 117; --avatar-2-rgb: 99 153 34; --avatar-3-rgb: 83 74 183; --avatar-4-rgb: 216 90 48;
   --usdc-icon-rgb: 12 68 124;

@@ -22,7 +22,7 @@ function applyTheme(mode: ThemeMode) {
   document.documentElement.style.colorScheme = resolved
   // Status bar (and the app's card in Recent apps) in the page's own colour,
   // like a native app - not a teal band above a light/dark page.
-  document.getElementById('mp-theme-color')?.setAttribute('content', resolved === 'dark' ? '#0B0E11' : '#F5F6F8')
+  document.getElementById('mp-theme-color')?.setAttribute('content', resolved === 'dark' ? '#000000' : '#F3F5F7')
 }
 
 interface ThemeStore {

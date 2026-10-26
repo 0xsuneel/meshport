@@ -139,7 +139,7 @@ export default defineConfig({
                 // instead of off-brand teal. The live status bar still follows the
                 // in-app theme via #mp-theme-color. background_color stays brand teal
                 // for the native launch-screen tile behind the logo.
-                theme_color: '#0B0E11',
+                theme_color: '#000000',
                 background_color: '#0F5C57',
                 display: 'standalone',
                 orientation: 'portrait',
