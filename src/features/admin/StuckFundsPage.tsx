@@ -96,7 +96,7 @@ function CopyText({ value, mono = true }: { value: string; mono?: boolean }) {
       <span style={{ fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : undefined, wordBreak: 'break-all' }}>{value}</span>
       <button aria-label="Copy" onClick={e => { e.stopPropagation(); copyToClipboard(value).then(ok => { if (ok) { setDone(true); setTimeout(() => setDone(false), 1200) } }) }}
         style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', flexShrink: 0 }}>
-        {done ? <Check size={13} color="var(--success)" /> : <Copy size={13} />}
+        {done ? <Check data-tick size={13} color="var(--success)" /> : <Copy size={13} />}
       </button>
     </span>
   )

@@ -1730,17 +1730,28 @@ function MultichainHubCard({
 // Touch / hover shows that day's balance. Hidden balance: bars stay, figures don't.
 const BARS_W = 112
 const BARS_H = 38
+// The bars arrive after the balance (they wait for Activity), so the first
+// time they show this session they fade in rather than pop; never again on
+// a refresh or a return to Home.
+let barsShown = false
+function useFirstShowFade(): string | undefined {
+  const [fade] = useState(() => !barsShown)
+  useEffect(() => { barsShown = true }, [])
+  return fade ? 'mp-fade-in' : undefined
+}
 // "+$x.xx 7D" - on the card's label row, right side, above the bars.
 function BalanceChange({ trend, hidden, fmt }: { trend: BalanceTrend; hidden: boolean; fmt: (n: number, symbol?: string) => string }) {
   const sign = trend.change >= 0 ? '+' : '−'
+  const fade = useFirstShowFade()
   return (
-    <span style={{ display: 'flex', alignItems: 'center', gap: 5, minHeight: 26, fontSize: 12, fontWeight: 700, color: '#8FE9CB', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+    <span className={fade} style={{ display: 'flex', alignItems: 'center', gap: 5, minHeight: 26, fontSize: 12, fontWeight: 700, color: '#8FE9CB', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
       {hidden ? '••••' : `${sign}$${fmt(Math.abs(trend.change)).replace(/^\$/, '')}`}
       <span style={{ color: 'rgba(255,255,255,0.78)', fontWeight: 600 }}>7D</span>
     </span>
   )
 }
 function BalanceBars({ trend, hidden }: { trend: BalanceTrend; hidden: boolean }) {
+  const fade = useFirstShowFade()
   const [active, setActive] = useState<number | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const { values, labels } = trend
@@ -1755,7 +1766,7 @@ function BalanceBars({ trend, hidden }: { trend: BalanceTrend; hidden: boolean }
   }
   return (
     // Narrow phones (320px) give the bars less room so the amount never runs under them.
-    <div style={{ position: 'relative', flexShrink: 0, width: `clamp(64px, 30%, ${BARS_W}px)` }}
+    <div className={fade} style={{ position: 'relative', flexShrink: 0, width: `clamp(64px, 30%, ${BARS_W}px)` }}
       // Inside the swipeable hero: a touch here reads the bars, it doesn't start a swipe.
       onPointerDownCapture={e => e.stopPropagation()}>
       <svg ref={svgRef} width="100%" height={BARS_H} viewBox={`0 0 ${BARS_W} ${BARS_H}`} preserveAspectRatio="none" role="img" style={{ display: 'block', touchAction: 'pan-y', cursor: 'crosshair' }}
@@ -4016,7 +4027,7 @@ export function HomePage() {
                     style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, background: 'none', border: 'none', padding: 0, cursor: 'pointer', maxWidth: '100%', minWidth: 0 }}>
                     <span style={{ fontSize: 11.5, color: 'var(--link)', fontFamily: 'monospace', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
                     {handleCopied
-                      ? <Check className="w-3 h-3 text-success flex-shrink-0" />
+                      ? <Check data-tick className="w-3 h-3 text-success flex-shrink-0" />
                       : <Copy className="w-3 h-3 text-link/60 flex-shrink-0" />}
                   </button>
                 </div>

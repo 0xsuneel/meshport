@@ -186,7 +186,7 @@ export function PayPage() {
         <button onClick={handleCopy}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs active:scale-95 transition-transform"
           style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)', color: 'var(--text-secondary)' }}>
-          {copied ? <CheckCircle className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+          {copied ? <CheckCircle data-tick className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
           {copied ? 'Copied!' : 'Copy link'}
         </button>
       </div>

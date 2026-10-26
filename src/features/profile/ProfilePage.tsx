@@ -120,7 +120,7 @@ export function ProfilePage() {
             className="inline-flex items-center gap-1.5 mt-1 bg-accent/10 border border-accent/25 text-link text-xs font-semibold px-2.5 py-0.5 rounded-full max-w-full">
             <span className="truncate">{(displayUsername || displayName).replace(/\.arc$/, '')}.arc</span>
             {usernameCopied
-              ? <Check className="w-3 h-3 text-success flex-shrink-0" />
+              ? <Check data-tick className="w-3 h-3 text-success flex-shrink-0" />
               : <Copy className="w-3 h-3 text-link/70 flex-shrink-0" />}
           </button>
         </div>
@@ -131,7 +131,7 @@ export function ProfilePage() {
           className="flex items-center justify-between w-full mt-4 bg-[rgb(var(--text-primary-rgb)/0.03)] border border-border rounded-xl px-3.5 py-2.5 text-text-secondary hover:text-text-primary transition-colors">
           <span className="text-xs font-mono text-text-secondary">{walletAddress.slice(0, 6)}...{walletAddress.slice(-6)}</span>
           <span className="flex items-center gap-1 text-[11px] font-bold text-brand-text">
-            {copied ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
+            {copied ? <Check data-tick className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
             {copied ? 'Copied' : 'Copy'}
           </span>
         </button>

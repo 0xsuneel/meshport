@@ -29,7 +29,7 @@ export function SolanaReceiveCard() {
       </div>
       <button onClick={copy} className="w-full flex items-center gap-2 text-left active:opacity-70" aria-label="Copy Solana address">
         <span className="flex-1 min-w-0 text-xs font-mono text-text-secondary break-all">{address}</span>
-        {copied ? <Check className="w-4 h-4 text-success flex-shrink-0" /> : <Copy className="w-4 h-4 text-text-secondary flex-shrink-0" />}
+        {copied ? <Check data-tick className="w-4 h-4 text-success flex-shrink-0" /> : <Copy className="w-4 h-4 text-text-secondary flex-shrink-0" />}
       </button>
       <p className="text-xs text-text-secondary">Receive USDC on Solana at this address. Only send Solana USDC here.</p>
       <a href={solanaExplorerUrl('address', address)} target="_blank" rel="noopener noreferrer"
