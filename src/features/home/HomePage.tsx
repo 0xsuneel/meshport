@@ -1716,19 +1716,6 @@ function useFirstShowFade(): string | undefined {
   useEffect(() => { barsShown = true }, [])
   return fade ? 'mp-fade-in' : undefined
 }
-// "+$x.xx 7D" - on the card's label row, right side. No change reads as
-// "$0" in the card's plain white: mint is for a real gain only.
-function BalanceChange({ trend, hidden, fmt }: { trend: BalanceTrend; hidden: boolean; fmt: (n: number, symbol?: string) => string }) {
-  const flat = Math.abs(trend.change) < 0.005
-  const sign = flat ? '' : trend.change > 0 ? '+' : '−'
-  const fade = useFirstShowFade()
-  return (
-    <span className={fade} style={{ display: 'flex', alignItems: 'center', gap: 5, minHeight: 26, fontSize: 12, fontWeight: 700, color: flat || trend.change < 0 ? 'rgba(255,255,255,0.9)' : '#8FE9CB', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-      {hidden ? '••••' : `${sign}$${fmt(Math.abs(trend.change)).replace(/^\$/, '')}`}
-      <span style={{ color: 'rgba(255,255,255,0.78)', fontWeight: 600 }}>7D</span>
-    </span>
-  )
-}
 let lastShownBalance: number | null = null
 const SETTLE_MS = 1500
 function AnimatedBalanceText({ target, children }: { target: number; children: (displayed: number) => ReactNode }) {
@@ -1763,101 +1750,74 @@ function AvailableBalanceCard({
   /** End-of-day balances, oldest first (the 7-day change). */
   trend?: BalanceTrend | null
 }) {
+  // Address row (avatar, address, copy), then the balance with its cents
+  // dimmed and the 7-day change; the pager dots sit at the bottom right.
+  const user = useAuthStore(s => s.user)
+  const initial = (user?.displayName || user?.username || '?').charAt(0).toUpperCase()
+  const change = trend?.change ?? 0
+  const flat = !trend || Math.abs(change) < 0.005
+  const eyeStroke = 'rgba(255,255,255,.8)'
+  const fade = useFirstShowFade()
   return (
     <BowedShapeCard background="var(--brand)" cardRef={cardRef} flat>
-      {/* Label + eye toggle; the 7-day balance bars sit beside the amount below. */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
-          Available Balance
-          <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
-            style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-            {balanceHidden ? (
-              <svg width="19" height="15.5" viewBox="0 0 22 18" fill="none">
-                <path d="M2 2l18 14" stroke="rgba(255,255,255,.8)" strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke="rgba(255,255,255,.8)" strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke="rgba(255,255,255,.8)" strokeWidth="1.5" strokeLinecap="round"/>
-                <circle cx="11" cy="9" r="3" stroke="rgba(255,255,255,.8)" strokeWidth="1.5"/>
-              </svg>
-            ) : (
-              <svg width="19" height="13.5" viewBox="0 0 22 16" fill="none">
-                <ellipse cx="11" cy="8" rx="10" ry="7" stroke="rgba(255,255,255,.8)" strokeWidth="1.5"/>
-                <circle cx="11" cy="8" r="3" stroke="rgba(255,255,255,.8)" strokeWidth="1.5"/>
-              </svg>
-            )}
-          </button>
-        </span>
-        {trend && <BalanceChange trend={trend} hidden={balanceHidden} fmt={fmt} />}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.14)' }}>
+        {user?.avatar
+          ? <img src={user.avatar.split('?')[0]} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+          : <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.16)', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 15, flexShrink: 0 }}>{initial}</div>}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.72)' }}>Address</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortAddr}</div>
+        </div>
+        <button type="button" aria-label="Copy wallet address"
+          onClick={() => { copyText(walletAddress || ''); showToastMessage('Address copied', 'success') }}
+          style={{ width: 36, height: 36, borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.12)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#fff', flexShrink: 0 }}>
+          <Copy size={17} />
+        </button>
       </div>
 
-      {/* Amount on the left, 7-day balance bars on the right, bottoms aligned. */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10, marginTop: 6 }}>
-      <div style={{ minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 14, color: 'rgba(255,255,255,0.85)' }}>
+        Balance
+        <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
+          style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+          {balanceHidden ? (
+            <svg width="19" height="15.5" viewBox="0 0 22 18" fill="none">
+              <path d="M2 2l18 14" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="11" cy="9" r="3" stroke={eyeStroke} strokeWidth="1.5"/>
+            </svg>
+          ) : (
+            <svg width="19" height="13.5" viewBox="0 0 22 16" fill="none">
+              <ellipse cx="11" cy="8" rx="10" ry="7" stroke={eyeStroke} strokeWidth="1.5"/>
+              <circle cx="11" cy="8" r="3" stroke={eyeStroke} strokeWidth="1.5"/>
+            </svg>
+          )}
+        </button>
+      </div>
+
       <AnimatedBalanceText target={portfolioTotal}>
         {(displayedBalance) => {
-          // Auto-shrink the balance figure so large amounts (6+ digits)
-          // stay inside the card - normal balances (up to 5 digits
-          // before the decimal) keep the original size untouched.
-          // fmt() adds thousand-separator commas (e.g. "1,420") for the
-          // asset-history table elsewhere in this file, where that reads
-          // naturally - but this hero figure is meant to show the plain
-          // number, so strip the commas back out here specifically rather
-          // than changing fmt() itself and affecting every other caller.
-          const formattedBalance = fmt(displayedBalance).replace(/,/g, '')
-          const wholePart = formattedBalance.split('.')[0].replace(/[^0-9]/g, '')
-          const digitCount = wholePart.length
-          const amountFontSize = digitCount >= 9 ? 20 : digitCount >= 8 ? 24 : digitCount >= 7 ? 27 : digitCount >= 6 ? 31 : 36
-          const subFontSize = Math.round(amountFontSize * 0.6)
-          // BUG FIX: fmt() already trims a whole-number balance down to
-          // "1,420" (no decimal point at all, see trimTrailingZeros in
-          // lib/utils.ts) - but this split-into-two-spans layout always
-          // rendered a literal "." before the decimal-part span regardless
-          // of whether one actually existed. React renders {undefined} as
-          // nothing, so that hardcoded "." was the ONLY thing left behind:
-          // a whole-number balance showed as "$1,420." with a dangling dot
-          // and no digits after it. Only render the decimal span (and its
-          // leading dot) when there's a real decimal part to show.
-          const decimalPart = formattedBalance.split('.')[1]
+          // fmt() gives "4,938.79", or "1,420" for a whole number (no
+          // decimal part - so no dangling "." is drawn). Large amounts
+          // shrink so they stay inside the card.
+          const [whole, cents] = fmt(displayedBalance).split('.')
+          const digits = whole.replace(/[^0-9]/g, '').length
+          const size = digits >= 9 ? 22 : digits >= 8 ? 26 : digits >= 7 ? 30 : digits >= 6 ? 34 : 40
           return (
-            <div style={{ display: 'flex', alignItems: 'center', marginTop: -4, height: 40 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-              <span style={{ fontSize: `min(${amountFontSize}px, 10.5vw)`, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1, color: '#fff', marginRight: 2 }}>$</span>
-              {balanceHidden ? (
-                <span style={{ fontSize: `min(${amountFontSize}px, 10.5vw)`, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1, color: '#fff' }}>••••••</span>
-              ) : (
-                <>
-                  <span style={{ fontSize: `min(${amountFontSize}px, 10.5vw)`, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1, color: '#fff' }}>
-                    {formattedBalance.split('.')[0]}
-                  </span>
-                  {decimalPart ? (
-                    <span style={{ fontSize: `min(${subFontSize}px, 6.3vw)`, fontWeight: 700, lineHeight: 1, color: '#fff', opacity: 0.75 }}>
-                      .{decimalPart}
-                    </span>
-                  ) : null}
-                </>
-              )}
-            </div>
+            <div style={{ marginTop: 2, fontSize: `min(${size}px, 10.5vw)`, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1.1, color: '#fff', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+              {balanceHidden ? '$••••••' : <>${whole}{cents ? <span style={{ color: 'rgba(255,255,255,0.6)' }}>.{cents}</span> : null}</>}
             </div>
           )
         }}
       </AnimatedBalanceText>
 
+      {/* The 7-day change; room on the right for the pager dots. */}
+      <div className={trend ? fade : undefined} style={{ marginTop: 6, paddingRight: 48, minHeight: 18, fontSize: 13, color: 'rgba(255,255,255,0.75)', fontVariantNumeric: 'tabular-nums' }}>
+        {!trend ? null : balanceHidden ? '••••' : flat ? 'No change in the last 7 days' : <>
+          <span style={{ fontWeight: 600, color: change > 0 ? '#8FE9CB' : '#FFB4A9' }}>{change > 0 ? '+' : '−'}${fmt(Math.abs(change)).replace(/^\$/, '')}</span> in the last 7 days
+        </>}
       </div>
-      </div>
-
-      {/* Address pill (copies it); the pager dots sit on this row's right. */}
-      <button type="button" onClick={() => { copyText(walletAddress || ''); showToastMessage('Address copied', 'success') }}
-        aria-label="Copy wallet address"
-        style={{ display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 11px', marginTop: 10, borderRadius: 999, border: 'none',
-          background: 'rgba(255,255,255,0.10)', cursor: 'pointer', maxWidth: '70%' }}>
-        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {shortAddr}
-        </span>
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-          <rect x="5" y="1" width="10" height="10" rx="2" stroke="rgba(255,255,255,0.85)" strokeWidth="1.4"/>
-          <path d="M1 5v9a1 1 0 001 1h9" stroke="rgba(255,255,255,0.85)" strokeWidth="1.4" strokeLinecap="round"/>
-        </svg>
-      </button>
     </BowedShapeCard>
   )
 }
@@ -4171,11 +4131,10 @@ export function HomePage() {
           </div>
         ) : (
           // Mobile hero: ONE card in the page's 20px margins with the theme's
-          // border (like Recent / Updates below) - the teal balance on top,
-          // the four actions inside it underneath.
-          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: HERO_RADIUS, overflow: 'hidden' }}>
-          <div style={{ position: 'relative', padding: '16px 0', background: 'var(--brand)',
-            borderRadius: `${HERO_RADIUS - 1}px ${HERO_RADIUS - 1}px ${HERO_RADIUS}px ${HERO_RADIUS}px` }}>
+          // border (like Recent / Updates below) - the teal balance card inset
+          // 6px inside it, the four actions underneath.
+          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: HERO_RADIUS + 6, overflow: 'hidden' }}>
+          <div style={{ position: 'relative', padding: '14px 0', background: 'var(--brand)', borderRadius: HERO_RADIUS }}>
             {businessAccount ? (
               // Business accounts: the balance card only - no Cross-chain card
               // or carousel edges (Cross-chain Transfer is in More actions).
