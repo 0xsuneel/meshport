@@ -22,7 +22,7 @@
  * `{ success: true }` and no txHash, because nothing was locked on-chain.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -183,6 +183,9 @@ describe('saveP2PActivity - the guard every P2P write routes through', () => {
 // ── Live path: createOffer (the path that produced the ghost sell orders) ────
 
 describe('createOffer - offer still created, unverifiable row withheld', () => {
+  // createOffer loads the escrow module (and viem under it) on demand; load it
+  // here so its first cold import isn't billed to the first test's 5s budget.
+  beforeAll(async () => { await import('@/lib/p2pEscrowContract') }, 60_000)
   it('honor-system deposit (no hash): offer IS created, NO activity row', async () => {
     escrow.depositTxHash = undefined
 

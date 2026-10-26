@@ -31,6 +31,8 @@ import { MotionConfig } from 'framer-motion'
 // ahead of React Router's - window listeners run in the order they're added.
 import './lib/leaveGuard'
 import App from './App.tsx'
+// Geist, self-hosted (no Google Fonts request on every open).
+import '@fontsource-variable/geist'
 import './index.css'
 import { clearLegacyData } from './lib/clearLegacyData'
 import { recoverFromStaleBuild, markBuildHealthy, onVitePreloadError, isChunkLoadError } from './lib/lazyRetry'

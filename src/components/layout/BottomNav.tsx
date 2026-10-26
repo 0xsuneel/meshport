@@ -252,7 +252,7 @@ export function BottomNav() {
                   <span style={{
                     fontSize: 11, fontWeight: isActive ? 700 : 500,
                     color: isActive ? 'var(--brand-text)' : 'var(--nav-idle)',
-                    lineHeight: 1, fontFamily: '-apple-system,sans-serif',
+                    lineHeight: 1, fontFamily: 'var(--font-sans)',
                     transition: 'color 0.15s',
                   }}>
                     {tab.label}

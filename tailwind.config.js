@@ -119,7 +119,7 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['-apple-system', 'SF Pro Display', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Geist Variable', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
       borderRadius: {
         '2xl': '1rem',

@@ -216,7 +216,7 @@ export function TransactionComplete({
             fontSize: 15, fontWeight: 600, color: '#fff',
             background: 'var(--brand)', border: 'none', cursor: 'pointer',
             boxShadow: 'var(--shadow-2)',
-            fontFamily: '-apple-system,sans-serif',
+            fontFamily: 'var(--font-sans)',
           }}>
           {primaryLabel}
         </motion.button>
@@ -228,7 +228,7 @@ export function TransactionComplete({
               width: '100%', padding: '14px 0', borderRadius: 16,
               fontSize: 14, fontWeight: 500, color: 'var(--text-secondary)',
               background: 'var(--surface)', border: '1px solid var(--border)',
-              cursor: 'pointer', fontFamily: '-apple-system,sans-serif',
+              cursor: 'pointer', fontFamily: 'var(--font-sans)',
             }}>
             {secondaryLabel}
           </motion.button>

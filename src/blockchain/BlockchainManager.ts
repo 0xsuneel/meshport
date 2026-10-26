@@ -43,7 +43,6 @@
 import type { SettingsMap } from '@/lib/adminSupabase'
 import { invalidatePrefix, peek, refresh } from './cache'
 import type { CacheOptions } from './cache'
-import { getClient } from './ProviderManager'
 import { getArcBalance, peekArcBalance, fetchArcBalanceRaw } from './arcBalanceReader'
 import type { ArcAsset } from './arcBalanceReader'
 import {
@@ -237,6 +236,8 @@ export async function readTransactionReceipt(
 
   return refresh(key, async () => {
     try {
+      // ProviderManager (viem) loads with the first receipt read, not at app start.
+      const { getClient } = await import('./ProviderManager')
       return await getClient(chain).getTransactionReceipt({ hash: hash as `0x${string}` })
     } catch {
       // viem throws when a receipt does not exist yet. That is a normal state

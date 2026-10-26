@@ -629,7 +629,7 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; 
         width: '100%', padding: 14, borderRadius: 14, fontSize: 15, fontWeight: 500,
         background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-primary)',
         border: '1px solid var(--border)', cursor: 'pointer',
-        marginTop: 8, fontFamily: '-apple-system,sans-serif',
+        marginTop: 8, fontFamily: 'var(--font-sans)',
       }}>Close</button>
     </>
   )
@@ -877,7 +877,7 @@ function CustomizeQuickActionsSheet({ selectedIds, onToggle, onClose, warning }:
         width: '100%', padding: 14, borderRadius: 14, fontSize: 15, fontWeight: 500,
         background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-primary)',
         border: '1px solid var(--border)', cursor: 'pointer',
-        marginTop: 16, fontFamily: '-apple-system,sans-serif',
+        marginTop: 16, fontFamily: 'var(--font-sans)',
       }}>Done</button>
     </>
   )

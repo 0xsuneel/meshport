@@ -15,7 +15,7 @@ import { supabase, getUserByUsername } from './supabase'
 import { cachedPrivacy, quietFor } from './privacy'
 import { trimTrailingZeros } from './utils'
 import { isMerchantNow } from './merchant'
-import { hasRecentPaymentRequest } from './merchantPay'
+import { hasRecentPaymentRequest } from './merchantPayBasics'
 
 // BUG FIX (2026-09-17): was 200, matching the OLD per-transaction earn cap.
 // The earn side was redesigned to 5 action types x 20 = 100/day (see
