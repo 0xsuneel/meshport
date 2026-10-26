@@ -199,7 +199,8 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
         {/* Steps with the travelling check */}
         <div style={{ position: 'relative', textAlign: 'left', margin: '18px 0 0' }}>
           <div style={{ position: 'absolute', left: 13, top: 12, width: 2, height: STEP_H * (STEPS.length - 1), background: 'var(--border)' }} />
-          <div style={{ position: 'absolute', left: 13, top: 12, width: 2, height: STEP_H * Math.min(doneIdx, STEPS.length - 1), background: 'var(--success)', transition: 'height .55s var(--ease-out)' }} />
+          <div style={{ position: 'absolute', left: 13, top: 12, width: 2, height: STEP_H * (STEPS.length - 1), background: 'var(--success)',
+            transformOrigin: 'top', transform: `scaleY(${Math.min(doneIdx, STEPS.length - 1) / Math.max(1, STEPS.length - 1)})`, transition: 'transform .55s var(--ease-out)' }} />
           {p.phase === 'running' && (
             <div className="rw-trav" aria-hidden style={{ position: 'absolute', left: 0, top: 6, width: 28, height: 28, borderRadius: '50%', zIndex: 3, transform: `translateY(${travIdx * STEP_H}px)`,
               background: 'var(--success)', color: '#fff', fontWeight: 900, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',

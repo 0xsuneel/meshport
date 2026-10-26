@@ -1766,7 +1766,7 @@ function BalanceBars({ trend, hidden }: { trend: BalanceTrend; hidden: boolean }
           const h = barH(v), x = i * (bw + gap), top = BARS_H - h, r = Math.min(4, h / 2)
           const fill = i === n - 1 ? '#8FE9CB' : 'rgba(255,255,255,0.55)'
           return <path key={i} d={`M${x} ${BARS_H} V${top + r} Q${x} ${top} ${x + r} ${top} H${x + bw - r} Q${x + bw} ${top} ${x + bw} ${top + r} V${BARS_H} Z`}
-            fill={fill} opacity={active === null || active === i ? 1 : 0.5} />
+            fill={fill} opacity={active === null || active === i ? 1 : 0.5} style={{ transition: 'opacity 120ms ease' }} />
         })}
       </svg>
       {active !== null && !hidden && (
@@ -1915,6 +1915,8 @@ function AvailableBalanceCard({
   )
 }
 
+// Hero pager: dot size, gap, and the sliding pill's width.
+const HERO_DOT = 5, HERO_DOT_GAP = 7, HERO_PILL = 14
 // ── Mobile Hero Carousel - Balance card / Multichain Hub card, swipeable ───
 // BUG FIX (swipe required twice + visible flicker): this carousel's state
 // (heroCardIndex, heroRowX, the drag handlers) used to live directly on
@@ -2227,16 +2229,18 @@ function MobileHeroCarousel({
 
       {/* ── Dot indicators - tap either to jump slides. On the card's last
            row, right side (the address sits on the left of it). ─────────── */}
-      <div style={{ position: 'absolute', right: 18, bottom: 12, display: 'flex', gap: 5 }}>
+      {/* The dots stay still; one white pill slides to the active one
+           (transform only - animating a dot's width re-laid out the row). */}
+      <div style={{ position: 'absolute', right: 18, bottom: 12, display: 'flex', gap: HERO_DOT_GAP }}>
         {[0, 1].map(i => (
           <button key={i} aria-label={i === 0 ? 'Show balance card' : 'Show multichain hub card'}
             onClick={() => { if (i !== heroCardIndex && !heroGestureActive.current) revealHeroSide(i > heroCardIndex ? 'right' : 'left') }}
-            style={{
-              width: heroCardIndex === i ? 16 : 5, height: 5, borderRadius: 3, border: 'none', padding: 0,
-              background: heroCardIndex === i ? '#fff' : 'rgba(255,255,255,0.35)', cursor: 'pointer',
-              transition: 'width 0.2s, background 0.2s',
-            }} />
+            style={{ width: HERO_DOT, height: HERO_DOT, borderRadius: 3, border: 'none', padding: 0, background: 'rgba(255,255,255,0.35)', cursor: 'pointer' }} />
         ))}
+        <span aria-hidden style={{
+          position: 'absolute', top: 0, left: -(HERO_PILL - HERO_DOT) / 2, width: HERO_PILL, height: HERO_DOT, borderRadius: 3, background: '#fff', pointerEvents: 'none',
+          transform: `translateX(${heroCardIndex * (HERO_DOT + HERO_DOT_GAP)}px)`, transition: 'transform 200ms var(--ease-out)',
+        }} />
       </div>
     </div>
   )
@@ -2282,6 +2286,7 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
   }, [idx, n]) // restarting on idx change resets the timer after a manual swipe
 
   const b = FEATURE_BANNERS[idx]
+  const dot = docked ? { w: 12, gap: 6, pill: 20 } : { w: 4, gap: 6, pill: 10 }
   const firstIdx = useRef(idx)
   const bannerMoved = useRef(false)
   if (idx !== firstIdx.current) bannerMoved.current = true
@@ -2308,7 +2313,7 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
         position: 'relative', overflow: 'hidden', height, borderRadius: 16, cursor: 'pointer',
         background: `linear-gradient(${110 + idx * 25}deg, var(--brand) 0%, color-mix(in srgb, var(--brand) 55%, #06110F) 100%)`,
         display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px',
-        transition: 'background 0.5s ease, transform 160ms var(--ease-out)',
+        transition: 'transform 160ms var(--ease-out)',
       }}>
       {docked ? (
         <>
@@ -2339,10 +2344,18 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
         </span>
       </div>
 
-      <div style={docked ? { position: 'relative', display: 'flex', justifyContent: 'center', gap: 6, paddingTop: 10 } : { position: 'absolute', left: 0, right: 0, bottom: 6, display: 'flex', justifyContent: 'center', gap: 4 }}>
-        {FEATURE_BANNERS.map((_, i) => (
-          <span key={i} style={{ width: docked ? (i === idx ? 20 : 12) : (i === idx ? 12 : 4), height: 4, borderRadius: 2, background: i === idx ? '#fff' : 'rgba(255,255,255,0.4)', transition: 'width 0.25s ease' }} />
-        ))}
+      <div style={docked ? { position: 'relative', display: 'flex', justifyContent: 'center', paddingTop: 10 } : { position: 'absolute', left: 0, right: 0, bottom: 6, display: 'flex', justifyContent: 'center' }}>
+        {/* Equal dots stay still; one white pill slides to the current banner
+            (transform only - growing a dot's width re-laid out the row). */}
+        <div style={{ position: 'relative', display: 'flex', gap: dot.gap }}>
+          {FEATURE_BANNERS.map((_, i) => (
+            <span key={i} style={{ width: dot.w, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.4)' }} />
+          ))}
+          <span aria-hidden style={{
+            position: 'absolute', top: 0, left: -(dot.pill - dot.w) / 2, width: dot.pill, height: 4, borderRadius: 2, background: '#fff',
+            transform: `translateX(${idx * (dot.w + dot.gap)}px)`, transition: 'transform 200ms var(--ease-out)',
+          }} />
+        </div>
       </div>
       <style>{`@keyframes mpBannerIn { from { opacity: 0.5; transform: translateX(14px) } to { opacity: 1; transform: none } }`}</style>
     </div>
@@ -4265,7 +4278,7 @@ export function HomePage() {
           ].map(a => (
             <div key={a.label}
               onClick={() => a.path ? navigate(a.path) : setShowMore(true)}
-              className="mp-press hover:shadow-elevation-2"
+              className="mp-press"
               style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center',
                 gap: 8, cursor: 'pointer',
