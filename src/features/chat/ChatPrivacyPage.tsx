@@ -9,6 +9,7 @@ import {
   cachedPrivacy, fetchMyPrivacy, saveMyPrivacy, fetchBlocked, unblockUser,
   type ChatPrivacy, type BlockedPerson,
 } from '@/lib/privacy'
+import { SkeletonRows } from '@/components/ui/Skeleton'
 
 // Chats → your profile picture. Who can message you, who can request money
 // from you, payments from strangers, and the people you've blocked (Unblock
@@ -129,7 +130,7 @@ export function ChatPrivacyPage() {
           </p>
           <div className="rounded-2xl overflow-hidden" style={card}>
             {blocked === null ? (
-              <div className="flex items-center justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-text-secondary" /></div>
+              <SkeletonRows count={2} className="px-4" />
             ) : blocked.length === 0 ? (
               <p className="px-4 py-4 text-[13px] text-text-secondary">
                 No one blocked. Hold a chat (or open a message request) and tap Block.

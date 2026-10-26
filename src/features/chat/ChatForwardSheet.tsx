@@ -11,6 +11,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { plainTextOf, parseMedia } from './chatMessageText'
 import { searchTerm } from '@/lib/searchTerm'
 import { SearchField } from '@/components/ui/SearchField'
+import { SkeletonRows } from '@/components/ui/Skeleton'
 
 const MAX_TARGETS = 5
 
@@ -132,7 +133,7 @@ export function ChatForwardSheet({ messages, sourceKey, myUserId, walletAddress,
       </div>
       <div className="flex-1 overflow-y-auto pb-28">
         {convs === null ? (
-          <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--brand-text)' }} /></div>
+          <SkeletonRows count={6} />
         ) : shown.length === 0 ? (
           <p className="text-center text-sm py-10" style={{ color: 'var(--text-secondary)' }}>No chats found</p>
         ) : shown.map(c => {

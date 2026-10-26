@@ -36,6 +36,7 @@ import { refreshBalancesAfterTx, BALANCES_STALE_EVENT } from '@/lib/balanceRefre
 import { readArcBalanceOrThrow } from '@/blockchain/BlockchainManager'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { pressable } from '@/lib/pressable'
+import { SkeletonCards } from '@/components/ui/Skeleton'
 
 // ── Token definitions ─────────────────────────────────────────────────────────
 // Arc Testnet: only USDC, EURC, cirBTC supported for swap (per Arc docs)
@@ -468,6 +469,9 @@ export function SwapPage() {
   const [tokenBals,    setTokenBals]    = useState<Record<string, number>>({ USDC: balance, EURC: 0, cirBTC: 0 })
   // Swap history
   const [history,      setHistory]      = useState<SwapRecord[]>(() => loadHistory(walletAddress))
+  // Until the swap history has loaded, an empty list means "not known yet"
+  // (skeleton), not "no swaps" - the empty state flashed on every open.
+  const [historyLoaded, setHistoryLoaded] = useState(false)
   const [histDetail,   setHistDetail]   = useState<SwapRecord|null>(null)
   const [histFlashId, setHistFlashId] = useState<string | null>(null)
   // Mirrors the last quote's total fee so the silent Review-poll can detect
@@ -657,6 +661,7 @@ export function SwapPage() {
     if (!walletAddress) return
     import('@/lib/ActivityService').then(({ fetchActivity }) => {
       fetchActivity(walletAddress, { activityType: 'swap', limit: SWAP_RECENT }).then(records => {
+        setHistoryLoaded(true)
         if (!records.length) return
         const mapped: SwapRecord[] = records.map(r => ({
           id:         r.id,
@@ -670,8 +675,8 @@ export function SwapPage() {
           explorerUrl: r.explorerUrl,
         }))
         setHistory(mapped)
-      }).catch(() => {})
-    }).catch(() => {})
+      }).catch(() => setHistoryLoaded(true))
+    }).catch(() => setHistoryLoaded(true))
   }, [walletAddress])
 
   // EURC / cirBTC balances. A failed read keeps what's shown (never $0).
@@ -1956,7 +1961,9 @@ export function SwapPage() {
               )}
             </div>
 
-            {history.length === 0 ? (
+            {history.length === 0 && !historyLoaded ? (
+              <SkeletonCards count={3} />
+            ) : history.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 gap-3 rounded-2xl"
                 style={{ background:'color-mix(in srgb, var(--text-primary) 2%, transparent)', border:'1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
                 <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
@@ -2027,7 +2034,9 @@ export function SwapPage() {
       main={flow}
       side={
         <DesktopHistoryPanel title="Recent History" onViewAll={() => navigate('/activity?filter=swap')}>
-          {history.length === 0 ? (
+          {history.length === 0 && !historyLoaded ? (
+            <SkeletonCards count={3} />
+          ) : history.length === 0 ? (
             <DesktopHistoryEmpty label="Your completed swaps will appear here" />
           ) : (
             history.slice(0, SWAP_RECENT).map(r => (

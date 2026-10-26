@@ -4,6 +4,7 @@ import { ArrowLeft, Send, X } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import { submitSupportTicket, fetchMySupportTickets, supabase, type SupportTicket } from '@/lib/supabase'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { SkeletonCards } from '@/components/ui/Skeleton'
 
 const SUBJECTS = ['General', 'Payment issue', 'Wallet & security', 'Bug report', 'Other']
 
@@ -134,7 +135,7 @@ export function HelpSupportPage({ embedded, onClose }: { embedded?: boolean; onC
           <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 px-1">Your tickets</p>
 
           {loadingTickets ? (
-            <div className="text-center py-8 text-sm text-text-secondary">Loading…</div>
+            <SkeletonCards count={2} />
           ) : tickets.length === 0 ? (
             <div className="bg-surface border border-border rounded-3xl p-6 text-center">
               <p className="text-sm text-text-secondary">No tickets yet - anything you submit above will show up here.</p>

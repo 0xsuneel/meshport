@@ -23,6 +23,7 @@ import { P2PSheet } from '@/features/p2p/p2pUi'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { useLeaveGuard } from '@/lib/leaveGuard'
+import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
 
 interface ClaimRecord {
   id: string; points_claimed: number; usdc_received: number
@@ -437,7 +438,7 @@ export function RewardsPage() {
         fontSize: 34, fontWeight: 900, color: '#7a4b06', boxShadow: 'inset -6px -8px 0 rgba(0,0,0,.12)' }}>P</div>
       <div style={{ fontSize: 12.5, opacity: 0.85 }}>Points balance</div>
       <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', marginTop: 2 }}>
-        {loading ? '…' : totalPoints.toLocaleString()} <span style={{ fontSize: 15, fontWeight: 600, opacity: 0.85 }}>pts</span>
+        {loading ? <Skeleton className="inline-block align-middle w-24 h-8 rounded-lg bg-white/20" /> : totalPoints.toLocaleString()} <span style={{ fontSize: 15, fontWeight: 600, opacity: 0.85 }}>pts</span>
       </div>
       <div style={{ fontSize: 13, opacity: 0.9, marginTop: 2 }}>
         ≈ ${formatAmount(pointsToUSDC(totalPoints))} USDC{lifetimePoints > 0 ? ` · ${lifetimePoints.toLocaleString()} earned all-time` : ''}
@@ -528,7 +529,7 @@ export function RewardsPage() {
         ))}
       </div>
       <div style={isDesktop ? { overflowY: 'auto', flex: 1, minHeight: 0, padding: '4px 0' } : { padding: '4px 0 24px' }}>
-        {loading ? <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px' }}>Loading…</p> : historyRows}
+        {loading ? <SkeletonRows count={4} className="px-4" /> : historyRows}
         {!loading && (historyTab === 'earned' ? earnedRows.length : claimsHistory.length) > 0 && (
           <button onClick={() => navigate(`/activity?filter=rewards&rewards=${historyTab}`)}
             style={{ display: 'block', margin: '6px auto 4px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--brand-text)', padding: '8px 12px' }}>

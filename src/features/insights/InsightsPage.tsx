@@ -4,6 +4,7 @@ import {ArrowLeft, Calendar, ChevronDown, ArrowUp, ArrowDown, Link2, Sparkles} f
 import { useAuthStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
 import { fetchActivity } from '@/lib/ActivityService'
+import { Skeleton } from '@/components/ui/Skeleton'
 type ActivityRecord = any
 import {
   startOfMonth, endOfMonth, subMonths, isWithinInterval,
@@ -241,6 +242,9 @@ export function InsightsPage() {
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
   const [transactions, setTransactions] = useState<ActivityRecord[]>([])
+  // Until Activity has loaded, every figure would read $0 and then jump: show
+  // the page's shape instead, and fade the real figures in once.
+  const [loaded, setLoaded] = useState(false)
   const [balance, setBalance] = useState(0)
   const walletAddress = useAuthStore(s => s.walletAddress) ?? ''
 
@@ -253,7 +257,7 @@ export function InsightsPage() {
     fetchActivity(walletAddress, { limit: 200 }).then(records => {
       // Failed rows moved no money (lib/failure.ts) - history only, never totals.
       setTransactions(records.filter(r => r.status !== 'failed') as any)
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => setLoaded(true))
     import('@/store').then(({ useWalletStore }) => {
       setBalance(useWalletStore.getState().balance)
     })
@@ -555,6 +559,8 @@ export function InsightsPage() {
           </div>
         </div>
       </div>
+
+      {!loaded ? <InsightsSkeleton /> : <div className="mp-fade-in">
 
       {/* ── HERO CARD ──────────────────────────────────────────────────── */}
       <div style={{ margin: '0 14px 12px' }}>
@@ -910,6 +916,36 @@ export function InsightsPage() {
 
       </div>
 
+      </div>}
+    </div>
+  )
+}
+
+// Insights while Activity loads: the page's shape - the volume card, the
+// three stat tiles and the activity chart.
+function InsightsSkeleton() {
+  const card = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20 } as const
+  return (
+    <div aria-busy="true" aria-label="Loading insights" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '0 14px 24px' }}>
+      <div style={{ ...card, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Skeleton className="h-7 w-48 rounded-full" />
+        <Skeleton className="h-3 w-24 rounded-full" />
+        <Skeleton className="h-9 w-36 rounded-lg" />
+        <Skeleton className="h-16 w-full rounded-xl" />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{ ...card, borderRadius: 16, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Skeleton className="h-6 w-6 rounded-lg" />
+            <Skeleton className="h-3 w-3/4 rounded-full" />
+            <Skeleton className="h-5 w-1/2 rounded-full" />
+          </div>
+        ))}
+      </div>
+      <div style={{ ...card, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Skeleton className="h-4 w-28 rounded-full" />
+        <Skeleton className="h-36 w-full rounded-xl" />
+      </div>
     </div>
   )
 }
