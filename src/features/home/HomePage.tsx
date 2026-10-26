@@ -1555,7 +1555,7 @@ function BowedShapeCard({
           <path d={path || fallbackPath} fill={background} />
         </svg>
       )}
-      <div style={{ position: 'relative', zIndex: 1, padding: flat ? '10px 2px 6px' : '16px 26px 16px', boxSizing: 'border-box',
+      <div style={{ position: 'relative', zIndex: 1, padding: flat ? '0 18px' : '16px 26px 16px', boxSizing: 'border-box',
         ...(fill ? { height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' } : null) }}>
         {children}
       </div>
@@ -1724,12 +1724,22 @@ function MultichainHubCard({
 // ── Balance bars (Home hero) - the balance at the end of each of the last
 // 7 days (lib/balanceTrend.ts), one rounded bar per day, today's in mint.
 // Touch / hover shows that day's balance. Hidden balance: bars stay, figures don't.
-const BARS_W = 120
-const BARS_H = 44
-function BalanceBars({ trend, hidden, fmt }: { trend: BalanceTrend; hidden: boolean; fmt: (n: number, symbol?: string) => string }) {
+const BARS_W = 112
+const BARS_H = 38
+// "+$x.xx 7D" - on the card's label row, right side, above the bars.
+function BalanceChange({ trend, hidden, fmt }: { trend: BalanceTrend; hidden: boolean; fmt: (n: number, symbol?: string) => string }) {
+  const sign = trend.change >= 0 ? '+' : '−'
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 5, minHeight: 26, fontSize: 12, fontWeight: 700, color: '#8FE9CB', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+      {hidden ? '••••' : `${sign}$${fmt(Math.abs(trend.change)).replace(/^\$/, '')}`}
+      <span style={{ color: 'rgba(255,255,255,0.78)', fontWeight: 600 }}>7D</span>
+    </span>
+  )
+}
+function BalanceBars({ trend, hidden }: { trend: BalanceTrend; hidden: boolean }) {
   const [active, setActive] = useState<number | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const { values, labels, change } = trend
+  const { values, labels } = trend
   const n = values.length, gap = 4
   const bw = (BARS_W - gap * (n - 1)) / n
   const hi = Math.max(...values), lo = Math.min(...values) * 0.8
@@ -1739,15 +1749,10 @@ function BalanceBars({ trend, hidden, fmt }: { trend: BalanceTrend; hidden: bool
     if (!r || r.width === 0) return
     setActive(Math.max(0, Math.min(n - 1, Math.floor((clientX - r.left) / r.width * n))))
   }
-  const sign = change >= 0 ? '+' : '−'
   return (
     <div style={{ position: 'relative', flexShrink: 0, width: BARS_W }}
       // Inside the swipeable hero: a touch here reads the bars, it doesn't start a swipe.
       onPointerDownCapture={e => e.stopPropagation()}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#8FE9CB', marginBottom: 4, fontVariantNumeric: 'tabular-nums', lineHeight: '14px' }}>
-        {hidden ? '••••' : `${sign}$${fmt(Math.abs(change)).replace(/^\$/, '')}`}
-        <span style={{ color: 'rgba(255,255,255,0.78)', fontWeight: 600 }}>7D</span>
-      </div>
       <svg ref={svgRef} width={BARS_W} height={BARS_H} viewBox={`0 0 ${BARS_W} ${BARS_H}`} role="img" style={{ display: 'block', touchAction: 'none', cursor: 'crosshair' }}
         aria-label={hidden ? 'Balance over the last 7 days' : `Balance over the last 7 days, from $${values[0].toFixed(2)} to $${values[n - 1].toFixed(2)}`}
         onPointerMove={e => pick(e.clientX)} onPointerDown={e => pick(e.clientX)}
@@ -1760,7 +1765,7 @@ function BalanceBars({ trend, hidden, fmt }: { trend: BalanceTrend; hidden: bool
         })}
       </svg>
       {active !== null && !hidden && (
-        <div style={{ position: 'absolute', top: -10, left: active * (bw + gap) + bw / 2, transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 2,
+        <div style={{ position: 'absolute', bottom: BARS_H + 6, left: active * (bw + gap) + bw / 2, transform: active >= n - 2 ? 'translateX(-80%)' : 'translateX(-50%)', pointerEvents: 'none', zIndex: 2,
           background: '#fff', color: '#0F2E2B', fontSize: 11, fontWeight: 700, padding: '3px 7px', borderRadius: 7, whiteSpace: 'nowrap',
           boxShadow: '0 3px 8px rgba(0,0,0,.18)', fontVariantNumeric: 'tabular-nums', lineHeight: '14px' }}>
           ${values[active].toFixed(2)}
@@ -1829,10 +1834,11 @@ function AvailableBalanceCard({
             )}
           </button>
         </span>
+        {trend && <BalanceChange trend={trend} hidden={balanceHidden} fmt={fmt} />}
       </div>
 
-      {/* Amount + address on the left, 7-day balance bars on the right. */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+      {/* Amount on the left, 7-day balance bars on the right, bottoms aligned. */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10, marginTop: 6 }}>
       <div style={{ minWidth: 0 }}>
       <AnimatedBalanceText target={portfolioTotal}>
         {(displayedBalance) => {
@@ -1847,7 +1853,7 @@ function AvailableBalanceCard({
           const formattedBalance = fmt(displayedBalance).replace(/,/g, '')
           const wholePart = formattedBalance.split('.')[0].replace(/[^0-9]/g, '')
           const digitCount = wholePart.length
-          const amountFontSize = digitCount >= 9 ? 22 : digitCount >= 8 ? 26 : digitCount >= 7 ? 30 : digitCount >= 6 ? 34 : 40
+          const amountFontSize = digitCount >= 9 ? 20 : digitCount >= 8 ? 24 : digitCount >= 7 ? 27 : digitCount >= 6 ? 31 : 36
           const subFontSize = Math.round(amountFontSize * 0.6)
           // BUG FIX: fmt() already trims a whole-number balance down to
           // "1,420" (no decimal point at all, see trimTrailingZeros in
@@ -1883,20 +1889,23 @@ function AvailableBalanceCard({
         }}
       </AnimatedBalanceText>
 
-      {/* Address (with copy). Scales down on narrow phones instead of wrapping. */}
-      <div onClick={() => { copyText(walletAddress || ''); showToastMessage('Address copied', 'success') }}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minWidth: 0, marginTop: 9, lineHeight: '16px' }}>
-        <span style={{ fontSize: 'clamp(11.5px, 3.5vw, 13.5px)', color: 'rgba(255,255,255,0.78)', letterSpacing: '0.2px', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      </div>
+      {trend && <BalanceBars trend={trend} hidden={balanceHidden} />}
+      </div>
+
+      {/* Address pill (copies it); the pager dots sit on this row's right. */}
+      <button type="button" onClick={() => { copyText(walletAddress || ''); showToastMessage('Address copied', 'success') }}
+        aria-label="Copy wallet address"
+        style={{ display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 11px', marginTop: 10, borderRadius: 999, border: 'none',
+          background: 'rgba(255,255,255,0.10)', cursor: 'pointer', maxWidth: '70%' }}>
+        <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {shortAddr}
         </span>
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-          <rect x="5" y="1" width="10" height="10" rx="2" stroke="rgba(255,255,255,0.78)" strokeWidth="1.4"/>
-          <path d="M1 5v9a1 1 0 001 1h9" stroke="rgba(255,255,255,0.78)" strokeWidth="1.4" strokeLinecap="round"/>
+          <rect x="5" y="1" width="10" height="10" rx="2" stroke="rgba(255,255,255,0.85)" strokeWidth="1.4"/>
+          <path d="M1 5v9a1 1 0 001 1h9" stroke="rgba(255,255,255,0.85)" strokeWidth="1.4" strokeLinecap="round"/>
         </svg>
-      </div>
-      </div>
-      {trend && <BalanceBars trend={trend} hidden={balanceHidden} fmt={fmt} />}
-      </div>
+      </button>
     </BowedShapeCard>
   )
 }
@@ -2091,7 +2100,7 @@ function MobileHeroCarousel({
   }
 
   return (
-    <div style={{ width: `calc(95% + ${2 * (PEEK + PEEK_GAP)}px)`, margin: '0 auto' }}>
+    <div style={{ position: 'relative', width: `calc(100% + ${2 * (PEEK + PEEK_GAP)}px)`, margin: '0 auto' }}>
       {/* ── HERO ROW - the outer wrapper is `89.39% + 2×(PEEK+PEEK_GAP)`
            wide (89.39% = the page's normal 95% card width × 0.97 × 0.97,
            two explicit 3%-narrower requests), PLUS extra room on top
@@ -2211,13 +2220,14 @@ function MobileHeroCarousel({
         </motion.div>
       </div>
 
-      {/* ── Dot indicators - tap either to jump slides. ─────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
+      {/* ── Dot indicators - tap either to jump slides. On the card's last
+           row, right side (the address sits on the left of it). ─────────── */}
+      <div style={{ position: 'absolute', right: 18, bottom: 12, display: 'flex', gap: 5 }}>
         {[0, 1].map(i => (
           <button key={i} aria-label={i === 0 ? 'Show balance card' : 'Show multichain hub card'}
             onClick={() => { if (i !== heroCardIndex && !heroGestureActive.current) revealHeroSide(i > heroCardIndex ? 'right' : 'left') }}
             style={{
-              width: heroCardIndex === i ? 16 : 6, height: 6, borderRadius: 3, border: 'none', padding: 0,
+              width: heroCardIndex === i ? 16 : 5, height: 5, borderRadius: 3, border: 'none', padding: 0,
               background: heroCardIndex === i ? '#fff' : 'rgba(255,255,255,0.35)', cursor: 'pointer',
               transition: 'width 0.2s, background 0.2s',
             }} />
@@ -2248,8 +2258,11 @@ function BannerIcon({ kind }: { kind: typeof FEATURE_BANNERS[number]['icon'] }) 
 
 // Mobile Home: the white action panel starts this far up, behind the teal
 // hero's rounded bottom corners.
-const ACTIONS_TUCK = 22
-// Mobile Home: tucked under the white action panel above it (TUCK px of it
+const ACTIONS_TUCK = 24
+// The three Home cards' shared corner: the hero's all round, the tucked
+// cards' bottom corners.
+const HERO_RADIUS = 24
+// Mobile Home: a card the width of the action card, tucked under it (TUCK px of it
 // sit behind that panel's rounded corners), full width, square corners.
 const BANNER_TUCK = 24
 function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (path: string) => void; docked?: boolean }) {
@@ -2283,8 +2296,9 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
       style={docked ? {
         // The column's 18px gap and the tuck are taken back so it starts behind the action panel.
         position: 'relative', zIndex: 1, overflow: 'hidden', cursor: 'pointer',
-        height: height + BANNER_TUCK + 12, margin: `-${18 + BANNER_TUCK}px -20px 0`, padding: `${BANNER_TUCK}px 16px 8px`,
-        background: 'var(--brand)', display: 'flex', alignItems: 'center', gap: 12, boxSizing: 'border-box',
+        margin: `-${18 + BANNER_TUCK}px 0 0`, padding: `${BANNER_TUCK + 12}px 16px 10px`, borderRadius: `0 0 ${HERO_RADIUS}px ${HERO_RADIUS}px`,
+        // A deeper teal than the hero, so the three cards read as three layers.
+        background: 'color-mix(in srgb, var(--brand) 78%, #000)', display: 'flex', flexDirection: 'column', alignItems: 'stretch', boxSizing: 'border-box',
       } : {
         position: 'relative', overflow: 'hidden', height, borderRadius: 16, cursor: 'pointer',
         background: `linear-gradient(${110 + idx * 25}deg, var(--brand) 0%, color-mix(in srgb, var(--brand) 55%, #06110F) 100%)`,
@@ -2294,8 +2308,7 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
       {docked ? (
         <>
           {/* large soft circles, lighter teal */}
-          <div aria-hidden style={{ position: 'absolute', right: -50, top: 8, width: 190, height: 190, borderRadius: '50%', background: 'rgba(140,225,205,0.09)' }} />
-          <div aria-hidden style={{ position: 'absolute', left: '44%', bottom: -120, width: 200, height: 160, borderRadius: '50%', background: 'rgba(140,225,205,0.08)' }} />
+          <div aria-hidden style={{ position: 'absolute', right: -60, top: 4, width: 180, height: 180, borderRadius: '50%', background: 'rgba(143,233,203,0.08)' }} />
         </>
       ) : (
         <>
@@ -2306,24 +2319,24 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
       )}
 
       {/* Slides in only when the banner changes - not when Home first opens. */}
-      <div key={idx} className={docked ? 'mp-press' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 220ms var(--ease-out)' : undefined }}>
-        <div style={{ width: docked ? 48 : 40, height: docked ? 48 : 40, borderRadius: docked ? '50%' : 12, background: docked ? 'rgba(140,225,205,0.16)' : 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <div key={idx} className={docked ? 'mp-press' : undefined} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: docked ? 10 : 12, flex: docked ? undefined : 1, minHeight: docked ? 48 : undefined, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 220ms var(--ease-out)' : undefined }}>
+        <div style={{ width: docked ? 42 : 40, height: docked ? 42 : 40, borderRadius: docked ? '50%' : 12, background: docked ? 'rgba(140,225,205,0.16)' : 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <BannerIcon kind={b.icon} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: docked ? 16 : 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hub(b.title)}</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hub(b.title)}</div>
           <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.82)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.text}</div>
         </div>
-        <span style={{ flexShrink: 0, position: 'relative', fontSize: docked ? 13 : 12, fontWeight: docked ? 600 : 700, color: docked ? '#0F2E2B' : 'var(--brand)', background: '#fff', borderRadius: 999,
-          padding: docked ? '7px 12px' : '6px 12px', display: 'flex', alignItems: 'center', gap: 5, boxShadow: docked ? '0 2px 6px rgba(0,0,0,0.12)' : undefined }}>
+        <span style={{ flexShrink: 0, position: 'relative', fontSize: docked ? 12.5 : 12, fontWeight: docked ? 600 : 700, color: docked ? '#0F2E2B' : 'var(--brand)', background: '#fff', borderRadius: 999,
+          padding: docked ? '0 12px' : '6px 12px', height: docked ? 32 : undefined, display: 'flex', alignItems: 'center', gap: 5, boxShadow: docked ? '0 2px 6px rgba(0,0,0,0.12)' : undefined }}>
           Try now
           {docked && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>}
         </span>
       </div>
 
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: docked ? 8 : 6, display: 'flex', justifyContent: 'center', gap: docked ? 6 : 4 }}>
+      <div style={docked ? { position: 'relative', display: 'flex', justifyContent: 'center', gap: 6, paddingTop: 10 } : { position: 'absolute', left: 0, right: 0, bottom: 6, display: 'flex', justifyContent: 'center', gap: 4 }}>
         {FEATURE_BANNERS.map((_, i) => (
-          <span key={i} style={{ width: docked ? (i === idx ? 22 : 14) : (i === idx ? 12 : 4), height: 4, borderRadius: 2, background: i === idx ? '#fff' : 'rgba(255,255,255,0.4)', transition: 'width 0.25s ease' }} />
+          <span key={i} style={{ width: docked ? (i === idx ? 20 : 12) : (i === idx ? 12 : 4), height: 4, borderRadius: 2, background: i === idx ? '#fff' : 'rgba(255,255,255,0.4)', transition: 'width 0.25s ease' }} />
         ))}
       </div>
       <style>{`@keyframes mpBannerIn { from { opacity: 0.5; transform: translateX(14px) } to { opacity: 1; transform: none } }`}</style>
@@ -3937,9 +3950,8 @@ export function HomePage() {
         // Above the page's cards while search is open (its results float over them).
         position: 'sticky', top: 0, zIndex: searchOpen ? 40 : 20,
         // Solid, no backdrop blur: a blur under a sticky header is redrawn on
-        // every frame of a scroll. Mobile: the teal of the hero panel below it
-        // (only colours change here - every size stays as it was).
-        background: isDesktop ? 'var(--bg)' : 'var(--brand)',
+        // every frame of a scroll.
+        background: 'var(--bg)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))',
         paddingBottom: 4, paddingLeft: 20, paddingRight: 20,
         boxSizing: 'border-box',
@@ -3951,7 +3963,7 @@ export function HomePage() {
           {searchOpen ? (
             <>
               <SearchField autoFocus value={searchQuery} onChange={setSearchQuery} placeholder="Search people, services…" />
-              <button onClick={closeSearch} style={{ background: 'none', border: 'none', color: isDesktop ? 'var(--brand-text)' : '#fff', fontSize: 14, fontWeight: 600, marginLeft: 10, cursor: 'pointer', flexShrink: 0 }}>
+              <button onClick={closeSearch} style={{ background: 'none', border: 'none', color: 'var(--brand-text)', fontSize: 14, fontWeight: 600, marginLeft: 10, cursor: 'pointer', flexShrink: 0 }}>
                 Cancel
               </button>
             </>
@@ -3959,14 +3971,14 @@ export function HomePage() {
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                 {user?.avatar ? (
-                  <div onClick={() => navigate('/profile')} style={{ cursor: 'pointer', flexShrink: 0, width: 47, height: 47, borderRadius: '50%', padding: 2, background: isDesktop ? 'var(--brand)' : '#D7F5EC', boxShadow: isDesktop ? undefined : '0 0 12px rgba(143,233,203,0.35)' }}>
+                  <div onClick={() => navigate('/profile')} style={{ cursor: 'pointer', flexShrink: 0, width: 47, height: 47, borderRadius: '50%', padding: 2, background: 'var(--brand)' }}>
                     <img src={user.avatar.split('?')[0]} alt="avatar"
                       loading="eager" decoding="async"
-                      style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: isDesktop ? '2px solid var(--bg)' : '2px solid var(--brand)' }}/>
+                      style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--bg)' }}/>
                   </div>
                 ) : (
-                  <div onClick={() => navigate('/profile')} style={{ cursor: 'pointer', flexShrink: 0, width: 47, height: 47, borderRadius: '50%', padding: 2, background: isDesktop ? 'var(--brand)' : '#D7F5EC', boxShadow: isDesktop ? undefined : '0 0 12px rgba(143,233,203,0.35)' }}>
-                    <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'var(--brand)', border: isDesktop ? '2px solid var(--bg)' : '2px solid var(--brand)', color: isDesktop ? undefined : '#fff',
+                  <div onClick={() => navigate('/profile')} style={{ cursor: 'pointer', flexShrink: 0, width: 47, height: 47, borderRadius: '50%', padding: 2, background: 'var(--brand)' }}>
+                    <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'var(--brand)', border: '2px solid var(--bg)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 17, fontWeight: 700 }}>
                       {displayName.charAt(0).toUpperCase()}
@@ -3974,7 +3986,7 @@ export function HomePage() {
                   </div>
                 )}
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: isDesktop ? 'var(--text-primary)' : '#fff', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
                   <button
                     onClick={async (e) => {
                       e.stopPropagation()
@@ -3984,29 +3996,28 @@ export function HomePage() {
                       setTimeout(() => setHandleCopied(false), 1500)
                     }}
                     style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, background: 'none', border: 'none', padding: 0, cursor: 'pointer', maxWidth: '100%', minWidth: 0 }}>
-                    <span style={{ fontSize: 11.5, color: isDesktop ? 'var(--link)' : 'rgba(255,255,255,0.78)', fontFamily: 'monospace', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
+                    <span style={{ fontSize: 11.5, color: 'var(--link)', fontFamily: 'monospace', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
                     {handleCopied
-                      ? <Check className="w-3 h-3 text-success flex-shrink-0" style={isDesktop ? undefined : { color: '#8FE9CB' }} />
-                      : <Copy className="w-3 h-3 text-link/60 flex-shrink-0" style={isDesktop ? undefined : { color: 'rgba(255,255,255,0.6)' }} />}
+                      ? <Check className="w-3 h-3 text-success flex-shrink-0" />
+                      : <Copy className="w-3 h-3 text-link/60 flex-shrink-0" />}
                   </button>
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                 {/* Search */}
                 <button onClick={() => setSearchOpen(true)} aria-label="Search"
-                  style={{ width: 38, height: 38, borderRadius: '50%', background: isDesktop ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'rgba(255,255,255,0.06)',
-                    border: isDesktop ? '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)' : '1px solid rgba(255,255,255,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isDesktop ? 'var(--brand-text)' : '#fff'} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  style={{ width: 38, height: 38, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
+                    border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </button>
                 {/* Bell - notifications */}
                 <button onClick={() => navigate('/notifications')} aria-label="Notifications"
                   style={{ position: 'relative', width: 38, height: 38, borderRadius: '50%',
-                    background: isDesktop ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'rgba(255,255,255,0.06)',
-                    border: isDesktop ? '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)' : '1px solid rgba(255,255,255,0.28)',
+                    background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-                    <path d="M9 1.5A5.5 5.5 0 0113.5 7v3l1.5 2H3L4.5 10V7A5.5 5.5 0 019 1.5z" stroke={isDesktop ? 'var(--brand-text)' : '#fff'} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M7 13.5a2 2 0 004 0" stroke={isDesktop ? 'var(--brand-text)' : '#fff'} strokeWidth="1.4" strokeLinecap="round"/>
+                    <path d="M9 1.5A5.5 5.5 0 0113.5 7v3l1.5 2H3L4.5 10V7A5.5 5.5 0 019 1.5z" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M7 13.5a2 2 0 004 0" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round"/>
                   </svg>
                   {(unreadCount > 0 || badgeLabel) && (
                     <span style={{ position: 'absolute', top: 7, right: 8, width: 6, height: 6,
@@ -4201,13 +4212,13 @@ export function HomePage() {
             </div>
           </div>
         ) : (
-          // Mobile hero: a full-width teal panel under the (teal) header, rounded
-          // at the bottom, sitting over the white action panel below it.
-          <div style={{ position: 'relative', zIndex: 3, margin: '0 -20px', padding: '0 20px 12px', background: 'var(--brand)', borderRadius: '0 0 22px 22px' }}>
+          // Mobile hero: a teal card in the page's 20px margins, over the
+          // action card and the banner card (same width, each tucked under).
+          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: '16px 0', background: 'var(--brand)', borderRadius: HERO_RADIUS }}>
             {businessAccount ? (
               // Business accounts: the balance card only - no Cross-chain card
               // or carousel edges (Cross-chain Transfer is in More actions).
-              <div style={{ width: '95%', margin: '0 auto' }}>
+              <div>
                 <AvailableBalanceCard
                   portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
                   walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
@@ -4238,14 +4249,14 @@ export function HomePage() {
         {/* Mobile only. Desktop is unaffected: it never rendered this row
             (its own Quick Actions card lives in column 2). */}
         {!isDesktop && (
-        <div style={{ position: 'relative', zIndex: 2, margin: `-${18 + ACTIONS_TUCK}px -20px 0`, padding: `${ACTIONS_TUCK + 14}px 20px 14px`,
-          background: 'var(--surface)', borderRadius: '0 0 24px 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: '95%', margin: '0 auto' }}>
+        <div style={{ position: 'relative', zIndex: 2, margin: `-${18 + ACTIONS_TUCK}px 0 0`, padding: `${ACTIONS_TUCK + 14}px 10px 16px`,
+          background: 'var(--surface)', borderRadius: `0 0 ${HERO_RADIUS}px ${HERO_RADIUS}px` }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
           {[
-            { label: 'Pay',     path: '/pay',     icon: <ActionIcon name="pay" size={27} /> },
-            { label: 'Receive', path: '/receive', icon: <ActionIcon name="receive" size={27} /> },
-            { label: 'Swap',    path: '/swap',    icon: <ActionIcon name="swap" size={27} /> },
-            { label: 'More',    path: null,       icon: <ActionIcon name="more" size={27} /> },
+            { label: 'Pay',     path: '/pay',     icon: <ActionIcon name="pay" size={24} /> },
+            { label: 'Receive', path: '/receive', icon: <ActionIcon name="receive" size={24} /> },
+            { label: 'Swap',    path: '/swap',    icon: <ActionIcon name="swap" size={24} /> },
+            { label: 'More',    path: null,       icon: <ActionIcon name="more" size={24} /> },
           ].map(a => (
             <div key={a.label}
               onClick={() => a.path ? navigate(a.path) : setShowMore(true)}
@@ -4255,7 +4266,7 @@ export function HomePage() {
                 gap: 8, cursor: 'pointer',
               }}>
               <div style={{
-                width: 58, height: 58, borderRadius: '50%', background: 'var(--brand)',
+                width: 52, height: 52, borderRadius: '50%', background: 'var(--brand)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
                 opacity: accountLock.locked && a.path ? 0.45 : 1,
               }}>
@@ -4268,7 +4279,7 @@ export function HomePage() {
                   }} />
                 )}
               </div>
-              <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1 }}>{a.label}</span>
+              <span style={{ fontSize: 12.5, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1 }}>{a.label}</span>
             </div>
           ))}
         </div>
