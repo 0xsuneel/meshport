@@ -48,7 +48,7 @@ export function QrInfoBox({ label, value, onCopy, copied = false, mono = true, o
     <>
       <span className="flex-1 min-w-0">
         <span className="block text-[11px] font-semibold text-brand-text">{label}</span>
-        <span className="block text-[13px] font-semibold text-text-primary truncate" style={mono ? { fontFamily: 'ui-monospace, monospace' } : undefined}>{value}</span>
+        <span className="block font-semibold text-text-primary truncate" style={{ fontSize: 'clamp(11px, 3.4vw, 13px)', ...(mono ? { fontFamily: 'ui-monospace, monospace' } : null) }}>{value}</span>
       </span>
       {onCopy && (copied ? <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" /> : <Copy className="w-4 h-4 text-brand-text flex-shrink-0" />)}
       {!onCopy && onOpen && <ChevronDown className="w-4 h-4 text-brand-text flex-shrink-0" />}

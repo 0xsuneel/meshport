@@ -326,6 +326,7 @@
 /* ── Page wrapper ────────────────────────────────────────────────────────────── */
 .page-bg {
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
   padding-bottom: 90px;
 }
@@ -534,7 +535,9 @@
   color: var(--text-secondary);
   transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
 }
-.mp-popup-close:hover { background: color-mix(in srgb, var(--text-primary) 12%, transparent); color: var(--text-primary); }
+@media (hover: hover) and (pointer: fine) {
+  .mp-popup-close:hover { background: color-mix(in srgb, var(--text-primary) 12%, transparent); color: var(--text-primary); }
+}
 .mp-popup-close:active { transform: scale(0.92); }
 
 /* Text never runs off the screen: long unbroken strings wrap. */
@@ -615,7 +618,7 @@ html.mp-locking #root { visibility: hidden; }
 
 /* Updates on desktop: the cover zooms in a touch under the pointer. */
 .mp-news-card img { transition: transform 0.35s ease; }
-.mp-news-card:hover img { transform: scale(1.03); }
+@media (hover: hover) and (pointer: fine) { .mp-news-card:hover img { transform: scale(1.03); } }
 @media (prefers-reduced-motion: reduce) { .mp-news-card:hover img { transform: none; } }
 
 /* Leave guard (components/layout/LeaveGuardHost.tsx): the panel of a flow
@@ -695,3 +698,15 @@ html.mp-locking #root { visibility: hidden; }
   body > *:not(.print-root) { display: none !important; }
   .print-root { display: block !important; background: #fff; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* Home's promo banner on the narrowest phones (320-359px): "Try now" shrinks
+   to its arrow so the title and line beside it aren't cut off. */
+@media (max-width: 359px) {
+  .mp-try { width: 32px; padding: 0 !important; justify-content: center; }
+  .mp-try .mp-try-label { display: none; }
+}
+
+/* Controls: tap fires immediately (no double-tap-zoom wait) and a long
+   press doesn't select the label. Content text stays selectable. */
+button, a, [role="button"], [role="tab"] { touch-action: manipulation; }
+button, [role="button"], [role="tab"] { -webkit-user-select: none; user-select: none; }

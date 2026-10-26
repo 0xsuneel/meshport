@@ -36,9 +36,10 @@ export default {
       lg: '980px',
       xl: '1280px',
       '2xl': '1536px',
-      // Short screens (iPhone SE, small Androids with the browser bars
-      // showing): `short:` tightens vertical spacing so a page still fits.
-      short: { raw: '(max-height: 700px)' },
+      // Keep every screen a plain min-width: one raw entry here makes
+      // Tailwind drop ALL arbitrary breakpoints (min-[360px]:, max-[399px]:),
+      // which silently disabled every small-phone tweak in the app.
+      // `short:` is a variant below instead.
     },
     extend: {
       colors: {
@@ -152,5 +153,9 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // Short screens (iPhone SE, small Androids with the browser bars
+    // showing): `short:` tightens vertical spacing so a page still fits.
+    ({ addVariant }) => { addVariant('short', '@media (max-height: 700px)') },
+  ],
 }

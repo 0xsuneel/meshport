@@ -1523,16 +1523,20 @@ function BowedShapeCard({
     const w = el.offsetWidth, h = el.offsetHeight
     if (w > 0 && h > 0) setSize(prev => (prev && prev.w === w && prev.h === h ? prev : { w, h }))
   }
+  // A flat card draws no shape, so it needs no size: measuring it anyway
+  // re-rendered the hero after every commit, and at some widths two sizes
+  // kept alternating until React stopped with "Maximum update depth
+  // exceeded" (Home crashed to the error screen after a resize/rotate).
   useLayoutEffect(() => {
-    if (wrapRef.current) measureNow(wrapRef.current)
+    if (!flat && wrapRef.current) measureNow(wrapRef.current)
   })
   useLayoutEffect(() => {
     const el = wrapRef.current
-    if (!el) return
+    if (!el || flat) return
     const ro = new ResizeObserver(() => measureNow(el))
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [flat])
   const path = useMemo(() => (size ? cardPath(size.w, size.h) : ''), [size?.w, size?.h])
   // iOS Safari can briefly report a zero-sized SVG during a reload/layout
   // restore. Keep a normalized fallback path mounted so the card background
@@ -1750,10 +1754,11 @@ function BalanceBars({ trend, hidden }: { trend: BalanceTrend; hidden: boolean }
     setActive(Math.max(0, Math.min(n - 1, Math.floor((clientX - r.left) / r.width * n))))
   }
   return (
-    <div style={{ position: 'relative', flexShrink: 0, width: BARS_W }}
+    // Narrow phones (320px) give the bars less room so the amount never runs under them.
+    <div style={{ position: 'relative', flexShrink: 0, width: `clamp(64px, 30%, ${BARS_W}px)` }}
       // Inside the swipeable hero: a touch here reads the bars, it doesn't start a swipe.
       onPointerDownCapture={e => e.stopPropagation()}>
-      <svg ref={svgRef} width={BARS_W} height={BARS_H} viewBox={`0 0 ${BARS_W} ${BARS_H}`} role="img" style={{ display: 'block', touchAction: 'none', cursor: 'crosshair' }}
+      <svg ref={svgRef} width="100%" height={BARS_H} viewBox={`0 0 ${BARS_W} ${BARS_H}`} preserveAspectRatio="none" role="img" style={{ display: 'block', touchAction: 'pan-y', cursor: 'crosshair' }}
         aria-label={hidden ? 'Balance over the last 7 days' : `Balance over the last 7 days, from $${values[0].toFixed(2)} to $${values[n - 1].toFixed(2)}`}
         onPointerMove={e => pick(e.clientX)} onPointerDown={e => pick(e.clientX)}
         onPointerLeave={() => setActive(null)} onPointerUp={e => { if (e.pointerType !== 'mouse') setActive(null) }}>
@@ -1765,7 +1770,7 @@ function BalanceBars({ trend, hidden }: { trend: BalanceTrend; hidden: boolean }
         })}
       </svg>
       {active !== null && !hidden && (
-        <div style={{ position: 'absolute', bottom: BARS_H + 6, left: active * (bw + gap) + bw / 2, transform: active >= n - 2 ? 'translateX(-80%)' : 'translateX(-50%)', pointerEvents: 'none', zIndex: 2,
+        <div style={{ position: 'absolute', bottom: BARS_H + 6, left: `${((active + 0.5) / n) * 100}%`, transform: active >= n - 2 ? 'translateX(-80%)' : 'translateX(-50%)', pointerEvents: 'none', zIndex: 2,
           background: '#fff', color: '#0F2E2B', fontSize: 11, fontWeight: 700, padding: '3px 7px', borderRadius: 7, whiteSpace: 'nowrap',
           boxShadow: '0 3px 8px rgba(0,0,0,.18)', fontVariantNumeric: 'tabular-nums', lineHeight: '14px' }}>
           ${values[active].toFixed(2)}
@@ -1868,16 +1873,16 @@ function AvailableBalanceCard({
           return (
             <div style={{ display: 'flex', alignItems: 'center', marginTop: -4, height: 40 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-              <span style={{ fontSize: amountFontSize, fontWeight: 800, letterSpacing: '-1.2px', lineHeight: 1, color: '#fff', marginRight: 2 }}>$</span>
+              <span style={{ fontSize: `min(${amountFontSize}px, 10.5vw)`, fontWeight: 800, letterSpacing: '-1.2px', lineHeight: 1, color: '#fff', marginRight: 2 }}>$</span>
               {balanceHidden ? (
-                <span style={{ fontSize: amountFontSize, fontWeight: 800, letterSpacing: '-1.2px', lineHeight: 1, color: '#fff' }}>••••••</span>
+                <span style={{ fontSize: `min(${amountFontSize}px, 10.5vw)`, fontWeight: 800, letterSpacing: '-1.2px', lineHeight: 1, color: '#fff' }}>••••••</span>
               ) : (
                 <>
-                  <span style={{ fontSize: amountFontSize, fontWeight: 800, letterSpacing: '-1.2px', lineHeight: 1, color: '#fff' }}>
+                  <span style={{ fontSize: `min(${amountFontSize}px, 10.5vw)`, fontWeight: 800, letterSpacing: '-1.2px', lineHeight: 1, color: '#fff' }}>
                     {formattedBalance.split('.')[0]}
                   </span>
                   {decimalPart ? (
-                    <span style={{ fontSize: subFontSize, fontWeight: 700, lineHeight: 1, color: '#fff', opacity: 0.75 }}>
+                    <span style={{ fontSize: `min(${subFontSize}px, 6.3vw)`, fontWeight: 700, lineHeight: 1, color: '#fff', opacity: 0.75 }}>
                       .{decimalPart}
                     </span>
                   ) : null}
@@ -2327,9 +2332,9 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
           <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hub(b.title)}</div>
           <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.82)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.text}</div>
         </div>
-        <span style={{ flexShrink: 0, position: 'relative', fontSize: docked ? 12.5 : 12, fontWeight: docked ? 600 : 700, color: docked ? '#0F2E2B' : 'var(--brand)', background: '#fff', borderRadius: 999,
+        <span className={docked ? 'mp-try' : undefined} style={{ flexShrink: 0, position: 'relative', fontSize: docked ? 12.5 : 12, fontWeight: docked ? 600 : 700, color: docked ? '#0F2E2B' : 'var(--brand)', background: '#fff', borderRadius: 999,
           padding: docked ? '0 12px' : '6px 12px', height: docked ? 32 : undefined, display: 'flex', alignItems: 'center', gap: 5, boxShadow: docked ? '0 2px 6px rgba(0,0,0,0.12)' : undefined }}>
-          Try now
+          <span className="mp-try-label">Try now</span>
           {docked && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>}
         </span>
       </div>
