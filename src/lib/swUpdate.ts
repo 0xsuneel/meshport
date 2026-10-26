@@ -232,7 +232,7 @@ export function showUpdating(): void {
     el.setAttribute('role', 'status')
     Object.assign(el.style, {
       position: 'fixed', inset: '0', zIndex: '10001', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '18px',
-      background: 'var(--bg, #0B0E11)', color: 'var(--text-secondary, #9AA4AE)', font: '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      background: 'var(--bg, #000000)', color: 'var(--text-secondary, #B4B4B4)', font: '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     })
     const logo = document.createElement('div')
     const label = document.createElement('div')
