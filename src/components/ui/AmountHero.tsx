@@ -42,6 +42,8 @@ export function AmountHero({ value, onChange, symbol = '$', token = 'USDC', auto
         onChange={e => onChange(clean(e.target.value))}
         style={{
           width: `${shown.length}ch`, minWidth: '1ch', maxWidth: '100%',
+          // Monospace on purpose: the input is sized in ch to the typed text, which
+          // only fits exactly when every digit is one ch wide. taste-skill-ignore
           fontSize: size, fontWeight: 700, lineHeight: 1, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
           textAlign: 'left', padding: 0, margin: 0, background: 'transparent', border: 'none', outline: 'none',
           color: 'var(--text-primary)', caretColor: 'var(--brand)',

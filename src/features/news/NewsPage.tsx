@@ -173,7 +173,7 @@ export function NewsPage() {
         {showLive.map(it => (
           <button key={it.id} data-news-id={it.id} className={it.id === flashId ? 'mp-last-opened' : undefined} onClick={() => openStory(it.id)}
             style={{ width: '100%', display: 'flex', gap: 10, alignItems: 'flex-start', textAlign: 'left', cursor: 'pointer', marginBottom: 10,
-              background: 'color-mix(in srgb, #F59E0B 12%, var(--surface))', border: '1px solid color-mix(in srgb, #F59E0B 40%, transparent)',
+              background: 'color-mix(in srgb, var(--warning) 12%, var(--surface))', border: '1px solid color-mix(in srgb, var(--warning) 40%, transparent)',
               borderRadius: 14, padding: '10px 12px', color: 'var(--text-primary)' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: 'none', marginTop: 1 }}>
               <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>

@@ -45,7 +45,7 @@ const chainName = (id: string) => id === 'Arc_Testnet' ? 'Arc'
 const chainLogo = (id: string) => id === 'Arc_Testnet' ? '/logos/chains/arc.svg' : chainLogoSrc(id)
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: 16 }
-const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }
+const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }
 
 function Change({ value, suffix }: { value: number; suffix: string }) {
   const up = value >= 0

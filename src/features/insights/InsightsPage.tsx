@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {ArrowLeft, Calendar, ChevronDown, ArrowUp, ArrowDown, Link2, Sparkles} from 'lucide-react'
+import {ArrowLeft, Calendar, ChevronDown, Link2, Sparkles} from 'lucide-react'
 import { useAuthStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
 import { fetchActivity } from '@/lib/ActivityService'
@@ -14,18 +14,18 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const CHAINS: Record<string, { name: string; color: string; bg: string; logo?: string }> = {
-  Ethereum:    { name: 'Ethereum',   color: '#8b8fbe', bg: 'radial-gradient(circle,#4a4ea8,#1d2059)', logo: '/logos/chains/ethereum.svg'           },
-  Base:        { name: 'Base',       color: '#2563eb', bg: '#2563EB',                                  logo: '/logos/chains/base.svg'            },
+  Ethereum:    { name: 'Ethereum',   color: '#8b8fbe', bg: '#2D3170', logo: '/logos/chains/ethereum.svg'           },
+  Base:        { name: 'Base',       color: '#0052FF', bg: '#0052FF',                                  logo: '/logos/chains/base.svg'            },
   Arbitrum:    { name: 'Arbitrum',   color: '#28A0F0', bg: '#213147',                                  logo: '/logos/chains/arbitrum.svg'            },
   Optimism:    { name: 'Optimism',   color: '#ff0420', bg: '#ff0420',                                  logo: '/logos/chains/optimism.svg'       },
-  Polygon:     { name: 'Polygon',    color: '#8247e5', bg: 'radial-gradient(circle,#9558f5,#5a1fa8)', logo: '/logos/chains/polygon.svg'         },
+  Polygon:     { name: 'Polygon',    color: '#8247e5', bg: '#6C2BD9', logo: '/logos/chains/polygon.svg'         },
   Avalanche:   { name: 'Avalanche',  color: '#E84142', bg: '#E84142',                                  logo: '/logos/chains/avalanche.svg' },
   HyperEVM:    { name: 'HyperEVM',   color: '#00C4FF', bg: '#020B22',                                  logo: '/logos/chains/hyperevm.svg'    },
   Sei:         { name: 'Sei',        color: '#9D3BE0', bg: '#9d2235',                                  logo: '/logos/chains/sei.svg'       },
   Sonic:       { name: 'Sonic',      color: '#FF6B2B', bg: '#0A1B3D',                                  logo: '/logos/chains/sonic.svg'         },
   Unichain:      { name: 'Unichain',   color: '#FF007A', bg: '#FF007A',                                  logo: '/logos/chains/unichain.svg'       },
   'World Chain': { name: 'World Chain',color: '#ffffff', bg: '#191919',                                  logo: '/logos/chains/world.svg'      },
-  'Arc Testnet': { name: 'Arc',        color: '#2563EB', bg: '#2563EB', logo: '/logos/chains/arc.svg' },
+  'Arc Testnet': { name: 'Arc',        color: 'var(--brand)', bg: 'var(--brand)', logo: '/logos/chains/arc.svg' },
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -71,23 +71,6 @@ function filterPrevPeriod(txs: ActivityRecord[], period: 'month' | 'week' | 'yea
 function pctChange(curr: number, prev: number) {
   if (prev === 0) return curr > 0 ? 100 : 0
   return Math.round(((curr - prev) / prev) * 100)
-}
-
-// ─── Sparkline SVG ────────────────────────────────────────────────────────────
-function Sparkline({ values, color }: { values: number[]; color: string }) {
-  if (!values.length) return <svg className="w-full h-5" viewBox="0 0 72 20" preserveAspectRatio="none"/>
-  const max = Math.max(...values, 1)
-  const pts = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * 72
-    const y = 18 - (v / max) * 15
-    return `${x},${y}`
-  }).join(' ')
-  return (
-    <svg className="w-full h-5" viewBox="0 0 72 20" preserveAspectRatio="none">
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.7"
-        strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
 }
 
 // ─── Area Chart SVG (hero) ────────────────────────────────────────────────────
@@ -194,9 +177,7 @@ function BarChart({ data, labels, highlightIdx, tooltip }:
                 width: '100%', maxWidth: 9, minHeight: 3,
                 borderRadius: '3px 3px 0 0',
                 height: `${pct}%`,
-                background: hi
-                  ? 'linear-gradient(180deg,var(--accent) 0%,var(--brand) 100%)'
-                  : 'linear-gradient(180deg,color-mix(in srgb, var(--accent) 85%, transparent) 0%,color-mix(in srgb, var(--brand) 45%, transparent) 100%)',
+                background: hi ? 'var(--brand)' : 'color-mix(in srgb, var(--brand) 40%, transparent)',
               }}/>
             </div>
           )
@@ -508,33 +489,6 @@ export function InsightsPage() {
     return vals.length >= 2 ? vals : [0, ...vals]
   }, [stats, period])
 
-  // ── Sparkline per-day values for stat cards ───────────────────────────────
-  const sparklines = useMemo(() => {
-    const days = 14
-    const now = new Date()
-    const sentD   = Array(days).fill(0)
-    const recvD   = Array(days).fill(0)
-    const treasD  = Array(days).fill(0)
-    const contD   = Array(days).fill(0)
-    const contactSets: Set<string>[] = Array.from({ length: days }, () => new Set())
-
-    stats.all.forEach(tx => {
-      const d = new Date(tx.createdAt || tx.timestamp)
-      const diffD = Math.floor((now.getTime() - d.getTime()) / 86400000)
-      if (diffD < 0 || diffD >= days) return
-      const idx = days - 1 - diffD
-      const meta = (tx as any).metadata || {}
-      const at = (tx as any).activityType
-      if (at === 'send' || at === 'bulk') sentD[idx] += tx.amount
-      if (at === 'receive') recvD[idx] += tx.amount
-      if (at === 'deposit') treasD[idx] += tx.amount
-      if (meta.toUsername)   contactSets[idx].add(meta.toUsername)
-      if (meta.fromUsername) contactSets[idx].add(meta.fromUsername)
-    })
-    contactSets.forEach((s, i) => { contD[i] = s.size })
-    return { sentD, recvD, treasD, contD }
-  }, [stats])
-
   const periodLabel = period === 'month' ? 'This Month' : period === 'week' ? 'This Week' : 'This Year'
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -661,67 +615,30 @@ export function InsightsPage() {
         </div>
       </div>
 
-      {/* ── STAT CARDS ──────────────────────────────────────────────────── */}
+      {/* ── STAT CARDS - label, value, change in words; no icon tiles or
+          mini trend lines (the Activity chart below is the trend). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, padding: '0 14px 12px' }}>
         {[
-          {
-            icon: <ArrowUp size={14} color="var(--brand-text)"/>,
-            iconBg: 'color-mix(in srgb, var(--brand) 20%, transparent)',
-            label: 'Paid',
-            value: `$${formatAmount(stats.sentVol)}`,
-            pct: stats.sentPct,
-            pctPositive: false,
-            spark: sparklines.sentD,
-            sparkColor: 'var(--brand)',
-          },
-          {
-            icon: <ArrowDown size={14} color="var(--success)"/>,
-            iconBg: 'color-mix(in srgb, var(--success) 18%, transparent)',
-            label: 'Received',
-            value: `$${formatAmount(stats.recvVol)}`,
-            pct: stats.recvPct,
-            pctPositive: true,
-            spark: sparklines.recvD,
-            sparkColor: 'var(--success)',
-          },
-
-          {
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
-                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
-              </svg>
-            ),
-            iconBg: 'color-mix(in srgb, var(--accent) 16%, transparent)',
-            label: 'Active Contacts',
-            value: String(stats.activeContacts),
-            pct: stats.contactPct,
-            pctPositive: true,
-            spark: sparklines.contD,
-            sparkColor: 'var(--accent)',
-          },
-        ].map((c, i) => (
+          { label: 'Paid', value: `$${formatAmount(stats.sentVol)}`, pct: stats.sentPct, pctPositive: false },
+          { label: 'Received', value: `$${formatAmount(stats.recvVol)}`, pct: stats.recvPct, pctPositive: true },
+          { label: 'Active Contacts', value: String(stats.activeContacts), pct: stats.contactPct, pctPositive: true },
+        ].map(c => (
           <div
-            key={i}
+            key={c.label}
             style={{
               background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
-              borderRadius: 16, padding: '11px 10px 9px', overflow: 'hidden',
+              borderRadius: 16, padding: '11px 10px 10px', overflow: 'hidden',
             }}
           >
-            <div style={{ width: 28, height: 28, borderRadius: 9, background: c.iconBg,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 7 }}>
-              {c.icon}
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500, marginBottom: 5 }}>{c.label}</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-.4px', marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>{c.value}</div>
+            <div style={{ fontSize: 12, fontWeight: c.pct === 0 ? 400 : 600,
+              // No change is grey words - green/red only for a real move.
+              color: c.pct === 0 ? 'var(--text-secondary)' : c.pctPositive
+                ? (c.pct > 0 ? 'var(--success-text)' : 'var(--danger-text)')
+                : (c.pct < 0 ? 'var(--success-text)' : 'var(--danger-text)') }}>
+              {c.pct === 0 ? 'No change vs last month' : <>{(c.pctPositive ? c.pct > 0 : c.pct < 0) ? '↑' : '↓'}{Math.abs(c.pct)}% vs last month</>}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500, marginBottom: 5 }}>{c.label}</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-.4px', marginBottom: 3 }}>{c.value}</div>
-            <div style={{ fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 2, marginBottom: 6,
-              color: c.pctPositive
-                ? (c.pct >= 0 ? 'var(--success)' : 'var(--danger)')
-                : (c.pct <= 0 ? 'var(--success)' : 'var(--danger)') }}>
-              {(c.pctPositive ? c.pct >= 0 : c.pct <= 0) ? '↑' : '↓'}
-              {Math.abs(c.pct)}% vs last month
-            </div>
-            <Sparkline values={c.spark} color={c.sparkColor}/>
           </div>
         ))}
       </div>
@@ -819,7 +736,7 @@ export function InsightsPage() {
               <div style={{ height: 5, borderRadius: 3, background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', overflow: 'hidden', marginBottom: 2 }}>
                 <div style={{
                   height: '100%', borderRadius: 3,
-                  background: 'linear-gradient(90deg,var(--brand),var(--accent))',
+                  background: 'var(--brand)',
                   width: `${stats.totalMcTxs > 0 ? pct : 0}%`,
                   transition: 'width .5s ease',
                 }}/>
@@ -883,8 +800,8 @@ export function InsightsPage() {
             {
               icon: <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" width="12" height="12"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
               label: 'You Received',
-              value: `${stats.recvPctForPI >= 0 ? '+' : ''}${stats.recvPctForPI}%`,
-              sub: 'vs last month', green: true,
+              value: `${stats.recvPctForPI > 0 ? '+' : ''}${stats.recvPctForPI}%`,
+              sub: 'vs last month', green: stats.recvPctForPI > 0,
             },
           ].map((row, i, arr) => (
             <div

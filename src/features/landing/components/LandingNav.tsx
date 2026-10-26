@@ -67,7 +67,7 @@ export function LandingNav() {
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-4 min-[375px]:px-5 sm:px-8">
         <a href="#top" className="flex min-w-0 items-center gap-2.5" aria-label="MeshPort home">
-          <img decoding="async" src="/favicon.svg" alt="MeshPort" className="h-8 w-8 flex-shrink-0 rounded-lg" style={{ boxShadow: 'var(--shadow-1)' }} />
+          <img decoding="async" src="/favicon.svg" alt="MeshPort" className="h-8 w-8 flex-shrink-0 rounded-lg" />
           <span className="hidden text-[17px] font-extrabold tracking-tight text-text-primary min-[360px]:inline">MeshPort</span>
         </a>
 
@@ -77,7 +77,7 @@ export function LandingNav() {
               key={link.href}
               href={link.href}
               onClick={e => handleNavClick(e, link.href)}
-              className="text-[14px] font-medium text-text-secondary transition-colors hover:text-text-primary"
+              className="text-[15px] font-medium text-text-secondary transition-colors hover:text-text-primary"
             >
               {link.label}
             </a>
@@ -99,7 +99,7 @@ export function LandingNav() {
               the wordmark - see the mobile screenshot this fixes. */}
           <button
             onClick={() => navigate('/auth')}
-            className="whitespace-nowrap rounded-xl bg-brand px-3 py-2 text-[13px] font-bold text-white shadow-elevation-1 transition-transform active:scale-[0.97] sm:px-5 sm:py-2.5 sm:text-[14px]"
+            className="whitespace-nowrap rounded-xl bg-brand px-3 py-2 text-[13px] font-bold text-white transition-transform active:scale-[0.97] sm:px-5 sm:py-2.5 sm:text-[14px]"
           >
             <span className="min-[400px]:hidden">Launch</span>
             <span className="hidden min-[400px]:inline">Launch MeshPort</span>

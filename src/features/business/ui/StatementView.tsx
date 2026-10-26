@@ -102,8 +102,8 @@ export function StatementView({
           <div className="flex flex-col gap-0">
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className="flex items-center justify-between px-5 py-4 border-b border-border last:border-0">
-                <div className="h-3 w-32 rounded bg-border/60 animate-pulse" />
-                <div className="h-3 w-16 rounded bg-border/60 animate-pulse" />
+                <div className="h-3 w-32 rounded bg-border/60 mp-pulse" />
+                <div className="h-3 w-16 rounded bg-border/60 mp-pulse" />
               </div>
             ))}
           </div>
@@ -178,7 +178,7 @@ export function PrintableStatement({
       </div>
 
       {/* Summary table */}
-      <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Summary</p>
+      <p className="text-xs font-bold text-gray-400 mb-3">Summary</p>
       <table className="w-full mb-8 text-sm">
         <tbody>
           {rows.map((row, i) => (
@@ -191,7 +191,7 @@ export function PrintableStatement({
       </table>
 
       {/* Payments table */}
-      <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Payments</p>
+      <p className="text-xs font-bold text-gray-400 mb-3">Payments</p>
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-gray-300">

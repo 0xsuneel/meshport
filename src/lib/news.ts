@@ -36,11 +36,11 @@ export const NEWS_SOURCE_LABEL: Record<NewsSource, string> = {
 
 /** Background shown behind (or instead of) a story's cover image. */
 export const NEWS_SOURCE_TINT: Record<NewsSource, string> = {
-  arc: 'linear-gradient(135deg, #0E3B37, #1F8A7E)',
-  circle: 'linear-gradient(135deg, #1C2340, #4E5BD1)',
-  circle_dev: 'linear-gradient(135deg, #10172A, #3B4A6B)',
-  arc_status: 'linear-gradient(135deg, #3B1F0F, #C9702E)',
-  meshport: 'linear-gradient(135deg, #0F5C57, #2F9E8F)',
+  arc: '#17635B',
+  circle: '#2B3566',
+  circle_dev: '#232F48',
+  arc_status: '#7A421B',
+  meshport: '#1C7A72',
 }
 
 /** Where "Read full article" goes, as shown on the button. */

@@ -170,7 +170,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
         {header(compact)}
         {!compact && (
           <div className="flex items-center justify-between mt-3 px-0.5">
-            <span className="text-[12px] font-bold uppercase tracking-[0.06em] text-text-secondary">Items{valid.length ? ` · ${valid.length}` : ''}</span>
+            <span className="text-[12px] font-semibold tracking-[0.06em] text-text-secondary">Items{valid.length ? ` · ${valid.length}` : ''}</span>
             {rows.length > 1 && <span className="text-[12px] font-semibold text-text-muted">{rows.length} of {MAX_BILL_ITEMS}</span>}
           </div>
         )}

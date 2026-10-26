@@ -686,9 +686,12 @@ html.mp-locking #root { visibility: hidden; }
    (it was gradient text - a decorative effect, not a status). */
 .mp-swap-shimmer { animation: mp-swap-shimmer 1.4s ease-in-out infinite; }
 @keyframes mp-swap-shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+/* Loading placeholders (Skeleton and friends): flat bars at their real size
+   that breathe gently - the same pulse, no sweeping gradient. */
+.mp-pulse { animation: mp-swap-shimmer 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
   .mp-swap-live, .mp-swap-arrow { animation: none; }
-  .mp-swap-shimmer { animation: none; }
+  .mp-swap-shimmer, .mp-pulse { animation: none; }
 }
 
 /* Desktop Settings pages beside the Settings menu (SettingsDesktopSplit):

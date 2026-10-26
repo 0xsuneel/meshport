@@ -26,7 +26,7 @@ export function InsightsChart({ total, sub, bars }: InsightsChartProps) {
   return (
     <div className="rounded-3xl bg-card border border-border p-5">
       {/* Hero total */}
-      <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">{sub}</p>
+      <p className="text-xs font-semibold text-text-muted">{sub}</p>
       <p className="display text-3xl font-bold tabular-nums text-text-primary mt-1">{total}</p>
 
       {/* Bar chart */}
@@ -78,7 +78,7 @@ export function RankList({ title, empty, rows }: RankListProps) {
   return (
     <div className="rounded-2xl bg-surface border border-border overflow-hidden">
       <div className="px-4 py-3 border-b border-border">
-        <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{title}</p>
+        <p className="text-xs font-semibold text-text-secondary">{title}</p>
       </div>
       {rows.length === 0 ? (
         <p className="text-sm text-text-muted text-center py-8">{empty}</p>

@@ -6,14 +6,14 @@
 // a buyer sees on an order - see p2pService's p2p_payment_methods notes).
 
 import { useState, type ReactNode } from 'react'
-import { ShieldCheck, X as XIcon } from 'lucide-react'
+import { ShieldCheck, X as XIcon, Check } from 'lucide-react'
 import { ActionSheet } from '@/components/ui/ActionSheet'
 import { savePaymentMethod, paymentMethodSummary, type P2PPaymentMethod, type MerchantStats } from '@/lib/p2pService'
 
 // Each type lists the details a buyer needs to pay it.
 export const PAYMENT_METHOD_TYPES: { id: string; color: string; fields: { key: string; label: string; placeholder: string }[] }[] = [
   { id: 'UPI', color: '#F5A524', fields: [{ key: 'upi_id', label: 'UPI ID', placeholder: 'name@okaxis' }] },
-  { id: 'IMPS', color: '#3B82F6', fields: [
+  { id: 'IMPS', color: '#1E5AA8', fields: [
     { key: 'account', label: 'Account number', placeholder: '000123456789' },
     { key: 'ifsc', label: 'IFSC', placeholder: 'HDFC0001234' },
     { key: 'bank', label: 'Bank', placeholder: 'HDFC Bank' }] },
@@ -21,10 +21,10 @@ export const PAYMENT_METHOD_TYPES: { id: string; color: string; fields: { key: s
     { key: 'account', label: 'Account number', placeholder: '000123456789' },
     { key: 'ifsc', label: 'IFSC / routing / SWIFT', placeholder: 'HDFC0001234' },
     { key: 'bank', label: 'Bank', placeholder: 'Bank name' }] },
-  { id: 'SEPA', color: '#2563EB', fields: [{ key: 'iban', label: 'IBAN', placeholder: 'DE89 3704 0044 0532 0130 00' }, { key: 'bank', label: 'Bank', placeholder: 'Bank name' }] },
+  { id: 'SEPA', color: '#003399', fields: [{ key: 'iban', label: 'IBAN', placeholder: 'DE89 3704 0044 0532 0130 00' }, { key: 'bank', label: 'Bank', placeholder: 'Bank name' }] },
   { id: 'Wise', color: '#9FE870', fields: [{ key: 'email', label: 'Wise email', placeholder: 'you@example.com' }] },
   { id: 'PayPal', color: '#0070BA', fields: [{ key: 'email', label: 'PayPal email', placeholder: 'you@example.com' }] },
-  { id: 'Revolut', color: '#8B5CF6', fields: [{ key: 'phone', label: 'Revolut phone or @tag', placeholder: '@yourtag' }] },
+  { id: 'Revolut', color: '#0075EB', fields: [{ key: 'phone', label: 'Revolut phone or @tag', placeholder: '@yourtag' }] },
   { id: 'Zelle', color: '#6D1ED4', fields: [{ key: 'email', label: 'Zelle email or phone', placeholder: 'you@example.com' }] },
   { id: 'Cash App', color: '#00D632', fields: [{ key: 'phone', label: '$Cashtag', placeholder: '$yourtag' }] },
   { id: 'Venmo', color: '#3D95CE', fields: [{ key: 'phone', label: 'Venmo @username', placeholder: '@you' }] },
@@ -148,7 +148,7 @@ export function PaymentMethodSheet({ open, onClose, userId, editing, defaultName
         </div>
       ))}
       <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 14px', lineHeight: 1.45 }}>
-        🔒 Shown only to the buyer of an active order with you - never on your public ad.
+        Shown only to the buyer of an active order with you - never on your public ad.
       </p>
       {error && <p role="alert" style={{ fontSize: 13, color: 'var(--danger-text)', margin: '0 0 10px' }}>{error}</p>}
       <button onClick={save} disabled={saving}
@@ -176,7 +176,7 @@ export function PaymentMethodPicker({ methods, selected, onToggle, onAdd, single
               <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{paymentMethodSummary(m)}</span>
             </span>
             <span aria-hidden style={{ width: 20, height: 20, borderRadius: single ? '50%' : 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: on ? 'var(--brand)' : 'transparent', border: on ? 'none' : '1.5px solid var(--border)', color: '#fff', fontSize: 12 }}>{on ? '✓' : ''}</span>
+              background: on ? 'var(--brand)' : 'transparent', border: on ? 'none' : '1.5px solid var(--border)', color: '#fff', fontSize: 12 }}>{on && <Check size={13} strokeWidth={3} />}</span>
           </button>
         )
       })}

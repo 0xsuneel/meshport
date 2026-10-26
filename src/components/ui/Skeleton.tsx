@@ -6,16 +6,15 @@ interface SkeletonProps {
   style?: CSSProperties
 }
 
-/** Single shimmer block - compose into row/card skeletons per screen. */
+/** Single placeholder block - a flat bar at the real size that breathes
+ * gently (no sweeping gradient); compose into row/card skeletons per screen. */
 export function Skeleton({ className, style }: SkeletonProps) {
   return (
     <div
-      className={cn('rounded-xl bg-border/60 relative overflow-hidden', className)}
+      className={cn('mp-pulse rounded-xl bg-border/60', className)}
       style={style}
       aria-hidden="true"
-    >
-      <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-text-primary/[0.06] to-transparent" />
-    </div>
+    />
   )
 }
 

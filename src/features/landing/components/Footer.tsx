@@ -17,7 +17,7 @@ const SOCIAL = [
 function FooterCol({ title, links }: { title: string; links: { label: string; href: string; external?: boolean }[] }) {
   return (
     <div>
-      <p className="text-[12px] font-bold uppercase tracking-[0.06em] text-text-muted">{title}</p>
+      <p className="text-[15px] font-semibold text-text-primary">{title}</p>
       <ul className="mt-4 flex flex-col gap-3">
         {links.map(l => (
           <li key={l.label}>
@@ -25,7 +25,7 @@ function FooterCol({ title, links }: { title: string; links: { label: string; hr
               href={l.href}
               target={l.external ? '_blank' : undefined}
               rel={l.external ? 'noopener noreferrer' : undefined}
-              className="text-[14px] font-medium text-text-secondary transition-colors hover:text-text-primary"
+              className="text-[15px] text-text-secondary transition-colors hover:text-text-primary"
             >
               {l.label}
             </a>
@@ -38,7 +38,7 @@ function FooterCol({ title, links }: { title: string; links: { label: string; hr
 
 export function Footer() {
   return (
-    <footer className="border-t border-border">
+    <footer className="bg-surface/40">
       <div className="mx-auto max-w-7xl px-5 py-14 sm:px-8 sm:py-16">
         <div className="grid grid-cols-2 gap-10 sm:grid-cols-4">
           <div className="col-span-2 sm:col-span-1">
@@ -46,7 +46,7 @@ export function Footer() {
               <img decoding="async" src="/favicon.svg" alt="MeshPort" className="h-8 w-8 rounded-lg" />
               <span className="text-[16px] font-extrabold tracking-tight text-text-primary">MeshPort</span>
             </a>
-            <p className="mt-3 max-w-[220px] text-[13px] leading-relaxed text-text-secondary">
+            <p className="mt-3 max-w-[220px] text-[15px] leading-relaxed text-text-secondary">
               USDC Payments, Made Simple.
             </p>
           </div>
@@ -55,10 +55,10 @@ export function Footer() {
           <FooterCol title="Community" links={SOCIAL.map(s => ({ ...s, external: true }))} />
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border pt-8 sm:flex-row">
-          <p className="text-[13px] text-text-muted">&copy; {new Date().getFullYear()} MeshPort. All rights reserved.</p>
+        <div className="mt-12 flex flex-col items-center justify-between gap-4 pt-4 sm:flex-row">
+          <p className="text-[14px] text-text-secondary">&copy; {new Date().getFullYear()} MeshPort. All rights reserved.</p>
           <ArcStudioBadge width={118} className="order-3 sm:order-none" />
-          <p className="text-[13px] text-text-muted">Built on Arc &middot; Arc Testnet</p>
+          <p className="text-[14px] text-text-secondary">Built on Arc &middot; Arc Testnet</p>
         </div>
       </div>
     </footer>

@@ -13,7 +13,7 @@ const variants = {
   primary: 'bg-brand text-white shadow-elevation-2 hover:brightness-105 border border-black/10',
   secondary: 'bg-surface text-text-primary border border-border hover:bg-bg',
   ghost: 'bg-transparent hover:bg-text-primary/5 active:bg-text-primary/10 text-text-primary',
-  danger: 'bg-danger text-white shadow-elevation-1 border border-black/10',
+  danger: 'bg-danger text-white border border-black/10',
   outline: 'border border-border hover:bg-text-primary/5 active:bg-text-primary/10 text-text-primary',
 }
 

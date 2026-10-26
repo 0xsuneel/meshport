@@ -418,31 +418,31 @@ function ChainSpeedBadge({ ub }: { ub: boolean }) {
 }
 
 const ALL_CHAINS = [
-  { id: 'eth',       name: 'Ethereum',    testnet: 'Ethereum Sepolia',    sdk: 'Ethereum_Sepolia',     emoji: 'Ξ',  gasToken: 'ETH',  minGas: 0.001, time: '<30s',  bg: 'rgba(98,126,234,0.15)', tc: '#818cf8', ub: true,  popular: true,  layer: 'L1' },
-  { id: 'base',      name: 'Base',        testnet: 'Base Sepolia',        sdk: 'Base_Sepolia',          emoji: '🔵', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(0,82,255,0.15)',   tc: '#38bdf8', ub: true,  popular: true,  layer: 'L2' },
-  { id: 'arb',       name: 'Arbitrum',    testnet: 'Arbitrum Sepolia',    sdk: 'Arbitrum_Sepolia',      emoji: '🔷', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(27,74,221,0.15)',  tc: '#60a5fa', ub: true,  popular: true,  layer: 'L2' },
-  { id: 'pol',       name: 'Polygon',     testnet: 'Polygon PoS Amoy',    sdk: 'Polygon_Amoy_Testnet',  emoji: '⬡',  gasToken: 'POL',  minGas: 0.01,  time: '<10s',  bg: 'rgba(130,71,229,0.15)', tc: '#a78bfa', ub: true,  popular: true,  layer: 'L2' },
-  { id: 'op',        name: 'Optimism',    testnet: 'OP Sepolia',          sdk: 'Optimism_Sepolia',      emoji: '🔴', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(255,4,32,0.12)',   tc: '#f87171', ub: true,  popular: true,  layer: 'L2' },
+  { id: 'eth',       name: 'Ethereum',    testnet: 'Ethereum Sepolia',    sdk: 'Ethereum_Sepolia', gasToken: 'ETH',  minGas: 0.001, time: '<30s',  bg: 'rgba(98,126,234,0.15)', ub: true,  popular: true,  layer: 'L1' },
+  { id: 'base',      name: 'Base',        testnet: 'Base Sepolia',        sdk: 'Base_Sepolia', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(0,82,255,0.15)',   ub: true,  popular: true,  layer: 'L2' },
+  { id: 'arb',       name: 'Arbitrum',    testnet: 'Arbitrum Sepolia',    sdk: 'Arbitrum_Sepolia', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(27,74,221,0.15)',  ub: true,  popular: true,  layer: 'L2' },
+  { id: 'pol',       name: 'Polygon',     testnet: 'Polygon PoS Amoy',    sdk: 'Polygon_Amoy_Testnet', gasToken: 'POL',  minGas: 0.01,  time: '<10s',  bg: 'rgba(130,71,229,0.15)', ub: true,  popular: true,  layer: 'L2' },
+  { id: 'op',        name: 'Optimism',    testnet: 'OP Sepolia',          sdk: 'Optimism_Sepolia', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(255,4,32,0.12)',   ub: true,  popular: true,  layer: 'L2' },
   // Not EVM: recipient is a Solana address. Both routes (Unified Balance and
   // CCTP) mint there through Circle's forwarder, and MeshPort opens the
   // recipient's USDC account first (lib/solanaBridge.ts).
-  { id: 'sol',       name: 'Solana',      testnet: 'Solana Devnet',       sdk: 'Solana_Devnet',         emoji: '◎',  gasToken: 'SOL',  minGas: 0,     time: '<30s',  bg: 'rgba(153,69,255,0.15)', tc: '#a78bfa', ub: true,  popular: true,  layer: 'L1' },
-  { id: 'avax',      name: 'Avalanche',   testnet: 'Avalanche Fuji',      sdk: 'Avalanche_Fuji',        emoji: '🔺', gasToken: 'AVAX', minGas: 0.01,  time: '<15s',  bg: 'rgba(232,65,66,0.12)',  tc: '#f87171', ub: true,  popular: true,  layer: 'L1' },
-  { id: 'hyperevm',  name: 'HyperEVM',    testnet: 'HyperEVM Testnet',    sdk: 'HyperEVM_Testnet',      emoji: '⚡', gasToken: 'HYPE', minGas: 0.01,  time: '<10s',  bg: 'rgba(250,204,21,0.12)', tc: '#fbbf24', ub: true,  popular: false, layer: 'L2' },
-  { id: 'sei',       name: 'Sei',         testnet: 'Sei Testnet',         sdk: 'Sei_Testnet',           emoji: '🌊', gasToken: 'SEI',  minGas: 0.1,   time: '<10s',  bg: 'rgba(157,34,53,0.15)',  tc: '#22d3ee', ub: true,  popular: false, layer: 'L1' },
-  { id: 'sonic',     name: 'Sonic',       testnet: 'Sonic Testnet',       sdk: 'Sonic_Testnet',         emoji: '🎵', gasToken: 'S',    minGas: 0.01,  time: '<8s',   bg: 'rgba(139,92,246,0.12)', tc: '#a78bfa', ub: true,  popular: false, layer: 'L1' },
-  { id: 'unichain',  name: 'Unichain',    testnet: 'Unichain Sepolia',    sdk: 'Unichain_Sepolia',      emoji: '🦄', gasToken: 'ETH',  minGas: 0.0001, time: '<8s',  bg: 'rgba(255,0,122,0.12)',  tc: '#f472b6', ub: true,  popular: false, layer: 'L2' },
-  { id: 'world',     name: 'World Chain', testnet: 'World Chain Sepolia', sdk: 'World_Chain_Sepolia',   emoji: '🌍', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(16,185,129,0.12)', tc: '#34d399', ub: true,  popular: false, layer: 'L2' },
-  { id: 'linea',     name: 'Linea',       testnet: 'Linea Sepolia',       sdk: 'Linea_Sepolia',         emoji: '📐', gasToken: 'ETH',  minGas: 0.0001, time: '<15s', bg: 'rgba(18,18,18,0.5)',    tc: 'var(--text-secondary)', ub: false, popular: false, layer: 'L2' },
-  { id: 'ink',       name: 'Ink',         testnet: 'Ink Testnet',         sdk: 'Ink_Testnet',           emoji: '🖊️', gasToken: 'ETH',  minGas: 0.0001, time: '<15s', bg: 'rgba(100,116,139,0.12)',tc: 'var(--text-secondary)', ub: false, popular: false, layer: 'L2' },
-  { id: 'monad',     name: 'Monad',       testnet: 'Monad Testnet',       sdk: 'Monad_Testnet',         emoji: '🔮', gasToken: 'MON',  minGas: 0.01,  time: '<12s',  bg: 'rgba(32,0,82,0.4)',     tc: 'var(--text-secondary)', ub: false, popular: false, layer: 'L1' },
-  { id: 'morph',     name: 'Morph',       testnet: 'Morph Testnet',       sdk: 'Morph_Testnet',         emoji: '🔄', gasToken: 'ETH',  minGas: 0.0001, time: '<15s', bg: 'rgba(100,116,139,0.12)',tc: 'var(--text-secondary)', ub: false, popular: false, layer: 'L2' },
-  { id: 'pharos',    name: 'Pharos',      testnet: 'Pharos Atlantic',     sdk: 'Pharos_Testnet',        emoji: '🏛️', gasToken: 'PTT',  minGas: 0.01,  time: '<15s',  bg: 'rgba(100,116,139,0.12)',tc: 'var(--text-secondary)', ub: false, popular: false, layer: 'L1' },
-  { id: 'plume',     name: 'Plume',       testnet: 'Plume Testnet',       sdk: 'Plume_Testnet',         emoji: '🪶', gasToken: 'PLUME',minGas: 0.01,  time: '<15s',  bg: 'rgba(100,116,139,0.12)',tc: 'var(--text-secondary)', ub: false, popular: false, layer: 'L1' },
-  { id: 'xdc',       name: 'XDC',         testnet: 'XDC Apothem',         sdk: 'XDC_Apothem',           emoji: '💠', gasToken: 'XDC',  minGas: 1,     time: '<15s',  bg: 'rgba(26,58,92,0.4)',    tc: 'var(--text-secondary)', ub: false, popular: false, layer: 'L1' },
-  { id: 'codex',     name: 'Codex',       testnet: 'Codex Testnet',       sdk: 'Codex_Testnet',         emoji: '📖', gasToken: 'CDX',  minGas: 0.01,  time: '<15s',  bg: 'rgba(100,116,139,0.12)',tc: 'var(--text-secondary)', ub: false, popular: false, layer: 'L2' },
-  { id: 'edge',      name: 'EDGE',        testnet: 'EDGE Testnet',        sdk: 'Edge_Testnet',          emoji: '⚙️', gasToken: 'EDGE', minGas: 0.01,  time: '<15s',  bg: 'rgba(100,116,139,0.12)',tc: 'var(--text-secondary)', ub: false, popular: false, layer: 'L1' },
-  { id: 'injective', name: 'Injective',   testnet: 'Injective Testnet',   sdk: 'Injective_Testnet',     emoji: '💉', gasToken: 'INJ',  minGas: 0.01,  time: '<15s',  bg: 'rgba(0,212,255,0.08)',  tc: '#00d4ff', ub: false, popular: false, layer: 'L1' },
+  { id: 'sol',       name: 'Solana',      testnet: 'Solana Devnet',       sdk: 'Solana_Devnet', gasToken: 'SOL',  minGas: 0,     time: '<30s',  bg: 'rgba(153,69,255,0.15)', ub: true,  popular: true,  layer: 'L1' },
+  { id: 'avax',      name: 'Avalanche',   testnet: 'Avalanche Fuji',      sdk: 'Avalanche_Fuji', gasToken: 'AVAX', minGas: 0.01,  time: '<15s',  bg: 'rgba(232,65,66,0.12)',  ub: true,  popular: true,  layer: 'L1' },
+  { id: 'hyperevm',  name: 'HyperEVM',    testnet: 'HyperEVM Testnet',    sdk: 'HyperEVM_Testnet', gasToken: 'HYPE', minGas: 0.01,  time: '<10s',  bg: 'rgba(250,204,21,0.12)', ub: true,  popular: false, layer: 'L2' },
+  { id: 'sei',       name: 'Sei',         testnet: 'Sei Testnet',         sdk: 'Sei_Testnet', gasToken: 'SEI',  minGas: 0.1,   time: '<10s',  bg: 'rgba(157,34,53,0.15)',  ub: true,  popular: false, layer: 'L1' },
+  { id: 'sonic',     name: 'Sonic',       testnet: 'Sonic Testnet',       sdk: 'Sonic_Testnet', gasToken: 'S',    minGas: 0.01,  time: '<8s',   bg: 'rgba(139,92,246,0.12)', ub: true,  popular: false, layer: 'L1' },
+  { id: 'unichain',  name: 'Unichain',    testnet: 'Unichain Sepolia',    sdk: 'Unichain_Sepolia', gasToken: 'ETH',  minGas: 0.0001, time: '<8s',  bg: 'rgba(255,0,122,0.12)',  ub: true,  popular: false, layer: 'L2' },
+  { id: 'world',     name: 'World Chain', testnet: 'World Chain Sepolia', sdk: 'World_Chain_Sepolia', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(16,185,129,0.12)', ub: true,  popular: false, layer: 'L2' },
+  { id: 'linea',     name: 'Linea',       testnet: 'Linea Sepolia',       sdk: 'Linea_Sepolia', gasToken: 'ETH',  minGas: 0.0001, time: '<15s', bg: 'rgba(18,18,18,0.5)', ub: false, popular: false, layer: 'L2' },
+  { id: 'ink',       name: 'Ink',         testnet: 'Ink Testnet',         sdk: 'Ink_Testnet', gasToken: 'ETH',  minGas: 0.0001, time: '<15s', bg: 'rgba(100,116,139,0.12)', ub: false, popular: false, layer: 'L2' },
+  { id: 'monad',     name: 'Monad',       testnet: 'Monad Testnet',       sdk: 'Monad_Testnet', gasToken: 'MON',  minGas: 0.01,  time: '<12s',  bg: 'rgba(32,0,82,0.4)', ub: false, popular: false, layer: 'L1' },
+  { id: 'morph',     name: 'Morph',       testnet: 'Morph Testnet',       sdk: 'Morph_Testnet', gasToken: 'ETH',  minGas: 0.0001, time: '<15s', bg: 'rgba(100,116,139,0.12)', ub: false, popular: false, layer: 'L2' },
+  { id: 'pharos',    name: 'Pharos',      testnet: 'Pharos Atlantic',     sdk: 'Pharos_Testnet', gasToken: 'PTT',  minGas: 0.01,  time: '<15s',  bg: 'rgba(100,116,139,0.12)', ub: false, popular: false, layer: 'L1' },
+  { id: 'plume',     name: 'Plume',       testnet: 'Plume Testnet',       sdk: 'Plume_Testnet', gasToken: 'PLUME',minGas: 0.01,  time: '<15s',  bg: 'rgba(100,116,139,0.12)', ub: false, popular: false, layer: 'L1' },
+  { id: 'xdc',       name: 'XDC',         testnet: 'XDC Apothem',         sdk: 'XDC_Apothem', gasToken: 'XDC',  minGas: 1,     time: '<15s',  bg: 'rgba(26,58,92,0.4)', ub: false, popular: false, layer: 'L1' },
+  { id: 'codex',     name: 'Codex',       testnet: 'Codex Testnet',       sdk: 'Codex_Testnet', gasToken: 'CDX',  minGas: 0.01,  time: '<15s',  bg: 'rgba(100,116,139,0.12)', ub: false, popular: false, layer: 'L2' },
+  { id: 'edge',      name: 'EDGE',        testnet: 'EDGE Testnet',        sdk: 'Edge_Testnet', gasToken: 'EDGE', minGas: 0.01,  time: '<15s',  bg: 'rgba(100,116,139,0.12)', ub: false, popular: false, layer: 'L1' },
+  { id: 'injective', name: 'Injective',   testnet: 'Injective Testnet',   sdk: 'Injective_Testnet', gasToken: 'INJ',  minGas: 0.01,  time: '<15s',  bg: 'rgba(0,212,255,0.08)',  ub: false, popular: false, layer: 'L1' },
 ] as const
 
 type ChainId = typeof ALL_CHAINS[number]['id']
@@ -471,9 +471,9 @@ type ChainId = typeof ALL_CHAINS[number]['id']
 // having no way to check it at all.
 
 const SPEEDS = [
-  { id: 'fast',     label: 'Fast',     emoji: '⚡', time: '<30s',   desc: 'Get there in < 30 seconds'      },
-  { id: 'standard', label: 'Standard', emoji: '🕐', time: '~2 min', desc: 'Usually arrives in ~2 minutes'  },
-  { id: 'economy',  label: 'Economy',  emoji: '🐢', time: '~10 min', desc: 'Usually arrives in ~10 minutes' },
+  { id: 'fast',     label: 'Fast',     time: '<30s',   desc: 'Get there in < 30 seconds'      },
+  { id: 'standard', label: 'Standard', time: '~2 min', desc: 'Usually arrives in ~2 minutes'  },
+  { id: 'economy',  label: 'Economy',  time: '~10 min', desc: 'Usually arrives in ~10 minutes' },
 ] as const
 type SpeedId = typeof SPEEDS[number]['id']
 
@@ -1187,10 +1187,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     return { approve, burn, attestation, mint }
   }
   const STEP_DONE_MESSAGE: Record<string, string> = {
-    approve:     'Approval confirmed ✓',
-    burn:        'Burn confirmed ✓',
-    attestation: 'Attestation received ✓',
-    mint:        'Mint confirmed ✓',
+    approve:     'Approval confirmed',
+    burn:        'Burn confirmed',
+    attestation: 'Attestation received',
+    mint:        'Mint confirmed',
   }
   const STEP_KEYS = ['approve', 'burn', 'attestation', 'mint']
 
@@ -1208,25 +1208,25 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     setAddress(val)
     setGasWarning('')
     if (!val) { setAddrHint({ type: '', text: 'Enter wallet address on destination chain' }); return }
-    if (/\.arc/i.test(val)) { setAddrHint({ type: 'error', text: '⚠ .arc usernames not supported - enter wallet address' }); return }
+    if (/\.arc/i.test(val)) { setAddrHint({ type: 'error', text: '.arc usernames are not supported here - enter a wallet address' }); return }
     // A Solana address can only receive on Solana (and an EVM one never on
     // Solana): switch the chain to match what was pasted.
     if (isEVMAddress(val)) {
       if (chain.sdk === 'Solana_Devnet') { const evm = ENABLED_CHAINS.find(c => c.sdk !== 'Solana_Devnet'); if (evm) setSelectedChain(evm.id) }
-      setAddrHint({ type: 'ok', text: chain.sdk === 'Solana_Devnet' ? '🔗 EVM address - pick the chain to receive on' : `🔗 EVM address - will receive on ${chain.name}` }); return
+      setAddrHint({ type: 'ok', text: chain.sdk === 'Solana_Devnet' ? 'EVM address - pick the chain to receive on' : `EVM address - will receive on ${chain.name}` }); return
     }
     if (isSolanaAddress(val)) {
       if (chain.sdk !== 'Solana_Devnet') {
-        if (!ENABLED_CHAINS.some(c => c.sdk === 'Solana_Devnet')) { setAddrHint({ type: 'error', text: '⚠ Solana is not available right now' }); return }
+        if (!ENABLED_CHAINS.some(c => c.sdk === 'Solana_Devnet')) { setAddrHint({ type: 'error', text: 'Solana is not available right now' }); return }
         setSelectedChain('sol')
       }
       setAddrHint({ type: 'ok', text: '◎ Solana address - will receive on Solana' }); return
     }
     if (looksLikeBrokenSolanaAddress(val)) {
-      setAddrHint({ type: 'error', text: '⚠ Not a valid Solana address - they are case-sensitive, paste it exactly' }); return
+      setAddrHint({ type: 'error', text: 'Not a valid Solana address - they are case-sensitive, paste it exactly' }); return
     }
     if (val.startsWith('0x') && val.length < 42) { setAddrHint({ type: 'warn', text: `Address: ${val.length}/42 characters` }); return }
-    if (val.length > 10) { setAddrHint({ type: 'error', text: '⚠ Invalid address format' }); return }
+    if (val.length > 10) { setAddrHint({ type: 'error', text: 'Invalid address format' }); return }
     setAddrHint({ type: '', text: 'Keep typing…' })
   }
 
@@ -2997,7 +2997,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const formBalance = (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '14px 16px', borderRadius: 16,
       background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-      <span style={{ minWidth: 0, fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Arc Balance</span>
+      <span style={{ minWidth: 0, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Arc Balance</span>
       {/* Amount + unit never split across lines on narrow phones. */}
       <span style={{ flexShrink: 0, whiteSpace: 'nowrap', fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(balance)} USDC</span>
     </div>
@@ -3734,7 +3734,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 {(() => {
                   const loading = feeEstimate.loading
                   const bar = (w: number) => (
-                    <span aria-hidden className="animate-pulse" style={{ display: 'inline-block', width: w, height: 12, borderRadius: 6,
+                    <span aria-hidden className="mp-pulse" style={{ display: 'inline-block', width: w, height: 12, borderRadius: 6,
                       background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
                   )
                   // The same rows while loading and after: decided by the route,

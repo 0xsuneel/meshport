@@ -260,7 +260,7 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
   const line: React.CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }
   // Wraps onto a second line on narrow phones rather than being cut off
   // ("AVAILABLE TO T…" at 320–360px).
-  const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', lineHeight: 1.3, color: 'rgba(255,255,255,0.72)', textTransform: 'uppercase', overflowWrap: 'normal', wordBreak: 'normal' }
+  const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, lineHeight: 1.3, color: 'rgba(255,255,255,0.72)', overflowWrap: 'normal', wordBreak: 'normal' }
   // Money is never cut off: on narrow phones the figure shrinks to fit its
   // half of the card (≈ 50vw - 40px wide; ~0.6em per character) instead.
   const amount = (n: number): React.CSSProperties => {

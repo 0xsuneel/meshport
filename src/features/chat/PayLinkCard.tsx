@@ -38,7 +38,7 @@ export function PayLinkCard({ link, isMine }: { link: PersonalPayLink; isMine: b
         background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', textAlign: 'left',
         boxShadow: '0 6px 16px -10px rgba(0,0,0,0.35)',
       }}>
-      <div style={{ position: 'relative', overflow: 'hidden', padding: '13px 13px 14px', color: '#fff', background: 'linear-gradient(135deg, #3E8E86, #155A55)' }}>
+      <div style={{ position: 'relative', overflow: 'hidden', padding: '13px 13px 14px', color: '#fff', background: '#1E6B64' }}>
         <span aria-hidden style={{ position: 'absolute', right: -18, top: -18, width: 72, height: 72, borderRadius: '50%', border: '12px solid rgba(255,255,255,0.12)' }} />
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           <Link2 size={13} className="flex-shrink-0" /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Payment link · {link.username}.arc</span>

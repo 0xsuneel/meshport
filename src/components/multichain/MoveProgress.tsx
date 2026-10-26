@@ -12,7 +12,7 @@
 // end (all steps done).
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, X } from 'lucide-react'
+import { ArrowLeft, Check, X } from 'lucide-react'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { TrackDetails, type TrackDetailRow } from './TrackDetails'
 import { formatAmount } from '@/lib/utils'
@@ -138,14 +138,14 @@ export function MoveProgress({
       )}
 
       <div ref={listRef} style={{ ...card, padding: '14px 16px', scrollMarginTop: 12 }}>
-        <p style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px' }}>
+        <p style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', margin: '0 0 12px' }}>
           <span>{focus ? 'Remaining steps' : 'Progress'}</span>
           {!loading && <span style={{ textTransform: 'none', letterSpacing: 0 }}>{at} of {n} done</span>}
         </p>
         {folded && at > 0 && (
           <button onClick={() => setShowDone(true)}
             style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px', marginBottom: 12, borderRadius: 12, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)', cursor: 'pointer', textAlign: 'left', fontSize: 13, fontWeight: 600 }}>
-            <span style={{ color: 'var(--success-text)', whiteSpace: 'nowrap', flexShrink: 0 }}>✓ {at} done</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--success-text)', whiteSpace: 'nowrap', flexShrink: 0 }}><Check size={14} strokeWidth={2.5} aria-hidden /> {at} done</span>
             <span style={{ marginLeft: 'auto', color: 'var(--text-secondary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{steps[at - 1].done} · Show</span>
           </button>
         )}
@@ -202,7 +202,7 @@ export function MoveProgress({
 
       {safe && running && !errored && (
         <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--accent-text)', padding: '10px 12px', borderRadius: 14, background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-          ✓ Safe to leave – {kind === 'transfer' ? 'Circle and MeshPort finish this transfer' : 'MeshPort finishes this on its servers'}. It stays in Hub Activity, and tapping it opens this page again.
+          Safe to leave – {kind === 'transfer' ? 'Circle and MeshPort finish this transfer' : 'MeshPort finishes this on its servers'}. It stays in Hub Activity, and tapping it opens this page again.
         </div>
       )}
 

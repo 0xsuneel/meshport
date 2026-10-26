@@ -15,7 +15,7 @@ import { DIALOG_BACKDROP, POPUP_DIM } from '@/lib/motion'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MeshLoader } from '@/components/ui/MeshLoader'
-import { ArrowLeft, Filter, Plus, Clock, CheckCircle2, Star, Paperclip, X as XIcon, History, Pencil, PlusCircle, Trash2 } from 'lucide-react'
+import { ArrowLeft, Filter, Plus, Clock, CheckCircle2, Star, Paperclip, X as XIcon, History, Pencil, PlusCircle, Trash2, Check, Lock } from 'lucide-react'
 import { useAuthStore, useUIStore, useP2PTradesCountStore, useWalletStore } from '@/store'
 import { PinSheet } from '@/components/ui/PinSheet'
 import { AmountKeypad, sanitizeAmountInput, tokenDecimals } from '@/components/ui/AmountKeypad'
@@ -424,7 +424,7 @@ export function P2PHubPage() {
         <button onClick={() => navigate('/p2p/my-trades')} style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           Orders
           {myTradesCount > 0 && (
-            <span style={{ background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, minWidth: 17, height: 17, padding: '0 5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{myTradesCount}</span>
+            <span style={{ background: 'var(--danger)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, minWidth: 17, height: 17, padding: '0 5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{myTradesCount}</span>
           )}
         </button>
         <button onClick={() => navigate('/p2p/my-offers')} style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>My ads</button>
@@ -651,7 +651,7 @@ export function P2PCreateOfferPage() {
               {i > 0 && <span style={{ flex: 1, borderTop: `1px dashed ${COLORS.border}` }} />}
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: on ? 700 : 500, color: on ? COLORS.text : COLORS.muted }}>
                 <span style={{ width: 20, height: 20, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700,
-                  background: done ? 'var(--success)' : on ? COLORS.text : 'color-mix(in srgb, var(--text-primary) 8%, transparent)', color: done ? '#fff' : on ? COLORS.bg : COLORS.muted }}>{done ? '✓' : n}</span>
+                  background: done ? 'var(--success)' : on ? COLORS.text : 'color-mix(in srgb, var(--text-primary) 8%, transparent)', color: done ? '#fff' : on ? COLORS.bg : COLORS.muted }}>{done ? <Check size={12} strokeWidth={3} aria-hidden /> : n}</span>
                 {on && l}
               </span>
             </div>
@@ -735,7 +735,7 @@ export function P2PCreateOfferPage() {
               {offerType === 'sell' ? (
                 <>
                   <PaymentMethodPicker methods={myMethods} selected={methodIds} onToggle={toggleMethodId} onAdd={() => setShowPmSheet(true)} />
-                  <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 8 }}>🔒 Account details are shown only to the buyer of an active order.</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: COLORS.muted, marginTop: 8 }}><Lock size={13} aria-hidden style={{ flexShrink: 0 }} />Account details are shown only to the buyer of an active order.</div>
                 </>
               ) : (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -790,7 +790,7 @@ export function P2PCreateOfferPage() {
             </div>
             {offerType === 'sell' && (
               <div style={{ borderRadius: 14, padding: '10px 14px', border: '1px solid color-mix(in srgb, var(--brand) 45%, transparent)', background: 'color-mix(in srgb, var(--brand) 10%, var(--surface))' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>🔒 {totalAmount} USDC will be locked in escrow on Arc</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: COLORS.text }}><Lock size={14} aria-hidden style={{ flexShrink: 0 }} />{totalAmount} USDC will be locked in escrow on Arc</div>
                 <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 4, lineHeight: 1.45 }}>It's released only to buyers who pay you. Withdraw what's left any time from My ads.</div>
               </div>
             )}
@@ -1141,7 +1141,7 @@ export function P2POfferDetailPage() {
             </div>
 
             <p style={{ fontSize: 12, color: COLORS.muted, margin: '0 4px', lineHeight: 1.45 }}>
-              🔒 {buyingUsdc ? "The seller's USDC is locked in escrow on Arc until they release it to you." : 'Your USDC is locked in escrow on Arc and released only when you confirm you were paid.'}
+              {buyingUsdc ? "The seller's USDC is locked in escrow on Arc until they release it to you." : 'Your USDC is locked in escrow on Arc and released only when you confirm you were paid.'}
             </p>
 
             <button onClick={accept} disabled={accepting || !amt || sellShort || outOfLimit || methodMissing || !price} style={{
@@ -1573,7 +1573,7 @@ export function P2PTradePage() {
               <button onClick={() => { const el = scrollRef.current; if (el) { nearBottom.current = true; el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }) } }} aria-label="Chat"
                 style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: 6, display: 'flex' }}>
                 <SendIcon size={18} color={COLORS.text} />
-                {unread > 0 && <span style={{ position: 'absolute', top: 0, right: 0, minWidth: 15, height: 15, borderRadius: 999, background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{unread}</span>}
+                {unread > 0 && <span style={{ position: 'absolute', top: 0, right: 0, minWidth: 15, height: 15, borderRadius: 999, background: 'var(--danger)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{unread}</span>}
               </button>
             } />
             <div style={{ padding: '0 16px 12px' }}>
@@ -1654,7 +1654,7 @@ export function P2PTradePage() {
               {trade.status === 'payment_sent' && !isBuyer && trade.disputeStatus !== 'open' && (
                 <button onClick={() => setReceivedChecked(v => !v)} style={{ ...card, width: '100%', display: 'flex', gap: 10, alignItems: 'flex-start', textAlign: 'left', cursor: 'pointer' }}>
                   <span aria-hidden style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: receivedChecked ? 'var(--success)' : 'transparent', border: receivedChecked ? 'none' : `1.5px solid ${COLORS.border}`, color: '#fff', fontSize: 12 }}>{receivedChecked ? '✓' : ''}</span>
+                    background: receivedChecked ? 'var(--success)' : 'transparent', border: receivedChecked ? 'none' : `1.5px solid ${COLORS.border}`, color: '#fff', fontSize: 12 }}>{receivedChecked && <Check size={13} strokeWidth={3} />}</span>
                   <span style={{ fontSize: 13, color: COLORS.text, lineHeight: 1.4 }}>I have checked my account and <b>received {sym}{fmtMoney(trade.amountFiat)}</b> from the buyer.</span>
                 </button>
               )}

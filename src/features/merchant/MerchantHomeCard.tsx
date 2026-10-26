@@ -41,7 +41,7 @@ export function MerchantHomeCard() {
       </div>
       {arriving.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Arriving payments</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Arriving payments</span>
           {arriving.map(p => (
             <div key={p.id} {...pressable(openMoney)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <Clock size={16} color="var(--warning)" />
@@ -52,7 +52,7 @@ export function MerchantHomeCard() {
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Recent payments</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Recent payments</span>
         {recent.length === 0 ? (
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No payments yet - tap Receive to create a payment request.</span>
         ) : recent.map(p => (

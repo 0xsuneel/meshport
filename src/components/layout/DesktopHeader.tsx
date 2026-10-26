@@ -277,7 +277,7 @@ export function DesktopHeader() {
 
               {people.length > 0 && (
                 <>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '12px 0 4px 6px' }}>People</div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, margin: '12px 0 4px 6px' }}>People</div>
                   {people.map(p => (
                     <div key={p.id} onClick={() => openChatWithUser(p)}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px', borderRadius: 12, cursor: 'pointer', opacity: navigatingId === p.id ? 0.5 : 1 }}>
@@ -294,7 +294,7 @@ export function DesktopHeader() {
 
               {services.length > 0 && (
                 <>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '12px 0 4px 6px' }}>Services</div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, margin: '12px 0 4px 6px' }}>Services</div>
                   {services.map(s => (
                     <div key={s.path} onClick={() => { closeSearch(); navigate(s.path) }}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px', borderRadius: 12, cursor: 'pointer' }}>

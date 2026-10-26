@@ -434,7 +434,7 @@ export function RoleManagersPanel() {
               </button>
             </div>
             <div style={{ fontSize: 12, marginTop: 4, color: isConnectedWalletASigner ? COLORS.success : COLORS.warning }}>
-              {isConnectedWalletASigner ? '✓ This is a role manager signer' : 'Not a role manager signer - connect the right wallet to act'}
+              {isConnectedWalletASigner ? 'This is a role manager signer' : 'Not a role manager signer - connect the right wallet to act'}
             </div>
             {/* ── Which privileged roles this address holds, checked live on-chain ── */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>

@@ -142,7 +142,7 @@ export function SettlementsView({
           {/* Header */}
           <div className="flex items-start justify-between mb-4">
             <div>
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Ready to settle</p>
+              <p className="text-xs font-semibold text-text-muted">Ready to settle</p>
               {scanning ? (
                 <Skeleton className="mt-2 h-10 w-36" />
               ) : (
@@ -214,7 +214,7 @@ export function SettlementsView({
 
       {/* ── Per-chain balances ──────────────────────────────────────────── */}
       <div className="mx-5">
-        <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">On each chain</p>
+        <p className="text-xs font-semibold text-text-muted mb-2">On each chain</p>
         <div className="rounded-2xl bg-surface border border-border px-4 py-1">
           {scanning ? (
             <div className="flex flex-col gap-4 py-3">
@@ -248,7 +248,7 @@ export function SettlementsView({
 
       {/* ── Settlement history ──────────────────────────────────────────── */}
       <div className="mx-5">
-        <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Settlement history</p>
+        <p className="text-xs font-semibold text-text-muted mb-2">Settlement history</p>
         <div className="rounded-2xl bg-surface border border-border px-4 py-1">
           {history.length === 0 ? (
             <div className="flex flex-col items-center py-8 text-center">

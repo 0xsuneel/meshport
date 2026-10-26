@@ -209,7 +209,7 @@ export function StoreForm({
   return (
     <div className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
-        <span className="text-xs text-text-muted font-medium uppercase tracking-wide">Store name</span>
+        <span className="text-xs text-text-muted font-medium">Store name</span>
         <input
           type="text"
           value={name}
@@ -220,7 +220,7 @@ export function StoreForm({
       </label>
 
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs text-text-muted font-medium uppercase tracking-wide">Store type</span>
+        <span className="text-xs text-text-muted font-medium">Store type</span>
         <div className="relative">
           <select
             value={type}
@@ -234,7 +234,7 @@ export function StoreForm({
       </div>
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-xs text-text-muted font-medium uppercase tracking-wide">Address <span className="normal-case font-normal opacity-60">(optional)</span></span>
+        <span className="text-xs text-text-muted font-medium">Address <span className="normal-case font-normal opacity-60">(optional)</span></span>
         <input
           type="text"
           value={address}
@@ -245,7 +245,7 @@ export function StoreForm({
       </label>
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-xs text-text-muted font-medium uppercase tracking-wide">Tax / registration no. <span className="normal-case font-normal opacity-60">(optional)</span></span>
+        <span className="text-xs text-text-muted font-medium">Tax / registration no. <span className="normal-case font-normal opacity-60">(optional)</span></span>
         <input
           type="text"
           value={taxId}

@@ -33,7 +33,7 @@ export function WalletPasskeyFrame({ request, height = 120, onDone }: {
   }, [JSON.stringify(request)])
 
   if (failed) return <p role="alert" className="text-sm text-danger">{failed}</p>
-  if (!src) return <div className="rounded-2xl bg-surface border border-border animate-pulse" style={{ height }} />
+  if (!src) return <div className="rounded-2xl bg-surface border border-border mp-pulse" style={{ height }} />
   return (
     <iframe
       src={src}

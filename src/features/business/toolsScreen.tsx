@@ -23,7 +23,7 @@ export function ToolsScreen({ open, onBack, groups, onOpen }: {
       <div className="flex flex-col gap-5 px-5 pt-4 pb-8">
         {groups.map(g => (
           <div key={g.title}>
-            <p className="px-1 mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">{g.title}</p>
+            <p className="px-1 mb-2 text-xs font-semibold text-text-muted">{g.title}</p>
             <div className="rounded-2xl bg-card border border-border overflow-hidden divide-y divide-border">
               {g.rows.map(r => {
                 const Icon = ICONS[r.id] ?? Users

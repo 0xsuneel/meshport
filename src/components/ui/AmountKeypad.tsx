@@ -361,7 +361,7 @@ export function AmountKeypad({
             transition={DESKTOP_FADE_TRANSITION}
             style={{
               background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18,
-              boxShadow: 'var(--shadow-1)', padding: '20px 22px',
+              padding: '20px 22px',
             }}
           >
             {errorMaxRow}

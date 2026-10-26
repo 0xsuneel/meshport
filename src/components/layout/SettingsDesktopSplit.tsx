@@ -75,7 +75,7 @@ export function SettingsDesktopSplit() {
           </span>
         </button>
 
-        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '10px 10px 4px' }}>Wallet</p>
+        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', margin: '10px 10px 4px' }}>Wallet</p>
         <Item icon={<User size={17} />} label="Profile" path="/profile" active={is('/profile') || is('/edit-profile')} onClick={go} />
         <Item icon={<Shield size={17} />} label="Security" path="/security" active={is('/security')} onClick={go} />
         <Item icon={<Palette size={17} />} label="Appearance" path="/appearance" active={is('/appearance')} onClick={go} />
@@ -86,7 +86,7 @@ export function SettingsDesktopSplit() {
           <Item icon={<Store size={17} />} label={merchant.status === 'approved' ? 'Business account' : 'Business verification'} path="/merchant" active={is('/merchant')} onClick={go} />
         )}
 
-        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '14px 10px 4px' }}>Support</p>
+        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', margin: '14px 10px 4px' }}>Support</p>
         <Item icon={<HelpCircle size={17} />} label="Help & Support" path="/help-support" active={is('/help-support')} onClick={go} />
         <Item icon={<BookOpen size={17} />} label="Feature Guide" path="/feature-guide" active={is('/feature-guide')} onClick={go} />
         <Item icon={<Info size={17} />} label="About MeshPort" path="/about" active={is('/about')} onClick={go} />

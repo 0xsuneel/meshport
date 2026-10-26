@@ -17,7 +17,7 @@ export function Field({ label, hint, children }: FieldProps) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between">
-        <span className="text-xs font-semibold text-text-secondary uppercase tracking-wide">{label}</span>
+        <span className="text-xs font-semibold text-text-secondary">{label}</span>
         {hint && <span className="text-xs text-text-muted">{hint}</span>}
       </div>
       {children}

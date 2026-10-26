@@ -42,7 +42,7 @@ import { WalletSecretFrame } from '@/components/wallet/WalletSecretFrame'
 
 /** Small uppercase heading above a Security page card. */
 function SecSectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[12px] font-semibold uppercase tracking-wide text-text-secondary px-1 mb-2">{children}</p>
+  return <p className="text-[12px] font-semibold text-text-secondary px-1 mb-2">{children}</p>
 }
 
 /** One Security page row: tinted icon, title + subtitle, optional right side. */
@@ -492,7 +492,7 @@ function BackupPrivateKeyOnlyPage() {
       </div>
       <div className="px-4 space-y-4">
         <div className="p-3 bg-warning/10 border border-warning/30 rounded-2xl">
-          <p className="text-sm text-warning">⚠️ Never share your private key. Anyone with it controls your wallet. Avoid taking a screenshot - write it down instead.</p>
+          <p className="text-sm text-warning">Never share your private key. Anyone with it controls your wallet. Avoid taking a screenshot - write it down instead.</p>
         </div>
 
         <Card className="p-5 space-y-4">
@@ -517,7 +517,7 @@ function BackupPrivateKeyOnlyPage() {
         </Card>
 
         <Card className="p-4 bg-brand/10 border-brand/30">
-          <p className="text-sm text-text-secondary">💡 This wallet was imported using a private key. The recovery seed phrase is not available.</p>
+          <p className="text-sm text-text-secondary">This wallet was imported using a private key. The recovery seed phrase is not available.</p>
         </Card>
       </div>
     </div>
@@ -592,11 +592,11 @@ function BackupRecoveryPhrasePage() {
         {verified && (
           <Card className="p-4 flex items-center gap-3 bg-success/10 border-success/30">
             <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
-            <p className="text-sm font-bold text-success">Backup Verified ✓</p>
+            <p className="text-sm font-bold text-success">Backup verified</p>
           </Card>
         )}
         <div className="p-3 bg-warning/10 border border-warning/30 rounded-2xl">
-          <p className="text-sm text-warning">⚠️ Never share your recovery phrase or private key. Anyone with them controls your wallet. Avoid taking a screenshot - write it down instead.</p>
+          <p className="text-sm text-warning">Never share your recovery phrase or private key. Anyone with them controls your wallet. Avoid taking a screenshot - write it down instead.</p>
         </div>
 
         {!revealed ? (

@@ -420,7 +420,7 @@ export function BulkPayoutPage() {
                 <button
                   onClick={() => { setRowPending(null); setRowUsername(''); setRowSelected(false); setRowResults([]) }}
                   className="text-xs text-text-secondary hover:text-danger transition-colors px-2">
-                  ✕ Change
+                  Change
                 </button>
               </div>
             ) : (
@@ -526,7 +526,7 @@ export function BulkPayoutPage() {
                       <User className="w-4 h-4 text-text-secondary" />
                     </div>
                     <div>
-                      <p className="text-xs font-mono text-text-primary">{rowUsername.trim().slice(0,20)}...</p>
+                      <p className="text-xs text-text-primary">{rowUsername.trim().slice(0,20)}...</p>
                       <p className="text-xs text-success">Tap to select external wallet</p>
                     </div>
                   </button>
@@ -714,7 +714,7 @@ export function BulkPayoutPage() {
 
       {/* Validation */}
       <div className={isDesktop ? "pt-2 border-t border-border space-y-1" : "pt-3 border-t border-border space-y-1.5"}>
-        <p className={isDesktop ? "text-xs text-text-secondary font-medium uppercase tracking-wide mb-1" : "text-xs text-text-secondary font-medium uppercase tracking-wide mb-2"}>Validation</p>
+        <p className={isDesktop ? "text-xs text-text-secondary font-medium mb-1" : "text-xs text-text-secondary font-medium uppercase tracking-wide mb-2"}>Validation</p>
         {[
           { ok: !hasUnresolved, label: hasUnresolved ? `${recipients.filter(r => r.status === 'unresolved').length} unresolved usernames` : 'All usernames are valid' },
           { ok: !hasDuplicates, label: hasDuplicates ? 'Duplicate recipients detected' : 'No duplicate recipients' },

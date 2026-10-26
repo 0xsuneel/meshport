@@ -118,7 +118,7 @@ export function HelpView({
 
         {/* Chain picker */}
         <div className="flex flex-col gap-2 mb-4">
-          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Chain</p>
+          <p className="text-xs font-semibold text-text-muted">Chain</p>
           <div className="flex gap-2 flex-wrap">
             {chains.map((c) => (
               <button
@@ -142,7 +142,7 @@ export function HelpView({
         <div className="flex flex-col gap-2 mb-4">
           <label
             htmlFor="help-txhash"
-            className="text-xs font-semibold text-text-muted uppercase tracking-wider"
+            className="text-xs font-semibold text-text-muted"
           >
             Transaction hash
           </label>
@@ -162,7 +162,7 @@ export function HelpView({
         {/* Order picker */}
         {orders.length > 0 && (
           <div className="flex flex-col gap-2 mb-4">
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+            <p className="text-xs font-semibold text-text-muted">
               Attach to order <span className="normal-case font-normal">(optional)</span>
             </p>
             <div className="flex flex-col gap-1">

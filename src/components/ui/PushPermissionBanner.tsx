@@ -10,12 +10,14 @@ import { enablePushNotifications, getNotificationPermission, isPushSupported } f
 // scratch, replacing a subscription the push service has revoked.
 const SNOOZE_KEY = 'mp_push_banner_snooze'
 const SNOOZE_MS = 3 * 24 * 3600_000
-// Blocked in the phone's settings: the user chose that - say it once, briefly
-// (it sits over the page header), then not again for a month.
+// Blocked in the phone's settings: the user chose that - say it once, briefly,
+// then not again for a month.
 const DENIED_SNOOZE_MS = 30 * 24 * 3600_000
 const DENIED_SHOW_MS = 8000
 
-export function PushPermissionBanner() {
+// It sits at the bottom - above the bottom nav on a phone, in the corner on
+// a desktop - so it never covers a page title or the search bar.
+export function PushPermissionBanner({ bottom = 12, desktop = false }: { bottom?: number | string; desktop?: boolean }) {
   const userId = useAuthStore(s => s.user?.id)
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -71,8 +73,8 @@ export function PushPermissionBanner() {
 
   return (
     <div role="region" aria-label="Notifications" style={{
-      position: 'fixed', left: 12, right: 12, top: 'calc(env(safe-area-inset-top, 0px) + 10px)', zIndex: 60,
-      maxWidth: 460, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12,
+      position: 'fixed', zIndex: 60, bottom,
+      ...(desktop ? { right: 24, width: 400 } : { left: 12, right: 12, maxWidth: 460, margin: '0 auto' }), display: 'flex', alignItems: 'center', gap: 12,
       padding: '12px 12px 12px 14px', borderRadius: 16, background: 'var(--surface)',
       border: '1px solid var(--border)', boxShadow: 'var(--shadow-2)',
     }}>

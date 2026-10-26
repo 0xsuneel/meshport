@@ -132,7 +132,7 @@ export function HelpSupportPage({ embedded, onClose }: { embedded?: boolean; onC
 
         {/* ── Ticket history ── */}
         <div>
-          <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 px-1">Your tickets</p>
+          <p className="text-xs font-bold text-text-secondary mb-3 px-1">Your tickets</p>
 
           {loadingTickets ? (
             <SkeletonCards count={2} />

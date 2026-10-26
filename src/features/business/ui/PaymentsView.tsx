@@ -188,7 +188,7 @@ export function PaymentsView({ loading, payments, onPayment, onExport, initialFi
               {/* Day header */}
               {gi > 0 && <Divider className="my-2" />}
               <div className="flex items-center justify-between py-2">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">{group.day}</span>
+                <span className="text-xs font-semibold text-text-muted">{group.day}</span>
                 <span className="text-xs font-semibold tabular-nums text-text-secondary">{group.total}</span>
               </div>
               {/* Day items */}

@@ -79,7 +79,7 @@ export function MaintenancePage() {
         >
           {saving ? 'Saving…' : 'Save Changes'}
         </button>
-        {savedAt && <p style={{ fontSize: 11, color: 'var(--success-text)', marginTop: 8 }}>Saved ✓</p>}
+        {savedAt && <p style={{ fontSize: 11, color: 'var(--success-text)', marginTop: 8 }}>Saved</p>}
       </AdminCard>
 
       <AdminCard style={{ background: 'var(--surface)' }}>
