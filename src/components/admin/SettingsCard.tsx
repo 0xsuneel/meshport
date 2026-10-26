@@ -28,7 +28,7 @@ export function SettingsCard({ label, description, checked, onChange, disabled, 
           <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</span>
           {badge && (
             <span style={{
-              fontSize: 11, fontWeight: 700, color: checked ? 'var(--success)' : 'var(--text-secondary)',
+              fontSize: 11, fontWeight: 700, color: checked ? 'var(--success-text)' : 'var(--text-secondary)',
               background: checked ? 'color-mix(in srgb, var(--success) 12%, transparent)' : 'color-mix(in srgb, var(--text-secondary) 12%, transparent)',
               padding: '2px 8px', borderRadius: 999,
             }}>

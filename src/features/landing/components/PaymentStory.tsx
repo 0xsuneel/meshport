@@ -13,11 +13,11 @@ export function PaymentStory() {
     <section className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28">
       <div className="grid gap-14 lg:grid-cols-2 lg:items-center lg:gap-10">
         <Reveal>
-          <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand-text">Pay by username</p>
+          <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-brand-text">Pay by username</p>
           <h2 className="mt-3 text-[28px] font-extrabold leading-tight tracking-tight text-text-primary sm:text-[36px]">
             Payments without the wallet gymnastics.
           </h2>
-          <p className="mt-4 max-w-[460px] text-[15.5px] leading-relaxed text-text-secondary">
+          <p className="mt-4 max-w-[460px] text-[16px] leading-relaxed text-text-secondary">
             No long addresses to copy. Send USDC to a MeshPort username and manage the payment directly inside MeshPort.
           </p>
 
@@ -28,8 +28,8 @@ export function PaymentStory() {
                   <p.icon size={18} />
                 </div>
                 <div>
-                  <p className="text-[14.5px] font-bold text-text-primary">{p.label}</p>
-                  <p className="mt-0.5 text-[13.5px] leading-relaxed text-text-secondary">{p.desc}</p>
+                  <p className="text-[15px] font-bold text-text-primary">{p.label}</p>
+                  <p className="mt-0.5 text-[14px] leading-relaxed text-text-secondary">{p.desc}</p>
                 </div>
               </div>
             ))}

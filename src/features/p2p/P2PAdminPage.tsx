@@ -410,7 +410,7 @@ export function P2PAdminPage() {
           {connectedWallet ? (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: COLORS.text, minWidth: 0 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: COLORS.text, minWidth: 0 }}>
                   <AddressChip address={connectedWallet} size={12.5} />
                 </span>
                 <button onClick={doDisconnectWallet} style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: COLORS.muted, background: 'none', border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: '4px 9px', cursor: 'pointer' }}>
@@ -436,7 +436,7 @@ export function P2PAdminPage() {
               )}
             </div>
           ) : (
-            <button onClick={doConnectWallet} disabled={connectingWallet} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 0', borderRadius: 12, border: 'none', background: COLORS.primary, color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', opacity: connectingWallet ? 0.7 : 1 }}>
+            <button onClick={doConnectWallet} disabled={connectingWallet} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 0', borderRadius: 12, border: 'none', background: COLORS.primary, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: connectingWallet ? 0.7 : 1 }}>
               {connectingWallet ? 'Connecting…' : 'Connect Wallet'}
             </button>
           )}
@@ -504,7 +504,7 @@ export function P2PAdminPage() {
         ) : trades.map(t => (
           <div key={t.id} style={{ background: COLORS.surface, borderRadius: 16, padding: 14, marginBottom: 10, border: `1px solid ${t.adminFrozen ? 'color-mix(in srgb, var(--danger) 40%, transparent)' : COLORS.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.text }}>{t.amountUsdc} USDC · {currencySymbol(t.currency)}{t.amountFiat}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>{t.amountUsdc} USDC · {currencySymbol(t.currency)}{t.amountFiat}</span>
               {t.adminFrozen && <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.error, background: 'color-mix(in srgb, var(--danger) 12%, transparent)', padding: '3px 8px', borderRadius: 10 }}>FROZEN</span>}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 11, color: COLORS.muted, marginBottom: 2 }}>
@@ -515,24 +515,24 @@ export function P2PAdminPage() {
 
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <button onClick={() => toggleFreeze(t)} disabled={!canFreeze} title={!canFreeze ? 'Connect a wallet holding the Pauser role first (see Escrow Controls above).' : undefined}
-                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.warning, fontSize: 11.5, fontWeight: 600, opacity: canFreeze ? 1 : 0.5 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.warning, fontSize: 12, fontWeight: 600, opacity: canFreeze ? 1 : 0.5 }}>
                 <Snowflake size={12} /> {t.adminFrozen ? 'Unfreeze' : 'Freeze'}
               </button>
               <button
                 onClick={() => doCancel(t)}
                 disabled={cancellingIds.has(t.id)}
                 title={(t.status === 'payment_sent' || t.offerType === 'buy') && !t.adminFrozen && t.disputeStatus !== 'open' ? 'Freeze or open a dispute first - the counterparty already fulfilled their obligation' : undefined}
-                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.error, fontSize: 11.5, fontWeight: 600, opacity: cancellingIds.has(t.id) ? 0.6 : 1 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.error, fontSize: 12, fontWeight: 600, opacity: cancellingIds.has(t.id) ? 0.6 : 1 }}
               >
                 <XCircle size={12} /> {cancellingIds.has(t.id) ? 'Cancelling…' : 'Cancel Trade'}
               </button>
-              <button onClick={() => setDisputeTarget(t)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: 'var(--accent-text)', fontSize: 11.5, fontWeight: 600 }}>
+              <button onClick={() => setDisputeTarget(t)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: 'var(--accent-text)', fontSize: 12, fontWeight: 600 }}>
                 <Scale size={12} /> Resolve Dispute
               </button>
-              <button onClick={() => setBanTarget(t.buyerId)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 11.5, fontWeight: 600 }}>
+              <button onClick={() => setBanTarget(t.buyerId)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 12, fontWeight: 600 }}>
                 <Ban size={12} /> Ban Buyer
               </button>
-              <button onClick={() => setBanTarget(t.sellerId)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 11.5, fontWeight: 600 }}>
+              <button onClick={() => setBanTarget(t.sellerId)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 12, fontWeight: 600 }}>
                 <Ban size={12} /> Ban Seller
               </button>
             </div>
@@ -551,7 +551,7 @@ export function P2PAdminPage() {
             border: `1px solid ${offerTab === t ? COLORS.primary : COLORS.border}`,
             background: offerTab === t ? 'var(--brand)' : 'none', cursor: 'pointer',
           }}>
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: offerTab === t ? '#fff' : COLORS.muted, textTransform: 'capitalize' }}>{t}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: offerTab === t ? '#fff' : COLORS.muted, textTransform: 'capitalize' }}>{t}</span>
           </button>
         ))}
       </div>
@@ -574,7 +574,7 @@ export function P2PAdminPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: o.offerType === 'sell' ? COLORS.error : COLORS.success, textTransform: 'uppercase' }}>{o.offerType}</span>
-                    <span style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.text }}>{o.minAmount}–{o.maxAmount} USDC</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>{o.minAmount}–{o.maxAmount} USDC</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     {isFrozen && <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.error, background: 'color-mix(in srgb, var(--danger) 12%, transparent)', padding: '3px 8px', borderRadius: 10 }}>FROZEN</span>}
@@ -596,7 +596,7 @@ export function P2PAdminPage() {
                       onClick={() => toggleFreezeOffer(o)}
                       disabled={freezingOfferIds.has(o.id) || !canFreeze}
                       title={!canFreeze ? 'Connect a wallet holding the Pauser role first (see Escrow Controls above).' : 'Pauser-only: blocks new deposits/trades against this offer without moving any funds'}
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.warning, fontSize: 11.5, fontWeight: 600, opacity: (freezingOfferIds.has(o.id) || !canFreeze) ? 0.5 : 1 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.warning, fontSize: 12, fontWeight: 600, opacity: (freezingOfferIds.has(o.id) || !canFreeze) ? 0.5 : 1 }}
                     >
                       {isFrozen ? <Unlock size={12} /> : <Lock size={12} />} {freezingOfferIds.has(o.id) ? 'Updating…' : isFrozen ? 'Unfreeze Offer' : 'Freeze Offer'}
                     </button>
@@ -607,13 +607,13 @@ export function P2PAdminPage() {
                     title={o.lockedByTradeId ? 'This offer has an active trade - cancel that trade first' : (remainingByOffer.get(o.id) ?? 0) > 0 ? 'This offer still holds escrow - only the seller\'s own wallet can withdraw it on P2PMeshportEscrowV3; Freeze Offer instead to block new trades' : undefined}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10,
-                      border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.error, fontSize: 11.5, fontWeight: 600,
+                      border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.error, fontSize: 12, fontWeight: 600,
                       opacity: (o.status !== 'active' || cancellingOfferIds.has(o.id)) ? 0.4 : 1,
                     }}
                   >
                     <XCircle size={12} /> {cancellingOfferIds.has(o.id) ? 'Cancelling…' : 'Cancel Offer'}
                   </button>
-                  <button onClick={() => setBanTarget(o.userId)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 11.5, fontWeight: 600 }}>
+                  <button onClick={() => setBanTarget(o.userId)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 12, fontWeight: 600 }}>
                     <Ban size={12} /> Ban Owner
                   </button>
                 </div>
@@ -665,7 +665,7 @@ export function P2PAdminPage() {
                 const label = isAdminMsg ? 'Admin' : m.isSystem ? 'System' : isBuyer ? 'Buyer' : isSeller ? 'Seller' : 'Unknown'
                 const imageUrl = safeStorageUrl(m.content.match(/^\[IMAGE\]\((.+)\)$/)?.[1])
                 return (
-                  <div key={m.id} style={{ fontSize: 11.5 }}>
+                  <div key={m.id} style={{ fontSize: 12 }}>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 3 }}>
                       <span style={{
                         fontWeight: 700,
@@ -712,7 +712,7 @@ export function P2PAdminPage() {
                   {connectedWallet ? (
                     <div style={{ marginBottom: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: COLORS.muted, minWidth: 0 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: COLORS.muted, minWidth: 0 }}>
                           Connected: <AddressChip address={connectedWallet} size={11.5} />
                         </span>
                         <button onClick={doDisconnectWallet} style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: COLORS.muted, background: 'none', border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: '4px 9px', cursor: 'pointer' }}>
@@ -736,7 +736,7 @@ export function P2PAdminPage() {
                       )}
                     </div>
                   ) : (
-                    <button onClick={doConnectWallet} disabled={connectingWallet} style={{ width: '100%', padding: '10px 0', borderRadius: 10, border: 'none', background: COLORS.text, color: COLORS.bg, fontSize: 12.5, fontWeight: 700, marginBottom: 8, opacity: connectingWallet ? 0.6 : 1 }}>
+                    <button onClick={doConnectWallet} disabled={connectingWallet} style={{ width: '100%', padding: '10px 0', borderRadius: 10, border: 'none', background: COLORS.text, color: COLORS.bg, fontSize: 13, fontWeight: 700, marginBottom: 8, opacity: connectingWallet ? 0.6 : 1 }}>
                       {connectingWallet ? 'Connecting…' : 'Connect Wallet to Act on This Dispute'}
                     </button>
                   )}
@@ -749,7 +749,7 @@ export function P2PAdminPage() {
                       <textarea value={freezeReason} onChange={e => setFreezeReason(e.target.value)} placeholder="Reason for freezing / forwarding to Investigator…" rows={2}
                         style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 9, fontSize: 'max(var(--fs-field, 0px), 12.5px)', marginBottom: 8, boxSizing: 'border-box', fontFamily: 'inherit' }} />
                       <button onClick={doFreezeDispute} disabled={!canFreeze || !freezeReason.trim() || freezing}
-                        style={{ width: '100%', padding: '10px 0', borderRadius: 10, border: 'none', background: COLORS.warning, color: '#fff', fontSize: 12.5, fontWeight: 700, opacity: (!canFreeze || !freezeReason.trim() || freezing) ? 0.6 : 1 }}>
+                        style={{ width: '100%', padding: '10px 0', borderRadius: 10, border: 'none', background: COLORS.warning, color: '#fff', fontSize: 13, fontWeight: 700, opacity: (!canFreeze || !freezeReason.trim() || freezing) ? 0.6 : 1 }}>
                         {freezing ? 'Signing…' : 'Freeze & Forward to Investigator'}
                       </button>
                     </>
@@ -788,20 +788,20 @@ export function P2PAdminPage() {
                       <textarea value={resolveNote} onChange={e => setResolveNote(e.target.value)} placeholder="Closing note (optional)…" rows={2}
                         style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 9, fontSize: 'max(var(--fs-field, 0px), 12.5px)', marginBottom: 8, boxSizing: 'border-box', fontFamily: 'inherit' }} />
                       <button onClick={doExecuteResolution} disabled={!canExecute || resolving}
-                        style={{ width: '100%', padding: '11px 0', borderRadius: 10, border: 'none', background: COLORS.text, color: COLORS.bg, fontSize: 12.5, fontWeight: 700, opacity: (!canExecute || resolving) ? 0.6 : 1 }}>
+                        style={{ width: '100%', padding: '11px 0', borderRadius: 10, border: 'none', background: COLORS.text, color: COLORS.bg, fontSize: 13, fontWeight: 700, opacity: (!canExecute || resolving) ? 0.6 : 1 }}>
                         {resolving ? 'Executing…' : `Execute: ${disputeOnChain.investigatedApproveRelease ? 'Release to Buyer' : 'Refund to Seller'}`}
                       </button>
                     </>
                   )}
 
                   {(disputeOnChain.state === 'Released' || disputeOnChain.state === 'Refunded') && (
-                    <p style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.success }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: COLORS.success }}>
                       Already resolved on-chain: {disputeOnChain.state === 'Released' ? 'released to buyer' : 'refunded to seller'}.
                     </p>
                   )}
 
                   {disputeOnChain.state === 'Cancelled' && (
-                    <p style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.muted }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: COLORS.muted }}>
                       This trade was cancelled by its own seller (cancelTrade) before this dispute needed resolving - nothing left to freeze, investigate, or resolve.
                     </p>
                   )}

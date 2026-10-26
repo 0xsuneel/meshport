@@ -173,8 +173,8 @@ function RecentBox({ navigate }: { navigate: NavigateFunction }) {
       <button onClick={() => navigate('/pay')}
         style={{ height: CONTENT_H, width: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', gap: 2,
           background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>No one yet</span>
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--brand-text)' }}>Pay someone ›</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>No one yet</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)' }}>Pay someone ›</span>
       </button>
     )
   } else {
@@ -269,7 +269,7 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
     content = (
       <div style={{ height: CONTENT_H, borderRadius: 10, display: 'flex', alignItems: 'center', padding: '0 8px',
         background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }}>
-        <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.3 }}>Arc, Circle and MeshPort updates show here</span>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.3 }}>Arc, Circle and MeshPort updates show here</span>
       </div>
     )
   } else {
@@ -309,7 +309,7 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
                   <NewsArt item={it} variant="row" />
                 )}
               </div>
-              <div style={{ marginTop: 4, fontSize: 11.5, fontWeight: 650, lineHeight: '14px', color: 'var(--text-primary)',
+              <div style={{ marginTop: 4, fontSize: 12, fontWeight: 650, lineHeight: '14px', color: 'var(--text-primary)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {it.title}
               </div>

@@ -28,11 +28,11 @@ export function SelfCustody() {
   return (
     <section id="self-custody" className="scroll-mt-24 mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28">
       <Reveal className="mx-auto max-w-2xl text-center">
-        <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand-text">Self-custody</p>
+        <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-brand-text">Self-custody</p>
         <h2 className="mt-3 text-[30px] font-extrabold tracking-tight text-text-primary sm:text-[38px]">
           Your keys. Your money. Your messages.
         </h2>
-        <p className="mt-4 text-[15.5px] leading-relaxed text-text-secondary">
+        <p className="mt-4 text-[16px] leading-relaxed text-text-secondary">
           Every MeshPort wallet is self-custodial - including the ones you open with Google or an email code. The key is made on your device, protected by your passkey and a Recovery QR only you can open, and never stored by MeshPort.
         </p>
       </Reveal>
@@ -47,7 +47,7 @@ export function SelfCustody() {
             className="flex flex-col gap-3 rounded-[20px] border border-border bg-surface p-6 shadow-elevation-1"
           >
             <p.icon size={22} className="text-brand-text" />
-            <h3 className="text-[15.5px] font-bold text-text-primary">{p.title}</h3>
+            <h3 className="text-[16px] font-bold text-text-primary">{p.title}</h3>
             <p className="text-[13px] leading-relaxed text-text-secondary">{p.desc}</p>
           </motion.div>
         ))}
@@ -60,7 +60,7 @@ export function SelfCustody() {
             <li key={s.n} className="flex items-start gap-3">
               <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand text-[13px] font-bold text-white">{s.n}</span>
               <div>
-                <p className="text-[14.5px] font-bold text-text-primary">{s.title}</p>
+                <p className="text-[15px] font-bold text-text-primary">{s.title}</p>
                 <p className="mt-0.5 text-[13px] leading-relaxed text-text-secondary">{s.desc}</p>
               </div>
             </li>
@@ -79,7 +79,7 @@ export function SelfCustody() {
               <p.icon size={21} className="text-brand-text" />
             </span>
             <div>
-              <h3 className="text-[15.5px] font-bold text-text-primary">{p.title}</h3>
+              <h3 className="text-[16px] font-bold text-text-primary">{p.title}</h3>
               <p className="mt-1 text-[13px] leading-relaxed text-text-secondary">{p.desc}</p>
             </div>
           </motion.div>

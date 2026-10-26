@@ -14,7 +14,7 @@ export function FinalCTA() {
           <h2 className="text-[28px] font-extrabold tracking-tight text-white sm:text-[38px]">
             USDC Payments, Made Simple.
           </h2>
-          <p className="mx-auto mt-4 max-w-lg text-[15.5px] leading-relaxed text-white/80">
+          <p className="mx-auto mt-4 max-w-lg text-[16px] leading-relaxed text-white/80">
             Create your wallet in under a minute and send your first payment on Arc Testnet.
           </p>
           <button

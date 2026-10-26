@@ -82,7 +82,7 @@ export function MerchantApplicationsPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {error && <AdminCard><p style={{ margin: 0, fontSize: 13, color: 'var(--danger)' }}>{error}</p></AdminCard>}
+      {error && <AdminCard><p style={{ margin: 0, fontSize: 13, color: 'var(--danger-text)' }}>{error}</p></AdminCard>}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
@@ -151,7 +151,7 @@ export function MerchantApplicationsPage() {
             <div style={{ marginBottom: 14 }}>
               <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', margin: '0 0 8px' }}>Documents</p>
               {active.documents.length === 0 ? (
-                <p style={{ fontSize: 12, color: 'var(--warning)', margin: 0 }}>None attached (applied before documents were asked for)</p>
+                <p style={{ fontSize: 12, color: 'var(--warning-text)', margin: 0 }}>None attached (applied before documents were asked for)</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {active.documents.map(d => (
@@ -194,7 +194,7 @@ export function MerchantApplicationsPage() {
               )}
               {active.status === 'approved' && (
                 <button onClick={() => decide('revoked')} disabled={busy}
-                  style={{ flex: 1, padding: 12, borderRadius: 14, background: 'transparent', color: 'var(--danger)', fontSize: 13, fontWeight: 600, border: '1px solid var(--danger)', cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+                  style={{ flex: 1, padding: 12, borderRadius: 14, background: 'transparent', color: 'var(--danger-text)', fontSize: 13, fontWeight: 600, border: '1px solid var(--danger)', cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
                   Remove merchant access
                 </button>
               )}

@@ -64,7 +64,7 @@ const USDC_DECIMALS = tokenDecimals('USDC')
 function SpeedTag({ fast, on }: { fast: boolean; on: boolean }) {
   return (
     <span style={{ fontSize: 11, fontWeight: 700, lineHeight: '14px', padding: '0 6px', borderRadius: 999, flexShrink: 0,
-      color: on ? '#fff' : fast ? 'var(--success)' : 'var(--warning)',
+      color: on ? '#fff' : fast ? 'var(--success-text)' : 'var(--warning-text)',
       background: on ? 'rgba(255,255,255,0.2)' : `color-mix(in srgb, ${fast ? 'var(--success)' : 'var(--warning)'} 14%, transparent)` }}>
       {fast ? 'Fast' : 'Slow'}
     </span>
@@ -408,7 +408,7 @@ function ChainSpeedBadge({ ub }: { ub: boolean }) {
     <span
       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-bold flex-shrink-0"
       style={ub
-        ? { background: 'color-mix(in srgb, var(--success) 14%, transparent)', color: 'var(--success)', border: '1px solid rgba(34,197,94,0.3)' }
+        ? { background: 'color-mix(in srgb, var(--success) 14%, transparent)', color: 'var(--success-text)', border: '1px solid rgba(34,197,94,0.3)' }
         : { background: 'color-mix(in srgb, var(--text-secondary) 12%, transparent)', color: 'var(--text-secondary)', border: '1px solid color-mix(in srgb, var(--text-secondary) 25%, transparent)' }
       }
     >
@@ -3012,7 +3012,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
           <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>From</span>
           <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Arc</span>
-          <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatAmount(balance)} USDC</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatAmount(balance)} USDC</span>
         </span>
       </div>
       <div aria-hidden="true" style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -3025,7 +3025,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
           <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>To</span>
           <span style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chain.name}</span>
-          <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chainNetwork}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chainNetwork}</span>
         </span>
       </div>
     </div>
@@ -3131,7 +3131,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         )}
         {addrHint.text && addrHint.type !== '' && (
           <span style={{ marginLeft: 'auto', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, textAlign: 'right',
-            color: addrHint.type === 'ok' ? 'var(--success)' : addrHint.type === 'error' ? 'var(--danger)' : 'var(--warning)' }}>
+            color: addrHint.type === 'ok' ? 'var(--success-text)' : addrHint.type === 'error' ? 'var(--danger-text)' : 'var(--warning-text)' }}>
             {/* A valid wallet address: say where the money lands, always
                 naming the chain currently picked above. */}
             {addrHint.type === 'ok' && <CheckCircle className="w-3 h-3 flex-shrink-0"/>}
@@ -3151,9 +3151,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const overBalance = numAmount > balance
   const amountBad = belowMin || overBalance
   const feeLine = overBalance
-    ? <span style={{ fontWeight: 700, color: 'var(--danger)' }}>Max {formatAmount(Math.max(0, balance - feeReserveEstimate))} USDC</span>
+    ? <span style={{ fontWeight: 700, color: 'var(--danger-text)' }}>Max {formatAmount(Math.max(0, balance - feeReserveEstimate))} USDC</span>
     : belowMin
-    ? <span style={{ fontWeight: 700, color: 'var(--danger)' }}>Minimum ${MIN_AMOUNT}</span>
+    ? <span style={{ fontWeight: 700, color: 'var(--danger-text)' }}>Minimum ${MIN_AMOUNT}</span>
     // feeReserveEstimate is only Max's safety margin, not a fee - real fees
     // are priced on Review, so no number is shown here.
     : <span>Fees on next step</span>
@@ -3175,7 +3175,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
           quick={quickAmounts([10, 50, 100], '$', setAmount, Math.max(0, balance - feeReserveEstimate))}
         />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5, color: 'var(--text-secondary)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
           {/* One line each: short labels, no wrapping (they used to break onto two lines). */}
           <span style={{ whiteSpace: 'nowrap' }}>Balance: {formatAmount(balance)} USDC</span>
           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, textAlign: 'right' }}>{feeLine}</span>
@@ -3230,7 +3230,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     <motion.div initial={false}
       animate={amountFocus ? { height: 'auto', opacity: 1, marginBottom: 0 } : { height: 0, opacity: 0, marginBottom: -18 }}
       transition={{ duration: 0.28, ease: EASE_OUT }} style={{ overflow: 'hidden' }}>
-      <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.4, color: 'var(--text-secondary)' }}>
+      <p style={{ margin: 0, fontSize: 13, lineHeight: 1.4, color: 'var(--text-secondary)' }}>
         Sending to {isEVMAddress(address)
           ? <b style={{ color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'ui-monospace, monospace' }}>{address.slice(0, 6)}…{address.slice(-6)}</b>
           : null}{isEVMAddress(address) ? ' on ' : ''}<b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{chain.testnet}</b>
@@ -3626,7 +3626,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                         className="w-full py-3 rounded-xl bg-transparent border border-border text-text-primary font-semibold text-sm">
                         {finishingMint ? 'Finishing…' : 'Finish transfer'}
                       </button>
-                      {finishMintError && <p role="alert" className="text-xs text-center" style={{ color: 'var(--danger)' }}>{finishMintError}</p>}
+                      {finishMintError && <p role="alert" className="text-xs text-center" style={{ color: 'var(--danger-text)' }}>{finishMintError}</p>}
                     </>
                     ) : (
                     <button onClick={() => { setStep('confirm'); setPassEntry(''); setPassError('') }}
@@ -3710,7 +3710,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   <p className="text-2xl font-bold text-text-primary">{formatAmount(numAmount)} USDC</p>
                   <p className="text-sm mt-1" style={{color:'var(--text-secondary)'}}>{chain.name}</p>
                   <p className="text-[13px] mt-1.5 font-mono font-semibold text-text-primary px-2" style={{wordBreak:'break-all', lineHeight:1.45}}>{address}</p>
-                  <p className="text-[11px] mt-1.5" style={{color:'var(--warning)'}}>Check the address carefully. Transfers can't be reversed.</p>
+                  <p className="text-[11px] mt-1.5" style={{color:'var(--warning-text)'}}>Check the address carefully. Transfers can't be reversed.</p>
                 </div>
               </div>
 
@@ -3721,7 +3721,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   this is just a heads-up why. Auto-clears on its own. */}
               {feeChangedNotice && (
                 <div className="rounded-xl px-3.5 py-2.5 text-xs font-medium text-center"
-                  style={{background:'color-mix(in srgb, var(--warning) 12%, transparent)', border:'1px solid color-mix(in srgb, var(--warning) 30%, transparent)', color:'var(--warning)'}}>
+                  style={{background:'color-mix(in srgb, var(--warning) 12%, transparent)', border:'1px solid color-mix(in srgb, var(--warning) 30%, transparent)', color:'var(--warning-text)'}}>
                   {feeChangedNotice}
                 </div>
               )}
@@ -3767,7 +3767,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                       <div className="flex justify-between items-center px-3 py-2.5 mt-1"
                         style={{background:'color-mix(in srgb, var(--brand) 8%, transparent)', borderRadius: 14}}>
                         <span className="text-sm font-bold text-text-primary">Receiver Gets</span>
-                        {loading ? bar(92) : <span className="text-sm font-bold" style={{color:'var(--success)'}}>{feeEstimate.approx ? '≈ ' : ''}{trimTrailingZeros(feeEstimate.receiverGets.toFixed(4))} USDC</span>}
+                        {loading ? bar(92) : <span className="text-sm font-bold" style={{color:'var(--success-text)'}}>{feeEstimate.approx ? '≈ ' : ''}{trimTrailingZeros(feeEstimate.receiverGets.toFixed(4))} USDC</span>}
                       </div>
                       {/* Stand-in numbers (the live fee couldn't be fetched): say so - they're retried every few seconds. */}
                       {!loading && feeEstimate.approx && (

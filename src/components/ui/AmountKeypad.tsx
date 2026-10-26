@@ -234,7 +234,7 @@ export function AmountKeypad({
   // and the mobile sheet - same row, same behavior either way.
   const errorMaxRow = (error || (showMax && balance > 0)) && (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: error ? 'space-between' : 'flex-end', gap: 8, margin: '0 0 10px' }}>
-      {error && <p role="alert" style={{ fontSize: 12, color: 'var(--danger)', margin: 0 }}>{error}</p>}
+      {error && <p role="alert" style={{ fontSize: 12, color: 'var(--danger-text)', margin: 0 }}>{error}</p>}
       {showMax && balance > 0 && (
         <button
           onClick={() => {

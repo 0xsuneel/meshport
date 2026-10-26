@@ -14,9 +14,9 @@ export function GuideSection() {
   return (
     <section id="guide" className="scroll-mt-24 py-20 sm:py-28">
       <Reveal className="mx-auto max-w-2xl px-5 text-center sm:px-8">
-        <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand-text">Feature guide</p>
+        <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-brand-text">Feature guide</p>
         <h2 className="mt-3 text-[30px] font-extrabold tracking-tight text-text-primary sm:text-[38px]">See every screen before you start.</h2>
-        <p className="mt-4 text-[15.5px] leading-relaxed text-text-secondary">
+        <p className="mt-4 text-[16px] leading-relaxed text-text-secondary">
           {FEATURES.length} features, each with the real screen and simple steps - from your first sign-in to bulk payouts.
         </p>
       </Reveal>
@@ -28,8 +28,8 @@ export function GuideSection() {
             <div className="overflow-hidden rounded-2xl border border-border bg-bg">
               <img src={`/guide/${f.image}.jpg`} alt={`${f.title} screen`} width={390} height={780} loading="lazy" decoding="async" className="block aspect-[1/2] w-full object-cover object-top" />
             </div>
-            <p className="mt-3 px-1 text-[14.5px] font-bold text-text-primary">{f.title}</p>
-            <p className="mt-1 px-1 text-[12.5px] leading-relaxed text-text-secondary line-clamp-2">{f.summary}</p>
+            <p className="mt-3 px-1 text-[15px] font-bold text-text-primary">{f.title}</p>
+            <p className="mt-1 px-1 text-[13px] leading-relaxed text-text-secondary line-clamp-2">{f.summary}</p>
           </button>
         ))}
       </div>

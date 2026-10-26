@@ -81,7 +81,7 @@ export function PushPermissionBanner() {
         <Bell size={18} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
           {denied ? 'Notifications are blocked' : 'Turn on notifications'}
         </p>
         <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.35 }}>

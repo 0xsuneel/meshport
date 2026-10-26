@@ -57,7 +57,7 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
               <div className="flex flex-wrap gap-2">
                 {section.features.map(f => (
                   <button key={f.id} onClick={() => jump(f.id)}
-                    className="px-3 h-8 rounded-full border border-border bg-bg text-[12.5px] font-medium text-text-primary active:scale-95 transition-transform">
+                    className="px-3 h-8 rounded-full border border-border bg-bg text-[13px] font-medium text-text-primary active:scale-95 transition-transform">
                     {f.title}
                   </button>
                 ))}
@@ -82,11 +82,11 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
                   ))}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[15.5px] font-bold text-text-primary">{f.title}</p>
+                  <p className="text-[16px] font-bold text-text-primary">{f.title}</p>
                   <p className="text-sm text-text-secondary leading-relaxed mt-1">{f.summary}</p>
                   <ol className="mt-3 space-y-2">
                     {f.steps.map((s, i) => (
-                      <li key={i} className="flex gap-2.5 text-[13.5px] text-text-primary leading-relaxed">
+                      <li key={i} className="flex gap-2.5 text-[14px] text-text-primary leading-relaxed">
                         <span className="flex-shrink-0 w-5 h-5 mt-0.5 rounded-full bg-brand/10 text-brand-text text-[11px] font-bold flex items-center justify-center">{i + 1}</span>
                         <span>{s}</span>
                       </li>
@@ -109,7 +109,7 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
             Launch MeshPort
           </button>
         )}
-        <p className="text-[11.5px] text-text-muted text-center px-4">Some screens show sample names and amounts.</p>
+        <p className="text-[12px] text-text-muted text-center px-4">Some screens show sample names and amounts.</p>
       </div>
 
       {/* Screenshot zoom: the app's centred popup (bare - the image is the card). */}

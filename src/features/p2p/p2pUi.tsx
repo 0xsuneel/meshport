@@ -72,7 +72,7 @@ export function MerchantLine({ name, verified, stats, compact }: { name: string;
         <span style={{ fontSize: compact ? 12.5 : 13.5, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
         {verified && <ShieldCheck size={13} color="var(--brand-text)" style={{ flexShrink: 0 }} aria-label="Verified trader" />}
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 3, fontSize: 11.5, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, marginTop: 3, fontSize: 12, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
         <span>{stats ? `${stats.orders.toLocaleString()} orders` : 'New trader'}{stats?.completionPct != null ? ` · ${stats.completionPct}%` : ''}</span>
         {release && <span>⏱ {release}</span>}
       </div>
@@ -131,7 +131,7 @@ export function PaymentMethodSheet({ open, onClose, userId, editing, defaultName
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
         {PAYMENT_METHOD_TYPES.map(t => (
           <button key={t.id} type="button" onClick={() => setType(t.id)} disabled={!!editing && editing.method !== t.id}
-            style={{ padding: '6px 11px', borderRadius: 999, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+            style={{ padding: '6px 11px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer',
               border: `1.5px solid ${type === t.id ? 'var(--text-primary)' : 'transparent'}`,
               background: type === t.id ? 'var(--surface)' : 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
               color: type === t.id ? 'var(--text-primary)' : 'var(--text-secondary)', opacity: editing && editing.method !== t.id ? 0.4 : 1 }}>
@@ -139,18 +139,18 @@ export function PaymentMethodSheet({ open, onClose, userId, editing, defaultName
           </button>
         ))}
       </div>
-      <label style={{ display: 'block', fontSize: 12.5, color: 'var(--text-secondary)', marginBottom: 6 }}>Account holder name</label>
+      <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>Account holder name</label>
       <input value={holder} onChange={e => setHolder(e.target.value)} placeholder="Name as on the account" style={{ ...inputStyle, marginBottom: 12 }} />
       {spec.fields.map(f => (
         <div key={f.key} style={{ marginBottom: 12 }}>
-          <label style={{ display: 'block', fontSize: 12.5, color: 'var(--text-secondary)', marginBottom: 6 }}>{f.label}</label>
+          <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>{f.label}</label>
           <input value={details[f.key] ?? ''} onChange={e => setDetails(d => ({ ...d, [f.key]: e.target.value }))} placeholder={f.placeholder} style={inputStyle} />
         </div>
       ))}
       <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 14px', lineHeight: 1.45 }}>
         🔒 Shown only to the buyer of an active order with you - never on your public ad.
       </p>
-      {error && <p role="alert" style={{ fontSize: 13, color: 'var(--danger)', margin: '0 0 10px' }}>{error}</p>}
+      {error && <p role="alert" style={{ fontSize: 13, color: 'var(--danger-text)', margin: '0 0 10px' }}>{error}</p>}
       <button onClick={save} disabled={saving}
         style={{ width: '100%', padding: '14px 0', borderRadius: 14, border: 'none', background: 'var(--brand)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
         {saving ? 'Saving…' : 'Save'}
@@ -172,7 +172,7 @@ export function PaymentMethodPicker({ methods, selected, onToggle, onAdd, single
             style={{ textAlign: 'left', borderRadius: 12, padding: '10px 12px', cursor: 'pointer', background: 'var(--surface)',
               border: `1.5px solid ${on ? 'var(--brand)' : 'var(--border)'}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontWeight: 700, fontSize: 13.5, color: 'var(--text-primary)' }}><MethodTag name={m.method} size={13.5} /></span>
+              <span style={{ display: 'block', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}><MethodTag name={m.method} size={13.5} /></span>
               <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{paymentMethodSummary(m)}</span>
             </span>
             <span aria-hidden style={{ width: 20, height: 20, borderRadius: single ? '50%' : 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',

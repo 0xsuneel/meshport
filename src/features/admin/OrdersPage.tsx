@@ -95,7 +95,7 @@ export function OrdersPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {error && <AdminCard><p style={{ margin: 0, fontSize: 13, color: 'var(--danger)' }}>{error}</p></AdminCard>}
+      {error && <AdminCard><p style={{ margin: 0, fontSize: 13, color: 'var(--danger-text)' }}>{error}</p></AdminCard>}
 
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {KIND_TABS.map(t => <Chip key={t.key} active={kind === t.key} onClick={() => setKind(t.key)}>{t.label} ({kindCount(t.key)})</Chip>)}

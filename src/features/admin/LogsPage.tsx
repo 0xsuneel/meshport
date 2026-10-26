@@ -31,7 +31,7 @@ export function LogsPage() {
             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{new Date(log.created_at).toLocaleString()}</span>
           </div>
           <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-            {log.old_value} → <span style={{ color: log.new_value === 'true' ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>{log.new_value}</span>
+            {log.old_value} → <span style={{ color: log.new_value === 'true' ? 'var(--success-text)' : 'var(--danger-text)', fontWeight: 600 }}>{log.new_value}</span>
             {log.changed_by ? ` · by ${log.changed_by}` : ''}
           </p>
         </AdminCard>

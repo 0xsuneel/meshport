@@ -25,7 +25,7 @@ export function PointsEarnedLine({ type, className }: { type: RewardActionType; 
     <motion.button type="button" onClick={() => navigate('/rewards')}
       initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}
       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${className ?? ''}`}
-      style={{ background: 'color-mix(in srgb, var(--success) 14%, transparent)', color: 'var(--success)' }}>
+      style={{ background: 'color-mix(in srgb, var(--success) 14%, transparent)', color: 'var(--success-text)' }}>
       <Sparkles className="w-3.5 h-3.5" />
       +{points} points{task ? ` · ${task.label} ✓` : ''}
     </motion.button>

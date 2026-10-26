@@ -104,7 +104,7 @@ export function BusinessHeader({
             {status === 'review' && <Clock className="size-3.5 text-warning shrink-0" aria-label="Under review" />}
             {onSwitchStore && <ChevronDown className="size-4 text-text-muted shrink-0" />}
           </span>
-          <span className="flex items-center gap-1 mt-0.5 text-[11.5px] text-link truncate" style={{ fontFamily: 'monospace' }}>
+          <span className="flex items-center gap-1 mt-0.5 text-[12px] text-link truncate" style={{ fontFamily: 'monospace' }}>
             {outlet ? `${outlet} · ${handle}` : storeName === handle ? 'Business account' : handle}
           </span>
         </span>

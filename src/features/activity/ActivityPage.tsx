@@ -504,9 +504,9 @@ export function ActivityRow({ record, isFirst, isLast, onSelect, flash, inPanel 
         </div>
         {/* Why it failed - one line here, the full sentence in the receipt. */}
         {isRecovery ? (
-          <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 2, ...oneLine }}>Tap to finish it in Recover</div>
+          <div style={{ fontSize: 11, color: 'var(--warning-text)', marginTop: 2, ...oneLine }}>Tap to finish it in Recover</div>
         ) : reason ? (
-          <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2, ...oneLine }} title={reason}>{reason}</div>
+          <div style={{ fontSize: 11, color: 'var(--danger-text)', marginTop: 2, ...oneLine }} title={reason}>{reason}</div>
         ) : null}
       </div>
 
@@ -516,7 +516,7 @@ export function ActivityRow({ record, isFirst, isLast, onSelect, flash, inPanel 
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
             -{formatAmt(metadata.amountIn ?? amount, metadata.tokenIn || tokenSymbol)} {metadata.tokenIn || tokenSymbol || 'USDC'}
           </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--success)', marginTop: 2 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--success-text)', marginTop: 2 }}>
             +{formatAmt(metadata.amountOut ?? 0, metadata.tokenOut)} {metadata.tokenOut || '?'}
           </div>
         </div>
@@ -808,8 +808,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
         {receiptSubtitle}
         {/* The full reason - wraps, never overlaps the rows below. */}
         {(isRecovery || failReason) && (
-          <span style={{ display: 'block', marginTop: 10, padding: '8px 10px', borderRadius: 10, fontSize: 12.5, lineHeight: 1.45, textAlign: 'left',
-            color: isRecovery ? 'var(--warning)' : 'var(--danger)',
+          <span style={{ display: 'block', marginTop: 10, padding: '8px 10px', borderRadius: 10, fontSize: 13, lineHeight: 1.45, textAlign: 'left',
+            color: isRecovery ? 'var(--warning-text)' : 'var(--danger-text)',
             background: isRecovery ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : 'color-mix(in srgb, var(--danger) 8%, transparent)' }}>
             {isRecovery
               ? `This move didn't finish on its own${failReason ? ` (${failReason.replace(/[.\s]+$/, '')})` : ''}. Your USDC already left the wallet - open Recover to finish it or bring it back.`
@@ -1068,7 +1068,7 @@ export function ActivityPage() {
                             <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{row.chain || '-'}</td>
                             <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: row.statusColor }}>{row.statusLabel}</td>
                             <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)' }}>{timeAgo(row.createdAt)}</td>
-                            <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: row.isSwap ? 'var(--success)' : row.amountColor, textAlign: 'right' }}>
+                            <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: row.isSwap ? 'var(--success-text)' : row.amountColor, textAlign: 'right' }}>
                               {row.isSwap
                                 ? `+${formatAmt(row.metadata.amountOut ?? 0, row.metadata.tokenOut)} ${row.metadata.tokenOut || '?'}`
                                 : `${row.amountPrefix}${formatAmt(row.amount, row.tokenSymbol)} ${row.tokenSymbol || 'USDC'}`}
@@ -1179,7 +1179,7 @@ export function ActivityPage() {
                 <HistoryRow key={p.id}
                   icon={<HistoryIcon tone="out" icon={t ? t.action : 'rewards'} />}
                   title={t ? t.done : 'Points earned'}
-                  meta={<><span style={{ color: 'var(--success)', fontWeight: 600 }}>Earned</span> · {timeAgo(p.created_at)}</>}
+                  meta={<><span style={{ color: 'var(--success-text)', fontWeight: 600 }}>Earned</span> · {timeAgo(p.created_at)}</>}
                   right={<div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>+{p.points} pts</div>} />
               )
             })}

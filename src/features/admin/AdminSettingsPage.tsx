@@ -103,12 +103,12 @@ export function AdminSettingsPage() {
           }}>
             <KeyRound size={16} color="var(--brand-text)" />
           </div>
-          <p style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)', fontSize: 14.5 }}>Change Password</p>
+          <p style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)', fontSize: 15 }}>Change Password</p>
         </div>
 
         {step === 'idle' && (
           <>
-            <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
               We'll email a 6-digit code to {adminEmail ?? 'your account'} to confirm it's you before changing anything.
             </p>
             <button onClick={requestCode} disabled={busy} style={btnStyle}>
@@ -119,7 +119,7 @@ export function AdminSettingsPage() {
 
         {step === 'code_sent' && (
           <>
-            <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
               Enter the 6-digit code sent to {adminEmail}.
             </p>
             <input
@@ -134,7 +134,7 @@ export function AdminSettingsPage() {
             </button>
             <button onClick={requestCode} disabled={busy} style={{
               width: '100%', marginTop: 8, padding: '8px 0', borderRadius: 10, border: 'none',
-              background: 'none', color: 'var(--accent-text)', fontSize: 12.5, cursor: 'pointer',
+              background: 'none', color: 'var(--accent-text)', fontSize: 13, cursor: 'pointer',
             }}>
               Resend code
             </button>
@@ -143,7 +143,7 @@ export function AdminSettingsPage() {
 
         {step === 'verified' && (
           <>
-            <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
               Verified. Choose a new password (at least 8 characters).
             </p>
             <input
@@ -163,14 +163,14 @@ export function AdminSettingsPage() {
         {step === 'done' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
             <Check size={16} color="var(--success)" />
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--success)', fontWeight: 600 }}>Password updated.</p>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--success-text)', fontWeight: 600 }}>Password updated.</p>
             <button onClick={resetFlow} style={{
-              marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--accent-text)', fontSize: 12.5, cursor: 'pointer',
+              marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--accent-text)', fontSize: 13, cursor: 'pointer',
             }}>Done</button>
           </div>
         )}
 
-        {error && <p style={{ fontSize: 12, color: 'var(--danger)', margin: '8px 0 0' }}>{error}</p>}
+        {error && <p style={{ fontSize: 12, color: 'var(--danger-text)', margin: '8px 0 0' }}>{error}</p>}
       </AdminCard>
 
       <button
@@ -178,7 +178,7 @@ export function AdminSettingsPage() {
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 25%, transparent)',
-          borderRadius: 20, padding: 14, color: 'var(--danger)', fontWeight: 700, fontSize: 14,
+          borderRadius: 20, padding: 14, color: 'var(--danger-text)', fontWeight: 700, fontSize: 14,
         }}
       >
         <LogOut size={16} /> Sign Out

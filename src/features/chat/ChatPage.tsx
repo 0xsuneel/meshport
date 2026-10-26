@@ -503,7 +503,7 @@ function PersonRow({ person, first, busy, action, onClick }: {
         <p className="text-[12px] mt-0.5 truncate text-link">{handle}</p>
       </div>
       {action ? (
-        <span className="flex-shrink-0 flex items-center justify-center gap-1 h-8 min-w-[84px] px-3 rounded-full text-[12.5px] font-semibold"
+        <span className="flex-shrink-0 flex items-center justify-center gap-1 h-8 min-w-[84px] px-3 rounded-full text-[13px] font-semibold"
           style={action === 'Add'
             ? { background: 'var(--brand)', color: '#fff' }
             : { background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)' }}>
@@ -1120,7 +1120,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
               ).map(a => (
                 <motion.button key={a.label} whileTap={{ scale: 0.88 }} onClick={a.run} aria-label={a.label} title={a.label}
                   className="w-10 h-10 rounded-full flex items-center justify-center"
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: (a as any).danger ? 'var(--danger)' : 'var(--text-primary)' }}>
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: (a as any).danger ? 'var(--danger-text)' : 'var(--text-primary)' }}>
                   {a.icon}
                 </motion.button>
               ))}
@@ -1156,7 +1156,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
             const on = listTab === id
             return (
               <button key={id} role="tab" aria-selected={on} onClick={() => setListTab(id)}
-                className={`flex-1 min-w-0 rounded-full flex items-center justify-center gap-1 ${requestsOn ? 'text-[12.5px]' : 'text-[14px]'} transition-colors`}
+                className={`flex-1 min-w-0 rounded-full flex items-center justify-center gap-1 ${requestsOn ? 'text-[13px]' : 'text-[14px]'} transition-colors`}
                 style={{ height: 36, fontWeight: on ? 700 : 600, cursor: 'pointer',
                   background: on ? 'color-mix(in srgb, var(--brand) 25%, transparent)' : 'transparent',
                   border: `1px solid ${on ? 'var(--brand)' : 'var(--border)'}`,
@@ -1208,7 +1208,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
       ) : (
         <div className="pb-4">
           {listTab === 'requests' && !searchQ && (
-            <p className="px-4 pt-3 pb-1 text-[12.5px] text-text-secondary">
+            <p className="px-4 pt-3 pb-1 text-[13px] text-text-secondary">
               People you don't know yet. Hold a chat to accept or block them - accepted chats move to All.
             </p>
           )}
@@ -1419,7 +1419,7 @@ function EncryptedImage({ url, ivBase64, convKey, isLastInGroup, isMine, onTap }
 
   if (failed) {
     return (
-      <div style={{ width: 200, height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isMine ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)', fontSize: 12.5 }}>
+      <div style={{ width: 200, height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isMine ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)', fontSize: 13 }}>
         🔒 Couldn't decrypt this image
       </div>
     )
@@ -1518,7 +1518,7 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
       onClose={onClose}
       title={sent ? 'Paid Successfully' : 'Payment Received'}
       subtitle={<>
-        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: sent ? 'var(--text-primary)' : 'var(--success)', marginBottom: 4 }}>{sent ? '-' : '+'}{amount}</span>
+        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: sent ? 'var(--text-primary)' : 'var(--success-text)', marginBottom: 4 }}>{sent ? '-' : '+'}{amount}</span>
         {sent ? <>Sent to {peer} in chat</> : <>From {peer} in chat</>}
       </>}
       // The header shows the amount and who it was with; the title the outcome.
@@ -1751,7 +1751,7 @@ const MessageBubble = memo(function MessageBubble({
               background: isMine ? 'linear-gradient(135deg, #1A7A72, #0C4A46)' : 'linear-gradient(135deg, #27C796, #12806B)',
             }}>
               <span aria-hidden style={{ position: 'absolute', right: -18, top: -18, width: 72, height: 72, borderRadius: '50%', border: '12px solid rgba(255,255,255,0.12)' }} />
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 11.5, fontWeight: 700, lineHeight: 1.3, opacity: 0.9 }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 12, fontWeight: 700, lineHeight: 1.3, opacity: 0.9 }}>
                 {isMine ? <ArrowUpRight className="w-3 h-3 flex-shrink-0" style={{ marginTop: 1.5 }} /> : <ArrowDownLeft className="w-3 h-3 flex-shrink-0" style={{ marginTop: 1.5 }} />}
                 {/* An order's name wraps rather than being cut; a plain payment stays on one line. */}
                 <span style={orderTag ? { minWidth: 0, overflowWrap: 'anywhere' } : { minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1777,13 +1777,13 @@ const MessageBubble = memo(function MessageBubble({
                   borderLeft: `3px solid ${isMine ? 'var(--brand)' : 'var(--success)'}`,
                   background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
                 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: isMine ? 'var(--brand-text)' : 'var(--success)' }}>{orderTag?.kind ? orderTitle(orderTag.kind, billRef) : `🧾 ${displayOrderNumber(billRef)}`}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: isMine ? 'var(--brand-text)' : 'var(--success-text)' }}>{orderTag?.kind ? orderTitle(orderTag.kind, billRef) : `🧾 ${displayOrderNumber(billRef)}`}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{isMine ? 'Paid in full' : 'Paid by customer'}</div>
               </div>
             )}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 14px 11px', fontSize: 11.5, color: 'var(--text-secondary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 14px 11px', fontSize: 12, color: 'var(--text-secondary)' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-                <CheckCircle className="w-3.5 h-3.5" style={{ color: 'var(--success)' }} strokeWidth={2.5} />
+                <CheckCircle className="w-3.5 h-3.5" style={{ color: 'var(--success-text)' }} strokeWidth={2.5} />
                 {msg.payment_tx_hash ? 'Confirmed on Arc' : 'Completed'}
               </span>
               <span style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{new Date(msg.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
@@ -1896,7 +1896,7 @@ const MessageBubble = memo(function MessageBubble({
       {isMine && msg._failed && !msg._upload && (
         <div className="flex justify-end">
           <button type="button" onClick={e => { e.stopPropagation(); onRetry?.(msg) }}
-            style={{ marginTop: 3, border: 'none', background: 'none', padding: '2px 4px', fontSize: 11.5, fontWeight: 600, color: '#ff8a7a', display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+            style={{ marginTop: 3, border: 'none', background: 'none', padding: '2px 4px', fontSize: 12, fontWeight: 600, color: '#ff8a7a', display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v6M12 16.5v.5" /></svg>
             Not sent · Tap to retry
           </button>
@@ -2098,7 +2098,7 @@ function QuoteBody({ quoted, name, nameColor, textColor, convKey }: {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: nameColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+        <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: nameColor, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: textColor, minWidth: 0 }}>
           {md?.kind === 'image' && icon('M4 7h3l2-3h6l2 3h3v13H4zM12 17a4 4 0 100-8 4 4 0 000 8z')}
           {md?.kind === 'file' && icon('M14 3H6v18h12V7zM14 3v4h4')}
@@ -4611,7 +4611,7 @@ export function ChatConversationPage() {
                         })}
                         onMax={payLocked || max <= 0 ? undefined : () => setAmt(max)}
                       />
-                      <p className="text-xs" style={{ color: payInsufficient ? 'var(--danger)' : 'var(--text-secondary)', marginTop: 8, fontWeight: payInsufficient ? 600 : undefined }}>
+                      <p className="text-xs" style={{ color: payInsufficient ? 'var(--danger-text)' : 'var(--text-secondary)', marginTop: 8, fontWeight: payInsufficient ? 600 : undefined }}>
                         {payInsufficient ? 'Insufficient balance · ' : 'Balance '}{chatPayTokenSymbolChar(payToken)}{formatAmount(bal, dec)} {payToken}
                       </p>
                     </div>
@@ -4801,7 +4801,7 @@ export function ChatConversationPage() {
                     {otherUser.display_name || recipientClean}
                   </p>
                   {otherTyping
-                    ? <p className="text-[12px] leading-tight" style={{ color: 'var(--success)' }}>typing…</p>
+                    ? <p className="text-[12px] leading-tight" style={{ color: 'var(--success-text)' }}>typing…</p>
                     : <p className="text-[12px] text-link leading-tight">{recipientClean}.arc</p>}
                 </div>
               ) : (
@@ -5096,13 +5096,13 @@ export function ChatConversationPage() {
             <div className="flex items-center gap-3">
               <p className="flex-1 text-[13px] text-text-secondary">You blocked {otherHandle}. They can't message or pay you.</p>
               <button onClick={unblockChat} disabled={gateBusy}
-                className="px-4 py-2.5 rounded-full text-[13.5px] font-bold"
+                className="px-4 py-2.5 rounded-full text-[14px] font-bold"
                 style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)', color: 'var(--brand-text)' }}>
                 Unblock
               </button>
             </div>
           ) : (
-            <p className="text-[13px] text-center py-1.5" style={{ color: 'var(--danger)' }}>{BLOCKED_YOU(otherHandle)}</p>
+            <p className="text-[13px] text-center py-1.5" style={{ color: 'var(--danger-text)' }}>{BLOCKED_YOU(otherHandle)}</p>
           )}
         </div>
       )}
@@ -5135,12 +5135,12 @@ export function ChatConversationPage() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }} aria-hidden>
               <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" /><path d="M12 9v4M12 16.5v.01" />
             </svg>
-            <div className="flex-1 min-w-0 text-[12.5px] leading-snug text-text-primary">
+            <div className="flex-1 min-w-0 text-[13px] leading-snug text-text-primary">
               {(otherUser?.display_name || recipientClean)}'s security info changed (wallet {idChanged.wallet.slice(0, 6)}…{idChanged.wallet.slice(-4)}).
               Messages wait and Pay is paused until you confirm. Check with them in person or another app first.
             </div>
             <button type="button" onClick={confirmNewIdentity}
-              className="text-[12.5px] font-semibold rounded-lg px-2.5 py-1.5 flex-shrink-0"
+              className="text-[13px] font-semibold rounded-lg px-2.5 py-1.5 flex-shrink-0"
               style={{ color: '#fff', background: 'var(--brand)' }}>
               Confirm
             </button>
@@ -5659,8 +5659,8 @@ export function ChatConversationPage() {
               {(payStep === 'processing' || (payStep === 'success' && paySuccessPhase === 'flash')) && (
                 <div className="px-5 pt-10 pb-12 flex-1 flex flex-col items-center justify-center gap-4">
                   <ProcessingRing size={64} />
-                  <p className="text-text-primary" style={{ fontSize: 14.7, fontWeight: 700 }}>Processing payment…</p>
-                  <p className="text-text-secondary" style={{ fontSize: 12.6, fontWeight: 700 }}>Do not close this screen</p>
+                  <p className="text-text-primary" style={{ fontSize: 15, fontWeight: 700 }}>Processing payment…</p>
+                  <p className="text-text-secondary" style={{ fontSize: 13, fontWeight: 700 }}>Do not close this screen</p>
                 </div>
               )}
 
@@ -5820,9 +5820,9 @@ export function ChatConversationPage() {
               <div className="px-6 pt-6 pb-3">
                 <p className="text-[18px] font-bold text-text-primary">{n > 1 ? `Delete ${n} messages?` : 'Delete message?'}</p>
                 {n === 1 && deleteTargets[0].content !== '[deleted]' && (
-                  <p className="mt-2 text-[13.5px] line-clamp-2" style={{ color: 'var(--text-secondary)' }}>“{messagePreview(deleteTargets[0].content)}”</p>
+                  <p className="mt-2 text-[14px] line-clamp-2" style={{ color: 'var(--text-secondary)' }}>“{messagePreview(deleteTargets[0].content)}”</p>
                 )}
-                <p className="mt-2 text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>
+                <p className="mt-2 text-[13px]" style={{ color: 'var(--text-secondary)' }}>
                   {allMineRecent ? `Delete for everyone removes ${n > 1 ? 'them' : 'it'} for ${otherUser?.display_name || 'them'} too.` : 'You can delete for everyone only your own messages, within 2 days of sending.'}
                 </p>
                 <div className="flex flex-col items-end mt-3">
@@ -5894,8 +5894,8 @@ export function ChatConversationPage() {
           <motion.div key="undo" {...SNACKBAR_MOTION}
             className="absolute left-4 right-4 z-40 flex items-center gap-3 rounded-xl px-4 py-3"
             style={{ bottom: 86, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
-            <span className="flex-1 text-[13.5px] text-text-primary">{undoDeleted.msgs.length > 1 ? `${undoDeleted.msgs.length} messages deleted for you` : 'Message deleted for you'}</span>
-            <button onClick={undoDelete} className="text-[13.5px] font-bold text-link">UNDO</button>
+            <span className="flex-1 text-[14px] text-text-primary">{undoDeleted.msgs.length > 1 ? `${undoDeleted.msgs.length} messages deleted for you` : 'Message deleted for you'}</span>
+            <button onClick={undoDelete} className="text-[14px] font-bold text-link">UNDO</button>
           </motion.div>
         )}
       </AnimatePresence>

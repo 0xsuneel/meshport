@@ -76,7 +76,7 @@ export function StorePicker({ stores, value, onChange, label = 'Request for stor
           {picked.personal ? <User className="size-[18px]" /> : <StoreIcon className="size-[18px]" />}
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-[11.5px] text-text-muted truncate">{picked.personal ? label.replace(/ store$/, '') : label}</p>
+          <p className="text-[12px] text-text-muted truncate">{picked.personal ? label.replace(/ store$/, '') : label}</p>
           <p className="text-sm font-bold text-text-primary truncate">{picked.name}</p>
         </div>
         <button type="button" onClick={() => setOpen(true)} aria-label={`Switch store (now ${picked.name})`}

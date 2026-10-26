@@ -15,7 +15,7 @@ export function TrustedTech() {
     <section className="border-y border-border bg-surface/40">
       <div className="mx-auto max-w-7xl px-5 py-14 sm:px-8 sm:py-16">
         <Reveal>
-          <p className="text-center text-[12.5px] font-bold uppercase tracking-[0.08em] text-text-muted">
+          <p className="text-center text-[13px] font-bold uppercase tracking-[0.08em] text-text-muted">
             Built for stablecoin payments
           </p>
         </Reveal>
@@ -33,7 +33,7 @@ export function TrustedTech() {
                 <t.icon size={20} color="var(--brand-text)" />
               </div>
               <div>
-                <p className="text-[14.5px] font-bold text-text-primary">{t.name}</p>
+                <p className="text-[15px] font-bold text-text-primary">{t.name}</p>
                 <p className="mt-1 text-[12px] leading-snug text-text-secondary">{t.desc}</p>
               </div>
             </motion.div>

@@ -9,7 +9,7 @@ export function ChatSentLine({ status, onRetry, onOpen, className = '' }: {
   if (status.state === 'idle') return null
   const link = 'font-semibold text-link underline-offset-2 hover:underline'
   return (
-    <p className={`inline-flex items-center justify-center flex-wrap gap-x-1.5 gap-y-0.5 text-[12.5px] text-text-secondary ${className}`} role="status" aria-live="polite">
+    <p className={`inline-flex items-center justify-center flex-wrap gap-x-1.5 gap-y-0.5 text-[13px] text-text-secondary ${className}`} role="status" aria-live="polite">
       {status.state === 'sending' && <><Loader2 className="size-3.5 animate-spin" aria-hidden /> Sending to {status.to.name} in chat…</>}
       {status.state === 'sent' && <>
         <CheckCircle2 className="size-3.5 text-success" aria-hidden /> Sent to {status.to.name} in chat

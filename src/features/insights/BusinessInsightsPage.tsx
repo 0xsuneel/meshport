@@ -50,7 +50,7 @@ const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(
 function Change({ value, suffix }: { value: number; suffix: string }) {
   const up = value >= 0
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11.5, fontWeight: 600, color: up ? 'var(--success)' : 'var(--danger, #D64545)' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12, fontWeight: 600, color: up ? 'var(--success-text)' : 'var(--danger, #D64545)' }}>
       {up ? <ArrowUp size={11} /> : <ArrowDown size={11} />}{Math.abs(value)}% <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>&nbsp;vs {suffix}</span>
     </span>
   )
@@ -82,7 +82,7 @@ function Stat({ title, value, sub }: { title: string; value: string; sub?: React
     <div style={{ ...card, padding: 14, minWidth: 0 }}>
       <div style={label}>{title}</div>
       <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
-      {sub && <div style={{ marginTop: 3, fontSize: 11.5, color: 'var(--text-secondary)' }}>{sub}</div>}
+      {sub && <div style={{ marginTop: 3, fontSize: 12, color: 'var(--text-secondary)' }}>{sub}</div>}
     </div>
   )
 }
@@ -269,7 +269,7 @@ export function BusinessInsightsPage() {
                   <img decoding="async" src={chainLogo(c.id)} alt="" width={26} height={26} style={{ borderRadius: '50%', flexShrink: 0 }}
                     onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13.5, marginBottom: 5 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 14, marginBottom: 5 }}>
                       <b style={{ color: 'var(--text-primary)' }}>{chainName(c.id)}</b>
                       <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>${formatAmount(c.amount)} <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>· {c.count}</span></span>
                     </div>
@@ -289,8 +289,8 @@ export function BusinessInsightsPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Moved to Arc</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--success)', marginTop: 2 }}>${formatAmount(s.movedToArc)}</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{s.claimsCount} claim{s.claimsCount === 1 ? '' : 's'}</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--success-text)', marginTop: 2 }}>${formatAmount(s.movedToArc)}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{s.claimsCount} claim{s.claimsCount === 1 ? '' : 's'}</div>
                 </div>
               </div>
               <button onClick={() => navigate('/multichain', { state: { tab: 'bring' } })}
@@ -309,8 +309,8 @@ export function BusinessInsightsPage() {
                   <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800,
                     background: 'color-mix(in srgb, var(--brand) 16%, transparent)', color: 'var(--brand-text)' }}>{i + 1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{c.count} payment{c.count === 1 ? '' : 's'} · last {timeAgo(c.last)}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.count} payment{c.count === 1 ? '' : 's'} · last {timeAgo(c.last)}</div>
                   </div>
                   <b style={{ fontSize: 14, color: 'var(--text-primary)', flexShrink: 0 }}>${formatAmount(c.total)}</b>
                 </div>
@@ -328,7 +328,7 @@ export function BusinessInsightsPage() {
                   </div>
                 ))}
               </div>
-              <div style={{ marginTop: 12, fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                 {conversion == null ? 'No requests or bills created in this period.'
                   : <>Paid rate <b style={{ color: 'var(--text-primary)' }}>{conversion}%</b>{s.avgPayMins != null && <> · paid in <b style={{ color: 'var(--text-primary)' }}>{fmtMins(s.avgPayMins)}</b> on average</>}</>}
               </div>
@@ -361,10 +361,10 @@ export function BusinessInsightsPage() {
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}>
                     <img decoding="async" src={chainLogo(p.chain)} alt="" width={22} height={22} style={{ borderRadius: '50%', flexShrink: 0 }}
                       onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
-                    <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{customersOf([p])[0]?.name}</span> · {chainName(p.chain)}{p.orderNumber ? ` · ${displayOrderNumber(p.orderNumber)}` : ''} · {timeAgo(p.createdAt)}
                     </div>
-                    <b style={{ fontSize: 13.5, color: 'var(--success)', flexShrink: 0 }}>+${formatAmount(p.amount)}</b>
+                    <b style={{ fontSize: 14, color: 'var(--success-text)', flexShrink: 0 }}>+${formatAmount(p.amount)}</b>
                   </div>
                 ))}
               </div>

@@ -255,7 +255,7 @@ export function SuccessReceipt({
             <h2 style={{ fontSize: 25, fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>{title}</h2>
           </Reveal>
           <Reveal i={1} revealed={revealed}>
-            <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', margin: '6px 0 12px', overflowWrap: 'anywhere' }}>{subtitle}</p>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '6px 0 12px', overflowWrap: 'anywhere' }}>{subtitle}</p>
           </Reveal>
           {bubble && (
             <Reveal i={1} revealed={revealed} style={{ display: 'flex', marginBottom: 6 }}>
@@ -337,12 +337,12 @@ export function SuccessReceipt({
                           }}>
                           <span>
                             <b style={{ display: 'block', fontSize: 13 }}>{l.title}</b>
-                            <small style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{[l.explorer, l.hash && !hashInRows && !showFullHash && shortHash(l.hash)].filter(Boolean).join(' · ')}</small>
+                            <small style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{[l.explorer, l.hash && !hashInRows && !showFullHash && shortHash(l.hash)].filter(Boolean).join(' · ')}</small>
                           </span>
                           <ExternalLink size={16} color="var(--text-secondary)" />
                         </a>
                       ))}
-                      {linksNote && <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0, padding: '8px 2px 2px' }}>{linksNote}</p>}
+                      {linksNote && <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0, padding: '8px 2px 2px' }}>{linksNote}</p>}
                     </>
                   )}
                 </motion.div>

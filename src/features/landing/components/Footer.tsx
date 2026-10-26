@@ -56,9 +56,9 @@ export function Footer() {
         </div>
 
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border pt-8 sm:flex-row">
-          <p className="text-[12.5px] text-text-muted">&copy; {new Date().getFullYear()} MeshPort. All rights reserved.</p>
+          <p className="text-[13px] text-text-muted">&copy; {new Date().getFullYear()} MeshPort. All rights reserved.</p>
           <ArcStudioBadge width={118} className="order-3 sm:order-none" />
-          <p className="text-[12.5px] text-text-muted">Built on Arc &middot; Arc Testnet</p>
+          <p className="text-[13px] text-text-muted">Built on Arc &middot; Arc Testnet</p>
         </div>
       </div>
     </footer>

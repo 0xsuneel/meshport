@@ -42,16 +42,16 @@ export function statusLine(i: MerchantIntent): { text: string; color: string } {
   const st = requestStatus(i)
   const who = i.customerUsername ? `${i.customerUsername.replace(/\.arc$/i, '')}.arc` : null
   if (st === 'paid') {
-    return { text: `${who ? `Paid by ${who}` : 'Paid'}${i.paidAt ? ` · ${when(i.paidAt)}` : ''}`, color: 'var(--success)' }
+    return { text: `${who ? `Paid by ${who}` : 'Paid'}${i.paidAt ? ` · ${when(i.paidAt)}` : ''}`, color: 'var(--success-text)' }
   }
   if (st === 'partially_paid') return { text: `Partially paid · $${formatAmount(i.received)} of $${formatAmount(i.amount)}`, color: 'var(--brand-text)' }
   if (st === 'expired') return { text: `Expired${i.expiresAt ? ` · ${when(i.expiresAt)}` : ''}`, color: 'var(--text-secondary)' }
   if (st === 'cancelled' || st === 'failed') return { text: STATUS_LABEL[st], color: 'var(--text-secondary)' }
   if (st === 'pending') {
     const exp = expiryText(i.expiresAt)
-    return { text: `Waiting for payment · ${exp ? exp.replace(/^Expires/, 'expires') : 'no expiry'}`, color: 'var(--warning)' }
+    return { text: `Waiting for payment · ${exp ? exp.replace(/^Expires/, 'expires') : 'no expiry'}`, color: 'var(--warning-text)' }
   }
-  return { text: STATUS_LABEL[st], color: 'var(--warning)' }
+  return { text: STATUS_LABEL[st], color: 'var(--warning-text)' }
 }
 
 export function MyRequestsPage() {
@@ -121,7 +121,7 @@ export function MyRequestsPage() {
                 const n = id === 'all' ? 0 : counts[id]
                 return (
                   <button key={id} role="tab" aria-selected={on} onClick={() => setFilter(id)}
-                    style={{ padding: '6px 13px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
+                    style={{ padding: '6px 13px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
                       background: on ? 'color-mix(in srgb, var(--brand) 22%, transparent)' : 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
                       color: on ? 'var(--brand-text)' : 'var(--text-secondary)' }}>
                     {label}{id === 'waiting' && n > 0 ? ` ${n}` : ''}
@@ -162,7 +162,7 @@ export function MyRequestsPage() {
                       icon={<HistoryIcon tone={bucket === 'paid' ? 'in' : bucket === 'closed' ? 'muted' : st === 'partially_paid' ? 'out' : 'pending'} icon="receive" />}
                       title={`${orderTitle(orderKindOf(i), orderLabel(i), { short: true })}${who}`}
                       meta={<span style={{ color: line.color }}>{line.text}</span>}
-                      right={<div style={{ fontSize: 14, fontWeight: 700, color: bucket === 'paid' ? 'var(--success)' : bucket === 'closed' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
+                      right={<div style={{ fontSize: 14, fontWeight: 700, color: bucket === 'paid' ? 'var(--success-text)' : bucket === 'closed' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
                         {bucket === 'paid' ? '+' : ''}${formatAmount(bucket === 'paid' ? (i.received || i.amount) : i.amount)}
                       </div>} />
                   )

@@ -139,7 +139,7 @@ export function ProcessingFlipCard({ open, phase, processingLabel, title, messag
                     : <XCircle size={26} color={resultColor} />}
                 </div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>{title}</div>
-                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{message}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{message}</div>
                 <button
                   onClick={onDismiss}
                   style={{

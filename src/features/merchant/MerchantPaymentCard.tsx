@@ -159,7 +159,7 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
           }}>PAID</span>
         )}
         {/* The order's name wraps rather than being cut ("Request ORD-00042 Received"). */}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 11.5, fontWeight: 700, lineHeight: 1.3, opacity: 0.92 }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 12, fontWeight: 700, lineHeight: 1.3, opacity: 0.92 }}>
           <span style={{ flexShrink: 0, display: 'flex', marginTop: 1 }}>{paid ? <CheckCircle2 size={13} /> : isBill ? <Receipt size={13} /> : <Clock size={13} />}</span>
           <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
             {orderTitle(orderKindOf(v), number, { paid, received: paid && isMine, short: true })}
@@ -197,8 +197,8 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
             <Clock size={12} /> {dueLine.text}
           </div>
         )}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 11.5, color: muted, marginTop: (isBill || v.note || dueLine) ? 6 : 0 }}>
-          <span style={{ fontWeight: 600, color: paid ? 'var(--success)' : muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{statusLine}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 12, color: muted, marginTop: (isBill || v.note || dueLine) ? 6 : 0 }}>
+          <span style={{ fontWeight: 600, color: paid ? 'var(--success-text)' : muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{statusLine}</span>
           {routeLabel && <span style={{ whiteSpace: 'nowrap' }}>{routeLabel}</span>}
         </div>
         {canPay && (
@@ -261,7 +261,7 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
       status={status}
       title={title}
       subtitle={<>
-        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: paid ? 'var(--success)' : 'var(--text-primary)', marginBottom: 4 }}>
+        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: paid ? 'var(--success-text)' : 'var(--text-primary)', marginBottom: 4 }}>
           ${formatAmount(v.amount)} {v.currency || 'USDC'}
         </span>
         {orderTitle(orderKind, number, { paid, received: paid && isMine })}{v.merchantName ? ` · ${v.merchantName}` : ''}

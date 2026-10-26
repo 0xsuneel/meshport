@@ -50,7 +50,7 @@ export function MaintenancePage() {
             </div>
             <div>
               <p style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)', fontSize: 15 }}>Maintenance Mode</p>
-              <p style={{ margin: '2px 0 0', fontSize: 12, color: enabled ? 'var(--warning)' : 'var(--text-secondary)', fontWeight: 600 }}>
+              <p style={{ margin: '2px 0 0', fontSize: 12, color: enabled ? 'var(--warning-text)' : 'var(--text-secondary)', fontWeight: 600 }}>
                 {enabled ? 'ON - app is locked for all users' : 'OFF - app is live'}
               </p>
             </div>
@@ -79,7 +79,7 @@ export function MaintenancePage() {
         >
           {saving ? 'Saving…' : 'Save Changes'}
         </button>
-        {savedAt && <p style={{ fontSize: 11, color: 'var(--success)', marginTop: 8 }}>Saved ✓</p>}
+        {savedAt && <p style={{ fontSize: 11, color: 'var(--success-text)', marginTop: 8 }}>Saved ✓</p>}
       </AdminCard>
 
       <AdminCard style={{ background: 'var(--surface)' }}>

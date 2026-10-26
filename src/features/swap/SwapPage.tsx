@@ -173,7 +173,7 @@ function SwapHistoryItem({ r, onOpen, flash, inPanel }: { r: SwapRecord; onOpen:
       </div>
 
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: isFailed ? 'var(--danger)' : 'var(--success)' }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: isFailed ? 'var(--danger-text)' : 'var(--success-text)' }}>
           {isFailed ? '-' : `+${fmtOut} ${r.tokenOut}`}
         </div>
       </div>
@@ -242,8 +242,8 @@ function applySwapProgress(s: SwapProgressState, p: SwapProgress): SwapProgressS
 }
 
 // Top of the "Swapping…" screen: live pill with total elapsed time, then the
-// two amounts at Review's size. The receive amount shimmers until the swap
-// lands (mp-swap-shimmer in index.css; static under reduced motion).
+// two amounts at Review's size. The receive amount pulses until the swap
+// lands (mp-swap-shimmer in index.css; still under reduced motion).
 function SwapProcessingHero({ step, tokenIn, tokenOut, amountIn, amountOut, minOut }: {
   step: string; tokenIn: Token; tokenOut: Token; amountIn: string; amountOut: string; minOut: string
 }) {
@@ -265,7 +265,7 @@ function SwapProcessingHero({ step, tokenIn, tokenOut, amountIn, amountOut, minO
     <div className="flex flex-col items-center" style={{ position: 'relative', gap: 6, paddingTop: 4 }}>
       <div className="flex items-center" style={{
         gap: 8, padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600,
-        color: running ? 'var(--brand-text)' : 'var(--success)',
+        color: running ? 'var(--brand-text)' : 'var(--success-text)',
         background: running ? 'color-mix(in srgb, var(--brand) 18%, transparent)' : 'color-mix(in srgb, var(--success) 14%, transparent)',
         border: `1px solid ${running ? 'color-mix(in srgb, var(--brand-text) 35%, transparent)' : 'color-mix(in srgb, var(--success) 35%, transparent)'}`,
       }}>
@@ -385,7 +385,7 @@ function SwapChecklist({ step, error, txHash, progress }: { step: string; error:
             </div>
             <div style={{ paddingBottom: isLast ? 0 : 18, flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <p style={{ fontSize: 14, fontWeight: 500, margin: '0 0 2px', color: s.done ? 'var(--success)' : errored ? 'var(--danger)' : s.active ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                <p style={{ fontSize: 14, fontWeight: 500, margin: '0 0 2px', color: s.done ? 'var(--success-text)' : errored ? 'var(--danger-text)' : s.active ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
                   {s.label}
                 </p>
                 {s.active && !isFailed && (
@@ -1524,7 +1524,7 @@ export function SwapPage() {
             <circle cx="8" cy="8" r="7" stroke="var(--warning)" strokeWidth="1.4"/>
             <path d="M8 5v4M8 11v.5" stroke="var(--warning)" strokeWidth="1.4" strokeLinecap="round"/>
           </svg>
-          <p className="text-[11px] leading-snug" style={{ color: 'var(--warning)' }}>
+          <p className="text-[11px] leading-snug" style={{ color: 'var(--warning-text)' }}>
             Arc swap liquidity can be unstable. If you get "No route available", try a smaller amount or wait a few minutes.
           </p>
         </div>
@@ -1538,7 +1538,7 @@ export function SwapPage() {
           }}>
             <div className="flex items-center justify-between">
               <p className="text-[13px] text-text-secondary">You pay</p>
-              <p className="text-[13px]" style={{ color: parseFloat(amountIn || '0') > inBalance ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: parseFloat(amountIn || '0') > inBalance ? 600 : undefined }}>Balance {fmtBal(tokenIn.id, inBalance)}</p>
+              <p className="text-[13px]" style={{ color: parseFloat(amountIn || '0') > inBalance ? 'var(--danger-text)' : 'var(--text-secondary)', fontWeight: parseFloat(amountIn || '0') > inBalance ? 600 : undefined }}>Balance {fmtBal(tokenIn.id, inBalance)}</p>
             </div>
             <div style={{ marginTop: 12 }}>
               <AmountField
@@ -1711,7 +1711,7 @@ export function SwapPage() {
             </div>
           ) : gasShortfall > 0 ? (
             <div className="rounded-2xl p-3.5" style={{ background: 'color-mix(in srgb, var(--warning) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)' }}>
-              <p className="text-xs" style={{ color: 'var(--warning)' }}>
+              <p className="text-xs" style={{ color: 'var(--warning-text)' }}>
                 Insufficient USDC to cover network gas. This swap needs ~{trimTrailingZeros(gasNeeded.toFixed(4))} USDC for gas, but only {trimTrailingZeros(usdcAfterSwap.toFixed(4))} USDC would be left.
               </p>
             </div>
@@ -1740,7 +1740,7 @@ export function SwapPage() {
                 numbers above already reflect the new quote; this is just a
                 heads-up why. Auto-clears on its own. */}
             {quoteChangedNotice && step === 'confirming' && (
-              <div className="rounded-xl px-3.5 py-2.5 text-xs font-medium text-center" style={{ position: 'relative', background:'color-mix(in srgb, var(--warning) 12%, transparent)', border:'1px solid color-mix(in srgb, var(--warning) 30%, transparent)', color:'var(--warning)' }}>
+              <div className="rounded-xl px-3.5 py-2.5 text-xs font-medium text-center" style={{ position: 'relative', background:'color-mix(in srgb, var(--warning) 12%, transparent)', border:'1px solid color-mix(in srgb, var(--warning) 30%, transparent)', color:'var(--warning-text)' }}>
                 {quoteChangedNotice}
               </div>
             )}
@@ -1807,7 +1807,7 @@ export function SwapPage() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
                   <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
-                <p className="text-xs" style={{ color: 'var(--warning)' }}>
+                <p className="text-xs" style={{ color: 'var(--warning-text)' }}>
                   Insufficient USDC to cover network gas. This swap needs ~{trimTrailingZeros(gasNeeded.toFixed(4))} USDC for gas, but only {trimTrailingZeros(usdcAfterSwap.toFixed(4))} USDC would be left.
                 </p>
               </div>
@@ -1910,11 +1910,11 @@ export function SwapPage() {
                 { label: 'From',    value: `${trimTrailingZeros(parseFloat(amountIn).toFixed(swapTokenDecimals(tokenIn.id)))} ${tokenIn.id}` },
                 { label: 'To',      value: tokenOut.id },
                 { label: 'Reason',  value: isUncertainFailure ? 'Could not confirm result'
-                    : error?.includes('route') || error?.includes('liquidity') ? 'No liquidity on Arc' : 'Transaction failed', color: 'var(--danger)' },
+                    : error?.includes('route') || error?.includes('liquidity') ? 'No liquidity on Arc' : 'Transaction failed', color: 'var(--danger-text)' },
                 ...(isUncertainFailure
-                  ? [{ label: 'Before retrying', value: 'Check your balance or Activity first', color: 'var(--warning)' }]
+                  ? [{ label: 'Before retrying', value: 'Check your balance or Activity first', color: 'var(--warning-text)' }]
                   : error?.toLowerCase().includes('route') || error?.toLowerCase().includes('liquidity')
-                  ? [{ label: 'Fix', value: 'Try smaller amount or wait a few minutes', color: 'var(--warning)' }]
+                  ? [{ label: 'Fix', value: 'Try smaller amount or wait a few minutes', color: 'var(--warning-text)' }]
                   : []),
               ]}
               primaryLabel={isUncertainFailure ? 'Check Activity' : 'Try Again'}

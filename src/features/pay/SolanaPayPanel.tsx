@@ -81,7 +81,7 @@ export function SolanaPayPanel({ to, amount, code, orderNumber, label, onPaid }:
   if (step === 'done') {
     return (
       <div className="bg-surface border border-border rounded-3xl p-5 flex flex-col items-center gap-2 text-center">
-        <CheckCircle2 className="w-10 h-10" style={{ color: 'var(--success)' }} />
+        <CheckCircle2 className="w-10 h-10" style={{ color: 'var(--success-text)' }} />
         <p className="text-base font-bold text-text-primary">Paid on Solana</p>
         {sig && <a href={solanaExplorerUrl('tx', sig)} target="_blank" rel="noopener noreferrer" className="text-xs inline-flex items-center gap-1" style={{ color: 'var(--brand-text)' }}>View on Solana Explorer <ExternalLink className="w-3 h-3" /></a>}
       </div>
@@ -94,7 +94,7 @@ export function SolanaPayPanel({ to, amount, code, orderNumber, label, onPaid }:
       <div style={{ background: '#fff', borderRadius: 16, padding: 10 }}>
         <canvas ref={canvasRef} width={220} height={220} style={{ display: 'block', width: 220, height: 220 }} />
       </div>
-      <p className="text-[11.5px] text-text-secondary text-center leading-snug">
+      <p className="text-[12px] text-text-secondary text-center leading-snug">
         Scan with Phantom, Solflare or Backpack - it opens the payment with the address and {amount != null ? 'exact amount' : 'USDC'} filled in.
       </p>
       {uri && (
@@ -109,7 +109,7 @@ export function SolanaPayPanel({ to, amount, code, orderNumber, label, onPaid }:
         {amount != null && row('Amount', `${formatAmount(amount)} USDC (exact)`, String(amount))}
       </div>
       {code && (
-        <p className="text-[11.5px] text-text-secondary text-center inline-flex items-center gap-1.5">
+        <p className="text-[12px] text-text-secondary text-center inline-flex items-center gap-1.5">
           {step === 'confirming' ? <><Loader2 className="w-3 h-3 animate-spin" /> Payment seen - confirming…</> : <><Loader2 className="w-3 h-3 animate-spin" /> Waiting for the payment…</>}
         </p>
       )}

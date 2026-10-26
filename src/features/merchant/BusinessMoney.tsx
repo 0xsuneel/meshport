@@ -207,7 +207,7 @@ function MoneyHome({ loaded, intents, payments, receipts, chains, claimChains, o
       onClick={() => { listFlash.leaving(i.id); onOpenRequest(i.code) }} amountColor={i.status === 'paid' ? 'var(--success)' : undefined} />
   )
   const more = (shown: number, total: number, open: boolean, toggle: () => void) => total > shown || open ? (
-    <button onClick={toggle} style={{ ...btnGhost, border: 'none', padding: '6px', color: 'var(--brand-text)', fontSize: 12.5 }}>
+    <button onClick={toggle} style={{ ...btnGhost, border: 'none', padding: '6px', color: 'var(--brand-text)', fontSize: 13 }}>
       {open ? 'Show less' : `Show all (${total})`}
     </button>
   ) : null
@@ -228,8 +228,8 @@ function MoneyHome({ loaded, intents, payments, receipts, chains, claimChains, o
 
       {waitingTotal > 0 && (
         <button onClick={() => setTab('chains')} style={{ ...card, padding: '10px 12px', textAlign: 'left', cursor: 'pointer', borderColor: 'color-mix(in srgb, var(--warning) 35%, var(--border))' }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--warning)' }}>${formatAmount(waitingTotal)} USDC on {fundedChainCount ? `${fundedChainCount} other chain${fundedChainCount === 1 ? '' : 's'}` : 'other chains'}</div>
-          <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--warning-text)' }}>${formatAmount(waitingTotal)} USDC on {fundedChainCount ? `${fundedChainCount} other chain${fundedChainCount === 1 ? '' : 's'}` : 'other chains'}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
             Open Chains to move it to Arc with Claim All
           </div>
         </button>
@@ -237,17 +237,17 @@ function MoneyHome({ loaded, intents, payments, receipts, chains, claimChains, o
 
       {waitingTotal === 0 && arriving.length > 0 && (
         <div style={{ ...card, padding: 10, display: 'flex', flexDirection: 'column', gap: 6, borderColor: 'color-mix(in srgb, var(--warning) 35%, var(--border))' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--warning)' }}>Arriving · ${formatAmount(onTheWay)} USDC moving to Arc</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--warning-text)' }}>Arriving · ${formatAmount(onTheWay)} USDC moving to Arc</div>
           {arriving.slice(0, 3).map(p => (
             <button key={p.id} onClick={() => { const i = intentByPay.get(p.intentId); if (i) onOpenRequest(i.code) }}
-              style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', fontSize: 12.5, color: 'var(--text-primary)' }}>
+              style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--text-primary)' }}>
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {p.customerUsername ? p.customerUsername + '.arc' : short(p.from)} · {routeLabel(p.chain)} · {paymentStageLabel(p)}
               </span>
               <b style={{ flexShrink: 0 }}>${formatAmount(p.amount)}</b>
             </button>
           ))}
-          {arriving.length > 3 && <div style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>+{arriving.length - 3} more</div>}
+          {arriving.length > 3 && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>+{arriving.length - 3} more</div>}
         </div>
       )}
 
@@ -255,7 +255,7 @@ function MoneyHome({ loaded, intents, payments, receipts, chains, claimChains, o
       <div role="tablist" style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 12, border: '1px solid var(--border)' }}>
         {([['chains', 'Chains'], ['requests', `Requests${openRequests.length ? ` (${openRequests.length})` : ''}`], ['customers', 'Customers']] as const).map(([id, text]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-            style={{ flex: 1, padding: '8px 4px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700,
+            style={{ flex: 1, padding: '8px 4px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
               background: tab === id ? 'var(--brand)' : 'transparent', color: tab === id ? '#fff' : 'var(--text-secondary)' }}>
             {text}
           </button>
@@ -422,12 +422,12 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
     <div style={{ ...card, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div>
         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Claim All</div>
-        <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
           {`Moves USDC from every chain to your Arc balance through CCTP - no gas needed, MeshPort pays it. ${waitText}; you can still claim one chain at a time below.`}
         </div>
       </div>
       {!scanning && due.length > 0 && (
-        <div style={{ fontSize: 12.5, color: 'var(--text-primary)' }}>
+        <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>
           <b>${formatAmount(total)} USDC</b> on {due.map(c => c.label).join(', ')}
         </div>
       )}
@@ -438,7 +438,7 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
       </button>
       {hasRun && !screenOpen && (
         <button onClick={() => setScreenOpen(true)}
-          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--brand-text)', textAlign: 'left' }}>
+          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand-text)', textAlign: 'left' }}>
           {running ? 'Claiming… view progress ›' : 'View last Claim All ›'}
         </button>
       )}
@@ -631,13 +631,13 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
               ))}
             </div>
           ) : null}
-          <div style={{ fontSize: 13, fontWeight: 700, marginTop: 6, color: st === 'paid' ? 'var(--success)' : done ? 'var(--text-secondary)' : 'var(--warning)' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginTop: 6, color: st === 'paid' ? 'var(--success-text)' : done ? 'var(--text-secondary)' : 'var(--warning-text)' }}>
             {st === 'paid' && intent.completedByMerchant ? 'Completed by you' : STATUS_LABEL[st]}
             {intent.received > 0 && st !== 'paid' ? ` · $${formatAmount(intent.received)} of $${formatAmount(intent.amount)} received` : ''}
             {intent.completedByMerchant && intent.received > 0 && intent.received < intent.amount ? ` · $${formatAmount(intent.received)} received` : ''}
           </div>
           {over > 0.000001 && (
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning)', marginTop: 2 }}>Overpaid by ${formatAmount(over)} USDC - you may want to refund it</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning-text)', marginTop: 2 }}>Overpaid by ${formatAmount(over)} USDC - you may want to refund it</div>
           )}
           {intent.completedNote && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Note: {intent.completedNote}</div>}
         </div>
@@ -649,7 +649,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
             <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 12, border: '1px solid var(--border)' }}>
               {([['link', 'MeshPort QR'], ['wallet', 'Wallet QR']] as const).map(([m, label]) => (
                 <button key={m} onClick={() => setQrMode(m)} disabled={m === 'wallet' && !walletAddress}
-                  style={{ padding: '7px 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700,
+                  style={{ padding: '7px 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
                     background: qrMode === m ? 'var(--brand)' : 'transparent', color: qrMode === m ? '#fff' : 'var(--text-secondary)' }}>
                   {label}
                 </button>
@@ -672,7 +672,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
             {walletAddress && (
               <CopyRow label="Wallet address (Arc & supported chains)" value={walletAddress} mono onCopy={() => copy(walletAddress, 'Address')} />
             )}
-            <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
               Payments through MeshPort confirm the order right away. A wallet payment of this exact amount to your address is linked to this order within seconds (if several open orders have the same amount, you'll be asked to pick). You can also use “Check a transaction” below.
             </div>
           </div>
@@ -713,7 +713,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
             </div>
           )}
           {intent && intent.received === 0 && (
-            <button onClick={cancel} disabled={busy} style={{ ...btnGhost, color: 'var(--danger)', borderColor: 'color-mix(in srgb, var(--danger) 40%, transparent)' }}>Cancel request</button>
+            <button onClick={cancel} disabled={busy} style={{ ...btnGhost, color: 'var(--danger-text)', borderColor: 'color-mix(in srgb, var(--danger) 40%, transparent)' }}>Cancel request</button>
           )}
         </>
       )}
@@ -807,7 +807,7 @@ function MerchantPaymentReceipt({ p, orderNumber, note, onViewOrder, onClose }: 
       status={arriving ? 'pending' : 'success'}
       title={arriving ? 'Payment Arriving' : 'Payment Received'}
       subtitle={<>
-        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: 'var(--success)', marginBottom: 4 }}>+${formatAmount(p.amount)} USDC</span>
+        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: 'var(--success-text)', marginBottom: 4 }}>+${formatAmount(p.amount)} USDC</span>
         From {from}{orderNumber ? ` · ${orderNumber}` : ''}
       </>}
       // The header shows the amount, who paid and the order; the title the outcome.
@@ -874,7 +874,7 @@ function CopyRow({ label, value, mono, onCopy }: { label: string; value: string;
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
-        <div style={{ fontSize: 12.5, color: 'var(--text-primary)', wordBreak: 'break-all', marginTop: 2, fontFamily: mono ? 'ui-monospace, monospace' : undefined }}>{value}</div>
+        <div style={{ fontSize: 13, color: 'var(--text-primary)', wordBreak: 'break-all', marginTop: 2, fontFamily: mono ? 'ui-monospace, monospace' : undefined }}>{value}</div>
       </div>
       <button onClick={onCopy} aria-label={`Copy ${label}`}
         style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -906,7 +906,7 @@ function NeedsReview({ deposits, intents, onDone }: { deposits: UnmatchedDeposit
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>+${formatAmount(d.amount)} USDC</div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{short(d.from)} · {routeLabel(d.chain)} · {timeAgo(d.createdAt)}</div>
-              <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--warning)', marginTop: 2 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning-text)', marginTop: 2 }}>
                 {d.reason === 'amount_mismatch' ? "Amount doesn't exactly match an order" : 'Matches more than one order'}
               </div>
             </div>

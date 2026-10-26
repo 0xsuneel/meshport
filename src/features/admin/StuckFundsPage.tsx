@@ -75,10 +75,10 @@ function txUrl(item: StuckItem): string | null {
   return chain === ARC_CHAIN_KEY ? arcExplorerTxUrl(item.txHash) : explorerTxUrl(chain === 'Polygon_Amoy_Testnet' ? 'Polygon_Sepolia' : chain, item.txHash)
 }
 function statusTone(item: StuckItem): { text: string; color: string } {
-  if (item.kind === 'ub_transfer') return { text: 'Waiting for user', color: 'var(--warning)' }
+  if (item.kind === 'ub_transfer') return { text: 'Waiting for user', color: 'var(--warning-text)' }
   if (item.kind === 'ub_withdrawal') return { text: 'Withdrawing', color: 'var(--text-secondary)' }
-  if (item.status === 'failed' || item.status === 'expired') return { text: item.status === 'expired' ? 'Expired' : 'Failed', color: 'var(--danger)' }
-  return { text: 'Stuck in progress', color: 'var(--warning)' }
+  if (item.status === 'failed' || item.status === 'expired') return { text: item.status === 'expired' ? 'Expired' : 'Failed', color: 'var(--danger-text)' }
+  return { text: 'Stuck in progress', color: 'var(--warning-text)' }
 }
 
 // ── Small UI pieces ──────────────────────────────────────────────────────────
@@ -204,8 +204,8 @@ function Detail({ item, onClose, onChanged }: {
       </div>
 
       {item.error && (
-        <div style={{ display: 'flex', gap: 8, padding: '10px 12px', borderRadius: 12, fontSize: 12.5, lineHeight: 1.45,
-          color: 'var(--danger)', background: 'color-mix(in srgb, var(--danger) 10%, transparent)' }}>
+        <div style={{ display: 'flex', gap: 8, padding: '10px 12px', borderRadius: 12, fontSize: 13, lineHeight: 1.45,
+          color: 'var(--danger-text)', background: 'color-mix(in srgb, var(--danger) 10%, transparent)' }}>
           <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
           <span style={{ wordBreak: 'break-word' }}>{item.error}</span>
         </div>
@@ -214,7 +214,7 @@ function Detail({ item, onClose, onChanged }: {
       {(state || err) && (
         <div style={{ padding: '10px 12px', borderRadius: 12, fontSize: 13, lineHeight: 1.45,
           background: err ? 'color-mix(in srgb, var(--danger) 10%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
-          color: err ? 'var(--danger)' : 'var(--text-primary)' }}>
+          color: err ? 'var(--danger-text)' : 'var(--text-primary)' }}>
           {err || (state ? STATE_TEXT[state] ?? state : '')}
           {!err && diag?.detail && state !== 'notified' && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{diag.detail}</div>}
           {!err && diag?.destinationMintTxHash && <div style={{ fontSize: 12, marginTop: 4 }}>Mint tx: <CopyText value={short(diag.destinationMintTxHash, 10)} /></div>}
@@ -318,7 +318,7 @@ export function StuckFundsPage() {
     <AdminCard padding={14} style={{ flex: '1 1 150px' }}>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 800, color, marginTop: 4, letterSpacing: '-0.4px' }}>{value}</div>
-      {sub && <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{sub}</div>}
     </AdminCard>
   )
 
@@ -399,14 +399,14 @@ export function StuckFundsPage() {
         </label>
       </div>
 
-      {error && <AdminCard><div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div></AdminCard>}
+      {error && <AdminCard><div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{error}</div></AdminCard>}
 
       {!loading && !error && visible.length === 0 ? (
         <AdminCard>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '28px 0', gap: 8 }}>
             <ShieldCheck size={30} color="var(--success)" />
             <p style={{ color: 'var(--text-primary)', fontSize: 14, fontWeight: 700, margin: 0 }}>Nothing stuck</p>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 12.5, margin: 0 }}>Every cross-chain move in this view has finished.</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>Every cross-chain move in this view has finished.</p>
           </div>
         </AdminCard>
       ) : isDesktop ? (
@@ -438,12 +438,12 @@ export function StuckFundsPage() {
           <Clock size={15} /> Recent admin actions
         </div>
         {log.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', padding: '6px 0' }}>No admin recovery actions yet.</div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '6px 0' }}>No admin recovery actions yet.</div>
         ) : log.map(l => (
-          <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderTop: '1px solid var(--border)', fontSize: 12.5 }}>
+          <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderTop: '1px solid var(--border)', fontSize: 13 }}>
             <span style={{ color: 'var(--text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               <b>{l.action.replace(/^admin-/, '').replace(/-/g, ' ')}</b> · {l.target_kind.replace('_', ' ')} {short(l.target_id, 4)}
-              {typeof (l.result as any)?.error === 'string' && <span style={{ color: 'var(--danger)' }}> · failed</span>}
+              {typeof (l.result as any)?.error === 'string' && <span style={{ color: 'var(--danger-text)' }}> · failed</span>}
             </span>
             <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>{l.admin_email ?? 'admin'} · {ago(l.created_at)}</span>
           </div>

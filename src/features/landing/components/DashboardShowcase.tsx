@@ -6,11 +6,11 @@ export function DashboardShowcase() {
     <section className="overflow-hidden bg-surface/40 py-20 sm:py-28">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <Reveal className="mx-auto max-w-2xl text-center">
-          <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand-text">See it in action</p>
+          <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-brand-text">See it in action</p>
           <h2 className="mt-3 text-[30px] font-extrabold tracking-tight text-text-primary sm:text-[38px]">
             One interface, every screen size
           </h2>
-          <p className="mt-4 text-[15.5px] leading-relaxed text-text-secondary">
+          <p className="mt-4 text-[16px] leading-relaxed text-text-secondary">
             The same premium experience on desktop and mobile - nothing feels like an afterthought.
           </p>
         </Reveal>

@@ -413,7 +413,7 @@ export function RoleManagersPanel() {
         <Shield size={18} color={COLORS.primary} />
         <h2 style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, margin: 0 }}>Role Managers</h2>
       </div>
-      <p style={{ fontSize: 12.5, color: COLORS.muted, marginBottom: 16, lineHeight: 1.5 }}>
+      <p style={{ fontSize: 13, color: COLORS.muted, marginBottom: 16, lineHeight: 1.5 }}>
         2-of-3 multisig, signed through your own wallet extension - no private key ever entered into this page.
         Every Pauser/Investigator/Admin change, and any rotation of the 3 signers themselves, needs two of these
         three signers to confirm.
@@ -429,11 +429,11 @@ export function RoleManagersPanel() {
                 <AddressChip address={connectedWallet} size={13} />
               </div>
               <button onClick={handleDisconnect} disabled={disconnecting}
-                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 700, color: COLORS.muted, background: 'transparent', border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: '5px 10px', cursor: 'pointer', opacity: disconnecting ? 0.6 : 1 }}>
+                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: COLORS.muted, background: 'transparent', border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: '5px 10px', cursor: 'pointer', opacity: disconnecting ? 0.6 : 1 }}>
                 <LogOut size={12} /> {disconnecting ? 'Disconnecting…' : 'Disconnect'}
               </button>
             </div>
-            <div style={{ fontSize: 11.5, marginTop: 4, color: isConnectedWalletASigner ? COLORS.success : COLORS.warning }}>
+            <div style={{ fontSize: 12, marginTop: 4, color: isConnectedWalletASigner ? COLORS.success : COLORS.warning }}>
               {isConnectedWalletASigner ? '✓ This is a role manager signer' : 'Not a role manager signer - connect the right wallet to act'}
             </div>
             {/* ── Which privileged roles this address holds, checked live on-chain ── */}
@@ -467,7 +467,7 @@ export function RoleManagersPanel() {
           </div>
         ) : (
           <button onClick={handleConnect} disabled={connecting}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 0', borderRadius: 12, border: 'none', background: COLORS.primary, color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', opacity: connecting ? 0.7 : 1 }}>
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 0', borderRadius: 12, border: 'none', background: COLORS.primary, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: connecting ? 0.7 : 1 }}>
             <Wallet size={16} /> {connecting ? 'Connecting…' : 'Connect Wallet'}
           </button>
         )}
@@ -510,7 +510,7 @@ export function RoleManagersPanel() {
         ) : (
           <>
             <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 4 }}>Pauser(s)</div>
+              <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 4 }}>Pauser(s)</div>
               {roleHolders.pausers.length === 0 ? (
                 <span style={{ fontSize: 13, color: COLORS.muted }}>None currently set.</span>
               ) : (
@@ -522,7 +522,7 @@ export function RoleManagersPanel() {
               )}
             </div>
             <div>
-              <div style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 4 }}>Investigator(s)</div>
+              <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 4 }}>Investigator(s)</div>
               {roleHolders.investigators.length === 0 ? (
                 <span style={{ fontSize: 13, color: COLORS.muted }}>None currently set.</span>
               ) : (
@@ -541,9 +541,9 @@ export function RoleManagersPanel() {
       <div style={{ background: COLORS.surface, border: `1px solid color-mix(in srgb, var(--warning) 40%, transparent)`, borderRadius: 14, padding: 14, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
           <AlertTriangle size={14} color={COLORS.warning} />
-          <span style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.text }}>Admin Rotation - Compromise Recovery</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>Admin Rotation - Compromise Recovery</span>
         </div>
-        <p style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 10, lineHeight: 1.4 }}>
+        <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 10, lineHeight: 1.4 }}>
           If the Admin wallet is compromised, 2 of these 3 role manager signers can replace it - the current
           Admin has no way to block, veto, or delay this. The new address must NOT already hold Pauser,
           Investigator, or Role Manager Signer status - Admin must be a genuinely separate address.
@@ -555,9 +555,9 @@ export function RoleManagersPanel() {
           <span style={{ fontSize: 13, color: COLORS.muted }}>Loading…</span>
         ) : (
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 2 }}>Current Admin</div>
+            <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 2 }}>Current Admin</div>
             <div style={{ marginBottom: 8 }}>{currentAdmin ? <AddressChip address={currentAdmin} size={13} /> : <span style={{ fontSize: 13, color: COLORS.muted }}>-</span>}</div>
-            <div style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 2 }}>Pending Admin</div>
+            <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 2 }}>Pending Admin</div>
             <div>
               {pendingAdminAddr ? <AddressChip address={pendingAdminAddr} size={13} color={COLORS.warning} /> : <span style={{ fontSize: 13, color: COLORS.muted }}>None - no rotation in progress</span>}
             </div>
@@ -568,12 +568,12 @@ export function RoleManagersPanel() {
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
             {connectedWallet?.toLowerCase() === pendingAdminAddr.toLowerCase() && (
               <button onClick={handleAcceptAdmin} disabled={!connectedWallet || acceptingAdmin}
-                style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: COLORS.success, color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', opacity: acceptingAdmin ? 0.6 : 1 }}>
+                style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: COLORS.success, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: acceptingAdmin ? 0.6 : 1 }}>
                 {acceptingAdmin ? 'Accepting…' : 'Accept Admin Role (I am the pending admin)'}
               </button>
             )}
             <button onClick={handleCancelPendingAdmin} disabled={!connectedWallet || proposingAdmin}
-              style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'transparent', color: COLORS.text, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', opacity: proposingAdmin ? 0.6 : 1 }}>
+              style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'transparent', color: COLORS.text, fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: proposingAdmin ? 0.6 : 1 }}>
               Propose Cancelling This Nomination
             </button>
           </div>
@@ -583,7 +583,7 @@ export function RoleManagersPanel() {
         <input value={newAdminInput} onChange={e => setNewAdminInput(e.target.value)} placeholder="New admin address 0x…"
           style={{ width: '100%', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 'max(var(--fs-field, 0px), 13.5px)', fontFamily: 'monospace', boxSizing: 'border-box', marginBottom: 10 }} />
         <button onClick={handleProposeAdminRotation} disabled={!connectedWallet || proposingAdmin}
-          style={{ width: '100%', padding: '11px 0', borderRadius: 12, border: 'none', background: COLORS.warning, color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', opacity: (!connectedWallet || proposingAdmin) ? 0.6 : 1 }}>
+          style={{ width: '100%', padding: '11px 0', borderRadius: 12, border: 'none', background: COLORS.warning, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: (!connectedWallet || proposingAdmin) ? 0.6 : 1 }}>
           {proposingAdmin ? 'Signing…' : 'Propose Admin Replacement (signs as 1st confirmation)'}
         </button>
       </div>
@@ -605,11 +605,11 @@ export function RoleManagersPanel() {
               <AlertTriangle size={13} color={COLORS.error} />
               <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.error }}>Blocked - would revert on-chain</span>
             </div>
-            <p style={{ fontSize: 11.5, color: COLORS.muted, margin: 0, lineHeight: 1.4 }}>{overlapWarning}</p>
+            <p style={{ fontSize: 12, color: COLORS.muted, margin: 0, lineHeight: 1.4 }}>{overlapWarning}</p>
           </div>
         )}
         <button onClick={handlePropose} disabled={!connectedWallet || submitting || !!overlapWarning}
-          style={{ width: '100%', padding: '11px 0', borderRadius: 12, border: 'none', background: COLORS.primary, color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', opacity: (!connectedWallet || submitting || !!overlapWarning) ? 0.6 : 1 }}>
+          style={{ width: '100%', padding: '11px 0', borderRadius: 12, border: 'none', background: COLORS.primary, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: (!connectedWallet || submitting || !!overlapWarning) ? 0.6 : 1 }}>
           {submitting ? 'Signing…' : 'Propose (signs as 1st confirmation)'}
         </button>
       </div>
@@ -620,7 +620,7 @@ export function RoleManagersPanel() {
           <RefreshCw size={14} color={COLORS.text} />
           <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>Rotate a signer</span>
         </div>
-        <p style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 10, lineHeight: 1.4 }}>
+        <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 10, lineHeight: 1.4 }}>
           Replace one of the 3 fixed signer slots - e.g. a key was lost or compromised. Also requires 2-of-3
           confirmation; the new address can't already be one of the 3 current signers.
         </p>
@@ -631,7 +631,7 @@ export function RoleManagersPanel() {
         <input value={rotateTarget} onChange={e => setRotateTarget(e.target.value)} placeholder="New signer address 0x…"
           style={{ width: '100%', background: COLORS.bg, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '10px 12px', fontSize: 'max(var(--fs-field, 0px), 13.5px)', fontFamily: 'monospace', boxSizing: 'border-box', marginBottom: 10 }} />
         <button onClick={handleRotate} disabled={!connectedWallet || rotating}
-          style={{ width: '100%', padding: '11px 0', borderRadius: 12, border: `1px solid ${COLORS.border}`, background: 'transparent', color: COLORS.text, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', opacity: (!connectedWallet || rotating) ? 0.6 : 1 }}>
+          style={{ width: '100%', padding: '11px 0', borderRadius: 12, border: `1px solid ${COLORS.border}`, background: 'transparent', color: COLORS.text, fontSize: 14, fontWeight: 700, cursor: 'pointer', opacity: (!connectedWallet || rotating) ? 0.6 : 1 }}>
           {rotating ? 'Signing…' : 'Propose Rotation (signs as 1st confirmation)'}
         </button>
       </div>
@@ -667,7 +667,7 @@ export function RoleManagersPanel() {
                     #{String(p.id)} - {p.action}{p.action === 'RotateSigner' ? ` (slot ${p.signerIndex + 1})` : ''}
                   </span>
                 </div>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: statusColor, marginTop: 4 }}>{statusLabel}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: statusColor, marginTop: 4 }}>{statusLabel}</div>
                 {/* Per-signer confirmation status - which of the 3 fixed
                     signers has actually confirmed, not just a count, so a
                     signer can tell at a glance whether they still need to
@@ -691,7 +691,7 @@ export function RoleManagersPanel() {
                 )}
                 <div style={{ marginTop: 6 }}>
                   {p.target === '0x0000000000000000000000000000000000000000' ? (
-                    <span style={{ fontSize: 11.5, color: COLORS.muted }}>No target (cancels the pending admin nomination)</span>
+                    <span style={{ fontSize: 12, color: COLORS.muted }}>No target (cancels the pending admin nomination)</span>
                   ) : (
                     <AddressChip address={p.target} size={11.5} color={COLORS.muted} />
                   )}
@@ -701,14 +701,14 @@ export function RoleManagersPanel() {
                     {isPendingApproval && (
                       <button onClick={() => handleConfirm(p.id)} disabled={!connectedWallet || !isConnectedWalletASigner || submitting || connectedAlreadyConfirmed}
                         title={connectedAlreadyConfirmed ? 'This wallet already confirmed - a DIFFERENT signer needs to confirm next.' : !isConnectedWalletASigner ? 'Connected wallet is not one of the 3 role manager signers.' : undefined}
-                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 11.5, fontWeight: 700, color: COLORS.success, background: 'color-mix(in srgb, var(--success) 10%, transparent)', border: 'none', borderRadius: 8, padding: '6px 0', cursor: 'pointer', opacity: (connectedAlreadyConfirmed || !isConnectedWalletASigner) ? 0.5 : 1 }}>
+                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: COLORS.success, background: 'color-mix(in srgb, var(--success) 10%, transparent)', border: 'none', borderRadius: 8, padding: '6px 0', cursor: 'pointer', opacity: (connectedAlreadyConfirmed || !isConnectedWalletASigner) ? 0.5 : 1 }}>
                         <CheckCircle2 size={12} /> {connectedAlreadyConfirmed ? 'Already confirmed' : 'Confirm'}
                       </button>
                     )}
                     {isReady && (
                       <button onClick={() => handleExecute(p.id)} disabled={!connectedWallet || !isConnectedWalletASigner || submitting}
                         title={!isConnectedWalletASigner ? 'Connected wallet is not one of the 3 role manager signers.' : undefined}
-                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 11.5, fontWeight: 700, color: '#fff', background: COLORS.primary, border: 'none', borderRadius: 8, padding: '6px 0', cursor: 'pointer', opacity: !isConnectedWalletASigner ? 0.5 : 1 }}>
+                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: '#fff', background: COLORS.primary, border: 'none', borderRadius: 8, padding: '6px 0', cursor: 'pointer', opacity: !isConnectedWalletASigner ? 0.5 : 1 }}>
                         Execute now
                       </button>
                     )}
@@ -722,7 +722,7 @@ export function RoleManagersPanel() {
                     {isPendingApproval && (
                       <button onClick={() => handleCancel(p.id)} disabled={!connectedWallet || !isConnectedWalletASigner || submitting || connectedAlreadyConfirmed}
                         title={connectedAlreadyConfirmed ? 'You already confirmed this proposal - a confirmer cannot cancel their own confirmation. A different, non-confirming signer must cancel it.' : !isConnectedWalletASigner ? 'Connected wallet is not one of the 3 role manager signers.' : undefined}
-                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 11.5, fontWeight: 700, color: COLORS.error, background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: 'none', borderRadius: 8, padding: '6px 0', cursor: 'pointer', opacity: (!isConnectedWalletASigner || connectedAlreadyConfirmed) ? 0.5 : 1 }}>
+                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: COLORS.error, background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: 'none', borderRadius: 8, padding: '6px 0', cursor: 'pointer', opacity: (!isConnectedWalletASigner || connectedAlreadyConfirmed) ? 0.5 : 1 }}>
                         <XCircle size={12} /> Cancel
                       </button>
                     )}

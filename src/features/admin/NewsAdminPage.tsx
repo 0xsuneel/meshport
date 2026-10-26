@@ -139,8 +139,8 @@ export function NewsAdminPage() {
             <input value={link} onChange={e => setLink(e.target.value)} placeholder="https://…" style={field} />
           </div>
 
-          {error && <div style={{ background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 25%, transparent)', borderRadius: 12, padding: '10px 12px', color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
-          {notice && <div style={{ background: 'color-mix(in srgb, var(--success) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--success) 25%, transparent)', borderRadius: 12, padding: '10px 12px', color: 'var(--success)', fontSize: 13 }}>{notice}</div>}
+          {error && <div style={{ background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 25%, transparent)', borderRadius: 12, padding: '10px 12px', color: 'var(--danger-text)', fontSize: 13 }}>{error}</div>}
+          {notice && <div style={{ background: 'color-mix(in srgb, var(--success) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--success) 25%, transparent)', borderRadius: 12, padding: '10px 12px', color: 'var(--success-text)', fontSize: 13 }}>{notice}</div>}
 
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={save} disabled={saving || !title.trim()}
@@ -181,9 +181,9 @@ export function NewsAdminPage() {
                     {r.hidden ? <Eye size={15} /> : <EyeOff size={15} />}
                   </button>
                   {r.source === 'meshport' && (confirmDelete === r.id ? (
-                    <button onClick={() => remove(r.id)} style={{ ...iconBtn, width: 'auto', padding: '0 10px', color: 'var(--danger)', fontSize: 12, fontWeight: 700 }}>Delete?</button>
+                    <button onClick={() => remove(r.id)} style={{ ...iconBtn, width: 'auto', padding: '0 10px', color: 'var(--danger-text)', fontSize: 12, fontWeight: 700 }}>Delete?</button>
                   ) : (
-                    <button onClick={() => setConfirmDelete(r.id)} title="Delete" style={{ ...iconBtn, color: 'var(--danger)' }}><Trash2 size={15} /></button>
+                    <button onClick={() => setConfirmDelete(r.id)} title="Delete" style={{ ...iconBtn, color: 'var(--danger-text)' }}><Trash2 size={15} /></button>
                   ))}
                 </div>
               </AdminCard>

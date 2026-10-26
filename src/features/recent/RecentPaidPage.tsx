@@ -255,7 +255,7 @@ export function RecentPaidPage() {
                     borderBottom: i < mostPaid.length - 1 ? '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' : 'none' }}>
                   <Avatar person={p} size={34} color={COLORS[people.indexOf(p) % COLORS.length]} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.isSelf ? 'You' : (p.display_name || shortName(p))}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.isSelf ? 'You' : (p.display_name || shortName(p))}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.times_sent} payment{p.times_sent === 1 ? '' : 's'}</div>
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>${formatAmount(p.total_sent)}</div>

@@ -1059,7 +1059,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                     </div>
                     {/* Why: one line, ellipsis - never runs into the amount column. */}
                     {isFailed && !isRecovery && item.error && (
-                      <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2, ...oneLine }} title={item.error}>
+                      <div style={{ fontSize: 11, color: 'var(--danger-text)', marginTop: 2, ...oneLine }} title={item.error}>
                         {item.error}
                       </div>
                     )}
@@ -1068,7 +1068,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                   {/* Amount */}
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700,
-                      color: isRecovery ? 'var(--warning)' : isFailed ? 'var(--text-muted)' : item.ownReceipt || item.ownClaim ? 'var(--text-secondary)' : isClaim ? 'var(--success)' : 'var(--danger)' }}>
+                      color: isRecovery ? 'var(--warning-text)' : isFailed ? 'var(--text-muted)' : item.ownReceipt || item.ownClaim ? 'var(--text-secondary)' : isClaim ? 'var(--success-text)' : 'var(--danger-text)' }}>
                       {/* Own transfer arriving on another chain: the same money as the
                           "Transfer to …" row (already −), so no sign - not new income. */}
                       {isFailed || item.ownReceipt || item.ownClaim
@@ -1079,7 +1079,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                       }
                     </div>
                     {isPending && (
-                      <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 2 }}>Tap to view →</div>
+                      <div style={{ fontSize: 11, color: 'var(--warning-text)', marginTop: 2 }}>Tap to view →</div>
                     )}
                     {isRecovery && (
                       <button type="button" onClick={e => { e.stopPropagation(); openRecover() }}
@@ -1127,7 +1127,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
           style={{
             display: 'flex', alignItems: 'center', gap: 5,
             background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-            fontSize: 15.4, color: 'var(--brand-text)', fontWeight: 500,
+            fontSize: 15, color: 'var(--brand-text)', fontWeight: 500,
           }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
             <path d="M12 3s6 6.5 6 10.5a6 6 0 01-12 0C6 9.5 12 3 12 3z" stroke="var(--brand-text)" strokeWidth="1.8" strokeLinejoin="round"/>
@@ -1294,7 +1294,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                         )}
                         {cctp && (
                           <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
-                            color: 'var(--success)', background: 'color-mix(in srgb, var(--success) 14%, transparent)' }}>CCTP</span>
+                            color: 'var(--success-text)', background: 'color-mix(in srgb, var(--success) 14%, transparent)' }}>CCTP</span>
                         )}
                       </div>
                     </div>
@@ -1327,7 +1327,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
         {hubTab === 'recovery' && (
           <div style={{ ...cardS, borderRadius: 20, padding: 20 }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Recover stuck funds</div>
-            <p style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '6px 0 16px' }}>
+            <p style={{ fontSize: 14, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '6px 0 16px' }}>
               {showRecovery
                 ? 'Anything that didn’t finish is listed below - choose how to finish each one.'
                 : failedCount > 0
@@ -1390,7 +1390,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
             status={status}
             title={title}
             subtitle={<>
-              <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: status === 'failed' ? 'var(--text-muted)' : isClaimItem ? 'var(--success)' : 'var(--text-primary)', marginBottom: 4 }}>{amountText}</span>
+              <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: status === 'failed' ? 'var(--text-muted)' : isClaimItem ? 'var(--success-text)' : 'var(--text-primary)', marginBottom: 4 }}>{amountText}</span>
               {hubItemTitle(it)}
             </>}
             // The header shows the amount and "Claim from / Transfer to <chain>",

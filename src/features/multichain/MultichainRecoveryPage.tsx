@@ -301,7 +301,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
         <button onClick={() => void load()} style={{ ...btn, marginLeft: 'auto' }} disabled={loading}>{loading ? 'Checking…' : 'Refresh'}</button>
       </div>
 
-      {result._list?.error && <div role="alert" style={{ ...card, color: 'var(--danger)' }}>{result._list.error}</div>}
+      {result._list?.error && <div role="alert" style={{ ...card, color: 'var(--danger-text)' }}>{result._list.error}</div>}
 
       {/* Stays up while Refresh re-checks (no blink), and never under an error. */}
       {(!loading || everLoaded.current) && !result._list?.error && items.length === 0 && ub.length === 0 && ubHeld.length === 0 && ubDust.length === 0 && ubStuck.length === 0 && ubArc === 0 && (
@@ -346,7 +346,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
                 {STATE_TEXT[shownState]}{r?.diag?.detail && shownState !== 'reattest_pending' ? ` (${r.diag.detail})` : ''}
               </div>
             )}
-            {r?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger)' }}>{r.error}</div>}
+            {r?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger-text)' }}>{r.error}</div>}
 
             <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
               <button style={btn} disabled={busy === key} onClick={() => run(key, () => inspectCctp(it.kind, it.id))}>
@@ -404,7 +404,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
             {row('Destination chain', t.destinationLabel)}
             {row('Destination address', t.destinationAddress, true)}
             {r?.diag?.detail && <div style={{ fontSize: 13, marginTop: 10, color: 'var(--text-primary)' }}>{r.diag.detail}</div>}
-            {r?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger)' }}>{r.error}</div>}
+            {r?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger-text)' }}>{r.error}</div>}
             {(holding || t.available < 0.1) ? (
               <div style={{ fontSize: 13, marginTop: 10, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
                 {heldLong
@@ -431,12 +431,12 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
             </div>
             )}
             {(heldLong || !holding) && canWithdraw && (
-              <button style={{ ...btn, marginTop: 8, width: '100%', fontSize: 12.5, ...(heldLong ? {} : { color: 'var(--text-secondary)' }) }} disabled={isBusy}
+              <button style={{ ...btn, marginTop: 8, width: '100%', fontSize: 13, ...(heldLong ? {} : { color: 'var(--text-secondary)' }) }} disabled={isBusy}
                 onClick={() => void withdrawTrustless(key, { chain: ARC_CHAIN_KEY, amount: withdrawAmount, label: t.destinationLabel, replaceRowId: t.id })}>
                 Withdraw {withdrawAmount.toFixed(2)} USDC without Circle (7-day wait)
               </button>
             )}
-            <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>
               The destination can’t be changed. Circle’s Gateway fee is taken from the amount. If sending keeps failing,
               the 7-day withdrawal needs no one but your own wallet.
             </div>
@@ -454,7 +454,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
             Small amounts left in your Unified Balance after earlier claims, on {ubDust.length} chain{ubDust.length === 1 ? '' : 's'}: {ubDust.map(d => d.chain.replace(/_(Sepolia|Testnet|Fuji|Amoy_Testnet)$/, '').replace(/_/g, ' ')).join(', ')}. Claim it back to your Arc wallet in one transfer.
           </div>
           {result.ubdust?.diag?.detail && <div style={{ fontSize: 13, marginTop: 10, color: 'var(--text-primary)' }}>{result.ubdust.diag.detail}</div>}
-          {result.ubdust?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger)' }}>{result.ubdust.error}</div>}
+          {result.ubdust?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger-text)' }}>{result.ubdust.error}</div>}
           <button style={{ ...btn, marginTop: 12 }} disabled={busy === 'ubdust'} onClick={() => void claimDust()}>
             {busy === 'ubdust' ? 'Sending…' : 'Claim back to Arc'}
           </button>
@@ -471,7 +471,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
             Left in your Unified Balance on Arc. Moving it to your Arc wallet has no Circle transfer fee - only Arc gas.
           </div>
           {result.ubarc?.diag?.detail && <div style={{ fontSize: 13, marginTop: 10, color: 'var(--text-primary)' }}>{result.ubarc.diag.detail}</div>}
-          {result.ubarc?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger)' }}>{result.ubarc.error}</div>}
+          {result.ubarc?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger-text)' }}>{result.ubarc.error}</div>}
           <button style={{ ...btn, marginTop: 12 }} disabled={busy === 'ubarc'} onClick={() => void moveArcUb()}>
             {busy === 'ubarc' ? 'Moving…' : 'Move to Arc wallet'}
           </button>
@@ -491,7 +491,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
               {h.pending > 0.01 ? `${h.pending.toFixed(2)} USDC still confirming on that chain` : 'Ready to send to your Arc wallet'}
             </div>
             {r?.diag?.detail && <div style={{ fontSize: 13, marginTop: 10, color: 'var(--text-primary)' }}>{r.diag.detail}</div>}
-            {r?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger)' }}>{r.error}</div>}
+            {r?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger-text)' }}>{r.error}</div>}
             {h.confirmed >= 0.1 && (
               <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
                 <button style={btn} disabled={busy === key} onClick={() => void sendHeldToArc(h.chain, h.confirmed)}>
@@ -516,11 +516,11 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
             </div>
           ))}
           {ubChain && ubChain.withdrawing > ub.reduce((t, u) => t + u.amount, 0) + 0.01 && (
-            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 6 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>
               {ubChain.withdrawing.toFixed(2)} USDC in total is being withdrawn - all of it comes back to your Arc wallet together.
             </div>
           )}
-          {result.ub?.error && <div role="alert" style={{ fontSize: 13, marginTop: 8, color: 'var(--danger)' }}>{result.ub.error}</div>}
+          {result.ub?.error && <div role="alert" style={{ fontSize: 13, marginTop: 8, color: 'var(--danger-text)' }}>{result.ub.error}</div>}
           {ubReady.length > 0 && (
             <button style={{ ...btn, marginTop: 12 }} disabled={busy === 'ub'} onClick={() => void completeUb()}>
               {busy === 'ub' ? 'Completing…' : 'Complete withdrawal to Arc'}
