@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
+import { motion } from 'framer-motion'
+import { springs } from '@/features/business/ui/types'
 import { Share2, ArrowLeft, Download, ListChecks } from 'lucide-react'
 import { StorePicker, type PickerStore } from '@/features/merchant/StorePicker'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -291,9 +293,12 @@ export function ReceivePage() {
         <div className="flex p-1 rounded-2xl" role="tablist" aria-label="How to receive" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
           {([['qr', 'My QR'], ['request', 'Request']] as const).map(([id, label]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-              className={`flex-1 rounded-xl text-[14px] font-semibold transition-colors ${tab === id ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted'}`}
+              className={`relative flex-1 rounded-xl text-[14px] font-semibold transition-colors ${tab === id ? 'text-text-primary' : 'text-text-muted'}`}
               style={{ height: 36 }}>
-              {label}
+              {/* The white pill slides to the chosen tab - the same switch as
+                  Business's tabs (BusinessTabs). */}
+              {tab === id && <motion.span layoutId="receive-tab-pill" className="absolute inset-0 rounded-xl bg-surface shadow-sm" transition={springs.snappy} />}
+              <span className="relative">{label}</span>
             </button>
           ))}
         </div>

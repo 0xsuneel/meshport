@@ -97,7 +97,7 @@ function Row({ row, i, revealed }: { row: ReceiptRow; i?: number; revealed?: boo
         {row.onCopy && (
           <button onClick={row.onCopy} aria-label={`Copy ${row.label.toLowerCase()}`}
             style={{ border: 0, background: 'none', cursor: 'pointer', color: 'var(--text-secondary)', marginLeft: 8, padding: 0, display: 'flex' }}>
-            {row.copied ? <Check size={16} color="var(--success)" /> : <Copy size={16} />}
+            {row.copied ? <Check data-tick size={16} color="var(--success)" /> : <Copy size={16} />}
           </button>
         )}
       </b>

@@ -30,7 +30,7 @@ export function ShareLink({ url, copied, onCopy, onShare, channels }: ShareLinkP
               : 'bg-border/40 text-text-secondary hover:bg-border/60'
           }`}
         >
-          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          {copied ? <Check data-tick className="size-3.5" /> : <Copy className="size-3.5" />}
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>

@@ -176,7 +176,7 @@ export function TransactionComplete({
                 background: 'none', border: 'none', cursor: 'pointer', padding: 0,
               }}>
                 {copied
-                  ? <Check size={14} color="var(--success)"/>
+                  ? <Check data-tick size={14} color="var(--success)"/>
                   : <Copy size={14} color="var(--text-secondary)"/>
                 }
               </button>

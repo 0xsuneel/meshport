@@ -42,7 +42,7 @@ export function TrackDetails({ rows }: { rows: TrackDetailRow[] }) {
                     {r.copy && (
                       <button onClick={() => { copyToClipboard(r.copy!); setCopied(r.label); setTimeout(() => setCopied(c => (c === r.label ? null : c)), 1500) }}
                         style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', color: copied === r.label ? 'var(--success)' : 'var(--text-secondary)', display: 'flex' }}>
-                        {copied === r.label ? <Check style={{ width: 14, height: 14 }} /> : <Copy style={{ width: 14, height: 14 }} />}
+                        {copied === r.label ? <Check data-tick style={{ width: 14, height: 14 }} /> : <Copy style={{ width: 14, height: 14 }} />}
                       </button>
                     )}
                   </span>

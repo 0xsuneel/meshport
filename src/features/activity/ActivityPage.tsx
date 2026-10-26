@@ -966,6 +966,15 @@ export function ActivityPage() {
   const tokenFilter = new URLSearchParams(location.search).get('token')
 
   const { records, loading, loadingMore, error, hasMore, setFilter, setSearch, loadMore, refresh } = useActivity(walletAddress, filterForTab(activeTab))
+  // The list fades in once, when it replaces the loading cards - not on
+  // scroll-loading, a refresh or a new row (the class stays, so the
+  // animation never restarts).
+  const sawSkeleton = useRef(false)
+  const [listFade, setListFade] = useState(false)
+  if (loading && records.length === 0) sawSkeleton.current = true
+  useEffect(() => {
+    if (!listFade && sawSkeleton.current && records.length > 0) setListFade(true)
+  }, [listFade, records.length])
 
   // Debounce the search box → useActivity's `search` state, which re-queries
   // Supabase (see fetchActivity's search clause) rather than only filtering
@@ -1195,7 +1204,7 @@ export function ActivityPage() {
             onSelect. Only the one on screen is rendered (both used to be,
             one hidden by CSS - every row twice on a phone), and it's built
             once per change of the list, so a re-render mid-scroll is cheap. */}
-        {listView}
+        <div className={listFade ? 'mp-fade-in' : undefined}>{listView}</div>
 
         <div ref={bottomRef} className="py-2 flex justify-center">
           {loadingMore && <Loader2 className="w-5 h-5 text-text-muted animate-spin" />}

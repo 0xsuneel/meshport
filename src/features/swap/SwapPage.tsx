@@ -1343,9 +1343,13 @@ export function SwapPage() {
     }
   }
 
+  // Half-turns of the ⇅ arrow: it turns 180° each flip, always the same
+  // way, so the change of direction is visible.
+  const [flipTurns, setFlipTurns] = useState(0)
   const flip = () => {
     const prev = tokenIn; setTokenIn(tokenOut); setTokenOut(prev)
     setAmountIn(''); setEstimate(null); setStep('idle')
+    setFlipTurns(t => t + 1)
   }
 
   const totalFees = (estimate?.fees ?? []).reduce((s, f) => s + parseFloat(f.amount || '0'), 0)
@@ -1593,15 +1597,18 @@ export function SwapPage() {
 
           {/* Swap direction - sits over the gap between the two cards */}
           <div style={{ position: 'relative', height: 6 }}>
+            {/* Centred by a wrapper: the button's own transform is free for the
+                press scale (an inline translate here used to cancel it). */}
+            <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 1 }}>
             <button onClick={flip} aria-label="Swap direction"
-              className="active:scale-90 transition-transform"
+              className="mp-press"
               style={{
-                position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 1,
                 width: 44, height: 44, borderRadius: 14, background: 'var(--surface)', border: '4px solid var(--bg)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-              <ArrowUpDown className="w-4 h-4" style={{ color: 'var(--brand-text)' }}/>
+              <ArrowUpDown className="w-4 h-4" style={{ color: 'var(--brand-text)', transform: `rotate(${flipTurns * 180}deg)`, transition: 'transform 250ms var(--ease-out)' }}/>
             </button>
+            </div>
           </div>
 
           {/* You receive */}
