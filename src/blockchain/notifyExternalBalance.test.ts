@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 
 // The chain read is faked; everything else (cache patching, the event) is real.
 const reads: number[] = []
@@ -15,6 +15,12 @@ vi.mock('./externalBalanceReader', async (orig) => {
 
 const WALLET = '0x1111111111111111111111111111111111111111'
 let shown: number[] = []
+
+// BlockchainManager's first (cold) import takes seconds when the whole suite
+// runs in parallel. Done inside the first test it ate that test's 5s budget,
+// and the timed-out run kept pushing into `shown` during the next test - both
+// failed in full runs, never alone. Load it once here, outside any budget.
+beforeAll(async () => { await import('./BlockchainManager') }, 60_000)
 
 beforeEach(() => {
   vi.useFakeTimers()
