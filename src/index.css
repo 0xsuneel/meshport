@@ -753,20 +753,13 @@ button, [role="button"], [role="tab"] { -webkit-user-select: none; user-select: 
 }
 
 /* ── Browser surfaces in the app's colours ───────────────────────────────
-   Keyboard focus: a teal ring on anything focused from the keyboard
-   (buttons, links, rows). Text fields: they had outline:none with nothing in
-   its place, so on a pointer device a focused field gets the same ring
-   (!important: it must beat the inline outline:none). On touch screens the
-   caret and keyboard already show where you are. */
-:where(button, a, [role="button"], [role="tab"], [tabindex]):focus-visible {
+   Keyboard focus only: a teal ring on a button, link or tappable row reached
+   with Tab (never on a mouse click or a tap). Text fields keep their own
+   focus styling - most highlight their rounded container already, and a
+   ring on the inner <input> drew a second box inside it (Pay search). */
+:where(button, a, [role="button"], [role="tab"]):focus-visible {
   outline: 2px solid var(--brand-text);
   outline-offset: 2px;
-}
-@media (hover: hover) and (pointer: fine) {
-  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select):focus-visible {
-    outline: 2px solid var(--brand-text) !important;
-    outline-offset: 2px;
-  }
 }
 ::selection { background: color-mix(in srgb, var(--brand) 26%, transparent); }
 input, textarea { caret-color: var(--brand-text); }
