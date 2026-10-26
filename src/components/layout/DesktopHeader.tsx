@@ -247,7 +247,7 @@ export function DesktopHeader() {
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '10px 14px',
-              color: 'var(--text-secondary)', fontSize: 13.5, cursor: 'text',
+              color: 'var(--text-secondary)', fontSize: 14, cursor: 'text',
             }}
           >
             <Search size={16} style={{ flexShrink: 0 }} />
@@ -352,7 +352,7 @@ export function DesktopHeader() {
           // untouched.
           background: 'color-mix(in srgb, var(--success) 12%, transparent)',
           border: '1px solid color-mix(in srgb, var(--success) 25%, transparent)',
-          cursor: 'pointer', fontSize: 13.5, fontWeight: 600, color: 'var(--success)', flexShrink: 0,
+          cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--success-text)', flexShrink: 0,
         }}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
@@ -366,7 +366,7 @@ export function DesktopHeader() {
         padding: '8px 16px', borderRadius: 999,
         background: 'color-mix(in srgb, var(--success) 12%, transparent)',
         border: '1px solid color-mix(in srgb, var(--success) 25%, transparent)',
-        fontSize: 13.5, fontWeight: 600, color: 'var(--success)', flexShrink: 0,
+        fontSize: 14, fontWeight: 600, color: 'var(--success-text)', flexShrink: 0,
       }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)' }} />
         Arc Testnet

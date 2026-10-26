@@ -15,7 +15,7 @@ export function HowItWorks() {
   return (
     <section id="how-it-works" className="scroll-mt-24 mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28">
       <Reveal className="mx-auto max-w-2xl text-center">
-        <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand-text">How it works</p>
+        <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-brand-text">How it works</p>
         <h2 className="mt-3 text-[30px] font-extrabold tracking-tight text-text-primary sm:text-[38px]">
           From zero to your first payment
         </h2>
@@ -51,7 +51,7 @@ export function HowItWorks() {
                 </div>
               </div>
               <h3 className="mt-4 text-[16px] font-bold text-text-primary">{s.title}</h3>
-              <p className="mt-2 max-w-[240px] text-[13.5px] leading-relaxed text-text-secondary">{s.desc}</p>
+              <p className="mt-2 max-w-[240px] text-[14px] leading-relaxed text-text-secondary">{s.desc}</p>
             </Reveal>
           ))}
         </div>

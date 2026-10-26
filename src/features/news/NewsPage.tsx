@@ -179,7 +179,7 @@ export function NewsPage() {
               <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>
             </svg>
             <span style={{ minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700 }}>{it.title}</span>
+              <span style={{ display: 'block', fontSize: 14, fontWeight: 700 }}>{it.title}</span>
               <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
                 {[it.status_label, 'status.arc.io', newsDate(it.published_at)].filter(Boolean).join(' · ')}
               </span>

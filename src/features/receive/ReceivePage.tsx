@@ -358,7 +358,7 @@ export function ReceivePage() {
                   icon={<HistoryIcon tone={bucket === 'paid' ? 'in' : bucket === 'closed' ? 'muted' : st === 'partially_paid' ? 'out' : 'pending'} icon="receive" />}
                   title={orderTitle(orderKindOf(i), orderLabel(i), { short: true })}
                   meta={<span style={{ color: line.color }}>{line.text}</span>}
-                  right={<div style={{ fontSize: 14, fontWeight: 700, color: bucket === 'paid' ? 'var(--success)' : bucket === 'closed' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
+                  right={<div style={{ fontSize: 14, fontWeight: 700, color: bucket === 'paid' ? 'var(--success-text)' : bucket === 'closed' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
                     {bucket === 'paid' ? '+' : ''}${formatAmount(bucket === 'paid' ? (i.received || i.amount) : i.amount)}
                   </div>} />
               )

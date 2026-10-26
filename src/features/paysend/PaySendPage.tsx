@@ -1233,7 +1233,7 @@ export function PaySendPage() {
                 <h1 className="text-xl font-bold text-text-primary">Pay on Arc</h1>
                 <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>Search people on MeshPort</p>
                 {recipientError && (
-                  <p role="alert" className="text-xs mt-1.5" style={{ color: 'var(--danger)' }}>{recipientError}</p>
+                  <p role="alert" className="text-xs mt-1.5" style={{ color: 'var(--danger-text)' }}>{recipientError}</p>
                 )}
               </div>
             </div>
@@ -1509,14 +1509,14 @@ export function PaySendPage() {
               {/* Too much: shown here too once the keypad (which shows it while
                   open) is closed, so it's never just a dimmed Review button. */}
               {amountErrorMessage && (isDesktop || !showAmountPad) && (
-                <p role="alert" className="text-[13px] font-semibold text-center" style={{ color: 'var(--danger)' }}>{amountErrorMessage}</p>
+                <p role="alert" className="text-[13px] font-semibold text-center" style={{ color: 'var(--danger-text)' }}>{amountErrorMessage}</p>
               )}
 
               {/* Available balance */}
               <div className="flex items-center justify-between px-1">
                 <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Available Balance</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold" style={{ color: amountExceedsBalance ? 'var(--danger)' : 'var(--text-primary)' }}>{formatAmount(activeBalance, tokenDisplayDecimals(token))} {token}</span>
+                  <span className="text-sm font-semibold" style={{ color: amountExceedsBalance ? 'var(--danger-text)' : 'var(--text-primary)' }}>{formatAmount(activeBalance, tokenDisplayDecimals(token))} {token}</span>
                 </div>
               </div>
 
@@ -1575,7 +1575,7 @@ export function PaySendPage() {
               return (
                 <div className="flex-shrink-0 px-5" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + 16px)', paddingTop: 8 }}>
                   {payBlocked && (
-                    <p role="alert" className="text-[13px] text-center mb-3" style={{ color: 'var(--danger)' }}>{payBlockedMessage}</p>
+                    <p role="alert" className="text-[13px] text-center mb-3" style={{ color: 'var(--danger-text)' }}>{payBlockedMessage}</p>
                   )}
                   <button
                     onClick={() => {
@@ -1750,8 +1750,8 @@ export function PaySendPage() {
                   <motion.div key="processing" initial={false}
                     className="flex flex-col items-center justify-center flex-1 space-y-6 py-10">
                     <ProcessingRing size={80} />
-                    <p className="text-text-primary" style={{ fontSize: 14.7, fontWeight: 700 }}>Processing payment…</p>
-                    <p style={{ fontSize: 12.6, fontWeight: 700, color: 'var(--text-secondary)' }}>Do not close this screen</p>
+                    <p className="text-text-primary" style={{ fontSize: 15, fontWeight: 700 }}>Processing payment…</p>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>Do not close this screen</p>
                   </motion.div>
                 )}
 
@@ -1843,8 +1843,8 @@ export function PaySendPage() {
                       )}
                       {!recipient.isUsername && (
                         <div className="flex items-center gap-2 mt-2 p-2.5 rounded-xl" style={{ background: 'color-mix(in srgb, var(--warning) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 20%, transparent)' }}>
-                          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--warning)' }} />
-                          <p className="text-xs font-medium" style={{ color: 'var(--warning)' }}>Payments cannot be reversed. Please verify the address carefully.</p>
+                          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--warning-text)' }} />
+                          <p className="text-xs font-medium" style={{ color: 'var(--warning-text)' }}>Payments cannot be reversed. Please verify the address carefully.</p>
                         </div>
                       )}
                     </div>
@@ -2020,7 +2020,7 @@ function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-1.5 min-w-0">
           <span className="text-[15px] font-semibold text-text-primary truncate" style={{ maxWidth: '60%' }}>{name}</span>
-          {!usernameBelow && <span className="text-[12.5px] truncate text-link">{username}</span>}
+          {!usernameBelow && <span className="text-[13px] truncate text-link">{username}</span>}
           {self && (
             <span className="flex-shrink-0 self-center text-[11px] font-bold uppercase tracking-wide px-1.5 py-[1px] rounded-md"
               style={{ color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>You</span>
@@ -2028,7 +2028,7 @@ function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast
         </div>
         {usernameBelow && <p className="text-[13px] mt-0.5 truncate text-link">{username}</p>}
         {showLast && (
-          <p className="text-[13px] mt-0.5 truncate" style={{ color: last?.dir === 'received' ? 'var(--success)' : last?.dir === 'failed' ? 'var(--danger)' : 'var(--text-secondary)' }}>
+          <p className="text-[13px] mt-0.5 truncate" style={{ color: last?.dir === 'received' ? 'var(--success-text)' : last?.dir === 'failed' ? 'var(--danger-text)' : 'var(--text-secondary)' }}>
             {last ? lastPaymentLine(last) : 'No payments yet'}
           </p>
         )}

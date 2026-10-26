@@ -143,7 +143,7 @@ export function ChatForwardSheet({ messages, sourceKey, myUserId, walletAddress,
               <Avatar name={c.other_user?.display_name ?? c.other_user?.username ?? ''} src={c.other_user?.avatar_url ?? null} size="md" />
               <div className="flex-1 min-w-0">
                 <p className="text-[15px] font-semibold text-text-primary truncate">{c.other_user?.display_name || c.other_user?.username}</p>
-                <p className="text-[12.5px] truncate" style={{ color: 'var(--text-secondary)' }}>{String(c.other_user?.username ?? '').replace(/\.arc$/, '')}.arc</p>
+                <p className="text-[13px] truncate" style={{ color: 'var(--text-secondary)' }}>{String(c.other_user?.username ?? '').replace(/\.arc$/, '')}.arc</p>
               </div>
               <span className="flex items-center justify-center rounded-full flex-shrink-0"
                 style={{ width: 22, height: 22, border: on ? 'none' : '2px solid var(--text-muted)', background: on ? 'var(--brand)' : 'transparent' }}>

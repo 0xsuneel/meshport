@@ -61,7 +61,7 @@ export function UserPicker({ label, hint, query, onQuery, picked, onPick, active
         <div className="flex items-center gap-2.5 rounded-[14px] pl-2.5 pr-1.5 border border-border" style={{ ...sheetInputStyle, minHeight: 48 }}>
           <Avatar name={name} src={picked.avatar_url ?? undefined} size="xs" />
           <div className="flex-1 min-w-0 py-1.5">
-            <p className="text-[14.5px] font-semibold text-text-primary truncate leading-tight">{name}</p>
+            <p className="text-[15px] font-semibold text-text-primary truncate leading-tight">{name}</p>
             <p className="text-[12px] text-link truncate">{arcHandle(picked.username)}</p>
           </div>
           <button type="button" onClick={() => onPick(null)} aria-label={`Remove ${name}`}
@@ -109,8 +109,8 @@ export function UserPicker({ label, hint, query, onQuery, picked, onPick, active
                   style={{ borderTop: rowBorder(i) }}>
                   <Avatar name={name} src={u.avatar_url ?? undefined} size="sm" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-[14.5px] font-semibold text-text-primary truncate">{name}</p>
-                    <p className="text-[12.5px] mt-0.5 truncate text-link">{arcHandle(u.username)}</p>
+                    <p className="text-[15px] font-semibold text-text-primary truncate">{name}</p>
+                    <p className="text-[13px] mt-0.5 truncate text-link">{arcHandle(u.username)}</p>
                   </div>
                 </button>
               )

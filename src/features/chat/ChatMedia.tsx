@@ -75,10 +75,10 @@ export function ChatImage({ url, iv, convKey, radius, square, upload, failed, on
         </div>
       )}
       {error && !src && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-secondary)' }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
           <span>Couldn't load this photo</span>
           <button type="button" onClick={e => { e.stopPropagation(); setError(false); setProgress(0); loadMedia(url, iv, convKey, setProgress).then(r => setSrc(r.url)).catch(() => setError(true)) }}
-            style={{ border: 'none', borderRadius: 14, padding: '5px 12px', background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 12.5, fontWeight: 600 }}>Try again</button>
+            style={{ border: 'none', borderRadius: 14, padding: '5px 12px', background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 13, fontWeight: 600 }}>Try again</button>
         </div>
       )}
       {upload && !failed && (
@@ -198,8 +198,8 @@ export function ChatFile({ name, url, iv, convKey, isMine, upload, failed, onRet
       <div style={{ width: 36, height: 44, borderRadius: 6, flexShrink: 0, background: TYPE_COLOR[ext] ?? '#56626a', color: '#fff', fontSize: 11, fontWeight: 800,
         display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 5, boxSizing: 'border-box' }}>{(ext || 'file').slice(0, 4).toUpperCase()}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</p>
-        <p style={{ fontSize: 11.5, color: error ? '#ff8a7a' : sub, marginTop: 2 }}>
+        <p style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</p>
+        <p style={{ fontSize: 12, color: error ? '#ff8a7a' : sub, marginTop: 2 }}>
           {error || [fmtBytes(meta.s), (ext || 'file').toUpperCase(), upload ? (failed ? 'not sent' : 'sending…') : ready ? 'tap to open' : ''].filter(Boolean).join(' · ')}
         </p>
       </div>
@@ -246,7 +246,7 @@ export function MediaPreview({ items, recipient, onChange, onAddMore, onClose, o
         <button style={tb} aria-label="Close" onClick={onClose}><X className="w-5 h-5" /></button>
         <p className="flex-1 min-w-0 truncate text-[13px]" style={{ color: 'rgba(255,255,255,0.7)' }}>To {recipient}</p>
         <button type="button" aria-pressed={hd} aria-label={hd ? 'HD quality on' : 'HD quality off'} onClick={() => setHd(v => !v)}
-          style={{ height: 32, borderRadius: 16, padding: '0 11px', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', border: '1.5px solid #fff', background: hd ? '#fff' : 'transparent', color: hd ? '#000' : '#fff' }}>HD</button>
+          style={{ height: 32, borderRadius: 16, padding: '0 11px', fontWeight: 800, fontSize: 13, cursor: 'pointer', border: '1.5px solid #fff', background: hd ? '#fff' : 'transparent', color: hd ? '#000' : '#fff' }}>HD</button>
         <button style={tb} aria-label="Remove this photo" onClick={remove}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
         </button>
@@ -441,7 +441,7 @@ export function ChatImageViewer({ items, startId, convKey, onClose, onReply, onF
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
         </button>
         <div className="flex-1 min-w-0">
-          <p className="text-[15.5px] font-semibold truncate">{item.sender}</p>
+          <p className="text-[16px] font-semibold truncate">{item.sender}</p>
           <p className="text-[12px]" style={{ color: 'rgba(255,255,255,0.7)' }}>{time.toLocaleDateString([], { day: 'numeric', month: 'short' })}, {time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
         </div>
         {counter && <span className="text-[13px]" style={{ color: 'rgba(255,255,255,0.8)' }}>{counter}</span>}

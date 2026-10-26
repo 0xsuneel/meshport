@@ -182,8 +182,8 @@ export function LeaveGuardHost() {
             display: 'flex', flexDirection: 'column', gap: 12,
           }}>
           <div>
-            <div id="mp-leave-title" style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text-primary)' }}>{what} in progress</div>
-            <div id="mp-leave-body" style={{ fontSize: 13.5, lineHeight: 1.45, color: 'var(--text-secondary)', marginTop: 3 }}>
+            <div id="mp-leave-title" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{what} in progress</div>
+            <div id="mp-leave-body" style={{ fontSize: 14, lineHeight: 1.45, color: 'var(--text-secondary)', marginTop: 3 }}>
               Leaving won't stop it, but this screen will close. You can check the result in Activity.
             </div>
           </div>

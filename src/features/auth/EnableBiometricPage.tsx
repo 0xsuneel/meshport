@@ -110,7 +110,7 @@ export function EnableBiometricPage() {
         </div>
 
         {apple && (
-          <div className="w-full max-w-xs rounded-2xl px-4 py-3 text-left text-[12.5px] leading-[1.5]"
+          <div className="w-full max-w-xs rounded-2xl px-4 py-3 text-left text-[13px] leading-[1.5]"
             style={{ background: 'color-mix(in srgb, var(--brand) 9%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 22%, transparent)', color: 'var(--text-secondary)' }}>
             <p className="font-semibold text-text-primary mb-1">Apple will ask to "Save a passkey"</p>
             On iPhone, iPad and Mac, websites use {label} through a passkey, so Apple shows its passkey screen first. Tap <b>Continue</b>, then use {label}.

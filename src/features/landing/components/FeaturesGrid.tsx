@@ -36,11 +36,11 @@ export function FeaturesGrid() {
   return (
     <section id="features" className="scroll-mt-24 mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28">
       <Reveal className="mx-auto max-w-2xl text-center">
-        <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand-text">Everything in one app</p>
+        <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-brand-text">Everything in one app</p>
         <h2 className="mt-3 text-[30px] font-extrabold tracking-tight text-text-primary sm:text-[38px]">
           Built for how people actually pay
         </h2>
-        <p className="mt-4 text-[15.5px] leading-relaxed text-text-secondary">
+        <p className="mt-4 text-[16px] leading-relaxed text-text-secondary">
           A payment app first - with the tools to move, swap, and trade USDC when you need them.
         </p>
       </Reveal>
@@ -65,7 +65,7 @@ export function FeaturesGrid() {
                   </div>
                   <div>
                     <h3 className="text-[16px] font-bold text-text-primary">{f.title}</h3>
-                    <p className="mt-1.5 text-[13.5px] leading-relaxed text-text-secondary">{f.desc}</p>
+                    <p className="mt-1.5 text-[14px] leading-relaxed text-text-secondary">{f.desc}</p>
                   </div>
                 </motion.div>
               ))}

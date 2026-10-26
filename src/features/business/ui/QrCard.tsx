@@ -77,14 +77,14 @@ export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with M
       <div className="flex items-center gap-2 px-4 py-3 text-white" style={{ background: TEAL }}>
         <Badge />
         <span className="text-[15px] font-extrabold">MeshPort</span>
-        <span className="ml-auto text-[11.5px] font-semibold opacity-85">{tag}</span>
+        <span className="ml-auto text-[12px] font-semibold opacity-85">{tag}</span>
       </div>
 
       <div className="flex flex-col items-center gap-2.5 px-4 pt-3.5 pb-4">
         {top ?? ((title || subtitle) && (
           <div className="text-center min-w-0 max-w-full">
             {title && <p className="text-[17px] font-extrabold text-text-primary leading-snug truncate">{title}</p>}
-            {subtitle && <p className="text-[12.5px] text-text-secondary mt-0.5 truncate">{subtitle}</p>}
+            {subtitle && <p className="text-[13px] text-text-secondary mt-0.5 truncate">{subtitle}</p>}
           </div>
         ))}
 
@@ -129,7 +129,7 @@ export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with M
           </div>
         </div>
 
-        {!paid && caption && <p className="text-[12.5px] font-semibold text-text-primary text-center">{caption}</p>}
+        {!paid && caption && <p className="text-[13px] font-semibold text-text-primary text-center">{caption}</p>}
         {!paid && <p className="text-[11px] text-text-muted text-center">{QR_WALLETS}</p>}
       </div>
     </div>

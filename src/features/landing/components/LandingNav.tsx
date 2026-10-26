@@ -99,7 +99,7 @@ export function LandingNav() {
               the wordmark - see the mobile screenshot this fixes. */}
           <button
             onClick={() => navigate('/auth')}
-            className="whitespace-nowrap rounded-xl bg-brand px-3 py-2 text-[12.5px] font-bold text-white shadow-elevation-1 transition-transform active:scale-[0.97] sm:px-5 sm:py-2.5 sm:text-[13.5px]"
+            className="whitespace-nowrap rounded-xl bg-brand px-3 py-2 text-[13px] font-bold text-white shadow-elevation-1 transition-transform active:scale-[0.97] sm:px-5 sm:py-2.5 sm:text-[14px]"
           >
             <span className="min-[400px]:hidden">Launch</span>
             <span className="hidden min-[400px]:inline">Launch MeshPort</span>

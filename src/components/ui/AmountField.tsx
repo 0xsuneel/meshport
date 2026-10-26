@@ -143,7 +143,7 @@ export function AmountField({
               onClick={e => { e.stopPropagation(); b.onClick(); if (!tapMode) inputRef.current?.focus() }}
               style={{
                 flex: 1, minWidth: 0, height: 34, borderRadius: 10, border: 'none', cursor: b.disabled || readOnly ? 'not-allowed' : 'pointer',
-                fontSize: 12.5, fontWeight: b.max ? 700 : 600, opacity: b.disabled || readOnly ? 0.45 : 1,
+                fontSize: 13, fontWeight: b.max ? 700 : 600, opacity: b.disabled || readOnly ? 0.45 : 1,
                 color: b.max ? 'var(--brand-text)' : 'var(--text-secondary)',
                 background: b.max ? 'color-mix(in srgb, var(--brand) 14%, transparent)' : 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
               }}>

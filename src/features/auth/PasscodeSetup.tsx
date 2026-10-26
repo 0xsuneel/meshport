@@ -430,7 +430,7 @@ export function PasscodeLockPage() {
       <div className="my-auto flex flex-col items-center gap-2 py-4">
         <MeshPortLogo className="w-20 h-20 short:w-16 short:h-16 mx-auto mb-2" splashTarget />
         {/* "Good morning, Sunil" - the name on its own line, large. */}
-        <p className="flex items-center gap-1.5 text-[14.5px] font-semibold text-text-secondary">
+        <p className="flex items-center gap-1.5 text-[15px] font-semibold text-text-secondary">
           <GreetIcon className="w-4 h-4" style={{ color: greetAt === 'night' ? 'var(--brand-text)' : '#E8A33A' }} />
           {greetText(greetAt, greetName)}
         </p>

@@ -138,13 +138,13 @@ export function ChatPendingOrders({ otherUserId, refreshKey }: { otherUserId: st
                   </div>
                 </button>
                 {o.iAmMerchant ? (
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--warning)', flexShrink: 0 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--warning-text)', flexShrink: 0 }}>
                     {o.received > 0 ? 'Partly paid' : 'Waiting'}
                   </span>
                 ) : (
                   <button onClick={() => void pay(o)} disabled={busy === o.code}
                     style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                      background: 'var(--brand)', color: '#fff', fontSize: 12.5, fontWeight: 700, opacity: busy === o.code ? 0.6 : 1 }}>
+                      background: 'var(--brand)', color: '#fff', fontSize: 13, fontWeight: 700, opacity: busy === o.code ? 0.6 : 1 }}>
                     Pay
                   </button>
                 )}

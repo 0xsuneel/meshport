@@ -58,11 +58,11 @@ export function LockedFeature({ title, showBack = true }: { title?: string; show
           </div>
           {status === 'pending' && (
             <div style={{ display: 'inline-block', marginTop: 10, padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700,
-              color: 'var(--warning)', background: 'color-mix(in srgb, var(--warning) 14%, transparent)' }}>Under review</div>
+              color: 'var(--warning-text)', background: 'color-mix(in srgb, var(--warning) 14%, transparent)' }}>Under review</div>
           )}
           {(status === 'rejected' || status === 'revoked') && (
             <div style={{ display: 'inline-block', marginTop: 10, padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700,
-              color: 'var(--danger)', background: 'color-mix(in srgb, var(--danger) 14%, transparent)' }}>
+              color: 'var(--danger-text)', background: 'color-mix(in srgb, var(--danger) 14%, transparent)' }}>
               {status === 'revoked' ? 'Access removed' : 'Not approved'}
             </div>
           )}

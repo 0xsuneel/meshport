@@ -40,7 +40,7 @@ export function PayLinkCard({ link, isMine }: { link: PersonalPayLink; isMine: b
       }}>
       <div style={{ position: 'relative', overflow: 'hidden', padding: '13px 13px 14px', color: '#fff', background: 'linear-gradient(135deg, #3E8E86, #155A55)' }}>
         <span aria-hidden style={{ position: 'absolute', right: -18, top: -18, width: 72, height: 72, borderRadius: '50%', border: '12px solid rgba(255,255,255,0.12)' }} />
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           <Link2 size={13} className="flex-shrink-0" /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Payment link · {link.username}.arc</span>
         </div>
         <div style={{ position: 'relative', fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px', lineHeight: 1.1, marginTop: 3 }}>
@@ -48,7 +48,7 @@ export function PayLinkCard({ link, isMine }: { link: PersonalPayLink; isMine: b
         </div>
       </div>
       <div style={{ padding: '10px 13px 12px' }}>
-        <div style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
           {own ? 'Your payment link' : `Pay ${link.username}.arc on MeshPort`}
         </div>
         {!isMine && !own && (

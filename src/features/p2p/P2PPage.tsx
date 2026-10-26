@@ -291,7 +291,7 @@ export function P2PHubPage() {
   const buying = tab === 'buy'
   const actColor = buying ? 'var(--success)' : 'var(--danger)'
   const chip = (on: boolean): CSSProperties => ({
-    flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+    flexShrink: 0, padding: '6px 12px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
     border: `1.5px solid ${on ? COLORS.text : 'transparent'}`, background: on ? 'transparent' : 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
     color: on ? COLORS.text : COLORS.muted,
   })
@@ -318,7 +318,7 @@ export function P2PHubPage() {
         <div role="tablist" style={{ display: 'flex', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', borderRadius: 12, padding: 3, gap: 3 }}>
           {(['buy', 'sell'] as OfferType[]).map(t => (
             <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} style={{
-              flex: 1, padding: '9px 0', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 14.5, fontWeight: 700,
+              flex: 1, padding: '9px 0', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 700,
               background: tab === t ? (t === 'buy' ? 'var(--success)' : 'var(--danger)') : 'transparent',
               color: tab === t ? '#fff' : COLORS.muted,
             }}>{t === 'buy' ? 'Buy' : 'Sell'} USDC</button>
@@ -376,8 +376,8 @@ export function P2PHubPage() {
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '56px 24px' }}>
             <p style={{ color: COLORS.text, fontSize: 14, fontWeight: 600, margin: 0 }}>No ads to {buying ? 'buy' : 'sell'} USDC right now</p>
-            <p style={{ color: COLORS.muted, fontSize: 12.5, marginTop: 6 }}>Try another filter, or post your own ad.</p>
-            <button onClick={() => navigate('/p2p/create')} style={{ marginTop: 14, padding: '10px 18px', borderRadius: 12, border: 'none', background: COLORS.primary, color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Post an ad</button>
+            <p style={{ color: COLORS.muted, fontSize: 13, marginTop: 6 }}>Try another filter, or post your own ad.</p>
+            <button onClick={() => navigate('/p2p/create')} style={{ marginTop: 14, padding: '10px 18px', borderRadius: 12, border: 'none', background: COLORS.primary, color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Post an ad</button>
           </div>
         ) : filtered.map(({ o: offer, price }) => {
           const avail = remaining.get(offer.id) ?? offer.totalAmount
@@ -421,14 +421,14 @@ export function P2PHubPage() {
       <div style={isDesktop
         ? { padding: '16px 16px 4px', display: 'flex', gap: 12 }
         : { position: 'fixed', bottom: 0, left: 0, right: 0, maxWidth: 480, margin: '0 auto', padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 12px)', background: 'linear-gradient(180deg, transparent, var(--bg) 30%)', display: 'flex', gap: 10 }}>
-        <button onClick={() => navigate('/p2p/my-trades')} style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        <button onClick={() => navigate('/p2p/my-trades')} style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           Orders
           {myTradesCount > 0 && (
             <span style={{ background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, minWidth: 17, height: 17, padding: '0 5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{myTradesCount}</span>
           )}
         </button>
-        <button onClick={() => navigate('/p2p/my-offers')} style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>My ads</button>
-        <button onClick={() => navigate('/p2p/create')} disabled={!walletAddress} style={{ flex: 1.15, padding: '13px 0', borderRadius: 14, background: COLORS.primary, border: '1px solid color-mix(in srgb, black 12%, transparent)', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        <button onClick={() => navigate('/p2p/my-offers')} style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>My ads</button>
+        <button onClick={() => navigate('/p2p/create')} disabled={!walletAddress} style={{ flex: 1.15, padding: '13px 0', borderRadius: 14, background: COLORS.primary, border: '1px solid color-mix(in srgb, black 12%, transparent)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           <Plus size={15} /> Post ad
         </button>
       </div>
@@ -460,7 +460,7 @@ export function P2PHubPage() {
                   icon={<HistoryIcon tone={done ? (isBuyer ? 'in' : 'out') : dead ? 'muted' : 'pending'} icon="p2p" />}
                   title={`${isBuyer ? 'Bought' : 'Sold'} USDC`}
                   meta={<><span style={{ color: statusColor, fontWeight: 600 }}>{statusLabel}</span> · {timeAgo(t.completedAt || t.createdAt)}</>}
-                  right={<div style={{ fontSize: 14, fontWeight: 700, color: done ? (isBuyer ? 'var(--success)' : 'var(--text-primary)') : 'var(--text-secondary)' }}>
+                  right={<div style={{ fontSize: 14, fontWeight: 700, color: done ? (isBuyer ? 'var(--success-text)' : 'var(--text-primary)') : 'var(--text-secondary)' }}>
                     {done ? (isBuyer ? '+' : '-') : ''}{trimTrailingZeros(t.amountUsdc.toFixed(2))} USDC
                   </div>} />
               )
@@ -699,7 +699,7 @@ export function P2PCreateOfferPage() {
             <div style={{ background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', borderRadius: 12, padding: '8px 14px' }}>
               {summaryRow('Market rate', rate ? `${sym}${rate.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : 'Unavailable')}
               {summaryRow(`You ${offerType} 1 USDC for`, effectivePrice ? `${sym}${effectivePrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—')}
-              {rate && effectivePrice > 0 && summaryRow('Vs market', <span style={{ color: effectivePrice >= rate ? 'var(--success)' : 'var(--danger)' }}>{effectivePrice >= rate ? '+' : ''}{((effectivePrice / rate - 1) * 100).toFixed(2)}%</span>)}
+              {rate && effectivePrice > 0 && summaryRow('Vs market', <span style={{ color: effectivePrice >= rate ? 'var(--success-text)' : 'var(--danger-text)' }}>{effectivePrice >= rate ? '+' : ''}{((effectivePrice / rate - 1) * 100).toFixed(2)}%</span>)}
             </div>
           </>
         )}
@@ -711,7 +711,7 @@ export function P2PCreateOfferPage() {
                 <div style={labelStyle}>Total amount (USDC)</div>
                 <input inputMode="decimal" value={totalAmount} onChange={e => setTotalAmount(sanitizeAmountInput(e.target.value, tokenDecimals('USDC')))}
                   style={{ ...inputStyle, fontSize: 18, fontWeight: 700, ...(sellInsufficient ? { borderColor: 'var(--danger)' } : {}) }} />
-                <div style={{ fontSize: 12, marginTop: 6, color: sellInsufficient ? 'var(--danger)' : COLORS.muted, fontWeight: sellInsufficient ? 600 : 400 }}>
+                <div style={{ fontSize: 12, marginTop: 6, color: sellInsufficient ? 'var(--danger-text)' : COLORS.muted, fontWeight: sellInsufficient ? 600 : 400 }}>
                   {sellInsufficient ? 'Insufficient balance · ' : 'Wallet '}{trimTrailingZeros(usdcBalance.toFixed(2))} USDC
                   {effectivePrice > 0 && !sellInsufficient && ` · ≈ ${sym}${((parseFloat(totalAmount) || 0) * effectivePrice).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} · locked in escrow when you post
                 </div>
@@ -724,7 +724,7 @@ export function P2PCreateOfferPage() {
                 <span style={{ color: COLORS.muted, fontSize: 13 }}>to</span>
                 <input inputMode="decimal" value={maxAmount} onChange={e => setMaxAmount(sanitizeAmountInput(e.target.value, tokenDecimals('USDC')))} style={inputStyle} aria-label="Maximum per trade" />
               </div>
-              <div style={{ fontSize: 12, marginTop: 6, color: offerType === 'sell' && parseFloat(maxAmount || '0') > parseFloat(totalAmount || '0') ? 'var(--danger)' : COLORS.muted }}>
+              <div style={{ fontSize: 12, marginTop: 6, color: offerType === 'sell' && parseFloat(maxAmount || '0') > parseFloat(totalAmount || '0') ? 'var(--danger-text)' : COLORS.muted }}>
                 {offerType === 'sell' && parseFloat(maxAmount || '0') > parseFloat(totalAmount || '0')
                   ? "Max per trade can't be more than your total."
                   : effectivePrice > 0 ? `≈ ${sym}${((parseFloat(minAmount) || 0) * effectivePrice).toLocaleString(undefined, { maximumFractionDigits: 0 })} – ${sym}${((parseFloat(maxAmount) || 0) * effectivePrice).toLocaleString(undefined, { maximumFractionDigits: 0 })} per order` : ''}
@@ -758,7 +758,7 @@ export function P2PCreateOfferPage() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {TRADE_WINDOW_OPTIONS.map(opt => (
                   <button key={opt.minutes} onClick={() => setTradeWindowMinutes(opt.minutes)} style={{
-                    padding: '7px 12px', borderRadius: 999, fontSize: 12.5, cursor: 'pointer', fontWeight: 600, border: 'none',
+                    padding: '7px 12px', borderRadius: 999, fontSize: 13, cursor: 'pointer', fontWeight: 600, border: 'none',
                     background: tradeWindowMinutes === opt.minutes ? COLORS.text : 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
                     color: tradeWindowMinutes === opt.minutes ? COLORS.bg : COLORS.muted,
                   }}>{opt.label}</button>
@@ -781,7 +781,7 @@ export function P2PCreateOfferPage() {
             </div>
             <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: '10px 14px' }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>Review</div>
-              {summaryRow('Type', <span style={{ color: offerType === 'sell' ? 'var(--danger)' : 'var(--success)' }}>{offerType === 'sell' ? 'Sell' : 'Buy'} USDC</span>)}
+              {summaryRow('Type', <span style={{ color: offerType === 'sell' ? 'var(--danger-text)' : 'var(--success-text)' }}>{offerType === 'sell' ? 'Sell' : 'Buy'} USDC</span>)}
               {summaryRow('Price', priceType === 'floating' ? `Market ${marginNum >= 0 ? '+' : ''}${marginNum}% (≈ ${sym}${effectivePrice})` : `${sym}${effectivePrice} · Fixed`)}
               {offerType === 'sell' && summaryRow('Total', `${totalAmount} USDC`)}
               {summaryRow('Limit', `${minAmount} – ${maxAmount} USDC`)}
@@ -1054,12 +1054,12 @@ export function P2POfferDetailPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
             <MerchantLine name={offer.displayName || offer.username || 'Trader'} verified={offer.isVerifiedMerchant} stats={stats} />
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontSize: 11.5, color: COLORS.muted }}>Price{offer.priceType === 'floating' ? ' · live' : ''}</div>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>Price{offer.priceType === 'floating' ? ' · live' : ''}</div>
               <div style={{ fontSize: 18, fontWeight: 800, color: accent }}>{price ? `${sym}${fmt(price)}` : '—'}</div>
             </div>
           </div>
           {rating && rating.count > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: COLORS.muted, marginTop: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: COLORS.muted, marginTop: 6 }}>
               <Star size={11} fill={COLORS.warning} color={COLORS.warning} /> {rating.avg} ({rating.count} rated){reputation ? ` · ${reputation.accountAgeDays}d on MeshPort` : ''}
             </div>
           )}
@@ -1096,10 +1096,10 @@ export function P2POfferDetailPage() {
                 tokenPicker={
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{inFiat ? offer.currency : 'USDC'}</span>
-                    <button onClick={setAll} style={{ background: 'none', border: 'none', color: COLORS.primaryText, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', padding: '0 0 0 4px' }}>All</button>
+                    <button onClick={setAll} style={{ background: 'none', border: 'none', color: COLORS.primaryText, fontWeight: 700, fontSize: 14, cursor: 'pointer', padding: '0 0 0 4px' }}>All</button>
                   </div>
                 } />
-              <div style={{ fontSize: 12, marginTop: 7, color: outOfLimit || sellShort ? 'var(--danger)' : COLORS.muted, fontWeight: outOfLimit || sellShort ? 600 : 400 }}>
+              <div style={{ fontSize: 12, marginTop: 7, color: outOfLimit || sellShort ? 'var(--danger-text)' : COLORS.muted, fontWeight: outOfLimit || sellShort ? 600 : 400 }}>
                 {sellShort ? `Insufficient balance · you have ${trimTrailingZeros(usdcBalanceForSell.toFixed(2))} USDC`
                   : `Limit ${price ? `${sym}${fmt(offer.minAmount * price)} – ${sym}${fmt(effMax * price)}` : `${offer.minAmount} – ${trimTrailingZeros(effMax.toFixed(2))} USDC`}`}
               </div>
@@ -1107,7 +1107,7 @@ export function P2POfferDetailPage() {
                 {row(buyingUsdc ? 'You receive' : 'You sell', <b style={{ fontSize: 15 }}>{amt > 0 ? `${trimTrailingZeros(amt.toFixed(4))} USDC` : '—'}</b>)}
                 {row(buyingUsdc ? 'You pay' : 'You receive', amt > 0 && price ? `${sym}${fmt(fiatTotal)}` : '—')}
                 {row('Payment window', `${offer.tradeWindowMinutes >= 60 ? `${offer.tradeWindowMinutes / 60} h` : `${offer.tradeWindowMinutes} min`}`)}
-                {row('Fee', <span style={{ color: 'var(--success)' }}>0 USDC</span>)}
+                {row('Fee', <span style={{ color: 'var(--success-text)' }}>0 USDC</span>)}
               </div>
             </div>
 
@@ -1135,7 +1135,7 @@ export function P2POfferDetailPage() {
               {offer.terms && (
                 <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${COLORS.border}` }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.muted, marginBottom: 4 }}>Trader's terms</div>
-                  <p style={{ fontSize: 12.5, color: COLORS.text, margin: 0, lineHeight: 1.45 }}>{offer.terms}</p>
+                  <p style={{ fontSize: 13, color: COLORS.text, margin: 0, lineHeight: 1.45 }}>{offer.terms}</p>
                 </div>
               )}
             </div>
@@ -1580,7 +1580,7 @@ export function P2PTradePage() {
               {/* Countdown */}
               {active && trade.status !== 'awaiting_seller_confirmation' && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <span style={{ fontSize: 12.5, color: COLORS.muted }}>{isBuyer ? 'Complete payment within' : 'Buyer pays within'}{inGracePeriod ? ' (grace period)' : ''}</span>
+                  <span style={{ fontSize: 13, color: COLORS.muted }}>{isBuyer ? 'Complete payment within' : 'Buyer pays within'}{inGracePeriod ? ' (grace period)' : ''}</span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', padding: '4px 10px', borderRadius: 999,
                     color: secondsLeft < 120 ? COLORS.error : COLORS.warning, background: `color-mix(in srgb, ${secondsLeft < 120 ? 'var(--danger)' : 'var(--warning)'} 15%, transparent)` }}>
                     <Clock size={13} /> {mins}:{secs.toString().padStart(2, '0')}
@@ -1607,7 +1607,7 @@ export function P2PTradePage() {
               {trade.status === 'payment_sent' && !isBuyer && trade.disputeStatus !== 'open' && (
                 <div style={{ ...card, borderColor: 'color-mix(in srgb, var(--success) 45%, transparent)', background: 'color-mix(in srgb, var(--success) 8%, var(--surface))' }}>
                   <div style={{ fontWeight: 700, color: COLORS.success, fontSize: 14 }}>Buyer marked the order as paid</div>
-                  <div style={{ fontSize: 12.5, color: COLORS.muted, marginTop: 4, lineHeight: 1.45 }}>
+                  <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 4, lineHeight: 1.45 }}>
                     Open your {trade.paymentMethod} account and check the payment has arrived before releasing. Never release on a screenshot alone.
                   </div>
                 </div>
@@ -1638,7 +1638,7 @@ export function P2PTradePage() {
                       {Object.entries(payTo.details).map(([k, v]) => line(detailLabels[k] ?? k, <>{v}<CopyBtn label={detailLabels[k] ?? k} v={v} /></>))}
                     </>
                   ) : (
-                    <div style={{ fontSize: 12.5, color: COLORS.muted, padding: '6px 0' }}>
+                    <div style={{ fontSize: 13, color: COLORS.muted, padding: '6px 0' }}>
                       {isBuyer ? "Ask the seller for their payment details in the chat." : 'The buyer pays you by this method.'}
                     </div>
                   )}
@@ -1661,14 +1661,14 @@ export function P2PTradePage() {
 
               {/* Buyer, after paying */}
               {trade.status === 'payment_sent' && isBuyer && trade.disputeStatus !== 'open' && (
-                <div style={{ ...card, fontSize: 12.5, color: COLORS.muted, lineHeight: 1.45 }}>
+                <div style={{ ...card, fontSize: 13, color: COLORS.muted, lineHeight: 1.45 }}>
                   The seller has been notified. Once they confirm your payment, the USDC is released from escrow to your wallet.
                 </div>
               )}
 
               {/* Ads without instant orders: the seller accepts each order */}
               {trade.status === 'awaiting_seller_confirmation' && !expired && isBuyer && (
-                <div style={{ ...card, fontSize: 12.5, color: COLORS.muted, textAlign: 'center' }}>
+                <div style={{ ...card, fontSize: 13, color: COLORS.muted, textAlign: 'center' }}>
                   Waiting for the seller to accept this order. You'll be notified - you can pay once it's accepted.
                 </div>
               )}
@@ -1679,16 +1679,16 @@ export function P2PTradePage() {
                     <CheckCircle2 size={26} color="var(--success)" />
                   </div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.text }}>{isBuyer ? '+' : '−'}{trimTrailingZeros(trade.amountUsdc.toFixed(6))} USDC</div>
-                  <div style={{ fontSize: 12.5, color: COLORS.muted, marginTop: 3 }}>{isBuyer ? 'Added to your MeshPort wallet' : 'Released to the buyer'}</div>
+                  <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 3 }}>{isBuyer ? 'Added to your MeshPort wallet' : 'Released to the buyer'}</div>
                   {trade.txHash && (
                     <a href={arcExplorerTxUrl(trade.txHash)} target="_blank" rel="noopener noreferrer"
-                      style={{ display: 'inline-block', marginTop: 8, color: COLORS.primaryText, fontSize: 12.5, fontWeight: 600, textDecoration: 'none' }}>View on Arc explorer ↗</a>
+                      style={{ display: 'inline-block', marginTop: 8, color: COLORS.primaryText, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>View on Arc explorer ↗</a>
                   )}
                 </div>
               )}
 
               {trade.disputeStatus === 'open' && (
-                <div style={{ textAlign: 'center', fontSize: 12.5, color: COLORS.warning, background: 'color-mix(in srgb, var(--warning) 10%, transparent)', borderRadius: 14, padding: '11px 14px', marginBottom: 10, fontWeight: 600 }}>
+                <div style={{ textAlign: 'center', fontSize: 13, color: COLORS.warning, background: 'color-mix(in srgb, var(--warning) 10%, transparent)', borderRadius: 14, padding: '11px 14px', marginBottom: 10, fontWeight: 600 }}>
                   {DISPUTE_LOCKED_MESSAGE}
                 </div>
               )}
@@ -1707,10 +1707,10 @@ export function P2PTradePage() {
                 return (
                   <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                     {canCancel && (
-                      <button onClick={handleCancel} disabled={acting} style={{ flex: buyerPay ? 0.7 : 1, padding: '14px 0', borderRadius: 14, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.text, fontSize: 14.5, fontWeight: 700 }}>Cancel</button>
+                      <button onClick={handleCancel} disabled={acting} style={{ flex: buyerPay ? 0.7 : 1, padding: '14px 0', borderRadius: 14, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.text, fontSize: 15, fontWeight: 700 }}>Cancel</button>
                     )}
                     {buyerPay && (
-                      <button onClick={handleMarkPaid} disabled={acting} style={{ flex: 1.3, padding: '14px 0', borderRadius: 14, border: 'none', background: COLORS.success, color: '#fff', fontSize: 14.5, fontWeight: 700, opacity: acting ? 0.6 : 1 }}>
+                      <button onClick={handleMarkPaid} disabled={acting} style={{ flex: 1.3, padding: '14px 0', borderRadius: 14, border: 'none', background: COLORS.success, color: '#fff', fontSize: 15, fontWeight: 700, opacity: acting ? 0.6 : 1 }}>
                         {processingPayment ? 'Notifying seller…' : 'Transferred, notify seller'}
                       </button>
                     )}
@@ -1723,14 +1723,14 @@ export function P2PTradePage() {
                 )
               })()}
               {isBuyer && trade.status === 'waiting_for_buyer' && !expired && trade.disputeStatus !== 'open' && (
-                <div style={{ textAlign: 'center', fontSize: 11.5, color: COLORS.muted, marginBottom: 8, lineHeight: 1.45 }}>
+                <div style={{ textAlign: 'center', fontSize: 12, color: COLORS.muted, marginBottom: 8, lineHeight: 1.45 }}>
                   Tap <strong>Transferred, notify seller</strong> as soon as you send the payment — that locks the trade so the seller can’t cancel it.
                 </div>
               )}
               {(trade.status === 'waiting_for_buyer' || trade.status === 'payment_sent') && trade.disputeStatus !== 'open' && (
-                <div style={{ textAlign: 'center', fontSize: 12.5, color: COLORS.muted, marginBottom: 10 }}>
+                <div style={{ textAlign: 'center', fontSize: 13, color: COLORS.muted, marginBottom: 10 }}>
                   Problem with this order?{' '}
-                  <button onClick={() => setShowDispute(true)} style={{ background: 'none', border: 'none', padding: 0, color: COLORS.primaryText, fontWeight: 700, cursor: 'pointer', fontSize: 12.5 }}>Appeal</button>
+                  <button onClick={() => setShowDispute(true)} style={{ background: 'none', border: 'none', padding: 0, color: COLORS.primaryText, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Appeal</button>
                 </div>
               )}
 
@@ -1746,7 +1746,7 @@ export function P2PTradePage() {
                   ))}
                 </div>
               )}
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.muted, margin: '6px 0 4px' }}>Chat with {isBuyer ? 'seller' : 'buyer'}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.muted, margin: '6px 0 4px' }}>Chat with {isBuyer ? 'seller' : 'buyer'}</div>
             </div>
           </>
         )
@@ -1760,8 +1760,8 @@ export function P2PTradePage() {
             transition={DIALOG_BACKDROP.transition}
             style={{ position: 'fixed', inset: 0, background: POPUP_DIM, zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
             <MeshLoader size={44} color="#5CD6CB" label="Processing" />
-            <p style={{ fontSize: 14.5, fontWeight: 600, color: '#fff' }}>Notifying the seller…</p>
-            <p style={{ fontSize: 11.5, color: COLORS.muted, textAlign: 'center', maxWidth: 260 }}>Recording on Arc that you've paid - the seller can no longer cancel.</p>
+            <p style={{ fontSize: 15, fontWeight: 600, color: '#fff' }}>Notifying the seller…</p>
+            <p style={{ fontSize: 12, color: COLORS.muted, textAlign: 'center', maxWidth: 260 }}>Recording on Arc that you've paid - the seller can no longer cancel.</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1776,7 +1776,7 @@ export function P2PTradePage() {
           // easy to miss or misread as impersonal).
           <div key={m.id} style={{ alignSelf: 'center', maxWidth: '85%' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.warning, textAlign: 'center', marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.3 }}>Admin</div>
-            <div style={{ background: 'color-mix(in srgb, var(--warning) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)', color: COLORS.text, borderRadius: 14, padding: '9px 13px', fontSize: 13.5 }}>{m.content}</div>
+            <div style={{ background: 'color-mix(in srgb, var(--warning) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)', color: COLORS.text, borderRadius: 14, padding: '9px 13px', fontSize: 14 }}>{m.content}</div>
           </div>
         ) : m.isSystem ? (
           // One solid rounded card per line (an inline span's background
@@ -1796,11 +1796,11 @@ export function P2PTradePage() {
           </div>
         ) : (
           <div key={m.id} style={{ alignSelf: m.senderId === user.id ? 'flex-end' : 'flex-start', maxWidth: '75%' }}>
-            <div style={{ background: m.senderId === user.id ? COLORS.primary : COLORS.surface, color: m.senderId === user.id ? '#fff' : COLORS.text, borderRadius: 14, padding: '9px 13px', fontSize: 13.5,
+            <div style={{ background: m.senderId === user.id ? COLORS.primary : COLORS.surface, color: m.senderId === user.id ? '#fff' : COLORS.text, borderRadius: 14, padding: '9px 13px', fontSize: 14,
               whiteSpace: 'pre-wrap', wordBreak: 'break-word', opacity: m.id.startsWith('local_') && !failedIds[m.id] ? 0.75 : 1 }}>{m.content}</div>
             {failedIds[m.id] && (
               <button type="button" onClick={() => sendText(m.content, m.id)}
-                style={{ display: 'block', marginLeft: 'auto', marginTop: 3, border: 'none', background: 'none', padding: '2px 4px', fontSize: 11.5, fontWeight: 600, color: '#ff8a7a', cursor: 'pointer' }}>
+                style={{ display: 'block', marginLeft: 'auto', marginTop: 3, border: 'none', background: 'none', padding: '2px 4px', fontSize: 12, fontWeight: 600, color: '#ff8a7a', cursor: 'pointer' }}>
                 Not sent · Tap to retry
               </button>
             )}
@@ -1812,7 +1812,7 @@ export function P2PTradePage() {
       {proofFile && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: `1px solid ${COLORS.border}` }}>
           <img decoding="async" src={proofFile.previewUrl} alt="proof preview" style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover' }} />
-          <div style={{ flex: 1, fontSize: 12.5, color: COLORS.muted }}>{uploadingProof ? 'Uploading payment proof…' : 'Payment proof ready to send'}</div>
+          <div style={{ flex: 1, fontSize: 13, color: COLORS.muted }}>{uploadingProof ? 'Uploading payment proof…' : 'Payment proof ready to send'}</div>
           <button onClick={clearProofFile} disabled={uploadingProof} style={{ width: 26, height: 26, borderRadius: '50%', background: COLORS.surface, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <XIcon size={14} color={COLORS.muted} />
           </button>
@@ -2213,7 +2213,7 @@ export function P2PMyOffersPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 7px', borderRadius: 6, color: o.offerType === 'sell' ? COLORS.error : COLORS.success, background: `color-mix(in srgb, ${o.offerType === 'sell' ? 'var(--danger)' : 'var(--success)'} 14%, transparent)` }}>{o.offerType === 'sell' ? 'SELL' : 'BUY'}</span>
-                <b style={{ fontSize: 13.5, color: COLORS.text }}>USDC</b><span style={{ fontSize: 12, color: COLORS.muted }}>· {o.currency}</span>
+                <b style={{ fontSize: 14, color: COLORS.text }}>USDC</b><span style={{ fontSize: 12, color: COLORS.muted }}>· {o.currency}</span>
               </span>
               {(o.status === 'active' || o.status === 'paused') ? (
                 <button onClick={() => toggleOnline(o)} disabled={togglingId === o.id} aria-label={o.status === 'active' ? 'Take ad offline' : 'Put ad online'}
@@ -2341,7 +2341,7 @@ export function P2PMyOffersPage() {
             <button onClick={submitEdit} disabled={editSaving || !editPriceOk || editMethodNames.length === 0 || !editLimitsValid} style={{
               width: '100%', padding: '14px 0', borderRadius: 14, border: '1px solid color-mix(in srgb, black 12%, transparent)',
               cursor: (!editSaving && editPriceOk && editMethodNames.length > 0 && editLimitsValid) ? 'pointer' : 'default',
-              background: COLORS.primary, color: '#fff', fontSize: 14.5, fontWeight: 700,
+              background: COLORS.primary, color: '#fff', fontSize: 15, fontWeight: 700,
               opacity: editSaving ? 0.6 : 1,
             }}>{editSaving ? 'Saving…' : 'Save Changes'}</button>
           </div>
@@ -2501,7 +2501,7 @@ export function P2PMyTradesPage() {
               title={`${isBuyer ? 'Buying' : 'Selling'} USDC`}
               sub={`${currencySymbol(t.currency)}${t.amountFiat} · ${t.paymentMethod}`}
               meta={<><span style={{ color: meta.color, fontWeight: 600 }}>{meta.label}</span> · {timeAgo(t.completedAt || t.createdAt)}</>}
-              right={<div style={{ fontSize: 14, fontWeight: 700, color: done && isBuyer ? 'var(--success)' : 'var(--text-primary)' }}>
+              right={<div style={{ fontSize: 14, fontWeight: 700, color: done && isBuyer ? 'var(--success-text)' : 'var(--text-primary)' }}>
                 {done ? (isBuyer ? '+' : '-') : ''}{t.amountUsdc} USDC
               </div>} />
           )

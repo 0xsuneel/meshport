@@ -109,7 +109,7 @@ export function ChatPrivacyPage() {
                         </span>
                         <span className="min-w-0">
                           <span className="block text-[15px] font-semibold text-text-primary">{o.label}</span>
-                          <span className="block text-[12.5px] text-text-secondary mt-0.5">{o.hint}</span>
+                          <span className="block text-[13px] text-text-secondary mt-0.5">{o.hint}</span>
                         </span>
                       </button>
                     )
@@ -140,7 +140,7 @@ export function ChatPrivacyPage() {
                 <Avatar name={p.display_name || p.username} src={p.avatar_url ?? undefined} size="md" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[15px] font-semibold text-text-primary truncate">{p.display_name || p.username.replace(/\.arc$/, '')}</p>
-                  <p className="text-[12.5px] text-link truncate">{p.username.replace(/\.arc$/, '')}.arc</p>
+                  <p className="text-[13px] text-link truncate">{p.username.replace(/\.arc$/, '')}.arc</p>
                 </div>
                 <button onClick={() => unblock(p)} disabled={busyId === p.id}
                   className="px-3.5 py-1.5 rounded-full text-[13px] font-bold flex items-center gap-1.5"

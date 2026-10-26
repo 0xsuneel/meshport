@@ -34,7 +34,7 @@ export function ChainPicker({ value, onChange, extra = [] }: { value: string; on
             style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 11px 7px 8px', borderRadius: 999, cursor: 'pointer',
               border: on ? '1px solid var(--brand)' : '1px solid var(--border)',
               background: on ? 'color-mix(in srgb, var(--brand) 14%, transparent)' : 'transparent',
-              color: on ? 'var(--brand-text)' : 'var(--text-secondary)', fontSize: 12.5, fontWeight: 700 }}>
+              color: on ? 'var(--brand-text)' : 'var(--text-secondary)', fontSize: 13, fontWeight: 700 }}>
             <img decoding="async" src={c.logo} alt="" width={18} height={18} style={{ borderRadius: '50%' }}
               onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
             {c.label}
@@ -68,7 +68,7 @@ function EvmPaymentDetails({ chainId, to, amount }: { chainId: string; to: strin
   )
   return (
     <div style={{ width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.45 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.45 }}>
         Scan with any wallet app (MetaMask, OKX, Trust, Coinbase…) - it opens the payment on <b style={{ color: 'var(--text-primary)' }}>{net}</b> with the address and amount filled in, and adds the network if the wallet doesn't have it.
       </div>
       <div style={{ padding: '9px 11px', borderRadius: 12, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -97,7 +97,7 @@ function SolanaPaymentDetails({ to, amount }: { to: string; amount: number }) {
   )
   return (
     <div style={{ width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.45 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.45 }}>
         Scan with a Solana wallet (Phantom, Solflare, Backpack) - it opens the payment with the address and exact amount filled in, linked to this order.
       </div>
       <div style={{ padding: '9px 11px', borderRadius: 12, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -215,7 +215,7 @@ export function MerchantQrPanel() {
           <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.4px' }}>
             ${formatAmount(order.amount)} <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>USDC</span>
           </div>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 2 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 2 }}>
             {orderTitle(orderKindOf(order), orderLabel(order), { paid: order.status === 'paid' })}
           </div>
         </div>
@@ -226,8 +226,8 @@ export function MerchantQrPanel() {
           <div style={{ position: 'relative', background: '#fff', padding: 6, borderRadius: 14, opacity: paid || closed ? 0.35 : 1 }}>
             <canvas ref={canvasRef} width={220} height={220} style={{ display: 'block' }} />
           </div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, fontSize: 12.5, fontWeight: 700,
-            color: paid ? 'var(--success)' : closed ? 'var(--text-secondary)' : 'var(--warning)',
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, fontSize: 13, fontWeight: 700,
+            color: paid ? 'var(--success-text)' : closed ? 'var(--text-secondary)' : 'var(--warning-text)',
             background: paid ? 'color-mix(in srgb, var(--success) 14%, transparent)' : closed ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'color-mix(in srgb, var(--warning) 14%, transparent)' }}>
             {paid ? <CheckCircle2 size={14} /> : <Clock size={14} />}
             {paid ? 'Payment received' : closed ? STATUS_LABEL[st] : st === 'pending' ? `Waiting for payment on ${c.label}` : STATUS_LABEL[st]}
@@ -266,7 +266,7 @@ export function MerchantQrPanel() {
       <button onClick={create} disabled={busy || !(Number(amount) > 0)} style={{ ...primary, opacity: busy || !(Number(amount) > 0) ? 0.5 : 1 }}>
         {busy ? 'Creating…' : 'Generate payment QR'}
       </button>
-      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', textAlign: 'center', marginTop: -4 }}>A unique order number is created for every QR.</div>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', marginTop: -4 }}>A unique order number is created for every QR.</div>
     </div>
   )
 }

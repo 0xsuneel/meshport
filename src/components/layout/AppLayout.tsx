@@ -812,8 +812,8 @@ function DeviceKeyNotice() {
   return (
     <div role="alert" className="mp-alert" style={{ position: 'fixed', left: 12, right: 12, top: 'calc(env(safe-area-inset-top, 0px) + 10px)', zIndex: 300, maxWidth: 480, margin: '0 auto',
       background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--warning) 45%, var(--border))', borderRadius: 16, padding: '12px 14px', boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }}>
-      <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)' }}>Restore your wallet on this device</p>
-      <p style={{ margin: '4px 0 10px', fontSize: 12.5, color: 'var(--text-secondary)' }}>
+      <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Restore your wallet on this device</p>
+      <p style={{ margin: '4px 0 10px', fontSize: 13, color: 'var(--text-secondary)' }}>
         This browser's saved copy of your wallet can't be opened any more (its site data was partly cleared). Your funds are safe - enter your recovery phrase or private key to use this wallet here again.
       </p>
       <button onClick={() => navigate('/auth/import-wallet')}

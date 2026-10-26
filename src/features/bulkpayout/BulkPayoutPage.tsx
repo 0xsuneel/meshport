@@ -571,7 +571,7 @@ export function BulkPayoutPage() {
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Amount (USDC)</div>
                 {field}
                 {overRemaining && (
-                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)', margin: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger-text)', margin: 0 }}>
                     Insufficient balance · Max {formatAmount(Math.floor(remainingForNext * 100) / 100)}
                   </p>
                 )}

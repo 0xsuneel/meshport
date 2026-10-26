@@ -171,7 +171,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
         {!compact && (
           <div className="flex items-center justify-between mt-3 px-0.5">
             <span className="text-[12px] font-bold uppercase tracking-[0.06em] text-text-secondary">Items{valid.length ? ` · ${valid.length}` : ''}</span>
-            {rows.length > 1 && <span className="text-[11.5px] font-semibold text-text-muted">{rows.length} of {MAX_BILL_ITEMS}</span>}
+            {rows.length > 1 && <span className="text-[12px] font-semibold text-text-muted">{rows.length} of {MAX_BILL_ITEMS}</span>}
           </div>
         )}
       </div>
@@ -182,7 +182,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
           <div className="mb-3">
             <div className="flex items-center justify-between px-0.5 mb-1.5">
               <span className="text-[12px] font-semibold text-text-muted">{editSaved ? 'Tap to remove' : 'Saved items · tap to add'}</span>
-              <button type="button" onClick={() => setEditSaved(e => !e)} className="text-[12.5px] font-bold" style={{ color: 'var(--brand-text)', background: 'none', border: 'none', cursor: 'pointer' }}>{editSaved ? 'Done' : 'Edit'}</button>
+              <button type="button" onClick={() => setEditSaved(e => !e)} className="text-[13px] font-bold" style={{ color: 'var(--brand-text)', background: 'none', border: 'none', cursor: 'pointer' }}>{editSaved ? 'Done' : 'Edit'}</button>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {saved.items.map(it => (
@@ -190,7 +190,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
                   aria-label={editSaved ? `Remove ${it.name}` : `Add ${it.name}`}
                   className="inline-flex items-center gap-1.5 px-3 rounded-full text-[13px] font-semibold"
                   style={{ height: 32, cursor: 'pointer', border: `1px solid ${editSaved ? 'color-mix(in srgb, var(--danger) 45%, transparent)' : 'var(--border)'}`,
-                    background: 'var(--bg)', color: editSaved ? 'var(--danger)' : 'var(--text-primary)' }}>
+                    background: 'var(--bg)', color: editSaved ? 'var(--danger-text)' : 'var(--text-primary)' }}>
                   {it.name} <span style={{ color: editSaved ? 'inherit' : 'var(--text-muted)', fontWeight: 500 }}>{editSaved ? <X size={13} /> : `$${billMoney(it.price)}`}</span>
                 </button>
               ))}
@@ -209,13 +209,13 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
                   onClick={() => { setEditing(r.id); focusSoon(() => (r.name ? priceRefs : nameRefs).current.get(r.id)) }}
                   className="w-full flex items-center gap-2 text-left px-3.5"
                   style={{ minHeight: 46, borderTop: top, background: 'transparent', cursor: 'pointer' }}>
-                  <span className="flex-1 min-w-0 truncate text-[14.5px] font-semibold" style={{ color: r.name.trim() ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                  <span className="flex-1 min-w-0 truncate text-[15px] font-semibold" style={{ color: r.name.trim() ? 'var(--text-primary)' : 'var(--text-muted)' }}>
                     {r.name.trim() || 'Item name'}
                   </span>
                   {problem
-                    ? <span className="text-[12.5px] font-semibold flex-shrink-0" style={{ color: 'var(--warning)' }}>{problem}</span>
+                    ? <span className="text-[13px] font-semibold flex-shrink-0" style={{ color: 'var(--warning-text)' }}>{problem}</span>
                     : <span className="text-[13px] text-text-secondary flex-shrink-0 tabular-nums">{Number(num(r.qty))} × ${billMoney(num(r.price))}</span>}
-                  <span className="text-[14.5px] font-bold flex-shrink-0 text-right tabular-nums" style={{ minWidth: 56, color: line > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>${billMoney(line)}</span>
+                  <span className="text-[15px] font-bold flex-shrink-0 text-right tabular-nums" style={{ minWidth: 56, color: line > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>${billMoney(line)}</span>
                 </button>
               )
             }

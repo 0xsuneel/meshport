@@ -91,7 +91,7 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
         quick={compact ? [] : QUICK.map(v => ({ label: `$${v}`, onClick: () => set(v) }))}
       />
       {!compact && (
-        <p className="text-[12.5px] mt-2" style={{ color: tooBig ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: tooBig ? 600 : 500 }}>
+        <p className="text-[13px] mt-2" style={{ color: tooBig ? 'var(--danger-text)' : 'var(--text-secondary)', fontWeight: tooBig ? 600 : 500 }}>
           {tooBig ? `Up to $${formatAmount(MAX_REQUEST)} per request` : hint}
         </p>
       )}
@@ -122,7 +122,7 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
 
         {options && (!compact || more) && (
           <button type="button" onClick={() => setMore(m => !m)} aria-expanded={more}
-            className="w-full flex items-center justify-between gap-2 rounded-[14px] px-3.5 text-[13.5px] text-text-secondary text-left flex-shrink-0"
+            className="w-full flex items-center justify-between gap-2 rounded-[14px] px-3.5 text-[14px] text-text-secondary text-left flex-shrink-0"
             style={{ minHeight: 44, background: 'var(--bg)', border: '1px solid var(--border)', cursor: 'pointer' }}>
             <span className="min-w-0 truncate">{options.summary}</span>
             <ChevronDown className={`size-4 flex-shrink-0 text-text-muted transition-transform ${more ? 'rotate-180' : ''}`} />

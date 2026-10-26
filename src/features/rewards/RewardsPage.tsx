@@ -145,7 +145,7 @@ function HowItWorksMenu({ rect, onClose }: { rect: DOMRect; onClose: () => void 
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)' }}>+{POINTS_PER_TX}</span>
           </div>
         ))}
-        <div style={{ margin: '4px 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, var(--brand) 10%, transparent)', fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        <div style={{ margin: '4px 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, var(--brand) 10%, transparent)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           <b style={{ color: 'var(--text-primary)' }}>1,000 pts = ${formatAmount(pointsToUSDC(1000))} USDC</b>, sent to your Arc wallet.
           {' '}{MIN_CLAIM_POINTS}–{MAX_CLAIM_POINTS.toLocaleString()} pts per claim, up to {MAX_DAILY_POINTS.toLocaleString()} a day. Earn up to {MAX_DAILY_EARN_POINTS} pts a day.
         </div>
@@ -185,15 +185,15 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
         <div style={{ marginTop: 14 }}>
           {p.phase === 'running' && <>
             <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)' }}>${formatAmount(p.usdc)} USDC</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 4 }}>Claiming {p.points.toLocaleString()} pts to your wallet</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Claiming {p.points.toLocaleString()} pts to your wallet</div>
           </>}
           {ok && <div className="rw-fade">
-            <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--success)' }}>+${formatAmount(p.usdcReceived ?? p.usdc)} USDC</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 4 }}>Sent to your MeshPort wallet</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--success-text)' }}>+${formatAmount(p.usdcReceived ?? p.usdc)} USDC</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Sent to your MeshPort wallet</div>
           </div>}
           {p.phase === 'failed' && <div className="rw-fade">
             <div style={{ fontSize: 21, fontWeight: 800, color: 'var(--text-primary)' }}>Claim didn't go through</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 4 }}>Your {p.points.toLocaleString()} pts were not deducted.</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Your {p.points.toLocaleString()} pts were not deducted.</div>
           </div>}
         </div>
 
@@ -212,7 +212,7 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
             const isFailed = i === failedIdx
             const t = p.times[s.key]
             return (
-              <div key={s.key} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, height: STEP_H, fontSize: 13.5 }}>
+              <div key={s.key} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, height: STEP_H, fontSize: 14 }}>
                 <span style={{ width: 28, display: 'flex', justifyContent: 'center', flexShrink: 0, position: 'relative', zIndex: 2 }}>
                   {isDone ? (
                     <span className="rw-tick" style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--success)', color: '#fff', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</span>
@@ -222,8 +222,8 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
                     <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--surface)', border: '2px solid var(--border)' }} />
                   )}
                 </span>
-                <span style={{ color: isFailed ? 'var(--danger)' : isDone || i === doneIdx ? 'var(--text-primary)' : dim, fontWeight: i === doneIdx && p.phase === 'running' ? 600 : 500 }}>{s.label}</span>
-                {isDone && t != null && <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--text-secondary)' }}>{t < 1000 ? `${(t / 1000).toFixed(1)}s` : `${(t / 1000).toFixed(1)}s`}</span>}
+                <span style={{ color: isFailed ? 'var(--danger-text)' : isDone || i === doneIdx ? 'var(--text-primary)' : dim, fontWeight: i === doneIdx && p.phase === 'running' ? 600 : 500 }}>{s.label}</span>
+                {isDone && t != null && <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-secondary)' }}>{t < 1000 ? `${(t / 1000).toFixed(1)}s` : `${(t / 1000).toFixed(1)}s`}</span>}
               </div>
             )
           })}
@@ -242,7 +242,7 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
         )}
         {p.phase === 'failed' && (
           <div className="rw-fade">
-            {p.error && <div role="alert" style={{ textAlign: 'left', marginTop: 14, padding: '10px 12px', borderRadius: 14, fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>{p.error}</div>}
+            {p.error && <div role="alert" style={{ textAlign: 'left', marginTop: 14, padding: '10px 12px', borderRadius: 14, fontSize: 13, lineHeight: 1.45, color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>{p.error}</div>}
             <button onClick={onRetry} style={{ width: '100%', border: 'none', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', marginTop: 16, cursor: 'pointer' }}>Try again</button>
             <button onClick={onClose} style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 14, padding: 13, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', background: 'transparent', marginTop: 8, cursor: 'pointer' }}>Close</button>
           </div>
@@ -254,7 +254,7 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
 
 function Line({ k, v }: { k: string; v: ReactNode }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12.5, padding: '5px 0' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '5px 0' }}>
       <span style={{ color: 'var(--text-secondary)' }}>{k}</span><b style={{ color: 'var(--text-primary)', fontWeight: 600, textAlign: 'right' }}>{v}</b>
     </div>
   )
@@ -436,7 +436,7 @@ export function RewardsPage() {
       <div aria-hidden style={{ position: 'absolute', right: -12, top: -18, width: 86, height: 86, borderRadius: '50%',
         background: 'radial-gradient(circle at 35% 35%, #FFE7A3, #F5A524 60%, #B8730B)', opacity: 0.9, display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 34, fontWeight: 900, color: '#7a4b06', boxShadow: 'inset -6px -8px 0 rgba(0,0,0,.12)' }}>P</div>
-      <div style={{ fontSize: 12.5, opacity: 0.85 }}>Points balance</div>
+      <div style={{ fontSize: 13, opacity: 0.85 }}>Points balance</div>
       <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', marginTop: 2 }}>
         {loading ? <Skeleton className="inline-block align-middle w-24 h-8 rounded-lg bg-white/20" /> : totalPoints.toLocaleString()} <span style={{ fontSize: 15, fontWeight: 600, opacity: 0.85 }}>pts</span>
       </div>
@@ -444,11 +444,11 @@ export function RewardsPage() {
         ≈ ${formatAmount(pointsToUSDC(totalPoints))} USDC{lifetimePoints > 0 ? ` · ${lifetimePoints.toLocaleString()} earned all-time` : ''}
       </div>
       <button onClick={openClaim} disabled={!canOpenClaim || claiming}
-        style={{ width: '100%', marginTop: 14, padding: '11px 0', borderRadius: 12, border: 'none', background: '#fff', color: '#0B3F3B', fontSize: 14.5, fontWeight: 800,
+        style={{ width: '100%', marginTop: 14, padding: '11px 0', borderRadius: 12, border: 'none', background: '#fff', color: '#0B3F3B', fontSize: 15, fontWeight: 800,
           cursor: canOpenClaim ? 'pointer' : 'default', opacity: canOpenClaim && !claiming ? 1 : 0.6 }}>
         {claiming ? 'Claiming…' : dailyCapHit ? 'Daily claim limit reached' : 'Claim USDC'}
       </button>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, opacity: 0.85, marginTop: 10, gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.85, marginTop: 10, gap: 8 }}>
         <span>Claimed today {dailyClaimedPoints.toLocaleString()} / {MAX_DAILY_POINTS.toLocaleString()} pts</span>
         <span>1,000 pts = ${formatAmount(pointsToUSDC(1000))}</span>
       </div>
@@ -459,7 +459,7 @@ export function RewardsPage() {
     <div>
       <div style={{ padding: isDesktop ? '0 2px 6px' : '18px 18px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <b style={{ fontSize: 15, color: 'var(--text-primary)' }}>Today's tasks</b>
-        <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>{earnedToday} / {MAX_DAILY_EARN_POINTS} pts</span>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{earnedToday} / {MAX_DAILY_EARN_POINTS} pts</span>
       </div>
       <div style={{ margin: isDesktop ? '4px 2px 8px' : '4px 18px 8px', height: 6, borderRadius: 999, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${(earnedToday / MAX_DAILY_EARN_POINTS) * 100}%`, background: 'linear-gradient(90deg, var(--success), #2FB5A7)', borderRadius: 999, transition: 'width .4s' }} />
@@ -470,13 +470,13 @@ export function RewardsPage() {
           <div key={t.type} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isDesktop ? '9px 2px' : '9px 18px' }}>
             <HistoryIcon tone={done ? 'in' : 'out'} icon={t.action} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <b style={{ display: 'block', fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 600 }}>{t.label}</b>
-              <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>+{POINTS_PER_TX} pts</span>
+              <b style={{ display: 'block', fontSize: 14, color: 'var(--text-primary)', fontWeight: 600 }}>{t.label}</b>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>+{POINTS_PER_TX} pts</span>
             </div>
             {done ? (
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--success)' }}>✓ Done</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success-text)' }}>✓ Done</span>
             ) : (
-              <button onClick={() => navigate(t.path)} style={{ fontSize: 12.5, fontWeight: 700, padding: '6px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
+              <button onClick={() => navigate(t.path)} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
                 background: 'color-mix(in srgb, var(--brand) 16%, transparent)', color: 'var(--brand-text)' }}>Go</button>
             )}
           </div>
@@ -494,7 +494,7 @@ export function RewardsPage() {
         <HistoryRow key={p.id} inPanel={isDesktop}
           icon={<HistoryIcon tone="out" icon={t ? t.action : 'rewards'} />}
           title={t ? t.done : 'Points earned'}
-          meta={<><span style={{ color: 'var(--success)', fontWeight: 600 }}>Earned</span> · {timeAgo(p.created_at)}</>}
+          meta={<><span style={{ color: 'var(--success-text)', fontWeight: 600 }}>Earned</span> · {timeAgo(p.created_at)}</>}
           right={<div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>+{p.points} pts</div>} />
       )
     })
@@ -552,7 +552,7 @@ export function RewardsPage() {
   // Claim sheet - pick the points, see the USDC.
   const sheet = (
     <P2PSheet open={showClaimSheet} onClose={() => setShowClaimSheet(false)} title="Claim USDC" id="rw-claim">
-      <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '-6px 0 12px' }}>Balance {totalPoints.toLocaleString()} pts</div>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '-6px 0 12px' }}>Balance {totalPoints.toLocaleString()} pts</div>
       <AmountField
         value={claimInput}
         onChange={raw => setClaimInput(raw.replace(/\D/g, '').slice(0, 5))}
@@ -570,7 +570,7 @@ export function RewardsPage() {
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, padding: '12px 14px', borderRadius: 14, background: 'color-mix(in srgb, var(--success) 10%, transparent)' }}>
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>You receive</span>
-        <b style={{ fontSize: 20, color: 'var(--success)' }}>${formatAmount(pointsToUSDC(claimOk ? typedPoints : 0))} USDC</b>
+        <b style={{ fontSize: 20, color: 'var(--success-text)' }}>${formatAmount(pointsToUSDC(claimOk ? typedPoints : 0))} USDC</b>
       </div>
       <div style={{ marginTop: 8 }}>
         <Line k="Rate" v={`1,000 pts = $${formatAmount(pointsToUSDC(1000))}`} />
@@ -579,11 +579,11 @@ export function RewardsPage() {
         <Line k="Sent to" v="Your Arc wallet" />
       </div>
       {claimInput !== '' && !claimOk && (
-        <p role="alert" style={{ fontSize: 12.5, color: 'var(--danger)', margin: '8px 0 0' }}>
+        <p role="alert" style={{ fontSize: 13, color: 'var(--danger-text)', margin: '8px 0 0' }}>
           {typedPoints < MIN_CLAIM_POINTS ? `Claim at least ${MIN_CLAIM_POINTS} pts` : `You can claim up to ${maxClaimable.toLocaleString()} pts now`}
         </p>
       )}
-      {claimError && <p role="alert" style={{ fontSize: 12.5, color: 'var(--danger)', margin: '8px 0 0' }}>{claimError}</p>}
+      {claimError && <p role="alert" style={{ fontSize: 13, color: 'var(--danger-text)', margin: '8px 0 0' }}>{claimError}</p>}
       {/* Phone: the keys right in the sheet (whole points, same 5-digit cap
           as typing on desktop); the field above shows what's entered. */}
       {!isDesktop && (

@@ -44,7 +44,7 @@ export function AddressChip({ address, mono = true, size = 12.5, color }: { addr
       <button
         onClick={copy}
         title={copied ? 'Copied' : 'Copy full address'}
-        style={{ flexShrink: 0, display: 'inline-flex', background: 'none', border: 'none', padding: 2, cursor: 'pointer', color: copied ? 'var(--success)' : 'var(--text-secondary)' }}
+        style={{ flexShrink: 0, display: 'inline-flex', background: 'none', border: 'none', padding: 2, cursor: 'pointer', color: copied ? 'var(--success-text)' : 'var(--text-secondary)' }}
       >
         {copied ? <Check data-tick size={size - 1} /> : <Copy size={size - 1} />}
       </button>

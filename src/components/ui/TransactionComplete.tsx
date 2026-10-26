@@ -139,7 +139,7 @@ export function TransactionComplete({
                 {s.label}
               </span>
               {s.time && (
-                <span style={{ fontSize: 11, color: 'var(--success)' }}>{s.time}</span>
+                <span style={{ fontSize: 11, color: 'var(--success-text)' }}>{s.time}</span>
               )}
             </div>
           ))}

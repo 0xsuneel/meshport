@@ -112,8 +112,8 @@ export function SheetPerson({ label, name, username, avatar, compact, onClose, s
     return (
       <div className="flex items-center gap-2.5 min-w-0">
         <Avatar name={name || handle} src={avatar ?? null} size="xs" />
-        <p className="min-w-0 truncate text-[14.5px] font-bold text-text-primary">
-          <span className="text-[12.5px] font-medium text-text-secondary mr-1">{label}</span>{name}
+        <p className="min-w-0 truncate text-[15px] font-bold text-text-primary">
+          <span className="text-[13px] font-medium text-text-secondary mr-1">{label}</span>{name}
           {handle && <span className="text-[13px] font-semibold text-link ml-1.5">{handle}</span>}
         </p>
         {close}
@@ -125,8 +125,8 @@ export function SheetPerson({ label, name, username, avatar, compact, onClose, s
       <div className="flex items-center gap-3 min-w-0">
         <Avatar name={name || handle} src={avatar ?? null} size="sm" />
         <div className="min-w-0">
-          <p className="text-[12.5px] font-medium text-text-secondary">{label}</p>
-          <p className="truncate text-[16.5px] font-bold text-text-primary leading-tight">
+          <p className="text-[13px] font-medium text-text-secondary">{label}</p>
+          <p className="truncate text-[17px] font-bold text-text-primary leading-tight">
             {name}{handle && <span className="text-[14px] font-semibold text-link ml-1.5">{handle}</span>}
           </p>
         </div>
@@ -173,5 +173,5 @@ export function SheetChips<T extends string>({ options, value, onChange, label }
 }
 
 /** The sheet's text box (note, customer): soft filled, brand ring on focus. */
-export const sheetInputClass = 'w-full rounded-[14px] px-3.5 py-3 text-[14.5px] text-text-primary outline-none placeholder:text-text-muted border border-border focus:border-[var(--brand-text)]'
+export const sheetInputClass = 'w-full rounded-[14px] px-3.5 py-3 text-[15px] text-text-primary outline-none placeholder:text-text-muted border border-border focus:border-[var(--brand-text)]'
 export const sheetInputStyle: React.CSSProperties = { background: 'var(--bg)' }

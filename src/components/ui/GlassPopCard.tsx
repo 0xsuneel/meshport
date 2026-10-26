@@ -72,8 +72,8 @@ export function GlassPopCard({ open, kind, title, message, actionLabel, onAction
                 {kind === 'success' ? <CheckCircle2 size={20} color={color} /> : <XCircle size={20} color={color} />}
               </div>
               <div style={{ flex: 1, paddingTop: 2 }}>
-                <p style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 3px' }}>{title}</p>
-                <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>{message}</p>
+                <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 3px' }}>{title}</p>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>{message}</p>
               </div>
             </div>
             {actionLabel && (

@@ -79,7 +79,7 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
   const box: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }
   const btn: React.CSSProperties = { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '13px 14px', borderRadius: 14, border: '1px solid color-mix(in srgb, black 12%, transparent)', background: 'var(--brand)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }
   const row = (k: string, v: string, full?: string, what?: string) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
       <span style={{ width: 64, flexShrink: 0, color: 'var(--text-secondary)' }}>{k}</span>
       <span style={{ flex: 1, minWidth: 0, color: 'var(--text-primary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
       {full && (
@@ -96,12 +96,12 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
         <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Payment sent</div>
         <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>${formatAmount(value)} USDC on {chain.label}{orderNumber ? ` · ${displayOrderNumber(orderNumber)}` : ''}</div>
         {unconfirmed && (
-          <div style={{ fontSize: 12.5, color: 'var(--warning)' }}>
+          <div style={{ fontSize: 13, color: 'var(--warning-text)' }}>
             We&apos;re confirming it with the shop. Keep the transaction link below in case they ask for it.
           </div>
         )}
         {hash && txExplorerUrl(chain.id, hash) && (
-          <a href={txExplorerUrl(chain.id, hash)!} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: 'var(--brand-text)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <a href={txExplorerUrl(chain.id, hash)!} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--brand-text)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             View transaction <ExternalLink size={12} />
           </a>
         )}
@@ -148,13 +148,13 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
                 : `Pay${valid ? ` $${formatAmount(value)}` : ''} with ${wallets.length > 1 ? w.name : 'this wallet'}`}
             </button>
           ))}
-          <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.45 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.45 }}>
             Your wallet adds {netName} if it doesn't have it yet, then shows the payment to confirm. Gas is paid in {gasCoin(chain.id)}.
           </div>
         </>
       ) : (
         <>
-          <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
             Open this page in your wallet app to pay - it fills in the network, address and amount:
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -168,7 +168,7 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
         </>
       )}
 
-      {error && <div role="alert" style={{ fontSize: 12.5, color: 'var(--danger)', textAlign: 'center' }}>{error}</div>}
+      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger-text)', textAlign: 'center' }}>{error}</div>}
     </div>
   )
 }

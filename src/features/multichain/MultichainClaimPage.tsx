@@ -138,7 +138,7 @@ const CCTP_BRING_TIME = '20–90 s'
 function SpeedTag({ fast, on }: { fast: boolean; on: boolean }) {
   return (
     <span style={{ fontSize: 11, fontWeight: 700, lineHeight: '14px', padding: '0 6px', borderRadius: 999, flexShrink: 0,
-      color: on ? '#fff' : fast ? 'var(--success)' : 'var(--warning)',
+      color: on ? '#fff' : fast ? 'var(--success-text)' : 'var(--warning-text)',
       background: on ? 'rgba(255,255,255,0.2)' : `color-mix(in srgb, ${fast ? 'var(--success)' : 'var(--warning)'} 14%, transparent)` }}>
       {fast ? 'Fast' : 'Slow'}
     </span>
@@ -1932,7 +1932,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                       <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getMeta(selectedChain.chainId).label}</span>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={COLORS.muted} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6"/></svg>
                     </span>
-                    <span style={{ fontSize: 11.5, color: COLORS.muted, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatAmount(selectedChain.claimable)} USDC</span>
+                    <span style={{ fontSize: 12, color: COLORS.muted, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatAmount(selectedChain.claimable)} USDC</span>
                   </span>
                 </button>
                 <div aria-hidden="true" style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1945,7 +1945,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
                     <span style={{ fontSize: 11, color: COLORS.muted }}>To</span>
                     <span style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Arc</span>
-                    <span style={{ fontSize: 11.5, color: COLORS.muted, whiteSpace: 'nowrap' }}>Your wallet</span>
+                    <span style={{ fontSize: 12, color: COLORS.muted, whiteSpace: 'nowrap' }}>Your wallet</span>
                   </span>
                 </div>
               </div>
@@ -1971,7 +1971,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
                     quick={quickAmounts([10, 50, 100], '$', v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') }, selectedChain.claimable)}
                   />
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 13 }}>
                     <span style={{ color: COLORS.muted }}>Available: {formatAmount(selectedChain.claimable)} USDC</span>
                     {claimOver ? (
                       <span style={{ fontWeight: 700, color: COLORS.error }}>Insufficient balance · Max {formatAmount(selectedChain.claimable)}</span>
@@ -2017,7 +2017,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                             {id === 'ub' ? ubBringTime(selectedSdkId) : CCTP_BRING_TIME}
                           </span>
                           {feeLine && (
-                            <span style={{ fontSize: 11, fontWeight: 500, color: tooHigh ? COLORS.error : (id === 'ub' && ubFeeHigh) ? 'var(--warning)' : on ? 'rgba(255,255,255,0.85)' : COLORS.muted }}>{feeLine}</span>
+                            <span style={{ fontSize: 11, fontWeight: 500, color: tooHigh ? COLORS.error : (id === 'ub' && ubFeeHigh) ? 'var(--warning-text)' : on ? 'rgba(255,255,255,0.85)' : COLORS.muted }}>{feeLine}</span>
                           )}
                         </button>
                       )
@@ -2044,7 +2044,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               {ubHighWarning && (
                 <div role="status" aria-label={ubHighWarning} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 8px 8px 12px', borderRadius: 12, fontSize: 13, lineHeight: 1.35,
                   color: COLORS.text, background: 'color-mix(in srgb, var(--warning) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)' }}>
-                  <span aria-hidden style={{ color: 'var(--warning)', fontWeight: 700 }}>!</span>
+                  <span aria-hidden style={{ color: 'var(--warning-text)', fontWeight: 700 }}>!</span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     {effectiveRoute === 'ub'
                       ? <>Fee {shortFee(ubFee.total)} is high · CCTP {cctpFeeShort}</>
@@ -2052,7 +2052,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   </span>
                   {effectiveRoute === 'ub' && (
                     <button onClick={e => { e.stopPropagation(); pickRoute('cctp') }}
-                      style={{ flexShrink: 0, minHeight: 30, padding: '0 12px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700,
+                      style={{ flexShrink: 0, minHeight: 30, padding: '0 12px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
                         background: 'var(--warning)', color: '#1A1205' }}>
                       Use CCTP
                     </button>

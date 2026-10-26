@@ -86,7 +86,7 @@ function TradeReceipt({ t, isBuyer, label, counterparty, counterpartyWallet, onO
       status={status}
       title={title}
       subtitle={<>
-        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: status === 'failed' ? 'var(--danger)' : isBuyer ? 'var(--success)' : 'var(--text-primary)', marginBottom: 4 }}>
+        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: status === 'failed' ? 'var(--danger-text)' : isBuyer ? 'var(--success-text)' : 'var(--text-primary)', marginBottom: 4 }}>
           {status === 'failed' ? '' : isBuyer ? '+' : '-'}{t.amountUsdc} USDC
         </span>
         {isBuyer ? 'Bought from' : 'Sold to'} {counterparty}
@@ -264,7 +264,7 @@ export function P2PHistoryPage() {
               title={`${isBuyer ? 'Bought' : 'Sold'} USDC${cp ? ` · ${cp.displayName || cp.username}` : ''}`}
               sub={`${currencySymbol(t.currency)}${t.amountFiat} ${t.currency} · ${t.pricePerUsdc}/USDC`}
               meta={<><span style={{ color: meta.color, fontWeight: 600 }}>{meta.label}</span> · {fmtDate(t.createdAt)}</>}
-              right={<div style={{ fontSize: 14, fontWeight: 700, color: done && isBuyer ? 'var(--success)' : 'var(--text-primary)' }}>
+              right={<div style={{ fontSize: 14, fontWeight: 700, color: done && isBuyer ? 'var(--success-text)' : 'var(--text-primary)' }}>
                 {done ? (isBuyer ? '+' : '-') : ''}{t.amountUsdc} USDC
               </div>} />
           )
@@ -290,8 +290,8 @@ export function P2PHistoryPage() {
         </div>
         <div style={{ ...card, padding: '6px 16px' }}>
           {([['Bought', `+${fmt(summary.bought)} USDC`, 'var(--success)'], ['Sold', `-${fmt(summary.sold)} USDC`, COLORS.text]] as const).map(([k, v, c], i) => (
-            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 0', fontSize: 13.5, borderBottom: i === 0 ? `1px solid ${COLORS.border}` : 'none' }}>
-              <span style={{ color: COLORS.muted }}>{k} <span style={{ fontSize: 11.5 }}>(completed)</span></span>
+            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 0', fontSize: 14, borderBottom: i === 0 ? `1px solid ${COLORS.border}` : 'none' }}>
+              <span style={{ color: COLORS.muted }}>{k} <span style={{ fontSize: 12 }}>(completed)</span></span>
               <span style={{ fontWeight: 700, color: c }}>{loading ? '–' : v}</span>
             </div>
           ))}

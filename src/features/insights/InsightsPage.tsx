@@ -617,7 +617,7 @@ export function InsightsPage() {
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
                   Net Flow
                 </div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: stats.netFlow >= 0 ? 'var(--success)' : 'var(--danger)', letterSpacing: '-.4px', lineHeight: 1 }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: stats.netFlow >= 0 ? 'var(--success-text)' : 'var(--danger-text)', letterSpacing: '-.4px', lineHeight: 1 }}>
                   {stats.netFlow >= 0 ? '+' : '-'}${formatAmount(Math.abs(stats.netFlow))}
                 </div>
               </div>
@@ -803,7 +803,7 @@ export function InsightsPage() {
           </div>
 
           {stats.chainUsage.length === 0 && (
-            <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', margin: '2px 0 4px' }}>No multichain moves in this period</p>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 4px' }}>No multichain moves in this period</p>
           )}
           {stats.chainUsage.map(({ chain, count, pct }, i) => (
             <div key={chain} style={{ marginBottom: i < stats.chainUsage.length - 1 ? 9 : 4 }}>
@@ -901,8 +901,8 @@ export function InsightsPage() {
                 <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{row.label}</span>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700,
-                  color: row.green ? 'var(--success)' : 'var(--text-primary)' }}>
+                <div style={{ fontSize: 12, fontWeight: 700,
+                  color: row.green ? 'var(--success-text)' : 'var(--text-primary)' }}>
                   {row.value}
                 </div>
                 {row.sub && (

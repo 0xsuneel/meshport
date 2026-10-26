@@ -99,15 +99,15 @@ export function NewsArticlePage() {
 
         {state === 'ready' && item && (
           <>
-            <span style={{ display: 'inline-block', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase',
+            <span style={{ display: 'inline-block', fontSize: 12, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase',
               color: 'var(--brand-text)', marginBottom: 8 }}>{NEWS_SOURCE_LABEL[item.source]}</span>
             <h1 style={{ margin: 0, fontSize: isDesktop ? 30 : 22, lineHeight: 1.25, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px', textWrap: 'balance' } as React.CSSProperties}>
               {item.title}
             </h1>
-            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 8 }}>{newsMeta(item, false)}</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8 }}>{newsMeta(item, false)}</div>
 
             {item.summary && (
-              <p style={{ fontSize: 15.5, lineHeight: 1.6, fontWeight: 600, color: 'var(--text-primary)', margin: '18px 0 0' }}>{item.summary}</p>
+              <p style={{ fontSize: 16, lineHeight: 1.6, fontWeight: 600, color: 'var(--text-primary)', margin: '18px 0 0' }}>{item.summary}</p>
             )}
             {item.body.map((p, i) => (
               <p key={i} style={{ fontSize: 15, lineHeight: 1.65, color: 'var(--text-primary)', opacity: 0.88, margin: '14px 0 0' }}>{p}</p>
@@ -124,7 +124,7 @@ export function NewsArticlePage() {
               )}
               <button onClick={share}
                 style={{ padding: '13px 16px', borderRadius: 14, cursor: 'pointer', background: 'var(--surface)', color: 'var(--text-primary)',
-                  fontSize: 14.5, fontWeight: 600, border: '1px solid var(--border)' }}>
+                  fontSize: 15, fontWeight: 600, border: '1px solid var(--border)' }}>
                 Share
               </button>
             </div>
@@ -166,7 +166,7 @@ export function NewsArticlePage() {
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: '14px 16px 6px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>More updates</span>
-              <button onClick={() => navigate('/news')} style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--brand-text)', background: 'none', border: 'none', cursor: 'pointer' }}>View all</button>
+              <button onClick={() => navigate('/news')} style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-text)', background: 'none', border: 'none', cursor: 'pointer' }}>View all</button>
             </div>
             {more === null ? [0, 1, 2, 3].map(i => (
               <div key={i} style={{ display: 'flex', gap: 12, padding: '10px 0' }}>
@@ -182,7 +182,7 @@ export function NewsArticlePage() {
                 <NewsCover item={n} variant="thumb" style={{ width: 52, height: 52, borderRadius: 12, flexShrink: 0 }} />
                 <span style={{ minWidth: 0, flex: 1 }}>
                   <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: 13, fontWeight: 600, lineHeight: 1.35, color: 'var(--text-primary)' }}>{n.title}</span>
-                  <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 3 }}>{NEWS_SOURCE_LABEL[n.source]} · {newsDate(n.published_at)}</span>
+                  <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>{NEWS_SOURCE_LABEL[n.source]} · {newsDate(n.published_at)}</span>
                 </span>
               </button>
             ))}
@@ -193,7 +193,7 @@ export function NewsArticlePage() {
               {facts.map(([k, v], i) => (
                 <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '10px 0', fontSize: 13, borderBottom: i < facts.length - 1 ? '1px solid var(--border)' : 'none' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>{k}</span>
-                  <span style={{ fontWeight: 600, textAlign: 'right', color: k === 'Status' ? 'var(--success)' : 'var(--text-primary)' }}>{v}</span>
+                  <span style={{ fontWeight: 600, textAlign: 'right', color: k === 'Status' ? 'var(--success-text)' : 'var(--text-primary)' }}>{v}</span>
                 </div>
               ))}
             </div>

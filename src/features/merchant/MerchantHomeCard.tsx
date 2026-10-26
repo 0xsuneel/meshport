@@ -46,7 +46,7 @@ export function MerchantHomeCard() {
             <div key={p.id} {...pressable(openMoney)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <Clock size={16} color="var(--warning)" />
               <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{who(p)} · {LABEL[p.chain] ?? p.chain} → Arc · {paymentStageLabel(p)}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--warning)' }}>${formatAmount(p.amount)}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--warning-text)' }}>${formatAmount(p.amount)}</span>
             </div>
           ))}
         </div>
@@ -58,7 +58,7 @@ export function MerchantHomeCard() {
         ) : recent.map(p => (
           <div key={p.id} {...pressable(openMoney)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
             <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{who(p)} <span style={{ color: 'var(--text-secondary)' }}>· {timeAgo(p.createdAt)}</span></span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>+${formatAmount(p.amount)}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success-text)' }}>+${formatAmount(p.amount)}</span>
           </div>
         ))}
       </div>

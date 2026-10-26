@@ -68,7 +68,7 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-4 py-5 text-left"
       >
-        <span className="text-[15.5px] font-semibold text-text-primary">{q}</span>
+        <span className="text-[16px] font-semibold text-text-primary">{q}</span>
         <motion.span
           animate={{ rotate: open ? 45 : 0 }}
           transition={CONTROL_MOTION}
@@ -98,7 +98,7 @@ export function FAQSection() {
   return (
     <section id="faq" className="scroll-mt-24 mx-auto max-w-3xl px-5 py-20 sm:px-8 sm:py-28">
       <Reveal className="text-center">
-        <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand-text">FAQ</p>
+        <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-brand-text">FAQ</p>
         <h2 className="mt-3 text-[30px] font-extrabold tracking-tight text-text-primary sm:text-[38px]">
           Questions, answered
         </h2>

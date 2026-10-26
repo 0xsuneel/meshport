@@ -28,7 +28,7 @@ const BENEFITS = [
     desc: 'Confirms in under a second',
   },
   {
-    icon: <DollarSign className="w-5 h-5" style={{ color: 'var(--success)' }} />,
+    icon: <DollarSign className="w-5 h-5" style={{ color: 'var(--success-text)' }} />,
     bg: 'color-mix(in srgb, var(--success) 12%, transparent)',
     label: 'Near-zero fees',
     desc: '~$0.01 per transfer',
@@ -40,7 +40,7 @@ const BENEFITS = [
     desc: 'Only you hold your keys',
   },
   {
-    icon: <Globe className="w-5 h-5" style={{ color: 'var(--warning)' }} />,
+    icon: <Globe className="w-5 h-5" style={{ color: 'var(--warning-text)' }} />,
     bg: 'color-mix(in srgb, var(--warning) 12%, transparent)',
     label: 'Global',
     desc: 'Send USDC anywhere',
@@ -238,7 +238,7 @@ export function PayPage() {
               </AnimatePresence>
             </div>
             {/* Every provider's #1 warning: the right token on the right network. */}
-            <p className="text-[11.5px] leading-snug" style={{ color: 'var(--text-muted)' }}>
+            <p className="text-[12px] leading-snug" style={{ color: 'var(--text-muted)' }}>
               Send only <b style={{ color: 'var(--text-primary)' }}>USDC on {net.label}</b> - other tokens or networks won't reach {displayName}.
               {!net.native && ` It reaches them once they move it to Arc.`}
             </p>

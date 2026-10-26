@@ -13,8 +13,8 @@ const assets = [
 ]
 
 const activity = [
-  { icon: ArrowUpRight, label: 'Paid to sarah.arc', amount: '-45.00', color: 'var(--danger)' },
-  { icon: ArrowDownLeft, label: 'Received from raj.arc', amount: '+120.00', color: 'var(--success)' },
+  { icon: ArrowUpRight, label: 'Paid to sarah.arc', amount: '-45.00', color: 'var(--danger-text)' },
+  { icon: ArrowDownLeft, label: 'Received from raj.arc', amount: '+120.00', color: 'var(--success-text)' },
   { icon: Repeat, label: 'Swapped USDC → EURC', amount: '200.00', color: 'var(--text-primary)' },
 ]
 
@@ -57,7 +57,7 @@ export function DesktopDashboardMockup() {
               display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 999,
               background: 'color-mix(in srgb, var(--success) 12%, transparent)',
               border: '1px solid color-mix(in srgb, var(--success) 25%, transparent)',
-              fontSize: 11, fontWeight: 600, color: 'var(--success)',
+              fontSize: 11, fontWeight: 600, color: 'var(--success-text)',
             }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)' }} />
               Arc Network
@@ -69,7 +69,7 @@ export function DesktopDashboardMockup() {
             <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Total Balance</p>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
               <span style={{ fontSize: 34, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>$3,534.50</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 12, fontWeight: 700, color: 'var(--success)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 12, fontWeight: 700, color: 'var(--success-text)' }}>
                 <TrendingUp size={13} /> 4.8%
               </span>
             </div>
@@ -102,13 +102,13 @@ export function DesktopDashboardMockup() {
                     {a.symbol.slice(0, 2)}
                   </div>
                   <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>{a.symbol}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{a.symbol}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{a.name}</div>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>${a.value}</div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: a.up ? 'var(--success)' : 'var(--danger)' }}>{a.change}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>${a.value}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: a.up ? 'var(--success-text)' : 'var(--danger-text)' }}>{a.change}</div>
                 </div>
               </div>
             ))}
@@ -123,7 +123,7 @@ export function DesktopDashboardMockup() {
                   <div style={{ width: 22, height: 22, borderRadius: 8, background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <a.icon size={12} color={a.color} />
                   </div>
-                  <span style={{ flex: 1, fontSize: 11.5, color: 'var(--text-primary)' }}>{a.label}</span>
+                  <span style={{ flex: 1, fontSize: 12, color: 'var(--text-primary)' }}>{a.label}</span>
                 </div>
               ))}
             </div>
@@ -144,7 +144,7 @@ export function DesktopDashboardMockup() {
           </div>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>Payment received</div>
-            <div style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600 }}>+120.00 USDC</div>
+            <div style={{ fontSize: 11, color: 'var(--success-text)', fontWeight: 600 }}>+120.00 USDC</div>
           </div>
         </CardShell>
       </motion.div>

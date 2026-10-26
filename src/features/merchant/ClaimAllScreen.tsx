@@ -49,7 +49,7 @@ function Badge({ kind }: { kind: 'wait' | 'working' | 'done' | 'error' }) {
     </span>
   )
   if (kind === 'error') return (
-    <span className="ca-tick" style={{ ...base, background: 'color-mix(in srgb, var(--danger) 12%, transparent)', border: '1.5px solid var(--danger)', color: 'var(--danger)', fontSize: 13, fontWeight: 800 }}>!</span>
+    <span className="ca-tick" style={{ ...base, background: 'color-mix(in srgb, var(--danger) 12%, transparent)', border: '1.5px solid var(--danger)', color: 'var(--danger-text)', fontSize: 13, fontWeight: 800 }}>!</span>
   )
   if (kind === 'working') return <span style={{ ...base, border: '1.5px solid var(--brand)' }}><MeshLoader size={15} label="Sending" /></span>
   return <span style={{ ...base, border: '1.5px solid var(--border)' }} />
@@ -70,7 +70,7 @@ function ChainRow({ chain, step, first, onTrack }: { chain: ClaimAllChain; step?
         : <span style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{chain.label}</div>
-        <div style={{ fontSize: 12, marginTop: 2, lineHeight: 1.35, color: kind === 'error' ? 'var(--danger)' : 'var(--text-secondary)' }}>{status}</div>
+        <div style={{ fontSize: 12, marginTop: 2, lineHeight: 1.35, color: kind === 'error' ? 'var(--danger-text)' : 'var(--text-secondary)' }}>{status}</div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>${formatAmount(chain.balance)}</div>

@@ -144,7 +144,7 @@ export function NotificationBroadcastPage() {
           {error && (
             <div style={{
               background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 25%, transparent)',
-              borderRadius: 12, padding: '10px 12px', color: 'var(--danger)', fontSize: 13,
+              borderRadius: 12, padding: '10px 12px', color: 'var(--danger-text)', fontSize: 13,
             }}>
               {error}
             </div>
@@ -156,7 +156,7 @@ export function NotificationBroadcastPage() {
               borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <CheckCircle size={15} color="var(--success)" />
-              <p style={{ margin: 0, fontSize: 13, color: 'var(--success)' }}>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--success-text)' }}>
                 Sent to {result.sent} device{result.sent === 1 ? '' : 's'}
                 {result.failed > 0 ? ` · ${result.failed} failed` : ''}
               </p>
@@ -205,11 +205,11 @@ export function NotificationBroadcastPage() {
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--success)' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--success-text)' }}>
                     <CheckCircle size={13} /> {h.sent_count} sent
                   </span>
                   {h.failed_count > 0 && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--danger)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--danger-text)' }}>
                       <XCircle size={13} /> {h.failed_count} failed
                     </span>
                   )}

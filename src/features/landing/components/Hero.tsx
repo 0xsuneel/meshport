@@ -19,7 +19,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: EASE }}
-            className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[12.5px] font-semibold text-text-secondary"
+            className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-text-secondary"
           >
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)' }} />
             Built on Arc &middot; USDC-native
@@ -38,7 +38,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.12, ease: EASE }}
-            className="mt-6 max-w-[520px] text-[16.5px] leading-[1.6] text-text-secondary sm:text-[18px]"
+            className="mt-6 max-w-[520px] text-[17px] leading-[1.6] text-text-secondary sm:text-[18px]"
           >
             Send and receive USDC by username, move funds across supported chains, and manage your payments from one wallet built on Arc.
           </motion.p>
@@ -77,7 +77,7 @@ export function Hero() {
             <span className="h-1 w-1 rounded-full bg-text-muted/50" />
             <span>Built on Arc</span>
             <span className="h-1 w-1 rounded-full bg-text-muted/50" />
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-1 text-[11.5px] font-semibold text-warning">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-1 text-[12px] font-semibold text-warning">
               Arc Testnet
             </span>
           </motion.div>

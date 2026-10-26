@@ -106,6 +106,18 @@ export default {
         eurc:   withOpacity('--usdc-icon-rgb'),
         cirbtc: '#F7931A',
       },
+      // Status colours as TEXT (text-success, text-arc-green, …) use the
+      // contrast-safe text tones; bg-/border-/ring- keep the bright fills.
+      textColor: {
+        success: withOpacity('--success-text-rgb'),
+        warning: withOpacity('--warning-text-rgb'),
+        danger:  withOpacity('--danger-text-rgb'),
+        arc: {
+          green: withOpacity('--success-text-rgb'),
+          amber: withOpacity('--warning-text-rgb'),
+          red:   withOpacity('--danger-text-rgb'),
+        },
+      },
       fontFamily: {
         sans: ['-apple-system', 'SF Pro Display', 'Inter', 'system-ui', 'sans-serif'],
       },

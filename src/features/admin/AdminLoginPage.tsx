@@ -91,7 +91,7 @@ export function AdminLoginPage() {
           {error && (
             <div style={{
               background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 25%, transparent)',
-              borderRadius: 12, padding: '10px 12px', color: 'var(--danger)', fontSize: 13,
+              borderRadius: 12, padding: '10px 12px', color: 'var(--danger-text)', fontSize: 13,
             }}>
               {error}
             </div>

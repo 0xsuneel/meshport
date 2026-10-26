@@ -69,7 +69,7 @@ export function PinSheet(p: PinSheetProps) {
   const close = p.locked ? () => {} : p.onClose
   const pad = p.fallbackConfirm ? (
     <button type="button" onClick={p.fallbackConfirm.onConfirm}
-      className="w-full rounded-2xl py-4 text-[14.5px] font-bold text-white bg-brand active:scale-[0.98] transition-transform">
+      className="w-full rounded-2xl py-4 text-[15px] font-bold text-white bg-brand active:scale-[0.98] transition-transform">
       {p.fallbackConfirm.label}
     </button>
   ) : (
@@ -100,7 +100,7 @@ export function PinSheet(p: PinSheetProps) {
         {p.header}
         <div className="text-center mb-7">
           <h2 className="text-lg font-bold text-text-primary">{p.title}</h2>
-          {(!p.card || p.error) && <p className="text-[12.5px] mt-1.5 text-text-secondary">{said}</p>}
+          {(!p.card || p.error) && <p className="text-[13px] mt-1.5 text-text-secondary">{said}</p>}
           {p.card && <SummaryCard {...p.card} />}
         </div>
         {pad}
@@ -118,13 +118,13 @@ function SummaryCard({ label, name, detail, amount, unit }: NonNullable<PinSheet
         {name.trim().charAt(0).toUpperCase() || '?'}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[12.5px] text-text-secondary">{label}</p>
-        <p className="text-[15.5px] font-bold text-text-primary truncate">{name}</p>
-        {detail && <p className="text-[12.5px] text-text-secondary truncate">{detail}</p>}
+        <p className="text-[13px] text-text-secondary">{label}</p>
+        <p className="text-[16px] font-bold text-text-primary truncate">{name}</p>
+        {detail && <p className="text-[13px] text-text-secondary truncate">{detail}</p>}
       </div>
       <div className="text-right shrink-0">
         <p className="text-[22px] font-extrabold tracking-[-0.5px] text-text-primary tabular-nums">{amount}</p>
-        {unit && <p className="text-[12.5px] text-text-secondary">{unit}</p>}
+        {unit && <p className="text-[13px] text-text-secondary">{unit}</p>}
       </div>
     </div>
   )

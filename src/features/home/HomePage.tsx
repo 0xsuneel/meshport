@@ -505,14 +505,14 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
       }}>
         <BiometricIcon size={17} style={{ color: 'var(--brand-text)' }} />
       </div>
-      <p style={{ flex: 1, minWidth: 0, fontSize: 12.35, fontWeight: 500, color: 'var(--text-primary)', margin: 0, lineHeight: 1.35 }}>
+      <p style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', margin: 0, lineHeight: 1.35 }}>
         Unlock MeshPort and approve payments faster with biometrics
       </p>
       {biometricEnabled ? (
         <span style={{
           flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4,
           padding: '6px 12px', borderRadius: 10, fontSize: 12, fontWeight: 600,
-          color: 'var(--success)', background: 'rgba(34,197,94,0.12)',
+          color: 'var(--success-text)', background: 'rgba(34,197,94,0.12)',
         }}>
           <Check size={13} /> Enabled
         </span>
@@ -521,7 +521,7 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
           onClick={openConfirm}
           style={{
             flexShrink: 0, padding: '6.5px 13.5px', borderRadius: 9.5, border: '1px solid var(--border)',
-            background: 'transparent', color: 'var(--text-primary)', fontSize: 12.35, fontWeight: 600, cursor: 'pointer',
+            background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
           }}>
           Enable
         </button>
@@ -689,8 +689,8 @@ function AssetRow({ icon, fallbackColor, fallbackChar, name, sub, cryptoAmount, 
             <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>-</span>
           ) : (
             <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12.5, fontWeight: 600,
-              color: changeUp ? 'var(--success)' : 'var(--danger)',
+              display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 13, fontWeight: 600,
+              color: changeUp ? 'var(--success-text)' : 'var(--danger-text)',
             }}>
               <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ transform: changeUp ? 'none' : 'rotate(180deg)' }}>
                 <path d="M5 1v8M5 1L1.5 4.5M5 1l3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
@@ -830,14 +830,14 @@ function CustomizeQuickActionsSheet({ selectedIds, onToggle, onClose, warning }:
   const content = (
     <>
       <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Customize Quick Actions</div>
-      <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '0 0 16px' }}>
+      <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 16px' }}>
         Choose up to {MAX_QUICK_ACTIONS} actions to pin to your Home dashboard.
       </p>
       {warning && (
         <div style={{
           background: 'color-mix(in srgb, var(--warning) 12%, transparent)',
           border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)',
-          color: 'var(--warning)', borderRadius: 10, padding: '8px 12px', fontSize: 12.5, fontWeight: 600,
+          color: 'var(--warning-text)', borderRadius: 10, padding: '8px 12px', fontSize: 13, fontWeight: 600,
           marginBottom: 14,
         }}>
           You already have {MAX_QUICK_ACTIONS} actions - remove one to add another.
@@ -1082,7 +1082,7 @@ function BusinessInsightsColumn({ walletAddress, period, setPeriod, navigate }: 
 
       <button onClick={() => navigate('/business?screen=reports')} style={{
         ...card, borderRadius: 14, padding: '11px 14px', cursor: 'pointer', textAlign: 'left',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 600, color: 'var(--brand-text)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: 'var(--brand-text)',
       }}>
         <span>Statement · download CSV or PDF</span>
         <span aria-hidden>→</span>
@@ -1105,7 +1105,7 @@ function InsightStatCard({ label, value, changePct, sparkValues }: {
       <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{label}</div>
       <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>{value}</div>
       {changePct !== null && (
-        <span style={{ fontSize: 11, fontWeight: 600, color: up ? 'var(--success)' : 'var(--danger)' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: up ? 'var(--success-text)' : 'var(--danger-text)' }}>
           {up ? '↑' : '↓'}{Math.abs(changePct).toFixed(0)}%
         </span>
       )}
@@ -1191,7 +1191,7 @@ function ActivityChartCard({ buckets, granularity, setGranularity, totalCount, p
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
         <div>
-          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>Activity</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Activity</div>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>{totalCount} transactions {periodLabel}</div>
         </div>
         <div style={{ display: 'flex', gap: 3, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', borderRadius: 9, padding: 2, flexShrink: 0 }}>
@@ -1630,7 +1630,7 @@ function MultichainHubCard({
           on the right (replaces the old centered title + translucent
           globe badge, per the approved reference layout). */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
           {hub('Multichain Hub')}
           <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
             style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
@@ -1661,13 +1661,13 @@ function MultichainHubCard({
           still shrinking independently via statFontSize() above. */}
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11.5, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px' }}>Available To Transfer</div>
+          <div style={{ fontSize: 12, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px' }}>Available To Transfer</div>
           <div style={{ fontSize: transferFontSize, fontWeight: 800, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', ...ellipsisLine }}>
             {balanceHidden ? '••••' : <>${renderStat(arcAvailable, transferFontSize)}</>}
           </div>
         </div>
         <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
-          <div style={{ fontSize: 11.5, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px',
+          <div style={{ fontSize: 12, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px',
             ...(claimLoading ? { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5, overflow: 'visible' } : null) }}>
             {claimLoading && <span style={{ margin: '-2px 0', display: 'flex' }}><ChainScanSpinner chain={scanChain} /></span>}
             <span style={claimLoading ? { minWidth: 0 } : undefined}>{isMerchantHero ? 'On Other Chains' : 'Available To Bring'}</span>
@@ -1693,7 +1693,7 @@ function MultichainHubCard({
           onPointerCancel={() => { hubTapStart.current = null }}
           onClick={() => { if (hubTapFired.current) { hubTapFired.current = false; return } navigate('/multichain') }}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/multichain') }}
-          style={{ cursor: 'pointer', fontSize: 13.5, fontWeight: 600, letterSpacing: '0.2px', color: '#8FE9CB',
+          style={{ cursor: 'pointer', fontSize: 14, fontWeight: 600, letterSpacing: '0.2px', color: '#8FE9CB',
             padding: '14px 44px', margin: '-14px -44px', lineHeight: '16px', touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent', userSelect: 'none' }}>
           View in Hub
         </div>
@@ -1833,7 +1833,7 @@ function AvailableBalanceCard({
     <BowedShapeCard background="var(--brand)" cardRef={cardRef} flat>
       {/* Label + eye toggle; the 7-day balance bars sit beside the amount below. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
           Available Balance
           <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
             style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
@@ -1917,7 +1917,7 @@ function AvailableBalanceCard({
         aria-label="Copy wallet address"
         style={{ display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 11px', marginTop: 10, borderRadius: 999, border: 'none',
           background: 'rgba(255,255,255,0.10)', cursor: 'pointer', maxWidth: '70%' }}>
-        <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {shortAddr}
         </span>
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
@@ -2243,18 +2243,23 @@ function MobileHeroCarousel({
       {/* ── Dot indicators - tap either to jump slides. On the card's last
            row, right side (the address sits on the left of it). ─────────── */}
       {/* The dots stay still; one white pill slides to the active one
-           (transform only - animating a dot's width re-laid out the row). */}
-      <div style={{ position: 'absolute', right: 18, bottom: 12, display: 'flex', gap: HERO_DOT_GAP }}>
-        {[0, 1].map(i => (
-          <button key={i} aria-label={i === 0 ? 'Show balance card' : 'Show multichain hub card'}
-            onClick={() => { if (i !== heroCardIndex && !heroGestureActive.current) revealHeroSide(i > heroCardIndex ? 'right' : 'left') }}
-            style={{ width: HERO_DOT, height: HERO_DOT, borderRadius: 3, border: 'none', padding: 0, background: 'rgba(255,255,255,0.35)', cursor: 'pointer' }} />
-        ))}
-        <span aria-hidden style={{
-          position: 'absolute', top: 0, left: -(HERO_PILL - HERO_DOT) / 2, width: HERO_PILL, height: HERO_DOT, borderRadius: 3, background: '#fff', pointerEvents: 'none',
-          transform: `translateX(${heroCardIndex * (HERO_DOT + HERO_DOT_GAP)}px)`, transition: 'transform 200ms var(--ease-out)',
-        }} />
-      </div>
+           (transform only - animating a dot's width re-laid out the row).
+           With two cards the pager is ONE button that switches them: a 24px+
+           tap area (the 5px dots on their own failed the 24px minimum). */}
+      <button type="button"
+        aria-label={heroCardIndex === 0 ? 'Show multichain hub card' : 'Show balance card'}
+        onClick={() => { if (!heroGestureActive.current) revealHeroSide(heroCardIndex === 0 ? 'right' : 'left') }}
+        style={{ position: 'absolute', right: 8, bottom: 2, padding: '10px', border: 'none', background: 'none', cursor: 'pointer', display: 'flex' }}>
+        <span style={{ position: 'relative', display: 'flex', gap: HERO_DOT_GAP }}>
+          {[0, 1].map(i => (
+            <span key={i} style={{ width: HERO_DOT, height: HERO_DOT, borderRadius: 3, background: 'rgba(255,255,255,0.35)' }} />
+          ))}
+          <span aria-hidden style={{
+            position: 'absolute', top: 0, left: -(HERO_PILL - HERO_DOT) / 2, width: HERO_PILL, height: HERO_DOT, borderRadius: 3, background: '#fff', pointerEvents: 'none',
+            transform: `translateX(${heroCardIndex * (HERO_DOT + HERO_DOT_GAP)}px)`, transition: 'transform 200ms var(--ease-out)',
+          }} />
+        </span>
+      </button>
     </div>
   )
 }
@@ -2348,7 +2353,7 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hub(b.title)}</div>
-          <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.82)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.text}</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.82)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.text}</div>
         </div>
         <span className={docked ? 'mp-try' : undefined} style={{ flexShrink: 0, position: 'relative', fontSize: docked ? 12.5 : 12, fontWeight: docked ? 600 : 700, color: docked ? '#0F2E2B' : 'var(--brand)', background: '#fff', borderRadius: 999,
           padding: docked ? '0 12px' : '6px 12px', height: docked ? 32 : undefined, display: 'flex', alignItems: 'center', gap: 5, boxShadow: docked ? '0 2px 6px rgba(0,0,0,0.12)' : undefined }}>
@@ -2388,11 +2393,18 @@ function BusinessApprovalBanner() {
       ? { tone: 'var(--danger)', title: status === 'revoked' ? 'Business access removed' : 'Business account not approved', text: application?.reviewNote || 'Check the details and send it again.', action: 'Apply again' }
       : { tone: 'var(--brand)', title: 'Apply for business approval', text: 'Payments, orders and business tools turn on once MeshPort approves your business.', action: 'Apply for approval' }
   return (
-    <div style={{ margin: '12px 0 0', padding: 16, borderRadius: 20, background: 'var(--card)', border: '1px solid var(--border)', borderLeft: `4px solid ${c.tone}` }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{c.title}</div>
-      <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 3, lineHeight: 1.4 }}>{c.text}</div>
+    // The status reads from a tint and a dot (a thick coloured left edge was
+    // decoration); the action is the app's usual teal button - white on the
+    // amber / red status tones failed contrast.
+    <div style={{ margin: '12px 0 0', padding: 16, borderRadius: 16,
+      background: `color-mix(in srgb, ${c.tone} 8%, var(--card))`, border: `1px solid color-mix(in srgb, ${c.tone} 28%, var(--border))` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: c.tone, flexShrink: 0 }} />
+        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{c.title}</span>
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.4 }}>{c.text}</div>
       <button type="button" onClick={() => navigate('/business?apply=1')}
-        style={{ marginTop: 12, minHeight: 40, padding: '0 16px', borderRadius: 12, border: 'none', background: c.tone, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+        style={{ marginTop: 12, minHeight: 40, padding: '0 16px', borderRadius: 12, border: 'none', background: 'var(--brand)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
         {c.action}
       </button>
     </div>
@@ -4028,7 +4040,7 @@ export function HomePage() {
                       setTimeout(() => setHandleCopied(false), 1500)
                     }}
                     style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, background: 'none', border: 'none', padding: 0, cursor: 'pointer', maxWidth: '100%', minWidth: 0 }}>
-                    <span style={{ fontSize: 11.5, color: 'var(--link)', fontFamily: 'monospace', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
+                    <span style={{ fontSize: 12, color: 'var(--link)', fontFamily: 'monospace', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
                     {handleCopied
                       ? <Check data-tick className="w-3 h-3 text-success flex-shrink-0" />
                       : <Copy className="w-3 h-3 text-link/60 flex-shrink-0" />}
@@ -4228,7 +4240,7 @@ export function HomePage() {
             </div>
             {!balanceHidden && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 700, color: todayChange.net >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 700, color: todayChange.net >= 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>
                   <svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{ transform: todayChange.net >= 0 ? 'none' : 'rotate(180deg)' }}>
                     <path d="M5 1v8M5 1L1.5 4.5M5 1l3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
@@ -4314,7 +4326,7 @@ export function HomePage() {
                   }} />
                 )}
               </span>
-              <span style={{ fontSize: 12.5, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1 }}>{a.label}</span>
+              <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1 }}>{a.label}</span>
             </button>
           ))}
         </div>
@@ -4341,7 +4353,7 @@ export function HomePage() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                fontSize: 15.4, color: 'var(--brand-text)', fontWeight: 500,
+                fontSize: 15, color: 'var(--brand-text)', fontWeight: 500,
               }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                 <path d="M12 3s6 6.5 6 10.5a6 6 0 01-12 0C6 9.5 12 3 12 3z" stroke="var(--brand-text)" strokeWidth="1.8" strokeLinejoin="round"/>
@@ -4428,7 +4440,7 @@ export function HomePage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Recent Activity</span>
-              <span onClick={() => navigate('/activity')} style={{ fontSize: 11.5, color: 'var(--brand-text)', fontWeight: 600, cursor: 'pointer' }}>View all</span>
+              <span onClick={() => navigate('/activity')} style={{ fontSize: 12, color: 'var(--brand-text)', fontWeight: 600, cursor: 'pointer' }}>View all</span>
             </div>
             {homeRecentActivity.length === 0 ? (
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', padding: '20px 0' }}>No recent activity</p>
@@ -4485,7 +4497,7 @@ export function HomePage() {
             <div style={{ display: 'flex', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Net Flow</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: insightsData.netFlow >= 0 ? 'var(--success)' : 'var(--danger)', marginTop: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: insightsData.netFlow >= 0 ? 'var(--success-text)' : 'var(--danger-text)', marginTop: 1 }}>
                   {insightsData.netFlow >= 0 ? '+' : '-'}${trimTrailingZeros(Math.abs(insightsData.netFlow).toFixed(2))}
                 </div>
               </div>

@@ -400,7 +400,7 @@ export function ChangePasscodePage() {
               <div className="flex gap-2 justify-center mb-1">
                 {steps.map(s => (
                   <div key={s.key} className="flex flex-col items-center gap-1">
-                    <div className="text-[11px] font-semibold" style={{ color: activeField === s.key ? 'var(--brand-text)' : s.done ? 'var(--success)' : 'var(--text-muted)' }}>{s.label}</div>
+                    <div className="text-[11px] font-semibold" style={{ color: activeField === s.key ? 'var(--brand-text)' : s.done ? 'var(--success-text)' : 'var(--text-muted)' }}>{s.label}</div>
                     <div className="h-0.5 w-16 rounded-full" style={{ background: activeField === s.key ? 'var(--brand)' : s.done ? 'var(--success)' : 'var(--border)' }} />
                   </div>
                 ))}

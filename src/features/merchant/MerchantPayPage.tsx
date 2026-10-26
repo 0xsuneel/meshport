@@ -155,7 +155,7 @@ export function MerchantPayPage() {
             <p className="text-xs font-semibold" style={{ color: statusColor }}>{STATUS_LABEL[view.status]}</p>
           )}
           {['pending', 'partially_paid', 'payment_detected'].includes(view.status) && expiryText(view.expiresAt) && (
-            <p className="text-xs font-semibold" style={{ color: 'var(--warning)' }}>{expiryText(view.expiresAt)}</p>
+            <p className="text-xs font-semibold" style={{ color: 'var(--warning-text)' }}>{expiryText(view.expiresAt)}</p>
           )}
           {view.received > 0 && view.status !== 'paid' && (
             <p className="text-xs text-text-secondary">Received ${formatAmount(view.received)} of ${formatAmount(view.amount)}</p>
@@ -204,7 +204,7 @@ export function MerchantPayPage() {
                     {netMenu && <TokenMenu ariaLabel="Choose network" maxHeight={320} selected={netId} options={netOptions} onSelect={setNetId} onClose={() => setNetMenu(false)} />}
                   </AnimatePresence>
                 </div>
-                <p className="text-[11.5px] leading-snug text-text-muted">
+                <p className="text-[12px] leading-snug text-text-muted">
                   Send only <b className="text-text-primary">USDC on {net.label}</b> - other tokens or networks won't reach {view.merchantName ?? 'them'}.
                 </p>
               </div>

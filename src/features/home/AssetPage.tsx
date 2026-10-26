@@ -144,7 +144,7 @@ export function AssetPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <ActionIcon name={a.icon} size={27} />
               </span>
-              <span style={{ fontSize: 12.5, fontWeight: 500 }}>{a.label}</span>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>{a.label}</span>
             </button>
           ))}
         </div>

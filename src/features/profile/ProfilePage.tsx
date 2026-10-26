@@ -139,12 +139,12 @@ export function ProfilePage() {
 
       <div className="flex items-center gap-2.5 mt-3">
         <button onClick={() => navigate('/edit-profile')}
-          className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-2xl text-white text-[13.5px] font-bold active:scale-95 transition-transform"
+          className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-2xl text-white text-[14px] font-bold active:scale-95 transition-transform"
           style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
           <User className="w-4 h-4" /> Edit Profile
         </button>
         <button onClick={handleSharePaymentLink}
-          className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-2xl text-text-primary text-[13.5px] font-bold active:scale-95 transition-transform bg-[rgb(var(--text-primary-rgb)/0.05)] border border-border">
+          className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-2xl text-text-primary text-[14px] font-bold active:scale-95 transition-transform bg-[rgb(var(--text-primary-rgb)/0.05)] border border-border">
           <Share2 className="w-4 h-4" /> Share
         </button>
       </div>
@@ -290,11 +290,11 @@ export function ProfilePage() {
           </p>
           <div className="flex gap-3">
             <button onClick={() => setShowLogoutConfirm(false)}
-              className="flex-1 py-3.5 rounded-2xl text-text-primary text-[14.5px] font-bold active:scale-95 transition-transform bg-[rgb(var(--text-primary-rgb)/0.05)] border border-border">
+              className="flex-1 py-3.5 rounded-2xl text-text-primary text-[15px] font-bold active:scale-95 transition-transform bg-[rgb(var(--text-primary-rgb)/0.05)] border border-border">
               Cancel
             </button>
             <button onClick={handleLogout}
-              className="flex-1 py-3.5 rounded-2xl text-white text-[14.5px] font-bold active:scale-95 transition-transform bg-danger"
+              className="flex-1 py-3.5 rounded-2xl text-white text-[15px] font-bold active:scale-95 transition-transform bg-danger"
               style={{ border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
               Confirm
             </button>

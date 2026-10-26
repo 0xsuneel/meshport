@@ -130,7 +130,7 @@ export function MoveProgress({
           <div style={{ maxWidth: 200, height: 6, borderRadius: 4, background: 'var(--border)', overflow: 'hidden', margin: '14px auto 0' }}>
             <div style={{ width: `${Math.max(pct, loading ? 0 : 6)}%`, height: '100%', background: errored ? 'var(--danger)' : 'var(--brand)', transition: 'width .4s' }} />
           </div>
-          <p role="status" style={{ fontSize: 14, fontWeight: 600, margin: '10px 0 0', color: errored ? 'var(--danger)' : 'var(--text-primary)', overflowWrap: 'anywhere' }}>{statusLine}</p>
+          <p role="status" style={{ fontSize: 14, fontWeight: 600, margin: '10px 0 0', color: errored ? 'var(--danger-text)' : 'var(--text-primary)', overflowWrap: 'anywhere' }}>{statusLine}</p>
           {activeStep && !errored && !loading && (
             <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '3px 0 0' }}>Usually {activeStep.eta}</p>
           )}
@@ -145,7 +145,7 @@ export function MoveProgress({
         {folded && at > 0 && (
           <button onClick={() => setShowDone(true)}
             style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px', marginBottom: 12, borderRadius: 12, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)', cursor: 'pointer', textAlign: 'left', fontSize: 13, fontWeight: 600 }}>
-            <span style={{ color: 'var(--success)', whiteSpace: 'nowrap', flexShrink: 0 }}>✓ {at} done</span>
+            <span style={{ color: 'var(--success-text)', whiteSpace: 'nowrap', flexShrink: 0 }}>✓ {at} done</span>
             <span style={{ marginLeft: 'auto', color: 'var(--text-secondary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{steps[at - 1].done} · Show</span>
           </button>
         )}
@@ -182,17 +182,17 @@ export function MoveProgress({
                 ...(focus && active ? { background: 'color-mix(in srgb, var(--brand) 8%, transparent)', borderRadius: 12, padding: '8px 10px 10px', marginBottom: isLast ? 0 : 10 } : {}),
               }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: done ? 'var(--success)' : bad ? 'var(--danger)' : active ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{s.label}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: done ? 'var(--success-text)' : bad ? 'var(--danger-text)' : active ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{s.label}</span>
                   {active && (
-                    <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 600, color: 'var(--accent-text)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                    <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--accent-text)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                       {elapsed != null && elapsed > 0 ? `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}` : focus ? s.eta : ''}
                     </span>
                   )}
                 </div>
-                {text && <p style={{ fontSize: 12.5, lineHeight: 1.4, margin: '2px 0 0', color: bad ? 'var(--danger)' : 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{text}</p>}
+                {text && <p style={{ fontSize: 13, lineHeight: 1.4, margin: '2px 0 0', color: bad ? 'var(--danger-text)' : 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{text}</p>}
                 {tx && (tx.href
-                  ? <a href={tx.href} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 3, fontSize: 11.5, fontFamily: 'monospace', color: 'var(--accent-text)', textDecoration: 'none' }}>{tx.hash.slice(0, 10)}…{tx.hash.slice(-6)} ↗</a>
-                  : <span style={{ display: 'inline-block', marginTop: 3, fontSize: 11.5, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{tx.hash.slice(0, 10)}…{tx.hash.slice(-6)}</span>)}
+                  ? <a href={tx.href} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 3, fontSize: 12, fontFamily: 'monospace', color: 'var(--accent-text)', textDecoration: 'none' }}>{tx.hash.slice(0, 10)}…{tx.hash.slice(-6)} ↗</a>
+                  : <span style={{ display: 'inline-block', marginTop: 3, fontSize: 12, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{tx.hash.slice(0, 10)}…{tx.hash.slice(-6)}</span>)}
               </div>
             </div>
           )
@@ -201,7 +201,7 @@ export function MoveProgress({
       </div>
 
       {safe && running && !errored && (
-        <div style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--accent-text)', padding: '10px 12px', borderRadius: 14, background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
+        <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--accent-text)', padding: '10px 12px', borderRadius: 14, background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
           ✓ Safe to leave – {kind === 'transfer' ? 'Circle and MeshPort finish this transfer' : 'MeshPort finishes this on its servers'}. It stays in Hub Activity, and tapping it opens this page again.
         </div>
       )}
@@ -218,13 +218,13 @@ export function MoveProgress({
           <>
             {onViewHub && (
               <button onClick={onViewHub}
-                style={{ flex: 1, minWidth: 0, padding: 14, borderRadius: 999, border: '1.5px solid var(--brand)', background: 'transparent', fontSize: 14.5, fontWeight: 700, color: 'var(--accent-text)', cursor: 'pointer' }}>
+                style={{ flex: 1, minWidth: 0, padding: 14, borderRadius: 999, border: '1.5px solid var(--brand)', background: 'transparent', fontSize: 15, fontWeight: 700, color: 'var(--accent-text)', cursor: 'pointer' }}>
                 View in Hub
               </button>
             )}
             {running && trackButton && (
               <button onClick={toggleFocus} aria-pressed={focus}
-                style={{ flex: 1, minWidth: 0, padding: 14, borderRadius: 999, border: 'none', background: 'var(--brand)', fontSize: 14.5, fontWeight: 700, color: '#fff', cursor: 'pointer' }}>
+                style={{ flex: 1, minWidth: 0, padding: 14, borderRadius: 999, border: 'none', background: 'var(--brand)', fontSize: 15, fontWeight: 700, color: '#fff', cursor: 'pointer' }}>
                 {focus ? 'Show all' : 'Track Progress'}
               </button>
             )}
