@@ -31,7 +31,7 @@ export function WalletSecretFrame({ address, what, passcode, height, onError }: 
   }, [address, what, passcode])
 
   if (failed) return <p role="alert" className="text-sm text-danger">{failed}</p>
-  if (!src) return <div className="rounded-2xl bg-surface border border-border animate-pulse" style={{ height: height ?? (what === 'mnemonic' ? 260 : 150) }} />
+  if (!src) return <div className="rounded-2xl bg-surface border border-border mp-pulse" style={{ height: height ?? (what === 'mnemonic' ? 260 : 150) }} />
   return (
     <iframe
       src={src}

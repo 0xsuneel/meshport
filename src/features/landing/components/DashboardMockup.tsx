@@ -9,7 +9,7 @@ import { ArrowUpRight, ArrowDownLeft, Repeat, Users, TrendingUp } from 'lucide-r
 const assets = [
   { symbol: 'USDC', name: 'USD Coin', value: '2,481.50', change: '+2.4%', up: true },
   { symbol: 'EURC', name: 'Euro Coin', value: '640.10',  change: '+0.3%', up: true },
-  { symbol: 'cirBTC', name: 'Circle BTC', value: '412.90', change: '-1.1%', up: false },
+  { symbol: 'cirBTC', name: 'Circle Bitcoin', value: '412.90', change: '-1.1%', up: false },
 ]
 
 const activity = [
@@ -21,11 +21,11 @@ const activity = [
 function CardShell({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <div
+      data-ui
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 20,
-        boxShadow: '0 20px 60px -20px rgba(0,0,0,0.18)',
         ...style,
       }}
     >
@@ -42,10 +42,7 @@ export function DesktopDashboardMockup() {
       transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
       style={{ width: '100%', maxWidth: 560 }}
     >
-      <motion.div
-        animate={{ y: [0, -8, 0] }}
-        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-      >
+      <div>
         <CardShell style={{ padding: 20 }}>
           {/* Header row */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
@@ -66,7 +63,7 @@ export function DesktopDashboardMockup() {
 
           {/* Balance */}
           <div style={{ marginBottom: 18 }}>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Total Balance</p>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Total balance</p>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
               <span style={{ fontSize: 34, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>$3,534.50</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 12, fontWeight: 700, color: 'var(--success-text)' }}>
@@ -116,7 +113,7 @@ export function DesktopDashboardMockup() {
 
           {/* Recent activity */}
           <div>
-            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 8 }}>Recent Activity</p>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Recent activity</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {activity.map((a, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -129,13 +126,13 @@ export function DesktopDashboardMockup() {
             </div>
           </div>
         </CardShell>
-      </motion.div>
+      </div>
 
       {/* Floating accent chip - swap confirmation, offset top-right */}
       <motion.div
         initial={{ opacity: 0, x: 12, y: -8 }}
-        animate={{ opacity: 1, x: 0, y: [0, -6, 0] }}
-        transition={{ opacity: { delay: 0.6, duration: 0.5 }, x: { delay: 0.6, duration: 0.5 }, y: { delay: 1.1, duration: 5, repeat: Infinity, ease: 'easeInOut' } }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 0.6, duration: 0.5 }}
         style={{ position: 'relative', marginTop: -40, marginLeft: 'auto', width: 190, zIndex: 2 }}
       >
         <CardShell style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -161,16 +158,15 @@ export function MobileDashboardMockup() {
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
       style={{ width: 240, flexShrink: 0 }}
     >
-      <div style={{
-        borderRadius: 32, border: '8px solid var(--surface)', background: 'var(--bg)',
-        boxShadow: '0 24px 60px -20px rgba(0,0,0,0.25)', overflow: 'hidden',
+      <div data-ui style={{
+        borderRadius: 32, border: '8px solid var(--surface)', background: 'var(--bg)', overflow: 'hidden',
       }}>
         <div style={{ padding: '18px 14px 14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
             <img decoding="async" src="/favicon.svg" alt="" style={{ width: 22, height: 22, borderRadius: 6 }} />
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>MeshPort</span>
           </div>
-          <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>Total Balance</p>
+          <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>Total balance</p>
           <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 14, letterSpacing: '-0.4px' }}>$3,534.50</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 14 }}>
             {[ArrowUpRight, ArrowDownLeft, Repeat, Users].map((Icon, i) => (

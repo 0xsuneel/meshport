@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
-import { Info } from 'lucide-react'
+import { Info, Check, X } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import {
   fetchUserPoints, claimPointsAsUSDC, fetchClaimsHistory, fetchPointHistory,
@@ -205,7 +205,7 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
           {p.phase === 'running' && (
             <div className="rw-trav" aria-hidden style={{ position: 'absolute', left: 0, top: 6, width: 28, height: 28, borderRadius: '50%', zIndex: 3, transform: `translateY(${travIdx * STEP_H}px)`,
               background: 'var(--success)', color: '#fff', fontWeight: 900, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 0 5px color-mix(in srgb, var(--success) 22%, transparent), 0 4px 14px color-mix(in srgb, var(--success) 45%, transparent)' }}>✓</div>
+              boxShadow: '0 0 0 5px color-mix(in srgb, var(--success) 22%, transparent), 0 4px 14px color-mix(in srgb, var(--success) 45%, transparent)' }}><Check size={15} strokeWidth={3} /></div>
           )}
           {STEPS.map((s, i) => {
             const isDone = i < doneIdx
@@ -215,9 +215,9 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
               <div key={s.key} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, height: STEP_H, fontSize: 14 }}>
                 <span style={{ width: 28, display: 'flex', justifyContent: 'center', flexShrink: 0, position: 'relative', zIndex: 2 }}>
                   {isDone ? (
-                    <span className="rw-tick" style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--success)', color: '#fff', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</span>
+                    <span className="rw-tick" style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--success)', color: '#fff', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={14} strokeWidth={3} /></span>
                   ) : isFailed ? (
-                    <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--danger)', color: '#fff', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</span>
+                    <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--danger)', color: '#fff', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} strokeWidth={3} /></span>
                   ) : (
                     <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--surface)', border: '2px solid var(--border)' }} />
                   )}
@@ -432,9 +432,9 @@ export function RewardsPage() {
     </div>
   ) : (
     <div style={{ margin: isDesktop ? 0 : '0 16px', borderRadius: 22, padding: 18, color: '#fff', position: 'relative', overflow: 'hidden',
-      background: 'radial-gradient(120% 140% at 100% 0%, #2FB5A7 0%, #12665F 45%, #0B3F3B 100%)', boxShadow: isDesktop ? 'var(--shadow-1)' : undefined }}>
+      background: '#12665F' }}>
       <div aria-hidden style={{ position: 'absolute', right: -12, top: -18, width: 86, height: 86, borderRadius: '50%',
-        background: 'radial-gradient(circle at 35% 35%, #FFE7A3, #F5A524 60%, #B8730B)', opacity: 0.9, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#F5A524', opacity: 0.9, display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 34, fontWeight: 900, color: '#7a4b06', boxShadow: 'inset -6px -8px 0 rgba(0,0,0,.12)' }}>P</div>
       <div style={{ fontSize: 13, opacity: 0.85 }}>Points balance</div>
       <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', marginTop: 2 }}>
@@ -462,7 +462,7 @@ export function RewardsPage() {
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{earnedToday} / {MAX_DAILY_EARN_POINTS} pts</span>
       </div>
       <div style={{ margin: isDesktop ? '4px 2px 8px' : '4px 18px 8px', height: 6, borderRadius: 999, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${(earnedToday / MAX_DAILY_EARN_POINTS) * 100}%`, background: 'linear-gradient(90deg, var(--success), #2FB5A7)', borderRadius: 999, transition: 'width .4s' }} />
+        <div style={{ height: '100%', width: `${(earnedToday / MAX_DAILY_EARN_POINTS) * 100}%`, background: 'var(--success)', borderRadius: 999, transition: 'width .4s' }} />
       </div>
       {TASKS.map(t => {
         const done = doneToday.has(`tx_reward:${t.type}`)
@@ -474,7 +474,7 @@ export function RewardsPage() {
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>+{POINTS_PER_TX} pts</span>
             </div>
             {done ? (
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success-text)' }}>✓ Done</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700, color: 'var(--success-text)' }}><Check size={14} strokeWidth={2.5} aria-hidden />Done</span>
             ) : (
               <button onClick={() => navigate(t.path)} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
                 background: 'color-mix(in srgb, var(--brand) 16%, transparent)', color: 'var(--brand-text)' }}>Go</button>
@@ -518,7 +518,7 @@ export function RewardsPage() {
   )
 
   const history = (
-    <div style={isDesktop ? { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, boxShadow: 'var(--shadow-1)', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' } : undefined}>
+    <div style={isDesktop ? { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' } : undefined}>
       <div style={{ display: 'flex', gap: 20, padding: isDesktop ? '12px 16px 0' : '14px 18px 0', borderBottom: '1px solid var(--border)', fontSize: 14 }}>
         {(['earned', 'claimed'] as const).map(t => (
           <button key={t} onClick={() => setHistoryTab(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 9px', fontSize: 14,
@@ -638,7 +638,7 @@ export function RewardsPage() {
               height (flex items would otherwise shrink and cut off Claim USDC). */}
           <div style={{ flex: '1 1 0%', minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18, padding: 2, margin: -2 }}>
             <div style={{ flexShrink: 0 }}>{hero}</div>
-            <div style={{ flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: '14px 14px 6px', boxShadow: 'var(--shadow-1)' }}>{tasks}</div>
+            <div style={{ flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: '14px 14px 6px' }}>{tasks}</div>
           </div>
           <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0 }}>{history}</div>
         </div>

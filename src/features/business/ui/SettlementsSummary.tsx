@@ -17,7 +17,7 @@ export interface ArcBalanceCardProps {
 export function ArcBalanceCard({ amount, hidden, onToggleHidden, note, action }: ArcBalanceCardProps) {
   return (
     <div className="flex-1 bg-card border border-border rounded-2xl p-4 flex flex-col gap-1.5 min-w-0">
-      <span className="text-xs text-text-muted font-medium uppercase tracking-wide">
+      <span className="text-xs text-text-muted font-medium">
         Available on Arc
       </span>
       <div className="flex items-center gap-2">

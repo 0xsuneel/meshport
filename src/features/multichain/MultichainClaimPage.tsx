@@ -1787,7 +1787,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 border: `1px solid ${COLORS.border}`,
               }}
             >
-              <p style={{ fontSize: 12, color: COLORS.muted, margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Available to Claim</p>
+              <p style={{ fontSize: 12, color: COLORS.muted, margin: '0 0 8px', fontWeight: 600 }}>Available to Claim</p>
               <p style={{ fontSize: 36, fontWeight: 700, color: claimableTotal > 0 ? COLORS.success : COLORS.text, margin: '0 0 4px', letterSpacing: '-0.5px' }}>
                 ${formatAmount(claimableTotal)}
               </p>

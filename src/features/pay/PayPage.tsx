@@ -1,7 +1,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { Zap, Copy, CheckCircle, ArrowRight, ArrowLeft, Home, Globe, Lock, DollarSign } from 'lucide-react'
+import { Zap, Copy, CheckCircle, ArrowRight, ArrowLeft, Home, Globe, Lock, DollarSign, Search } from 'lucide-react'
 import { getUserByUsername } from '@/lib/supabase'
 import { useAuthStore, useUIStore } from '@/store'
 import { Avatar } from '@/components/ui/Avatar'
@@ -166,7 +166,7 @@ export function PayPage() {
     return (
       <div className="h-full flex flex-col items-center justify-center px-6 text-center gap-4" style={{ background: 'var(--bg)' }}>
         <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 20%, transparent)' }}>
-          <span className="text-2xl">🔍</span>
+          <Search size={26} aria-hidden style={{ color: 'var(--danger-text)' }} />
         </div>
         <h1 className="text-xl font-bold text-text-primary">User not found</h1>
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>

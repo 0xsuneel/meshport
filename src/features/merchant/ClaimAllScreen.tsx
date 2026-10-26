@@ -141,7 +141,7 @@ export function ClaimAllScreen({ chains, steps, running, onClose, onRetry, onTra
               </div>
             )}
             {(phase === 'partial' || phase === 'failed') && (
-              <div className="ca-ok" style={{ ...ring(phase === 'partial' ? '#F59E0B' : 'var(--danger)'), color: '#fff', fontSize: 32, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>!</div>
+              <div className="ca-ok" style={{ ...ring(phase === 'partial' ? 'var(--warning)' : 'var(--danger)'), color: '#fff', fontSize: 32, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>!</div>
             )}
           </div>
           <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -0.5, marginTop: 16, fontVariantNumeric: 'tabular-nums' }}>{title}</div>

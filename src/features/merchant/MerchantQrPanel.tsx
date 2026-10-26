@@ -21,7 +21,7 @@ import { drawMeshportQr } from '@/lib/qrLogo'
 import { AmountHero } from '@/components/ui/AmountHero'
 
 
-const box: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: 'var(--shadow-1)' }
+const box: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16 }
 const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }
 
 export function ChainPicker({ value, onChange, extra = [] }: { value: string; onChange: (id: string) => void; extra?: Array<{ id: string; label: string; logo: string }> }) {

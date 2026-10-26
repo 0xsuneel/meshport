@@ -1411,7 +1411,11 @@ export function SwapPage() {
     && !liveQuoteLoading
 
   // Format balance for display depending on token
-  const fmtBal = (id: string, val: number) => trimTrailingZeros(id === 'cirBTC' ? val.toFixed(8) : formatAmount(val, 3))
+  // One format for both sides: stablecoins at 2 fixed decimals (rounded down,
+  // so it never shows more than you hold), cirBTC up to 8; then the symbol.
+  const fmtBal = (id: string, val: number) => id === 'cirBTC'
+    ? `${trimTrailingZeros(val.toFixed(8))} cirBTC`
+    : `${(Math.floor(val * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${id}`
 
 
   // Held in a variable (not returned directly) so the exact same JSX renders
@@ -1500,7 +1504,7 @@ export function SwapPage() {
             variants={{ leave: (stillOnForm: boolean) => stillOnForm ? { height: 0, opacity: 0 } : { opacity: 0, transition: { duration: 0 } } }}
             exit="leave" className="overflow-hidden">
             <div className="p-4 rounded-2xl space-y-3" style={{ background:'var(--surface)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
-              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Slippage Tolerance</p>
+              <p className="text-xs font-semibold text-text-secondary">Slippage Tolerance</p>
               <div className="flex gap-2">
                 {[100,300,500].map(b => (
                   <button key={b} onClick={() => setSlippage(b)}
@@ -1674,8 +1678,8 @@ export function SwapPage() {
             ) : (
               // Same line, placeholder bars, while the quote loads.
               <>
-                <span aria-hidden className="animate-pulse" style={{ width: 130, height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
-                <span aria-hidden className="animate-pulse" style={{ width: 70, height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
+                <span aria-hidden className="mp-pulse" style={{ width: 130, height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
+                <span aria-hidden className="mp-pulse" style={{ width: 70, height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
               </>
             )}
           </div>

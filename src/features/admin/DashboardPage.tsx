@@ -46,7 +46,7 @@ export function DashboardPage() {
       {maintenanceOn && (
         <AdminCard style={{ background: 'color-mix(in srgb, var(--warning) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)' }}>
           <p style={{ margin: 0, fontSize: 13, color: 'var(--warning-text)', fontWeight: 600 }}>
-            ⚠ Maintenance Mode is currently ON - the app shows a maintenance screen to all users.
+            Maintenance Mode is currently ON - the app shows a maintenance screen to all users.
           </p>
         </AdminCard>
       )}

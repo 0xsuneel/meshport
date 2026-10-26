@@ -120,7 +120,7 @@ export function RefundSheet({
         {/* Where it goes back */}
           {destinations && destinations.length > 1 && (
             <div className="flex flex-col gap-2">
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Send back on</p>
+              <p className="text-xs font-semibold text-text-muted">Send back on</p>
               <div className="grid grid-cols-2 gap-2">
                 {destinations.map(d => (
                   <button key={d.id} type="button" onClick={() => onDestination?.(d.id)} aria-pressed={destination === d.id}
@@ -135,7 +135,7 @@ export function RefundSheet({
   
           {/* Reason chips */}
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Reason</p>
+            <p className="text-xs font-semibold text-text-muted">Reason</p>
             <div className="flex flex-wrap gap-2">
               {reasons.map((r) => (
                 <button
@@ -156,7 +156,7 @@ export function RefundSheet({
   
           {/* Optional note */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-text-muted uppercase tracking-wider" htmlFor="refund-note">
+            <label className="text-xs font-semibold text-text-muted" htmlFor="refund-note">
               Note <span className="normal-case font-normal text-text-muted">(optional)</span>
             </label>
             <input

@@ -141,7 +141,7 @@ export function SheetPerson({ label, name, username, avatar, compact, onClose, s
 export function SheetLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="flex items-center justify-between px-0.5 mb-2">
-      <span className="text-[12px] font-bold uppercase tracking-[0.06em] text-text-secondary">{children}</span>
+      <span className="text-[12px] font-semibold tracking-[0.06em] text-text-secondary">{children}</span>
       {right}
     </div>
   )

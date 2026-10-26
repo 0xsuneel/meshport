@@ -597,7 +597,7 @@ export function EmailOTPPage() {
         else if (circleSigner) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
       }
       setLoading(false)
-      showToastMessage(`Welcome back, ${existing.username || existing.display_name}! 👋`, 'success')
+      showToastMessage(`Welcome back, ${existing.username || existing.display_name}`, 'success')
       // Returning user - set a new passcode (no old passcode needed), then
       // unlock the wallet with the passkey or Recovery QR (never a copy left
       // on this device from before this sign-in).
@@ -900,7 +900,7 @@ export function CreateWalletPage() {
               className="w-24 h-24 bg-success/20 rounded-full flex items-center justify-center mx-auto">
               <CheckCircle className="w-14 h-14 text-success" />
             </motion.div>
-            <div><h2 className="text-2xl font-bold text-text-primary">Wallet Created! 🎉</h2><p className="text-text-secondary mt-1">Arc Testnet ready</p></div>
+            <div><h2 className="text-2xl font-bold text-text-primary">Wallet created</h2><p className="text-text-secondary mt-1">Arc Testnet ready</p></div>
             <Card className="p-4 text-left"><div><p className="text-xs text-text-secondary mb-1">Wallet Address</p><p className="text-xs font-mono text-text-primary break-all">{walletData.address}</p></div></Card>
             <Button fullWidth onClick={() => {
               showToastMessage('Wallet created!', 'success')
@@ -1273,8 +1273,8 @@ export function ClaimUsernamePage() {
     setStatus('checking')
     debounceRef.current = setTimeout(async () => {
       const taken = await isUsernameTakenDb(cleaned)
-      if (taken) { setStatus('taken'); setStatusMsg(cleaned + '.arc is already taken ✗') }
-      else { setStatus('available'); setStatusMsg(cleaned + '.arc is available ✓') }
+      if (taken) { setStatus('taken'); setStatusMsg(cleaned + '.arc is already taken') }
+      else { setStatus('available'); setStatusMsg(cleaned + '.arc is available') }
     }, 500)
   }
 
@@ -1284,7 +1284,7 @@ export function ClaimUsernamePage() {
 
     // Final availability check against Supabase
     const taken = await isUsernameTakenDb(handle)
-    if (taken) { setStatus('taken'); setStatusMsg(handle + '.arc just taken ✗'); setLoading(false); return }
+    if (taken) { setStatus('taken'); setStatusMsg(handle + '.arc was just taken'); setLoading(false); return }
 
     // ALL user types save to Supabase users table.
     // Wallet-only users get a stable UUID derived from their wallet address.
@@ -1336,7 +1336,7 @@ export function ClaimUsernamePage() {
     // up to 35s on the claim screen before the app opened. A failure is
     // retried by the server (name-register sync) and from Home.
     void registerNameOnchain({ walletAddress, name: handle, kind: signupKind, displayName: '' })
-      .then(r => { if (r.status === 'registered') showToastMessage(`${handle}.arc is registered on Arc 🎉`, 'success') })
+      .then(r => { if (r.status === 'registered') showToastMessage(`${handle}.arc is registered on Arc`, 'success') })
       .catch(() => {})
     clearAuthIntent()
     void refreshMerchant()

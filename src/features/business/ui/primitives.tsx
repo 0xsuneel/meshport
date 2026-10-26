@@ -9,7 +9,7 @@ import React from 'react'
 export function Skeleton({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`animate-pulse rounded-xl bg-border/40 ${className}`}
+      className={`mp-pulse rounded-xl bg-border/40 ${className}`}
     />
   )
 }

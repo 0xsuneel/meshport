@@ -127,7 +127,7 @@ export function MerchantPayPage() {
           {view.note && <p className="text-sm text-text-secondary">{view.note}</p>}
           {view.kind === 'invoice' && !!view.items?.length && (
             <div className="bg-surface border border-border rounded-2xl p-4 text-left mt-2">
-              <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2">Bill</p>
+              <p className="text-xs font-bold text-text-secondary mb-2">Bill</p>
               {view.items.map((i, k) => (
                 <div key={k} className="flex justify-between gap-3 text-sm py-1">
                   <span className="text-text-primary truncate">{i.name} <span className="text-text-secondary">× {Number(i.qty)} @ ${formatAmount(Number(i.price))}</span></span>

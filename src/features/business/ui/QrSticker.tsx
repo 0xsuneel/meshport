@@ -55,7 +55,7 @@ export function QrSticker({ dataUrl, storeName, handle }: QrStickerProps) {
       {/* Store info */}
       <div className="flex flex-col items-center px-6 pb-5 gap-1">
         <p className="text-base font-bold text-[#1A1A1A] text-center leading-snug">{storeName}</p>
-        <p className="text-sm font-mono text-[#666B73]">{handle}</p>
+        <p className="text-sm text-[#666B73]">{handle}</p>
       </div>
 
       {/* Footer */}

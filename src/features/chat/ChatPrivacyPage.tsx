@@ -94,7 +94,7 @@ export function ChatPrivacyPage() {
           <>
             {groups.map(group => (
               <div key={group.key}>
-                <p className="text-[12px] font-bold uppercase tracking-wide text-text-secondary mb-2">{group.title}</p>
+                <p className="text-[12px] font-semibold text-text-secondary mb-2">{group.title}</p>
                 <div role="radiogroup" aria-label={group.title} className="rounded-2xl overflow-hidden" style={card}>
                   {group.options.map((o, i) => {
                     const on = privacy[group.key] === o.v
@@ -125,7 +125,7 @@ export function ChatPrivacyPage() {
 
         {/* Blocked contacts */}
         <div>
-          <p className="text-[12px] font-bold uppercase tracking-wide text-text-secondary mb-2">
+          <p className="text-[12px] font-semibold text-text-secondary mb-2">
             Blocked contacts{blocked && blocked.length > 0 ? ` · ${blocked.length}` : ''}
           </p>
           <div className="rounded-2xl overflow-hidden" style={card}>

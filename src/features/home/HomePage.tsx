@@ -389,7 +389,7 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
           // Username and address side by side over the QR, tap to copy - the
           // same as Receive's QR.
           top={<div className="w-full flex gap-2">
-            {handle && <QrInfoBox label="Username" value={`${handle}.arc`} onCopy={() => void copyBox(`${handle}.arc`, 'username')} copied={copiedBox === 'username'} />}
+            {handle && <QrInfoBox label="Username" value={`${handle}.arc`} mono={false} onCopy={() => void copyBox(`${handle}.arc`, 'username')} copied={copiedBox === 'username'} />}
             <QrInfoBox label="Address" value={`${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`} onCopy={() => void copyBox(walletAddress, 'address')} copied={copiedBox === 'address'} />
           </div>}>
           <div style={{ position: 'relative', lineHeight: 0, opacity: qrReady ? 1 : 0, transition: 'opacity 0.2s ease-out' }}>
@@ -614,7 +614,7 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; 
                   {a.label === 'P2P' && hasOngoingP2P && (
                     <span style={{
                       position: 'absolute', top: 2, right: 2, width: 12, height: 12, borderRadius: '50%',
-                      background: '#EF4444', border: '2px solid var(--bg)',
+                      background: 'var(--danger)', border: '2px solid var(--bg)',
                     }} />
                   )}
                 </span>
@@ -714,29 +714,6 @@ function AssetRow({ icon, fallbackColor, fallbackChar, name, sub, cryptoAmount, 
   )
 }
 
-// ── Sparkline - small inline SVG trend line, no charting dependency ────────────
-// Fed real bucketed values only (balance trend, insights volume trend, stat
-// mini-charts) - never synthetic. A flat/empty series still renders a flat
-// mid-line rather than nothing, so the card never looks broken.
-function Sparkline({ values, color, height = 32, fill = false }: { values: number[]; color: string; height?: number; fill?: boolean }) {
-  const w = 100, h = height
-  const max = Math.max(...values, 0.0001)
-  const min = Math.min(...values, 0)
-  const range = Math.max(max - min, 0.0001)
-  const pts = values.length > 1
-    ? values.map((v, i) => `${(i / (values.length - 1)) * w},${h - ((v - min) / range) * h}`)
-    : [`0,${h / 2}`, `${w},${h / 2}`]
-  const line = pts.join(' ')
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
-      {fill && (
-        <polygon points={`0,${h} ${line} ${w},${h}`} fill={color} opacity={0.12} />
-      )}
-      <polyline points={line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-    </svg>
-  )
-}
-
 // ── Quick Actions - desktop-only card, 8 real routes + Customize→MoreSheet ─────
 // Same icon set as MoreSheet (components/ui/ActionIcon); Scan QR keeps its own.
 // Module-level (not per-render) - the full pool of 10 actions a user can
@@ -779,7 +756,7 @@ function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: {
   return (
     <div style={{
       background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
-      padding: '12px 14px', boxShadow: 'var(--shadow-1)',
+      padding: '12px 14px',
     }}>
       <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Quick Actions</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
@@ -800,7 +777,7 @@ function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: {
               {t.id === 'p2p' && hasOngoingP2P && (
                 <span style={{
                   position: 'absolute', top: -1, right: -1, width: 9, height: 9, borderRadius: '50%',
-                  background: '#EF4444', border: '2px solid var(--surface)',
+                  background: 'var(--danger)', border: '2px solid var(--surface)',
                 }} />
               )}
             </div>
@@ -971,7 +948,7 @@ function BusinessInsightsColumn({ walletAddress, period, setPeriod, navigate }: 
     }
   }, [mod, sales, report, days, period])
   const periodWord = period === 'week' ? 'last 7 days' : period === 'month' ? 'last 30 days' : 'last 12 months'
-  const card = { background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)', boxShadow: 'var(--shadow-1)' } as const
+  const card = { background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)' } as const
   const small = { fontSize: 11, color: 'var(--text-secondary)' } as const
   const sum = view?.sum
 
@@ -996,7 +973,6 @@ function BusinessInsightsColumn({ walletAddress, period, setPeriod, navigate }: 
           <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Sales · {periodWord}</div>
           <div style={{ fontSize: 27, fontWeight: 700, color: 'var(--text-primary)', marginTop: 1 }}>{sum ? bizMoney(sum.total) : '…'}</div>
         </div>
-        <Sparkline values={view?.series ?? []} color="var(--brand-text)" height={34} fill />
         <div style={{ display: 'flex', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
           <div style={{ flex: 1 }}>
             <div style={small}>Average sale</div>
@@ -1014,9 +990,9 @@ function BusinessInsightsColumn({ walletAddress, period, setPeriod, navigate }: 
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-        <InsightStatCard label="Sales" value={sum ? bizMoney(sum.total) : '-'} changePct={sum?.totalChange ?? null} sparkValues={view?.series ?? []} />
-        <InsightStatCard label="Payments" value={sum ? String(sum.count) : '-'} changePct={sum?.countChange ?? null} sparkValues={view?.countSeries ?? []} />
-        <InsightStatCard label="Customers" value={sum ? String(sum.customers) : '-'} changePct={sum?.customersChange ?? null} sparkValues={view?.customerSeries ?? []} />
+        <InsightStatCard label="Sales" value={sum ? bizMoney(sum.total) : '-'} changePct={sum?.totalChange ?? null} />
+        <InsightStatCard label="Payments" value={sum ? String(sum.count) : '-'} changePct={sum?.countChange ?? null} />
+        <InsightStatCard label="Customers" value={sum ? String(sum.customers) : '-'} changePct={sum?.customersChange ?? null} />
       </div>
 
       {/* Full report: sales by day (or month), by hour, by customer, chain and store. */}
@@ -1094,24 +1070,25 @@ function BusinessInsightsColumn({ walletAddress, period, setPeriod, navigate }: 
 }
 
 // ── Insights sub-cards - desktop-only, all fed real computed numbers ───────────
-function InsightStatCard({ label, value, changePct, sparkValues }: {
-  label: string; value: string; changePct: number | null; icon?: React.ReactNode; sparkValues: number[];
+function InsightStatCard({ label, value, changePct }: {
+  label: string; value: string; changePct: number | null; icon?: React.ReactNode;
 }) {
-  const up = (changePct ?? 0) >= 0
+  // No change is grey words; green/red only for a real move. Nothing to
+  // compare with (null): no line at all.
+  const flat = changePct !== null && Math.round(changePct) === 0
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 4,
       background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)',
-      padding: '11px 12px', boxShadow: 'var(--shadow-1)',
+      padding: '11px 12px',
     }}>
-      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{label}</div>
-      <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>{value}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
       {changePct !== null && (
-        <span style={{ fontSize: 11, fontWeight: 600, color: up ? 'var(--success-text)' : 'var(--danger-text)' }}>
-          {up ? '↑' : '↓'}{Math.abs(changePct).toFixed(0)}%
+        <span style={{ fontSize: 12, fontWeight: flat ? 400 : 600, color: flat ? 'var(--text-secondary)' : changePct > 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>
+          {flat ? 'No change' : `${changePct > 0 ? '↑' : '↓'}${Math.abs(changePct).toFixed(0)}%`}
         </span>
       )}
-      <Sparkline values={sparkValues} color="var(--brand-text)" height={16} />
     </div>
   )
 }
@@ -1120,7 +1097,7 @@ function MultichainUsageCard({ chains, total }: { chains: { name: string; pct: n
   return (
     <div style={{
       background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)',
-      padding: '10px 12px', boxShadow: 'var(--shadow-1)', display: 'flex', flexDirection: 'column', gap: 5,
+      padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 5,
     }}>
       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Multichain Usage</div>
       {chains.length === 0 ? (
@@ -1156,7 +1133,7 @@ function PaymentIntelligenceCard({ avgPayment, largestPayment, activeHourLabel, 
   return (
     <div style={{
       background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)',
-      padding: '10px 12px', boxShadow: 'var(--shadow-1)',
+      padding: '10px 12px',
     }}>
       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Payment Intelligence</div>
       {row('Average Payment', `$${trimTrailingZeros(avgPayment.toFixed(2))}`)}
@@ -1189,7 +1166,7 @@ function ActivityChartCard({ buckets, granularity, setGranularity, totalCount, p
   return (
     <div style={{
       background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
-      padding: '14px 16px', boxShadow: 'var(--shadow-1)', minWidth: 0,
+      padding: '14px 16px', minWidth: 0,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
         <div>
@@ -1730,73 +1707,28 @@ function MultichainHubCard({
 // first moments' recalculation (prices / balances arriving) settle without
 // counting up - the count-up used to replay on every return. Only a real
 // change while Home is open counts up.
-// ── Balance bars (Home hero) - the balance at the end of each of the last
-// 7 days (lib/balanceTrend.ts), one rounded bar per day, today's in mint.
-// Touch / hover shows that day's balance. Hidden balance: bars stay, figures don't.
-const BARS_W = 112
-const BARS_H = 38
-// The bars arrive after the balance (they wait for Activity), so the first
-// time they show this session they fade in rather than pop; never again on
-// a refresh or a return to Home.
+// The 7-day change arrives after the balance (it waits for Activity), so the
+// first time it shows this session it fades in rather than pops; never again
+// on a refresh or a return to Home.
 let barsShown = false
 function useFirstShowFade(): string | undefined {
   const [fade] = useState(() => !barsShown)
   useEffect(() => { barsShown = true }, [])
   return fade ? 'mp-fade-in' : undefined
 }
-// "+$x.xx 7D" - on the card's label row, right side, above the bars.
+// "+$x.xx 7D" - on the card's label row, right side. No change reads as
+// "$0" in the card's plain white: mint is for a real gain only.
 function BalanceChange({ trend, hidden, fmt }: { trend: BalanceTrend; hidden: boolean; fmt: (n: number, symbol?: string) => string }) {
-  const sign = trend.change >= 0 ? '+' : '−'
+  const flat = Math.abs(trend.change) < 0.005
+  const sign = flat ? '' : trend.change > 0 ? '+' : '−'
   const fade = useFirstShowFade()
   return (
-    <span className={fade} style={{ display: 'flex', alignItems: 'center', gap: 5, minHeight: 26, fontSize: 12, fontWeight: 700, color: '#8FE9CB', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+    <span className={fade} style={{ display: 'flex', alignItems: 'center', gap: 5, minHeight: 26, fontSize: 12, fontWeight: 700, color: flat || trend.change < 0 ? 'rgba(255,255,255,0.9)' : '#8FE9CB', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
       {hidden ? '••••' : `${sign}$${fmt(Math.abs(trend.change)).replace(/^\$/, '')}`}
       <span style={{ color: 'rgba(255,255,255,0.78)', fontWeight: 600 }}>7D</span>
     </span>
   )
 }
-function BalanceBars({ trend, hidden }: { trend: BalanceTrend; hidden: boolean }) {
-  const fade = useFirstShowFade()
-  const [active, setActive] = useState<number | null>(null)
-  const svgRef = useRef<SVGSVGElement>(null)
-  const { values, labels } = trend
-  const n = values.length, gap = 4
-  const bw = (BARS_W - gap * (n - 1)) / n
-  const hi = Math.max(...values), lo = Math.min(...values) * 0.8
-  const barH = (v: number) => (hi - lo < 0.005 ? BARS_H * 0.55 : Math.max(4, (BARS_H - 2) * (v - lo) / (hi - lo)))
-  const pick = (clientX: number) => {
-    const r = svgRef.current?.getBoundingClientRect()
-    if (!r || r.width === 0) return
-    setActive(Math.max(0, Math.min(n - 1, Math.floor((clientX - r.left) / r.width * n))))
-  }
-  return (
-    // Narrow phones (320px) give the bars less room so the amount never runs under them.
-    <div className={fade} style={{ position: 'relative', flexShrink: 0, width: `clamp(64px, 30%, ${BARS_W}px)` }}
-      // Inside the swipeable hero: a touch here reads the bars, it doesn't start a swipe.
-      onPointerDownCapture={e => e.stopPropagation()}>
-      <svg ref={svgRef} width="100%" height={BARS_H} viewBox={`0 0 ${BARS_W} ${BARS_H}`} preserveAspectRatio="none" role="img" style={{ display: 'block', touchAction: 'pan-y', cursor: 'crosshair' }}
-        aria-label={hidden ? 'Balance over the last 7 days' : `Balance over the last 7 days, from $${values[0].toFixed(2)} to $${values[n - 1].toFixed(2)}`}
-        onPointerMove={e => pick(e.clientX)} onPointerDown={e => pick(e.clientX)}
-        onPointerLeave={() => setActive(null)} onPointerUp={e => { if (e.pointerType !== 'mouse') setActive(null) }}>
-        {values.map((v, i) => {
-          const h = barH(v), x = i * (bw + gap), top = BARS_H - h, r = Math.min(4, h / 2)
-          const fill = i === n - 1 ? '#8FE9CB' : 'rgba(255,255,255,0.55)'
-          return <path key={i} d={`M${x} ${BARS_H} V${top + r} Q${x} ${top} ${x + r} ${top} H${x + bw - r} Q${x + bw} ${top} ${x + bw} ${top + r} V${BARS_H} Z`}
-            fill={fill} opacity={active === null || active === i ? 1 : 0.5} style={{ transition: 'opacity 120ms ease' }} />
-        })}
-      </svg>
-      {active !== null && !hidden && (
-        <div style={{ position: 'absolute', bottom: BARS_H + 6, left: `${((active + 0.5) / n) * 100}%`, transform: active >= n - 2 ? 'translateX(-80%)' : 'translateX(-50%)', pointerEvents: 'none', zIndex: 2,
-          background: '#fff', color: '#0F2E2B', fontSize: 11, fontWeight: 700, padding: '3px 7px', borderRadius: 7, whiteSpace: 'nowrap',
-          boxShadow: '0 3px 8px rgba(0,0,0,.18)', fontVariantNumeric: 'tabular-nums', lineHeight: '14px' }}>
-          ${values[active].toFixed(2)}
-          <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#5A6B68' }}>{labels[active]}</span>
-        </div>
-      )}
-    </div>
-  )
-}
-
 let lastShownBalance: number | null = null
 const SETTLE_MS = 1500
 function AnimatedBalanceText({ target, children }: { target: number; children: (displayed: number) => ReactNode }) {
@@ -1828,7 +1760,7 @@ function AvailableBalanceCard({
   navigate: NavigateFunction
   fmt: (n: number, symbol?: string) => string
   cardRef?: RefObject<HTMLDivElement>
-  /** End-of-day balances, oldest first (BalanceBars). */
+  /** End-of-day balances, oldest first (the 7-day change). */
   trend?: BalanceTrend | null
 }) {
   return (
@@ -1911,7 +1843,6 @@ function AvailableBalanceCard({
       </AnimatedBalanceText>
 
       </div>
-      {trend && <BalanceBars trend={trend} hidden={balanceHidden} />}
       </div>
 
       {/* Address pill (copies it); the pager dots sit on this row's right. */}
@@ -2331,7 +2262,7 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
         background: 'color-mix(in srgb, var(--brand) 78%, #000)', display: 'flex', flexDirection: 'column', alignItems: 'stretch', boxSizing: 'border-box',
       } : {
         position: 'relative', overflow: 'hidden', height, borderRadius: 16, cursor: 'pointer',
-        background: `linear-gradient(${110 + idx * 25}deg, var(--brand) 0%, color-mix(in srgb, var(--brand) 55%, #06110F) 100%)`,
+        background: 'var(--brand)',
         display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px',
         transition: 'transform 160ms var(--ease-out)',
       }}>
@@ -3832,27 +3763,7 @@ export function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDesktop, walletAddress, insightsPeriod])
 
-  // Balance card's mini trend - always the trailing 7 days regardless of the
-  // Insights period selector (the fetch above always covers >= 14 days, so a
-  // 7-day slice is always fully present). Cumulative running NET (received −
-  // sent) per day - a relative trend line, not a fabricated historical
-  // balance series this app has no snapshot data for.
-  const balanceTrend = useMemo(() => {
-    const shells = makeBuckets(7, 'daily', new Date())
-    let running = 0
-    return shells.map(b => {
-      const net = homeRecentActivity
-        .filter(r => { const t = new Date(r.createdAt).getTime(); return t >= b.start && t < b.end })
-        .reduce((s, r) => {
-          const sign = activitySign(r.activityType, r.metadata?.direction)
-          return s + (sign === '+' ? r.amount : sign === '-' ? -r.amount : 0)
-        }, 0)
-      running += net
-      return running
-    })
-  }, [homeRecentActivity])
-
-  // Mobile hero bars: the portfolio at the end of each of the last 7 days -
+  // Mobile hero 7-day change: the portfolio at the end of each of the last 7 days -
   // each asset's own amounts from Activity (a swap moves value between
   // assets), valued at today's prices (lib/portfolio.ts). Nothing is drawn
   // until the Activity has loaded (no flat-then-jump).
@@ -3956,31 +3867,6 @@ export function HomePage() {
     }
   }, [homeRecentActivity, insightsPeriod])
 
-  // Year is bucketed monthly instead of daily purely for chart legibility
-  // (365 daily bars vs. 12 monthly ones) - same real per-record data either way.
-  const insightsBucketGranularity: InsightsGranularity = insightsPeriod === 'year' ? 'monthly' : 'daily'
-  const volumeTrendBuckets = useMemo(
-    () => aggregateBuckets(insightsData.current, PERIOD_DAYS[insightsPeriod], insightsBucketGranularity, new Date()),
-    [insightsData.current, insightsPeriod, insightsBucketGranularity],
-  )
-  const sentTrendBuckets = useMemo(
-    () => aggregateBuckets(insightsData.current.filter(r => activitySign(r.activityType, r.metadata?.direction) === '-'), PERIOD_DAYS[insightsPeriod], insightsBucketGranularity, new Date()),
-    [insightsData.current, insightsPeriod, insightsBucketGranularity],
-  )
-  const receivedTrendBuckets = useMemo(
-    () => aggregateBuckets(insightsData.current.filter(r => activitySign(r.activityType, r.metadata?.direction) === '+'), PERIOD_DAYS[insightsPeriod], insightsBucketGranularity, new Date()),
-    [insightsData.current, insightsPeriod, insightsBucketGranularity],
-  )
-  const contactsTrendBuckets = useMemo(() => {
-    const shells = makeBuckets(PERIOD_DAYS[insightsPeriod], insightsBucketGranularity, new Date())
-    return shells.map(b => {
-      const recs = insightsData.current.filter(r => {
-        const t = new Date(r.createdAt).getTime()
-        return t >= b.start && t < b.end && (r.activityType === 'send' || r.activityType === 'receive' || r.activityType === 'bulk') && r.counterpartyAddress
-      })
-      return new Set(recs.map(r => r.counterpartyAddress!.toLowerCase())).size
-    })
-  }, [insightsData.current, insightsPeriod, insightsBucketGranularity])
   const activityBuckets = useMemo(
     () => aggregateBuckets(insightsData.current, PERIOD_DAYS[insightsPeriod], activityGranularity, new Date()),
     [insightsData.current, insightsPeriod, activityGranularity],
@@ -4112,7 +3998,7 @@ export function HomePage() {
 
             {searchPeople.length > 0 && (
               <>
-                <div style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '12px 0 4px 6px' }}>People</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, margin: '12px 0 4px 6px' }}>People</div>
                 {searchPeople.map(p => (
                   <div key={p.id} {...pressable(() => openChatWithUser(p))}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px', borderRadius: 12, cursor: 'pointer', opacity: navigatingId === p.id ? 0.5 : 1 }}>
@@ -4130,7 +4016,7 @@ export function HomePage() {
 
             {searchServices.length > 0 && (
               <>
-                <div style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '12px 0 4px 6px' }}>Services</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, margin: '12px 0 4px 6px' }}>Services</div>
                 {searchServices.map(s => (
                   <div key={s.path} {...pressable(() => { closeSearch(); navigate(s.path) })}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px', borderRadius: 12, cursor: 'pointer' }}>
@@ -4214,11 +4100,10 @@ export function HomePage() {
         {/* ── BALANCE - shows all tokens total, eye toggles visibility ────────
              Desktop gets a bordered card with the address chip moved to the
              top-right and two real additions below the number: today's net
-             change (computed from homeRecentActivity, not fabricated) and a
-             7-day cumulative-net trend line (balanceTrend, see above). Mobile
+             change (computed from homeRecentActivity, not fabricated). Mobile
              branch below is byte-identical to before this change. */}
         {isDesktop ? (
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '14px 18px', boxShadow: 'var(--shadow-1)' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '14px 18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Total Balance</span>
@@ -4267,20 +4152,22 @@ export function HomePage() {
             </div>
             {!balanceHidden && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 700, color: todayChange.net >= 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>
-                  <svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{ transform: todayChange.net >= 0 ? 'none' : 'rotate(180deg)' }}>
-                    <path d="M5 1v8M5 1L1.5 4.5M5 1l3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  {todayChange.pct >= 0 ? '+' : ''}{todayChange.pct.toFixed(2)}%
-                </span>
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {todayChange.net >= 0 ? '+' : '-'}${trimTrailingZeros(Math.abs(todayChange.net).toFixed(2))} today
-                </span>
+                {Math.abs(todayChange.net) < 0.005 ? (
+                  // No change today: grey words, no arrow, no green.
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No change today</span>
+                ) : (<>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 13, fontWeight: 700, color: todayChange.net > 0 ? 'var(--success-text)' : 'var(--danger-text)' }}>
+                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{ transform: todayChange.net > 0 ? 'none' : 'rotate(180deg)' }}>
+                      <path d="M5 1v8M5 1L1.5 4.5M5 1l3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    {todayChange.pct > 0 ? '+' : ''}{todayChange.pct.toFixed(2)}%
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    {todayChange.net > 0 ? '+' : '-'}${trimTrailingZeros(Math.abs(todayChange.net).toFixed(2))} today
+                  </span>
+                </>)}
               </div>
             )}
-            <div style={{ marginTop: 8 }}>
-              <Sparkline values={balanceTrend} color={todayChange.net >= 0 ? 'var(--success)' : 'var(--danger)'} height={26} fill />
-            </div>
           </div>
         ) : (
           // Mobile hero: ONE card in the page's 20px margins with the theme's
@@ -4346,7 +4233,7 @@ export function HomePage() {
                 {a.label === 'More' && ongoingTradesCount > 0 && (
                   <span style={{
                     position: 'absolute', top: 2, right: 2, width: 11, height: 11, borderRadius: '50%',
-                    background: '#EF4444', border: '2px solid var(--surface)',
+                    background: 'var(--danger)', border: '2px solid var(--surface)',
                   }} />
                 )}
               </span>
@@ -4386,7 +4273,7 @@ export function HomePage() {
             </button>}
           </div>
           {isDesktop && (
-            <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px', marginBottom: 4, fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px', marginBottom: 4, fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>
               <span style={{ flex: 1 }}>Asset</span>
               <span style={{ minWidth: 64, textAlign: 'right' }}>Change (24h)</span>
               <span style={{ minWidth: 90, textAlign: 'right' }}>Value (USD)</span>
@@ -4420,7 +4307,7 @@ export function HomePage() {
             <AssetRow
               icon="/logos/tokens/cirbtc.png"
               fallbackColor="#F7931A" fallbackChar="₿"
-              name="cirBTC" sub="Celo Bitcoin"
+              name="cirBTC" sub="Circle Bitcoin"
               cryptoAmount={`${cirBtcBalance > 0 ? trimTrailingZeros(cirBtcBalance < 0.0001 ? cirBtcBalance.toFixed(8) : cirBtcBalance.toFixed(6)) : '0'} cirBTC`}
               usdValue={cirBtcBalance > 0 && btcPrice === 0 ? "Fetching..." : `$${trimTrailingZeros((cirBtcBalance * btcPrice).toFixed(2)).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`}
               usdColor="var(--warning)"
@@ -4460,14 +4347,21 @@ export function HomePage() {
             position: 'absolute', inset: 0,
             display: 'flex', flexDirection: 'column', overflowY: 'auto',
             background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
-            padding: '12px 14px', boxShadow: 'var(--shadow-1)',
+            padding: '12px 14px',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Recent Activity</span>
               <span onClick={() => navigate('/activity')} style={{ fontSize: 12, color: 'var(--brand-text)', fontWeight: 600, cursor: 'pointer' }}>View all</span>
             </div>
             {homeRecentActivity.length === 0 ? (
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', padding: '20px 0' }}>No recent activity</p>
+              // Empty: one sentence where the rows will be, and the two ways to start.
+              <div style={{ marginTop: 10, padding: '14px 0', borderTop: '1px solid var(--border)' }}>
+                <p style={{ fontSize: 14, color: 'var(--text-primary)', margin: 0 }}>No payments yet. What you send, receive and swap shows here.</p>
+                <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
+                  <button type="button" onClick={() => navigate('/pay')} style={{ fontSize: 14, fontWeight: 600, color: 'var(--brand-text)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>Pay someone</button>
+                  <button type="button" onClick={() => navigate('/receive')} style={{ fontSize: 14, fontWeight: 600, color: 'var(--brand-text)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>Get your QR</button>
+                </div>
+              </div>
             ) : homeRecentActivity.slice(0, 8).map((r, i, list) => (
               <ActivityRow key={r.id} record={r} isFirst={i === 0} isLast={i === list.length - 1}
                 onSelect={() => { recentFlash.opened(); setSelectedActivity(r) }} flash={r.id === recentFlash.flashId} />
@@ -4495,7 +4389,7 @@ export function HomePage() {
           <div style={{
             display: 'flex', flexDirection: 'column', gap: 8,
             background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
-            padding: '12px 16px', boxShadow: 'var(--shadow-1)',
+            padding: '12px 16px',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
@@ -4517,7 +4411,6 @@ export function HomePage() {
               <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Total Volume</div>
               <div style={{ fontSize: 27, fontWeight: 700, color: 'var(--text-primary)', marginTop: 1 }}>${trimTrailingZeros(insightsData.totalVolume.toFixed(2))}</div>
             </div>
-            <Sparkline values={volumeTrendBuckets.map(b => b.volume)} color="var(--brand-text)" height={34} fill />
             <div style={{ display: 'flex', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Net Flow</div>
@@ -4542,17 +4435,14 @@ export function HomePage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
             <InsightStatCard
               label="Paid" value={`$${insightsData.sent.toFixed(2)}`} changePct={insightsData.sentChangePct}
-              sparkValues={sentTrendBuckets.map(b => b.volume)}
               icon={<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 12L12 2M12 2H6M12 2V8" stroke="var(--brand-text)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
             />
             <InsightStatCard
               label="Received" value={`$${insightsData.received.toFixed(2)}`} changePct={insightsData.receivedChangePct}
-              sparkValues={receivedTrendBuckets.map(b => b.volume)}
               icon={<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12 2L2 12M2 12H8M2 12V6" stroke="var(--brand-text)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
             />
             <InsightStatCard
               label="Active Contacts" value={`${insightsData.activeContacts}`} changePct={insightsData.activeContactsChangePct}
-              sparkValues={contactsTrendBuckets}
               icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3" stroke="var(--brand-text)" strokeWidth="1.6"/><path d="M3 20v-1a6 6 0 016-6h0a6 6 0 016 6v1" stroke="var(--brand-text)" strokeWidth="1.6" strokeLinecap="round"/><circle cx="17" cy="8" r="2.4" stroke="var(--brand-text)" strokeWidth="1.4"/></svg>}
             />
           </div>

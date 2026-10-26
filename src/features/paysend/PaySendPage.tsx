@@ -1383,10 +1383,10 @@ export function PaySendPage() {
                         {[0, 1, 2, 3].map(i => (
                           <div key={i} className="flex items-center gap-3 px-3.5 py-3"
                             style={{ borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : undefined }}>
-                            <div className="w-9 h-9 rounded-full animate-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />
+                            <div className="w-9 h-9 rounded-full mp-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />
                             <div className="flex-1 space-y-1.5">
-                              <div className="h-3 w-28 rounded animate-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />
-                              <div className="h-2.5 w-20 rounded animate-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+                              <div className="h-3 w-28 rounded mp-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />
+                              <div className="h-2.5 w-20 rounded mp-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
                             </div>
                           </div>
                         ))}
@@ -1974,7 +1974,7 @@ function lastAmountLabel(amount: number, token: string): string {
 }
 function SectionLabel({ children, count }: { children: string; count?: number }) {
   return (
-    <p className="text-[12px] font-semibold mb-2 flex items-center gap-1.5 uppercase" style={{ color: 'var(--text-secondary)', letterSpacing: '0.06em' }}>
+    <p className="text-[12px] font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-secondary)' }}>
       {children}
       {count != null && <span className="normal-case tracking-normal text-[11px] font-semibold px-1.5 rounded-md" style={{ background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }}>{count}</span>}
     </p>
@@ -2002,7 +2002,7 @@ export function lastPaymentWhen(iso: string, now = new Date()): string {
 export function lastPaymentLine(info: LastPayment): string {
   const when = lastPaymentWhen(info.at)
   const amt = info.amount > 0 ? `${lastAmountLabel(info.amount, info.token)} ` : ''
-  const [icon, verb] = info.dir === 'failed' ? ['✕', 'failed'] : info.dir === 'paid' ? ['↑', 'sent'] : ['↓', 'received']
+  const [icon, verb] = info.dir === 'failed' ? ['×', 'failed'] : info.dir === 'paid' ? ['↑', 'sent'] : ['↓', 'received']
   return `${icon} ${amt}${verb}${when ? ` · ${when}` : ''}`
 }
 // One Pay-page person row: avatar, name + username, optional last payment, Pay pill.

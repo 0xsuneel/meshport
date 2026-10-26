@@ -183,7 +183,7 @@ export function PaymentDetailSheet({
           {/* Refunds (one or more) */}
           {refunds.length > 0 && (
             <div className="rounded-2xl bg-danger/10 border border-danger/20 px-4 py-3.5 flex flex-col gap-2">
-              <p className="text-xs font-semibold text-danger uppercase tracking-wider">
+              <p className="text-xs font-semibold text-danger">
                 {isRefunded ? `Refunded ${refundTotals?.refunded ?? ''}` : `Partly refunded · ${refundTotals?.refunded ?? ''} of ${payment.amount}`}
               </p>
               {!isRefunded && refundTotals && <p className="-mt-1 text-xs text-text-muted">{refundTotals.left} left to refund</p>}

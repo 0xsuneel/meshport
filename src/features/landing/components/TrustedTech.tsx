@@ -1,45 +1,24 @@
-import { CONTROL_MOTION } from '@/lib/motion'
-import { Waypoints, CircleDollarSign, ShieldCheck, Network } from 'lucide-react'
-import { Reveal, RevealGroup, staggerItem } from './Reveal'
-import { motion } from 'framer-motion'
+import { Reveal } from './Reveal'
 
+// What MeshPort runs on, as four plain facts on one tone band.
 const TECH = [
-  { icon: Waypoints, name: 'Arc', desc: 'Stablecoin-native L1 with sub-second finality' },
-  { icon: CircleDollarSign, name: 'USDC', desc: 'The native stablecoin and gas token on Arc' },
-  { icon: ShieldCheck, name: 'CCTP', desc: "Circle's crosschain USDC infrastructure" },
-  { icon: Network, name: 'Multichain', desc: 'Supported networks, one simpler experience' },
+  { name: 'Arc', desc: 'Stablecoin-native L1 with sub-second finality' },
+  { name: 'USDC', desc: 'The native stablecoin and gas token on Arc' },
+  { name: 'CCTP', desc: "Circle's crosschain USDC infrastructure" },
+  { name: 'Multichain', desc: 'Supported networks, one simpler experience' },
 ]
 
 export function TrustedTech() {
   return (
-    <section className="border-y border-border bg-surface/40">
-      <div className="mx-auto max-w-7xl px-5 py-14 sm:px-8 sm:py-16">
-        <Reveal>
-          <p className="text-center text-[13px] font-bold uppercase tracking-[0.08em] text-text-muted">
-            Built for stablecoin payments
-          </p>
-        </Reveal>
-
-        <RevealGroup className="mt-8 grid grid-cols-2 gap-4 sm:mt-10 lg:grid-cols-4 lg:gap-5">
-          {TECH.map(t => (
-            <motion.div
-              key={t.name}
-              variants={staggerItem}
-              whileHover={{ y: -3 }}
-              transition={CONTROL_MOTION}
-              className="flex flex-col items-center gap-3 rounded-[20px] border border-border bg-bg px-5 py-7 text-center shadow-elevation-1"
-            >
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand/12">
-                <t.icon size={20} color="var(--brand-text)" />
-              </div>
-              <div>
-                <p className="text-[15px] font-bold text-text-primary">{t.name}</p>
-                <p className="mt-1 text-[12px] leading-snug text-text-secondary">{t.desc}</p>
-              </div>
-            </motion.div>
-          ))}
-        </RevealGroup>
-      </div>
+    <section className="bg-surface/40">
+      <Reveal className="mx-auto grid max-w-7xl grid-cols-1 gap-x-8 gap-y-6 px-5 py-12 sm:grid-cols-2 sm:px-8 lg:grid-cols-4">
+        {TECH.map(t => (
+          <div key={t.name}>
+            <p className="text-[18px] font-bold text-text-primary">{t.name}</p>
+            <p className="mt-1 text-[16px] leading-snug text-text-secondary">{t.desc}</p>
+          </div>
+        ))}
+      </Reveal>
     </section>
   )
 }

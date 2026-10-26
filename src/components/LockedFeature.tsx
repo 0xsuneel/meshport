@@ -48,7 +48,7 @@ export function LockedFeature({ title, showBack = true }: { title?: string; show
       )}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px 96px' }}>
         <div style={{ width: '100%', maxWidth: 420, textAlign: 'center', padding: '28px 20px', borderRadius: 24,
-          background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-1)' }}>
+          background: 'var(--surface)', border: '1px solid var(--border)' }}>
           <div style={{ width: 64, height: 64, borderRadius: '50%', margin: '0 auto 16px',
             background: 'color-mix(in srgb, var(--brand) 14%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Lock size={28} strokeWidth={2} color="var(--brand-text)" />

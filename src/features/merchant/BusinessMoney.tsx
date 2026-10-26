@@ -192,7 +192,7 @@ function MoneyHome({ loaded, intents, payments, receipts, chains, claimChains, o
 
   const stat = (title: string, value: string, sub?: string, color?: string) => (
     <div style={{ flex: 1, minWidth: 0, padding: '10px 12px' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{title}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{title}</div>
       <div style={{ fontSize: 18, fontWeight: 800, color: color ?? 'var(--text-primary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
     </div>
@@ -757,11 +757,11 @@ function CustomerDetail({ keyId, payments, intents, onBack, onRequest, onOpenReq
       <Header title={name} onBack={onBack} />
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ ...card, flex: 1, padding: 12 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Total received</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>Total received</div>
           <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginTop: 4 }}>${formatAmount(total)}</div>
         </div>
         <div style={{ ...card, flex: 1, padding: 12 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Transactions</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>Transactions</div>
           <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginTop: 4 }}>{mine.length}</div>
         </div>
       </div>
@@ -842,7 +842,7 @@ function Header({ title, onBack }: { title: string; onBack: () => void }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{title}</div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>{children}</div>
     </div>
   )
@@ -873,7 +873,7 @@ function CopyRow({ label, value, mono, onCopy }: { label: string; value: string;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{label}</div>
         <div style={{ fontSize: 13, color: 'var(--text-primary)', wordBreak: 'break-all', marginTop: 2, fontFamily: mono ? 'ui-monospace, monospace' : undefined }}>{value}</div>
       </div>
       <button onClick={onCopy} aria-label={`Copy ${label}`}

@@ -14,12 +14,12 @@ export function FinalCTA() {
           <h2 className="text-[28px] font-extrabold tracking-tight text-white sm:text-[38px]">
             USDC Payments, Made Simple.
           </h2>
-          <p className="mx-auto mt-4 max-w-lg text-[16px] leading-relaxed text-white/80">
+          <p className="mx-auto mt-4 max-w-lg text-[18px] leading-relaxed text-white/80">
             Create your wallet in under a minute and send your first payment on Arc Testnet.
           </p>
           <button
             onClick={() => navigate('/auth')}
-            className="mx-auto mt-8 flex items-center justify-center gap-2 rounded-2xl bg-white px-7 py-4 text-[15px] font-bold text-[color:var(--brand)] shadow-elevation-2 transition-transform active:scale-[0.98]"
+            className="mx-auto mt-8 flex items-center justify-center gap-2 rounded-2xl bg-white px-7 py-4 text-[16px] font-bold text-[color:var(--brand)] transition-transform active:scale-[0.98]"
           >
             Launch MeshPort
             <ArrowRight size={17} />

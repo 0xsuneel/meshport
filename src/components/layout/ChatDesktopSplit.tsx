@@ -51,8 +51,8 @@ export function ChatDesktopSplit({ list }: { list: ReactNode }) {
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, color: 'var(--text-secondary)', background: 'var(--bg)' }}>
             <div style={{
               width: 76, height: 76, borderRadius: '50%',
-              background: 'linear-gradient(135deg, color-mix(in srgb, var(--brand) 16%, var(--surface)) 0%, var(--surface) 100%)',
-              border: '1px solid var(--border)', boxShadow: 'var(--shadow-1)',
+              background: 'color-mix(in srgb, var(--brand) 8%, var(--surface))',
+              border: '1px solid var(--border)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <MessageCircle size={30} color="var(--brand-text)" />

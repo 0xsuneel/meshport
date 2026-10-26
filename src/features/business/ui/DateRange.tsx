@@ -101,7 +101,7 @@ export function DateRangeSheet({
       {/* Date inputs */}
       <div className="flex gap-3 mb-6">
         <label className="flex-1 flex flex-col gap-1">
-          <span className="text-xs text-text-muted font-medium uppercase tracking-wide">From</span>
+          <span className="text-xs text-text-muted font-medium">From</span>
           <input
             type="date"
             value={from}
@@ -110,7 +110,7 @@ export function DateRangeSheet({
           />
         </label>
         <label className="flex-1 flex flex-col gap-1">
-          <span className="text-xs text-text-muted font-medium uppercase tracking-wide">To</span>
+          <span className="text-xs text-text-muted font-medium">To</span>
           <input
             type="date"
             value={to}

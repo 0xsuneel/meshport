@@ -53,7 +53,7 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
         <div className="bg-surface border border-border rounded-3xl p-4 space-y-4">
           {sections.map(section => (
             <div key={section.heading}>
-              <p className="text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-2 px-1">{section.heading}</p>
+              <p className="text-[12px] font-semibold text-text-secondary mb-2 px-1">{section.heading}</p>
               <div className="flex flex-wrap gap-2">
                 {section.features.map(f => (
                   <button key={f.id} onClick={() => jump(f.id)}
@@ -69,13 +69,13 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
         {/* ── Each feature ── */}
         {sections.map(section => (
           <div key={section.heading} className="space-y-3">
-            <p className="text-xs font-bold text-text-secondary uppercase tracking-wider px-1">{section.heading}</p>
+            <p className="text-xs font-bold text-text-secondary px-1">{section.heading}</p>
             {section.features.map(f => (
               <div key={f.id} id={`guide-${f.id}`} className="scroll-mt-24 bg-surface border border-border rounded-3xl p-4 flex flex-col sm:flex-row gap-4">
                 <div className="self-center sm:self-start flex-shrink-0 flex gap-2">
                   {[f.image, ...(f.more ?? [])].map(img => (
                     <button key={img} onClick={() => setZoom({ title: f.title, image: img })} aria-label={`Enlarge ${f.title} screen`}
-                      className="w-[min(150px,calc(50vw-36px))] rounded-2xl overflow-hidden border border-border bg-bg shadow-elevation-1">
+                      className="w-[min(150px,calc(50vw-36px))] rounded-2xl overflow-hidden border border-border bg-bg">
                       <img src={`/guide/${img}.jpg`} alt={`${f.title} screen`} width={390} height={780}
                         loading="lazy" decoding="async" className="block w-full aspect-[1/2] object-cover object-top" />
                     </button>

@@ -121,14 +121,14 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
   // Pay button on a strip below. Same width limits as before.
   // Status not known yet (first sight of this bill): a neutral band and no
   // "due" tag, so a bill that turns out paid doesn't flip amber → green.
-  const band = loading ? 'linear-gradient(135deg, #7C8796, #5B6573)'
-    : paid ? 'linear-gradient(135deg, #27C796, #12806B)'
-    : closed ? 'linear-gradient(135deg, #8A929C, #5E6670)'
-    : 'linear-gradient(135deg, #F0B24F, #C9812A)'
+  const band = loading ? '#66707E'
+    : paid ? '#15876F'
+    : closed ? '#6C747E'
+    : '#B9761F'
   const amountTag = loading ? '' : paid ? 'paid' : closed ? STATUS_LABEL[v.status].toLowerCase() : 'due'
   const statusLine = loading ? 'Checking status…'
-    : paid && v.completedByMerchant ? '✓ Completed'
-    : paid ? (isMine ? '✓ Payment received' : '✓ Paid')
+    : paid && v.completedByMerchant ? 'Completed'
+    : paid ? (isMine ? 'Payment received' : 'Paid')
     : v.status === 'processing' && v.payments.some(p => p.status === 'in_ledger') ? 'Moving to Arc'
     : closed ? 'Can no longer be paid' // the band already says expired / cancelled / failed
     : expiryText(v.expiresAt) && v.status !== 'processing' ? `${STATUS_LABEL[v.status]} · ${expiryText(v.expiresAt)!.replace(/^Expires/, 'expires')}`

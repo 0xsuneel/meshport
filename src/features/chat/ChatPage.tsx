@@ -447,7 +447,7 @@ function ConversationPreview({ conv, isSelfChat, uname, userId }: {
     if (known != null) { setMsg(known); return }
     let cancelled = false
     const otherId = conv.other_user?.id
-    if (!walletAddress || !otherId) { setMsg('🔒 New message'); return }
+    if (!walletAddress || !otherId) { setMsg('New message'); return }
     getConversationKey(walletAddress, otherId).then(async key => {
       const decrypted = await decryptText(raw, key)
       if (!isDecryptFailure(decrypted)) _plainByContent.set(raw, decrypted)
@@ -458,11 +458,11 @@ function ConversationPreview({ conv, isSelfChat, uname, userId }: {
 
   // Image/file messages store a raw markdown-style URL - show a clean label instead
   const previewCaption = splitCaption(msg).caption
-  if (msg.startsWith('[IMAGE](') || msg.startsWith('[IMAGE-E:')) return <>📷 {previewCaption || 'Photo'}</>
+  if (msg.startsWith('[IMAGE](') || msg.startsWith('[IMAGE-E:')) return <><Image size={13} aria-hidden style={{ display: 'inline', verticalAlign: '-2px', marginRight: 4 }} />{previewCaption || 'Photo'}</>
   if (msg.startsWith('[FILE:') || msg.startsWith('[FILE-E:')) {
     let fname = msg.match(/^\[FILE:(.+?)\]\(/)?.[1] || msg.match(/^\[FILE-E:(.+?):/)?.[1]
     try { if (fname) fname = decodeURIComponent(fname) } catch { /* plain name */ }
-    return <>{previewCaption ? `📎 ${previewCaption}` : fname ? `📎 ${fname}` : '📎 File'}</>
+    return <><Paperclip size={13} aria-hidden style={{ display: 'inline', verticalAlign: '-2px', marginRight: 4 }} />{previewCaption || fname || 'File'}</>
   }
 
   const myUsername = (
@@ -480,7 +480,7 @@ function ConversationPreview({ conv, isSelfChat, uname, userId }: {
 function PeopleCard({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
   return (
     <div>
-      <p className="text-[12px] font-semibold mb-2 flex items-center gap-1.5 uppercase" style={{ color: 'var(--text-secondary)', letterSpacing: '0.06em' }}>
+      <p className="text-[12px] font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-secondary)' }}>
         {title}
         {count != null && <span className="normal-case tracking-normal text-[11px] font-semibold px-1.5 rounded-md" style={{ background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }}>{count}</span>}
       </p>
@@ -525,10 +525,10 @@ function PersonRowSkeleton({ first }: { first: boolean }) {
   const bar = 'color-mix(in srgb, var(--text-primary) 8%, transparent)'
   return (
     <div className="flex items-center gap-3 px-3.5 py-3" style={{ borderTop: first ? undefined : '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-      <div className="w-[38px] h-[38px] rounded-full animate-pulse" style={{ background: bar }} />
+      <div className="w-[38px] h-[38px] rounded-full mp-pulse" style={{ background: bar }} />
       <div className="flex-1 space-y-1.5">
-        <div className="h-3 w-28 rounded animate-pulse" style={{ background: bar }} />
-        <div className="h-2.5 w-20 rounded animate-pulse" style={{ background: bar }} />
+        <div className="h-3 w-28 rounded mp-pulse" style={{ background: bar }} />
+        <div className="h-2.5 w-20 rounded mp-pulse" style={{ background: bar }} />
       </div>
     </div>
   )
@@ -1213,7 +1213,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
             </p>
           )}
           {searchQ && filtered.length > 0 && (
-            <p className="px-4 pt-3 pb-1 text-[12px] font-bold uppercase tracking-wide text-text-secondary">Chats</p>
+            <p className="px-4 pt-3 pb-1 text-[12px] font-semibold text-text-secondary">Chats</p>
           )}
           {filtered.map((conv, idx) => {
             // A self-conversation (paying/messaging your own username) has
@@ -1420,7 +1420,7 @@ function EncryptedImage({ url, ivBase64, convKey, isLastInGroup, isMine, onTap }
   if (failed) {
     return (
       <div style={{ width: 200, height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isMine ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)', fontSize: 13 }}>
-        🔒 Couldn't decrypt this image
+        Couldn't decrypt this image
       </div>
     )
   }
@@ -1606,7 +1606,7 @@ const MessageBubble = memo(function MessageBubble({
     const cached = _plainByContent.get(msg.content)
     if (cached != null) { setDecryptedContent(cached); return }
     // Key still unlocking (e.g. just after a refresh) - not a failure.
-    if (convKey === undefined) { setDecryptedContent('🔒 Decrypting…'); return }
+    if (convKey === undefined) { setDecryptedContent('Decrypting…'); return }
     let cancelled = false
     decryptText(msg.content, convKey).then(d => {
       // Only a real decrypt is remembered - "unable to decrypt" (wallet key
@@ -1748,7 +1748,7 @@ const MessageBubble = memo(function MessageBubble({
           }}>
             <div style={{
               position: 'relative', overflow: 'hidden', padding: '13px 14px 14px', color: '#fff',
-              background: isMine ? 'linear-gradient(135deg, #1A7A72, #0C4A46)' : 'linear-gradient(135deg, #27C796, #12806B)',
+              background: isMine ? '#12625B' : '#15876F',
             }}>
               <span aria-hidden style={{ position: 'absolute', right: -18, top: -18, width: 72, height: 72, borderRadius: '50%', border: '12px solid rgba(255,255,255,0.12)' }} />
               <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 12, fontWeight: 700, lineHeight: 1.3, opacity: 0.9 }}>
@@ -1777,7 +1777,7 @@ const MessageBubble = memo(function MessageBubble({
                   borderLeft: `3px solid ${isMine ? 'var(--brand)' : 'var(--success)'}`,
                   background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
                 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: isMine ? 'var(--brand-text)' : 'var(--success-text)' }}>{orderTag?.kind ? orderTitle(orderTag.kind, billRef) : `🧾 ${displayOrderNumber(billRef)}`}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: isMine ? 'var(--brand-text)' : 'var(--success-text)' }}>{orderTag?.kind ? orderTitle(orderTag.kind, billRef) : `Order ${displayOrderNumber(billRef)}`}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{isMine ? 'Paid in full' : 'Paid by customer'}</div>
               </div>
             )}
@@ -4530,7 +4530,7 @@ export function ChatConversationPage() {
                     <Avatar name={otherUser?.display_name ?? ""} src={otherUser?.avatar_url ?? null} size="sm" />
                     <div>
                       <p className="text-[15px] font-bold text-text-primary">{otherUser?.display_name || recipientClean}</p>
-                      <p className="text-[12px] font-mono text-link">{recipientClean}.arc</p>
+                      <p className="text-[12px] text-link">{recipientClean}.arc</p>
                     </div>
                   </div>
                 </div>
@@ -4808,8 +4808,8 @@ export function ChatConversationPage() {
                 // Not known yet (first open with nothing cached): placeholder
                 // bars, never a bare ".arc" that fills in later.
                 <div className="min-w-0 flex flex-col justify-center gap-1.5" aria-label="Loading">
-                  <span className="block h-3 w-28 rounded animate-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
-                  <span className="block h-2.5 w-20 rounded animate-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }} />
+                  <span className="block h-3 w-28 rounded mp-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
+                  <span className="block h-2.5 w-20 rounded mp-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }} />
                 </div>
               )}
             </button>

@@ -70,9 +70,9 @@ export const RECEIPT_CHECK = 76
 const shortHash = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`
 const GOOD = 'color-mix(in srgb, var(--success) 70%, var(--text-primary))'
 const HEADER_BG = {
-  success: 'linear-gradient(160deg, var(--success), var(--brand))',
-  pending: 'linear-gradient(160deg, var(--warning), color-mix(in srgb, var(--warning) 55%, var(--brand)))',
-  failed:  'linear-gradient(160deg, var(--danger), color-mix(in srgb, var(--danger) 55%, black))',
+  success: 'var(--brand)',
+  pending: 'color-mix(in srgb, var(--warning) 80%, #3A2A00)',
+  failed:  'color-mix(in srgb, var(--danger) 85%, black)',
 } as const
 const HEADER_ICON_COLOR = { success: 'var(--success)', pending: 'var(--warning)', failed: 'var(--danger)' } as const
 const CONFETTI = ['var(--success)', '#F5B82E', 'var(--avatar-3)', 'var(--avatar-4)', '#FFFFFF']

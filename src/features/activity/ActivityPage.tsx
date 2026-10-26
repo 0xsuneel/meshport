@@ -717,7 +717,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
         { label: networkFeeLabel(record), value: formatFee(move.networkFee) },
       ] : []),
     ] : []),
-    { label: 'Status', value: isFailed ? 'Failed ✗' : isSuccess ? 'Completed ✓' : 'Processing…' },
+    { label: 'Status', value: isFailed ? 'Failed' : isSuccess ? 'Completed' : 'Processing…' },
     { label: 'Date',   value: new Date(createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
     { label: 'Time',   value: new Date(createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) },
     // A recovery is listed when its money landed; this is when the transfer was first tried.
@@ -1048,8 +1048,8 @@ export function ActivityPage() {
             <div className="px-4 lg:max-w-[1100px] lg:mx-auto">
               {groups.map(group => (
                 <div key={group.label} className="mb-6">
-                  <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 px-1">{group.label}</p>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--shadow-1)' }}>
+                  <p className="text-xs font-bold text-text-secondary mb-2 px-1">{group.label}</p>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)' }}>
                         {['Type', 'Details', 'Chain', 'Status', 'Time', 'Amount'].map((h, i) => (
@@ -1086,7 +1086,7 @@ export function ActivityPage() {
     <div>
             {!showEarned && !loading && groups.map(group => (
               <div key={group.label} className="px-4 mb-4">
-                <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 mt-4 px-1">{group.label}</p>
+                <p className="text-xs font-bold text-text-secondary mb-2 mt-4 px-1">{group.label}</p>
                 <div>
                   {group.items.map((item, i, arr) => (
                     <ActivityRow key={item.id} record={item}

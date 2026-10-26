@@ -20,7 +20,7 @@ type AssetToken = 'USDC' | 'EURC' | 'cirBTC'
 const TOKENS: Record<AssetToken, { name: string; logo: string; fallbackChar: string; fallbackColor: string }> = {
   USDC:   { name: 'USD Coin',      logo: '/logos/tokens/usdc.png',       fallbackChar: '$', fallbackColor: 'var(--usdc-icon)' },
   EURC:   { name: 'Euro Coin',     logo: '/logos/tokens/eurc.png', fallbackChar: '€', fallbackColor: 'var(--usdc-icon)' },
-  cirBTC: { name: 'Celo Bitcoin',  logo: '/logos/tokens/cirbtc.png',       fallbackChar: '₿', fallbackColor: '#F7931A' },
+  cirBTC: { name: 'Circle Bitcoin', logo: '/logos/tokens/cirbtc.png',       fallbackChar: '₿', fallbackColor: '#F7931A' },
 }
 const ACTIONS: Record<AssetToken, { label: string; icon: ActionIconName; path: string }[]> = {
   USDC: [

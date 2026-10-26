@@ -139,7 +139,7 @@ export function DesktopSidebar() {
               {showP2PBadge && (
                 <span style={{
                   marginLeft: 'auto', minWidth: 18, height: 18, borderRadius: 9,
-                  background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700,
+                  background: 'var(--danger)', color: '#fff', fontSize: 11, fontWeight: 700,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
                 }}>
                   {ongoingP2PCount > 99 ? '99+' : ongoingP2PCount}

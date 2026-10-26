@@ -54,7 +54,7 @@ export function StaffView({ staff, onInvite, onEdit, onRemove }: StaffViewProps)
     <div className="flex flex-col gap-5 px-5 py-4">
       {/* Role legend */}
       <div className="flex flex-col gap-2">
-        <p className="text-xs text-text-muted font-medium uppercase tracking-wide">Roles</p>
+        <p className="text-xs text-text-muted font-medium">Roles</p>
         <div className="grid grid-cols-2 gap-2">
           {(Object.entries(ROLE_LEGEND) as [StaffRole, typeof ROLE_LEGEND[StaffRole]][]).map(([roleKey, info]) => (
             <div key={roleKey} className="bg-card border border-border rounded-2xl p-3 flex flex-col gap-1.5">
@@ -92,7 +92,7 @@ export function StaffView({ staff, onInvite, onEdit, onRemove }: StaffViewProps)
                   {member.name[0].toUpperCase()}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-text-primary font-mono truncate">
+                  <p className="text-sm font-semibold text-text-primary truncate">
                     {member.name}
                   </p>
                   <div className="flex items-center gap-2 mt-0.5">
@@ -179,21 +179,21 @@ export function StaffForm({
   return (
     <div className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
-        <span className="text-xs text-text-muted font-medium uppercase tracking-wide">Arc username</span>
+        <span className="text-xs text-text-muted font-medium">Arc username</span>
         <input
           type="text"
           value={username}
           onChange={e => onUsername(e.target.value)}
           placeholder="ravi.arc"
           autoCapitalize="none"
-          className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] font-mono focus:outline-none focus:ring-2 focus:ring-brand/40"
+          className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] focus:outline-none focus:ring-2 focus:ring-brand/40"
         />
         {problem && <span className={`text-[12px] px-0.5 ${problem.tone === 'danger' ? 'text-danger font-semibold' : 'text-text-muted'}`} role={problem.tone === 'danger' ? 'alert' : undefined}>{problem.text}</span>}
       </label>
 
       {/* Role segmented */}
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs text-text-muted font-medium uppercase tracking-wide">Role</span>
+        <span className="text-xs text-text-muted font-medium">Role</span>
         <div className="flex gap-1.5 bg-bg rounded-2xl p-1">
           {(['cashier', 'manager'] as StaffRole[]).map(r => (
             <button
@@ -215,7 +215,7 @@ export function StaffForm({
       {/* Store picker */}
       {stores.length > 1 && (
         <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-text-muted font-medium uppercase tracking-wide">Assign to store</span>
+          <span className="text-xs text-text-muted font-medium">Assign to store</span>
           <div className="flex flex-col gap-1">
             {stores.map(s => (
               <button

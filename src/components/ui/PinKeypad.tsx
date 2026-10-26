@@ -39,7 +39,6 @@ interface PinKeypadProps {
   shake?: boolean
   onComplete?: (pin: string, viaBiometric?: boolean) => void
   accentFrom?: string
-  accentTo?: string
   // Revived - previously declared but never actually wired to anything
   // (see git history / the file this replaced). Both now optional and
   // both default to the real, live check below if omitted, so existing
@@ -73,7 +72,6 @@ export function PinKeypad({
   shake,
   onComplete,
   accentFrom = 'var(--brand)',
-  accentTo = 'var(--brand)',
   onBiometric,
   biometricAvailable,
   autoBiometric = true,
@@ -259,7 +257,7 @@ export function PinKeypad({
                 background: filled
                   ? error
                     ? 'var(--danger)'
-                    : `linear-gradient(135deg, ${accentFrom}, ${accentTo})`
+                    : accentFrom
                   : 'transparent',
                 border: filled ? 'none' : '1.5px solid var(--border)',
               }}

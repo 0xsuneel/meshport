@@ -134,10 +134,10 @@ export function MyRequestsPage() {
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16 }}>
                 {[0, 1, 2].map(k => (
                   <div key={k} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '13px 14px', borderTop: k ? '1px solid var(--border)' : 'none' }}>
-                    <div className="animate-pulse" style={{ width: 38, height: 38, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />
+                    <div className="mp-pulse" style={{ width: 38, height: 38, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />
                     <div style={{ flex: 1 }}>
-                      <div className="animate-pulse" style={{ width: 130, height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />
-                      <div className="animate-pulse" style={{ width: 90, height: 10, borderRadius: 6, marginTop: 7, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+                      <div className="mp-pulse" style={{ width: 130, height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />
+                      <div className="mp-pulse" style={{ width: 90, height: 10, borderRadius: 6, marginTop: 7, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
                     </div>
                   </div>
                 ))}
