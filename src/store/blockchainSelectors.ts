@@ -63,7 +63,7 @@ export function useArcBalanceAmount(wallet: string | null, asset: AssetSymbol = 
  *
  * EURC is converted at the rate the store holds; when no rate has been fetched
  * the entry is absent and its contribution is 0 - deliberately NOT a hardcoded
- * 1.08 fallback like the current HomePage line. Showing a total built from a
+ * fixed-rate fallback (HomePage once used 1.08). Showing a total built from a
  * stale constant is worse than showing one that's briefly missing a component,
  * because the user cannot tell the difference. cirBTC behaves the same way.
  */

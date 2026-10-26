@@ -1,6 +1,8 @@
 import { PinSheet } from '@/components/ui/PinSheet'
 import { useBusinessTab, useHubLabel, useMerchant } from '@/lib/merchant'
-import { fetchBtcPriceUsd } from '@/lib/btcPrice'
+import { fetchBtcPriceUsd, lastKnownBtcPrice } from '@/lib/btcPrice'
+import { fetchEurcPriceUsd, lastKnownEurcPrice } from '@/lib/eurcPrice'
+import { portfolioUsd, portfolioTrend } from '@/lib/portfolio'
 import { loadAssetSlot, saveAssetSlot } from '@/lib/assetSlot'
 import { handBiometricPasscode } from '@/lib/biometricHandoff'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
@@ -32,12 +34,12 @@ import { filterServices } from '@/lib/searchServices'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 import { LockBadge } from '@/components/LockedFeature'
 import { RecentNewsRow } from './RecentNewsRow'
-import { BALANCES_STALE_EVENT } from '@/lib/balanceRefresh'
+import { BALANCES_STALE_EVENT, msSinceLastTx } from '@/lib/balanceRefresh'
 import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { useSettingsStore } from '@/store/settingsStore'
 import { activityLabel, activitySign, type ActivityRecord } from '@/lib/ActivityService'
 import { projectMomentum } from '@/lib/gesture'
-import { balanceTrend as computeBalanceTrend, type BalanceTrend } from '@/lib/balanceTrend'
+import type { BalanceTrend } from '@/lib/balanceTrend'
 // Reused so the desktop "Recent Activity" panel shows the exact same
 // title wording as the Activity page itself (Paid to / Received from /
 // Claimed from / Transfer to / P2P Sell Order Cancelled, including
@@ -2583,12 +2585,15 @@ export function HomePage() {
   const [eurcBalance,    setEurcBalanceState]    = useState(() => loadAssetSlot(walletAddress).eurc)
   const [cirBtcBalance,  setCirBtcBalanceState]  = useState(() => loadAssetSlot(walletAddress).cirbtc)
   const setEurcBalance = useCallback((v: number) => { setEurcBalanceState(v); saveAssetSlot(walletAddress, { eurc: v }) }, [walletAddress])
+  const eurcBalanceRef = useRef(eurcBalance); eurcBalanceRef.current = eurcBalance
+  const cirBtcBalanceRef = useRef(cirBtcBalance); cirBtcBalanceRef.current = cirBtcBalance
   const setCirBtcBalance = useCallback((v: number) => { setCirBtcBalanceState(v); saveAssetSlot(walletAddress, { cirbtc: v }) }, [walletAddress])
   useEffect(() => {
     const slot = loadAssetSlot(walletAddress)
     setEurcBalanceState(slot.eurc); setCirBtcBalanceState(slot.cirbtc)
   }, [walletAddress])
-  const [btcPrice,       setBtcPrice]       = useState(0)
+  const [btcPrice,       setBtcPrice]       = useState(() => lastKnownBtcPrice())
+  const [eurcPrice,      setEurcPrice]      = useState(() => lastKnownEurcPrice())
   const [unifiedBalance, setUnifiedBalance] = useState<number | null>(null)
   // True until the first all-chains scan for this wallet has finished.
   const [unifiedLoading, setUnifiedLoading] = useState(true)
@@ -2657,16 +2662,31 @@ export function HomePage() {
   }
 
   // A payment / swap / transfer just finished (lib/balanceRefresh.ts): read
-  // EURC and cirBTC again too (USDC is refreshed by the helper itself).
+  // EURC and cirBTC again too (USDC is refreshed by the helper itself) -
+  // uncached, and again over ~25s until each shows a new figure: an RPC node
+  // can answer from the block before the transaction landed, and a stale
+  // answer used to stick until the 2-minute poll (so the total was wrong
+  // after a swap). Also when Home opens within 30s of a transaction made on
+  // another screen, which never heard the event.
   useEffect(() => {
-    // Read now, and again shortly after: an RPC node can still answer from
-    // the block before the transaction landed.
-    const onStale = () => {
-      refreshBalanceForToken('EURC'); refreshBalanceForToken('CIRBTC')
-      setTimeout(() => { refreshBalanceForToken('EURC'); refreshBalanceForToken('CIRBTC') }, 4000)
+    if (!walletAddress) return
+    let stopped = false
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const settle = () => {
+      const start = { EURC: eurcBalanceRef.current, CIRBTC: cirBtcBalanceRef.current }
+      const done = { EURC: false, CIRBTC: false }
+      const read = (tok: 'EURC' | 'CIRBTC') => readArcBalanceOrThrow(walletAddress, tok, { ttlMs: 0 }).then(v => {
+        if (stopped) return
+        if (tok === 'EURC') setEurcBalance(v); else setCirBtcBalance(v)
+        if (Math.abs(v - start[tok]) > 1e-12) done[tok] = true
+      }).catch(() => {})
+      for (const at of [0, 3_000, 8_000, 15_000, 25_000]) {
+        timers.push(setTimeout(() => { if (!done.EURC) void read('EURC'); if (!done.CIRBTC) void read('CIRBTC') }, at))
+      }
     }
-    window.addEventListener(BALANCES_STALE_EVENT, onStale)
-    return () => window.removeEventListener(BALANCES_STALE_EVENT, onStale)
+    window.addEventListener(BALANCES_STALE_EVENT, settle)
+    if (msSinceLastTx() < 30_000) settle()
+    return () => { stopped = true; timers.forEach(clearTimeout); window.removeEventListener(BALANCES_STALE_EVENT, settle) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walletAddress])
 
@@ -2862,8 +2882,12 @@ export function HomePage() {
     )
   }
 
-  // CHANGE 4: Total portfolio = USDC + EURC (in USD) + cirBTC (in USD)
-  const portfolioTotal = balance + eurcBalance * 1.08 + cirBtcBalance * btcPrice
+  // Total portfolio, as MetaMask / OKX count it: every Arc asset at its live
+  // market price (lib/portfolio.ts). USDC $1, EURC at the euro-coin price,
+  // cirBTC at BTC's. It used to price EURC at a fixed 1.08.
+  const holdings = { USDC: balance, EURC: eurcBalance, cirBTC: cirBtcBalance }
+  const prices = { EURC: eurcPrice, cirBTC: btcPrice }
+  const portfolioTotal = portfolioUsd(holdings, prices)
 
   // Animated count-up for the balance display now lives in its own small
   // `AnimatedBalanceText` component (see above), not as state here - see
@@ -3573,11 +3597,13 @@ export function HomePage() {
 
       // Slow network: prices are extra requests to other sites (each a new
       // connection) - use the last price instead and leave the pipe to balances.
-      const priceEnrichmentPromise = (isSlowNetwork() ? Promise.all([0, null]) : Promise.all([
+      const priceEnrichmentPromise = (isSlowNetwork() ? Promise.all([0, null, 0]) : Promise.all([
         fetchBtcPrice(),
         fetchChange24h(),
-      ])).then(([btcP]) => {
+        fetchEurcPriceUsd(),
+      ])).then(([btcP, , eurP]) => {
         if (cancelled) return
+        if (eurP > 0) setEurcPrice(eurP)
         // Cache last known BTC price in sessionStorage so it survives API failures
         if (btcP > 0) {
           sessionStorage.setItem('meshport_btc_price', String(btcP))
@@ -3826,13 +3852,14 @@ export function HomePage() {
     })
   }, [homeRecentActivity])
 
-  // Mobile hero bars: the Arc USDC balance at the end of each of the last 7
-  // days, worked out from today's USDC and that Activity - USDC moves only,
-  // swaps counted by the USDC that went in or came out (lib/balanceTrend.ts).
-  // Nothing is drawn until the Activity has loaded (no flat-then-jump).
+  // Mobile hero bars: the portfolio at the end of each of the last 7 days -
+  // each asset's own amounts from Activity (a swap moves value between
+  // assets), valued at today's prices (lib/portfolio.ts). Nothing is drawn
+  // until the Activity has loaded (no flat-then-jump).
   const mobileBalanceTrend = useMemo(
-    () => (isDesktop || !homeActivityLoaded ? null : computeBalanceTrend(homeRecentActivity, balance, new Date(), 7, { asset: 'USDC' })),
-    [isDesktop, homeActivityLoaded, homeRecentActivity, balance],
+    () => (isDesktop || !homeActivityLoaded ? null
+      : portfolioTrend(homeRecentActivity, { USDC: balance, EURC: eurcBalance, cirBTC: cirBtcBalance }, { EURC: eurcPrice, cirBTC: btcPrice })),
+    [isDesktop, homeActivityLoaded, homeRecentActivity, balance, eurcBalance, cirBtcBalance, eurcPrice, btcPrice],
   )
 
   const todayChange = useMemo(() => {
@@ -4267,18 +4294,15 @@ export function HomePage() {
               // or carousel edges (Cross-chain Transfer is in More actions).
               <div>
                 <AvailableBalanceCard
-                  portfolioTotal={balance} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
+                  portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
                   walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
                   trend={mobileBalanceTrend}
                 />
               </div>
             ) : (
-              // "Available Balance" is the Arc USDC balance - what the explorer
-              // shows and what can be spent. EURC / cirBTC are under Assets
-              // (a total priced EURC at a fixed 1.08 while the testnet pool
-              // pays ~1.38 EURC per USDC, so every swap inflated it).
+              // "Available Balance": every Arc asset at its market price.
               <MobileHeroCarousel
-                portfolioTotal={balance}
+                portfolioTotal={portfolioTotal}
                 balanceHidden={balanceHidden}
                 onToggleHidden={toggleBalanceHidden}
                 walletAddress={walletAddress}
@@ -4386,7 +4410,7 @@ export function HomePage() {
               fallbackColor="var(--usdc-icon)" fallbackChar="€"
               name="EURC" sub="Euro Coin"
               cryptoAmount={`${fmt(eurcBalance)} EURC`}
-              usdValue={`$${fmt(eurcBalance * 1.08)}`}
+              usdValue={`$${fmt(eurcBalance * eurcPrice)}`}
               usdColor="var(--brand-text)"
               onClick={() => navigate('/asset/EURC')}
               hidden={balanceHidden}

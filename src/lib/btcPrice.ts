@@ -30,6 +30,17 @@ const sources: Array<() => Promise<number>> = [
   },
 ]
 
+// The last price is kept on the device so a portfolio total can show at once
+// on the next open (and when every source is down) instead of leaving cirBTC
+// out until the network answers.
+const KEY = 'meshport_btc_price_usd'
+
+/** The last price fetched on this device (0 if never). */
+export function lastKnownBtcPrice(): number {
+  if (cached) return cached.price
+  try { const p = parseFloat(localStorage.getItem(KEY) || '0'); return p > 0 ? p : 0 } catch { return 0 }
+}
+
 export async function fetchBtcPriceUsd(): Promise<number> {
   if (cached && Date.now() - cached.at < 60_000) return cached.price
   if (inflight) return inflight
@@ -38,10 +49,11 @@ export async function fetchBtcPriceUsd(): Promise<number> {
       try {
         const price = await source()
         cached = { at: Date.now(), price }
+        try { localStorage.setItem(KEY, String(price)) } catch { /* storage blocked */ }
         return price
       } catch { /* try next */ }
     }
-    return 0
+    return lastKnownBtcPrice()
   })().finally(() => { inflight = null })
   return inflight
 }

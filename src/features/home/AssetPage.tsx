@@ -8,7 +8,8 @@ import { type ActivityRecord } from '@/lib/ActivityService'
 import { ActivityRow, DetailSheet, recordMovesToken } from '@/features/activity/ActivityPage'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { loadAssetSlot } from '@/lib/assetSlot'
-import { fetchBtcPriceUsd } from '@/lib/btcPrice'
+import { fetchBtcPriceUsd, lastKnownBtcPrice } from '@/lib/btcPrice'
+import { fetchEurcPriceUsd, lastKnownEurcPrice } from '@/lib/eurcPrice'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 
 // One asset's own page (Home → Assets → tap a token): balance, that token's
@@ -75,7 +76,9 @@ export function AssetPage() {
   const token = (Object.keys(TOKENS) as AssetToken[]).find(t => t.toLowerCase() === (param || '').toLowerCase())
 
   const [history, setHistory] = useState<ActivityRecord[] | null>(null)
-  const [btcPrice, setBtcPrice] = useState(0)
+  // Live prices, starting from the last ones seen on this device.
+  const [btcPrice, setBtcPrice] = useState(() => lastKnownBtcPrice())
+  const [eurcPrice, setEurcPrice] = useState(() => lastKnownEurcPrice())
   // The transaction whose details are open (shown here, over this page).
   const [selected, setSelected] = useState<ActivityRecord | null>(null)
   // The row last opened flashes once when its details close (same as Activity).
@@ -95,14 +98,15 @@ export function AssetPage() {
     if (token !== 'cirBTC') return
     let cancelled = false
     fetchBtcPriceUsd().then(p => { if (!cancelled && p) setBtcPrice(p) }).catch(() => {})
+    fetchEurcPriceUsd().then(p => { if (!cancelled && p) setEurcPrice(p) }).catch(() => {})
     return () => { cancelled = true }
   }, [token])
 
   if (!token) return <Navigate to="/" replace />
   const slot = loadAssetSlot(walletAddress)
   const amount = token === 'USDC' ? Number(usdcBalance) || 0 : token === 'EURC' ? slot.eurc : slot.cirbtc
-  const usd = token === 'USDC' ? amount : token === 'EURC' ? amount * 1.08 : amount * btcPrice
-  const usdStr = token === 'cirBTC' && amount > 0 && btcPrice === 0 ? 'Fetching…'
+  const usd = token === 'USDC' ? amount : token === 'EURC' ? amount * eurcPrice : amount * btcPrice
+  const usdStr = amount > 0 && ((token === 'cirBTC' && btcPrice === 0) || (token === 'EURC' && eurcPrice === 0)) ? 'Fetching…'
     : `$${trimTrailingZeros(usd.toFixed(2)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
   const actions = ACTIONS[token]
 
