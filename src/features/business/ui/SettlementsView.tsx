@@ -157,7 +157,7 @@ export function SettlementsView({
                     </div>
                   ))}
                   {chains.length > 4 && (
-                    <span className="text-[10px] text-text-muted ml-2">+{chains.length - 4}</span>
+                    <span className="text-[11px] text-text-muted ml-2">+{chains.length - 4}</span>
                   )}
                 </div>
               )}

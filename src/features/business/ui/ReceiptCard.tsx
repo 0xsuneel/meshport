@@ -51,7 +51,7 @@ export function ReceiptCard({
       {/* Amount */}
       <div className="flex flex-col items-center py-6 gap-1">
         {refunded && (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-red-500 mb-1">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-red-500 mb-1">
             Refunded
           </span>
         )}
@@ -105,8 +105,8 @@ export function ReceiptCard({
 
       {/* Footer */}
       <div className="flex flex-col items-center py-5 gap-1">
-        <p className="text-[10px] text-gray-400">Paid with USDC on MeshPort</p>
-        <p className="text-[10px] text-gray-300">meshport.app</p>
+        <p className="text-[11px] text-gray-400">Paid with USDC on MeshPort</p>
+        <p className="text-[11px] text-gray-300">meshport.app</p>
       </div>
     </div>
   )

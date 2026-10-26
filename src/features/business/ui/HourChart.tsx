@@ -30,7 +30,7 @@ export function HourChart({ title, sub, bars, peak }: HourChartProps) {
           <p className="text-xs text-text-muted mt-0.5">{sub}</p>
         </div>
         {peak && (
-          <span className="text-[10px] font-medium text-text-muted bg-border/40 rounded-xl px-2.5 py-1 shrink-0 ml-2">
+          <span className="text-[11px] font-medium text-text-muted bg-border/40 rounded-xl px-2.5 py-1 shrink-0 ml-2">
             {peak}
           </span>
         )}
@@ -62,7 +62,7 @@ export function HourChart({ title, sub, bars, peak }: HourChartProps) {
         {bars.map((bar, i) => (
           <div key={i} className="flex-1">
             {i % 4 === 0 && (
-              <span className="block text-[9px] text-text-muted text-center leading-none truncate">
+              <span className="block text-[11px] text-text-muted text-center leading-none truncate">
                 {bar.label}
               </span>
             )}

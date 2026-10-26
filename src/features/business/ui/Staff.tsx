@@ -96,11 +96,11 @@ export function StaffView({ staff, onInvite, onEdit, onRemove }: StaffViewProps)
                     {member.name}
                   </p>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${legend.color}`}>
+                    <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${legend.color}`}>
                       {legend.label}
                     </span>
                     {member.status === 'invited' && (
-                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-warning/10 text-warning font-medium">
+                      <span className="px-1.5 py-0.5 rounded-full text-[11px] bg-warning/10 text-warning font-medium">
                         Invited
                       </span>
                     )}

@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store'
 import { useMerchant } from '@/lib/merchant'
 import { formatAmount, timeAgo } from '@/lib/utils'
 import { listMyPayments, subscribeMerchantPayments, isArriving, paymentStageLabel, type MerchantPayment } from '@/lib/merchantPay'
+import { pressable } from '@/lib/pressable'
 
 const LABEL: Record<string, string> = {
   Arc_Testnet: 'Arc', Ethereum_Sepolia: 'Ethereum', Base_Sepolia: 'Base', Arbitrum_Sepolia: 'Arbitrum', Optimism_Sepolia: 'Optimism',
@@ -42,7 +43,7 @@ export function MerchantHomeCard() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Arriving payments</span>
           {arriving.map(p => (
-            <div key={p.id} onClick={openMoney} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <div key={p.id} {...pressable(openMoney)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <Clock size={16} color="var(--warning)" />
               <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{who(p)} · {LABEL[p.chain] ?? p.chain} → Arc · {paymentStageLabel(p)}</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--warning)' }}>${formatAmount(p.amount)}</span>
@@ -55,7 +56,7 @@ export function MerchantHomeCard() {
         {recent.length === 0 ? (
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No payments yet - tap Receive to create a payment request.</span>
         ) : recent.map(p => (
-          <div key={p.id} onClick={openMoney} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+          <div key={p.id} {...pressable(openMoney)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
             <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{who(p)} <span style={{ color: 'var(--text-secondary)' }}>· {timeAgo(p.createdAt)}</span></span>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>+${formatAmount(p.amount)}</span>
           </div>

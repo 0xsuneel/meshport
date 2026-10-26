@@ -392,7 +392,7 @@ export function DesktopHeader() {
             transition={CONTROL_MOTION}
             style={{
               position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: 8,
-              background: 'var(--danger)', color: '#fff', fontSize: 10, fontWeight: 700,
+              background: 'var(--danger)', color: '#fff', fontSize: 11, fontWeight: 700,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >

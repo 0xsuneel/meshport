@@ -294,7 +294,7 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
                       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
                         transform: on || reduce ? 'scale(1)' : 'scale(1.08)', transition: reduce ? 'none' : 'transform 5.5s cubic-bezier(.2,.6,.3,1)' }} />
                     <span style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(0,0,0,0.45)', borderRadius: 999, padding: '1px 7px',
-                      color: '#fff', fontSize: 9.5, fontWeight: 700, lineHeight: '15px' }}>{NEWS_SOURCE_LABEL[it.source]}</span>
+                      color: '#fff', fontSize: 11, fontWeight: 700, lineHeight: '15px' }}>{NEWS_SOURCE_LABEL[it.source]}</span>
                   </>
                 ) : (
                   // No picture: a drawn cover (icon + label) instead of an empty block.

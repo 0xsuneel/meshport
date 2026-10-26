@@ -236,7 +236,7 @@ export function HelpView({
                     type="button"
                     aria-label={`Assign payment from ${p.from}`}
                     onClick={() => onAssign(p.id)}
-                    className="inline-flex items-center gap-1 rounded-xl bg-brand/10 px-2.5 py-1 text-[10px] font-semibold text-brand-text hover:bg-brand/20 transition-colors"
+                    className="inline-flex items-center gap-1 rounded-xl bg-brand/10 px-2.5 py-1 text-[11px] font-semibold text-brand-text hover:bg-brand/20 transition-colors"
                   >
                     <UserPlus className="size-3" />
                     Assign

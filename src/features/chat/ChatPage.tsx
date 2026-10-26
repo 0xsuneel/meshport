@@ -1286,7 +1286,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span className="text-[15px] font-semibold text-text-primary truncate">{name}</span>
                       {!isSelfChat && conv.other_user?.id && merchantIds.has(conv.other_user.id) && (
-                        <span className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-[1px] rounded-md"
+                        <span className="flex-shrink-0 text-[11px] font-bold uppercase tracking-wide px-1.5 py-[1px] rounded-md"
                           style={{ color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>
                           Merchant
                         </span>
@@ -1367,7 +1367,7 @@ const UnreadDivider = memo(function UnreadDivider({ count }: { count: number }) 
 function NotEncryptedTag({ light }: { light?: boolean }) {
   return (
     <span title="Sent without end-to-end encryption" aria-label="Not encrypted"
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10.5, whiteSpace: 'nowrap',
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, whiteSpace: 'nowrap',
         color: light ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)' }}>
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.5-2" />
@@ -1381,7 +1381,7 @@ function NotEncryptedTag({ light }: { light?: boolean }) {
 function WaitingTag({ light }: { light?: boolean }) {
   return (
     <span title="End-to-end encrypted. Delivered when they next sign in to MeshPort." aria-label="Waiting for recipient"
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10.5, whiteSpace: 'nowrap',
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, whiteSpace: 'nowrap',
         color: light ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)' }}>
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
@@ -1786,7 +1786,7 @@ const MessageBubble = memo(function MessageBubble({
                 <CheckCircle className="w-3.5 h-3.5" style={{ color: 'var(--success)' }} strokeWidth={2.5} />
                 {msg.payment_tx_hash ? 'Confirmed on Arc' : 'Completed'}
               </span>
-              <span style={{ fontSize: 10.5, whiteSpace: 'nowrap' }}>{new Date(msg.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+              <span style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{new Date(msg.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
             </div>
           </div>
         </div>
@@ -5183,7 +5183,7 @@ export function ChatConversationPage() {
                   ) : (
                     <div className="w-16 h-16 rounded-xl bg-surface border border-border flex flex-col items-center justify-center px-1">
                       <File className="w-5 h-5 text-brand-text" />
-                      <span className="text-[8px] text-text-secondary truncate max-w-full mt-0.5">{pf.file.name}</span>
+                      <span className="text-[11px] text-text-secondary truncate max-w-full mt-0.5">{pf.file.name}</span>
                     </div>
                   )}
                   <button onClick={() => removePendingFile(pf.id)} type="button"
@@ -5347,12 +5347,12 @@ export function ChatConversationPage() {
                 <div className="flex-1 rounded-2xl p-3.5 text-center" style={{ background:'color-mix(in srgb, var(--brand) 10%, transparent)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
                   <p className="text-[11px] text-text-secondary mb-1">Total Sent</p>
                   <p className="text-[17px] font-bold text-brand-text">{formatAmount(totalSent)}</p>
-                  <p className="text-[10px] text-text-secondary">USDC</p>
+                  <p className="text-[11px] text-text-secondary">USDC</p>
                 </div>
                 <div className="flex-1 rounded-2xl p-3.5 text-center" style={{ background:'color-mix(in srgb, var(--success) 8%, transparent)', border:'1px solid color-mix(in srgb, var(--success) 20%, transparent)' }}>
                   <p className="text-[11px] text-text-secondary mb-1">Total Received</p>
                   <p className="text-[17px] font-bold text-success">{formatAmount(totalReceived)}</p>
-                  <p className="text-[10px] text-text-secondary">USDC</p>
+                  <p className="text-[11px] text-text-secondary">USDC</p>
                 </div>
               </div>
 

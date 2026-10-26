@@ -245,7 +245,7 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
   const line: React.CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }
   // Wraps onto a second line on narrow phones rather than being cut off
   // ("AVAILABLE TO T…" at 320–360px).
-  const label: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', lineHeight: 1.3, color: 'rgba(255,255,255,0.72)', textTransform: 'uppercase', overflowWrap: 'normal', wordBreak: 'normal' }
+  const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', lineHeight: 1.3, color: 'rgba(255,255,255,0.72)', textTransform: 'uppercase', overflowWrap: 'normal', wordBreak: 'normal' }
   // Money is never cut off: on narrow phones the figure shrinks to fit its
   // half of the card (≈ 50vw - 40px wide; ~0.6em per character) instead.
   const amount = (n: number): React.CSSProperties => {
@@ -306,7 +306,7 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
           ))}
           {extra > 0 && (
             <span style={{ marginLeft: -7, height: 22, minWidth: 22, padding: '0 5px', boxSizing: 'border-box', borderRadius: 11,
-              background: 'rgba(0,0,0,0.25)', border: '2px solid var(--brand)', fontSize: 10, fontWeight: 800,
+              background: 'rgba(0,0,0,0.25)', border: '2px solid var(--brand)', fontSize: 11, fontWeight: 800,
               display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+{extra}</span>
           )}
         </div>
@@ -935,7 +935,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                     position: 'absolute', top: -4, right: -4,
                     background: 'var(--warning)', color: '#000',
                     borderRadius: '50%', width: 16, height: 16,
-                    fontSize: 10, fontWeight: 700,
+                    fontSize: 11, fontWeight: 700,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>{pendingCount}</span>
                 )}
@@ -1066,7 +1066,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                       }
                     </div>
                     {isPending && (
-                      <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 2 }}>Tap to view →</div>
+                      <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 2 }}>Tap to view →</div>
                     )}
                     {isRecovery && (
                       <button type="button" onClick={e => { e.stopPropagation(); openRecover() }}

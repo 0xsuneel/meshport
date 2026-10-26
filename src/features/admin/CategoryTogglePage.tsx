@@ -127,7 +127,7 @@ export function CategoryTogglePage({ sections }: CategoryTogglePageProps) {
                         }}
                       />
                       {savingReason[row.feature] && (
-                        <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: '4px 0 0' }}>Saving…</p>
+                        <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '4px 0 0' }}>Saving…</p>
                       )}
                     </div>
                   )}

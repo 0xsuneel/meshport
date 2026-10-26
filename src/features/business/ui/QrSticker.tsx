@@ -60,7 +60,7 @@ export function QrSticker({ dataUrl, storeName, handle }: QrStickerProps) {
 
       {/* Footer */}
       <div className="border-t border-[#D8DBE0] px-6 py-4">
-        <p className="text-[10px] text-center text-[#8A9099] leading-relaxed">
+        <p className="text-[11px] text-center text-[#8A9099] leading-relaxed">
           Accepted from Arc, Base, Ethereum and more
         </p>
       </div>

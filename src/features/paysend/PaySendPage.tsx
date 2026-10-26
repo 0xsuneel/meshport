@@ -2022,7 +2022,7 @@ function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast
           <span className="text-[15px] font-semibold text-text-primary truncate" style={{ maxWidth: '60%' }}>{name}</span>
           {!usernameBelow && <span className="text-[12.5px] truncate text-link">{username}</span>}
           {self && (
-            <span className="flex-shrink-0 self-center text-[10px] font-bold uppercase tracking-wide px-1.5 py-[1px] rounded-md"
+            <span className="flex-shrink-0 self-center text-[11px] font-bold uppercase tracking-wide px-1.5 py-[1px] rounded-md"
               style={{ color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>You</span>
           )}
         </div>

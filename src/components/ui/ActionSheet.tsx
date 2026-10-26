@@ -15,14 +15,16 @@ import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { PopupOpen } from '@/hooks/usePopupOpen'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { SHEET_PANEL, SHEET_BACKDROP, SHEET_DIM, DESKTOP_QUERY, PUSH_OPEN_MS } from '@/lib/motion'
-import { sheetDrag } from '@/lib/sheetDrag'
+import { sheetDrag, sheetExit } from '@/lib/sheetDrag'
 import { useBackLayer } from '@/lib/backLayers'
 
 /** Exit for a sheet's panel / dim: its own, or (leaving under a page that is
  *  sliding in over it) stay put until that page has arrived, then go. */
-const leaveVariant = (own: object) => (under?: boolean): TargetAndTransition => under
+// `own` may be a getter: read when the sheet starts closing (a flick's speed
+// is only known then - see sheetExit).
+const leaveVariant = (own: object | (() => object)) => (under?: boolean): TargetAndTransition => under
   ? { opacity: 0, transition: { delay: PUSH_OPEN_MS / 1000, duration: 0 } }
-  : own as TargetAndTransition
+  : (typeof own === 'function' ? own() : own) as TargetAndTransition
 
 export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, height = 'auto', backClose = true, desktopMaxWidth = 440, zIndex, leaveUnder = false, children }: {
   open: boolean
@@ -72,12 +74,12 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
           leaves (leaveUnder) is read here, at the moment it closes. */}
       <AnimatePresence custom={leaveUnder}>
         {open && [
-          <motion.div key={sid + '-dim'} {...SHEET_BACKDROP} variants={{ leave: leaveVariant(SHEET_BACKDROP.exit) }} exit="leave"
+          <motion.div key={sid + '-dim'} {...SHEET_BACKDROP} variants={{ leave: leaveVariant(() => ({ ...SHEET_BACKDROP.exit, transition: sheetExit(sid, SHEET_PANEL.exit).transition })) }} exit="leave"
             className={`${pos} inset-0`} style={{ background: SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40, willChange: 'opacity' }} onClick={onClose} />,
-          <motion.div key={sid} {...sheetDrag(sid, onClose)} {...SHEET_PANEL} variants={{ leave: leaveVariant(SHEET_PANEL.exit) }} exit="leave"
+          <motion.div key={sid} {...sheetDrag(sid, onClose)} {...SHEET_PANEL} variants={{ leave: leaveVariant(() => sheetExit(sid, SHEET_PANEL.exit)) }} exit="leave"
             role="dialog" aria-modal="true"
             className={`${pos} bottom-0 left-0 right-0 bg-surface border-t border-border rounded-t-3xl flex flex-col${fixed ? ' mx-auto max-w-md' : ''}${height === 'full' ? ' h-[92dvh]' : ''}`}
-            style={{ maxHeight: 'calc(100% - 40px)', zIndex: z }}>
+            style={{ maxHeight: 'calc(100% - 40px)', zIndex: z, boxShadow: '0 80px 0 var(--surface)' }}>
             <div data-sheet-handle className="flex justify-center pt-2.5 pb-1 flex-shrink-0">
               <div style={{ width: 38, height: 5, borderRadius: 3, background: 'var(--border)' }} />
             </div>

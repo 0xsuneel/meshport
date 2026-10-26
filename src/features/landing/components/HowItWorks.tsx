@@ -44,7 +44,7 @@ export function HowItWorks() {
                   <s.icon size={20} className="text-brand-text" />
                 </div>
                 <div
-                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[10.5px] font-bold text-white"
+                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold text-white"
                   style={{ background: 'var(--brand)' }}
                 >
                   {i + 1}

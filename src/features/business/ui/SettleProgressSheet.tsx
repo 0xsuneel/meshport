@@ -60,7 +60,7 @@ function MiniStepper({ stage }: { stage: Stage }) {
               className={`flex flex-col items-center`}
             >
               <span
-                className={`inline-flex items-center justify-center size-6 rounded-full text-[10px] transition-colors ${
+                className={`inline-flex items-center justify-center size-6 rounded-full text-[11px] transition-colors ${
                   done
                     ? 'bg-success/15 text-success'
                     : current
@@ -70,7 +70,7 @@ function MiniStepper({ stage }: { stage: Stage }) {
               >
                 {done ? <CheckCircle2 className="size-3" /> : <Icon className="size-3" />}
               </span>
-              <span className={`text-[9px] mt-0.5 ${current ? 'text-brand-text' : done ? 'text-success' : 'text-text-muted'}`}>
+              <span className={`text-[11px] mt-0.5 ${current ? 'text-brand-text' : done ? 'text-success' : 'text-text-muted'}`}>
                 {STAGE_LABELS[s]}
               </span>
             </div>

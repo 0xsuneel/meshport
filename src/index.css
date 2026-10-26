@@ -725,3 +725,12 @@ button, [role="button"], [role="tab"] { -webkit-user-select: none; user-select: 
    it grows in, so the copy reads as confirmed. Reduced motion: instant. */
 @keyframes mpTickIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: none; } }
 [data-tick] { animation: mpTickIn 150ms var(--ease-out); }
+
+/* Type scale - the sizes text should come from (Apple-style steps: each
+   level reads clearly different from the next). Nothing below --text-11.
+   Tracking is per size, in em: tighter as text grows, never fixed px. */
+:root {
+  --text-11: 0.6875rem; --text-12: 0.75rem; --text-13: 0.8125rem; --text-15: 0.9375rem;
+  --text-17: 1.0625rem; --text-22: 1.375rem; --text-34: 2.125rem;
+  --track-display: -0.02em; --track-body: 0; --track-caption: 0.01em;
+}

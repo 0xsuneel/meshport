@@ -88,7 +88,7 @@ export function DesktopDashboardMockup() {
                 borderRadius: 14, background: 'var(--bg)', border: '1px solid var(--border)',
               }}>
                 <a.icon size={16} color="var(--brand-text)" />
-                <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)' }}>{a.label}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>{a.label}</span>
               </div>
             ))}
           </div>
@@ -98,17 +98,17 @@ export function DesktopDashboardMockup() {
             {assets.map(a => (
               <div key={a.symbol} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 12, background: 'var(--bg)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'color-mix(in srgb, var(--brand) 16%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--brand-text)' }}>
+                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'color-mix(in srgb, var(--brand) 16%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--brand-text)' }}>
                     {a.symbol.slice(0, 2)}
                   </div>
                   <div>
                     <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>{a.symbol}</div>
-                    <div style={{ fontSize: 10.5, color: 'var(--text-secondary)' }}>{a.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{a.name}</div>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>${a.value}</div>
-                  <div style={{ fontSize: 10.5, fontWeight: 600, color: a.up ? 'var(--success)' : 'var(--danger)' }}>{a.change}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: a.up ? 'var(--success)' : 'var(--danger)' }}>{a.change}</div>
                 </div>
               </div>
             ))}
@@ -170,7 +170,7 @@ export function MobileDashboardMockup() {
             <img decoding="async" src="/favicon.svg" alt="" style={{ width: 22, height: 22, borderRadius: 6 }} />
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>MeshPort</span>
           </div>
-          <p style={{ fontSize: 10.5, color: 'var(--text-secondary)', marginBottom: 2 }}>Total Balance</p>
+          <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>Total Balance</p>
           <p style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 14, letterSpacing: '-0.4px' }}>$3,534.50</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 14 }}>
             {[ArrowUpRight, ArrowDownLeft, Repeat, Users].map((Icon, i) => (
@@ -183,7 +183,7 @@ export function MobileDashboardMockup() {
             {activity.slice(0, 3).map((a, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)' }}>
                 <a.icon size={11} color={a.color} />
-                <span style={{ fontSize: 9.5, color: 'var(--text-primary)', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.label}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-primary)', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.label}</span>
               </div>
             ))}
           </div>

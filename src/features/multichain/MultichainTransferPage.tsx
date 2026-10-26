@@ -63,7 +63,7 @@ const USDC_DECIMALS = tokenDecimals('USDC')
  *  in under a second, so neither waits for source finality. */
 function SpeedTag({ fast, on }: { fast: boolean; on: boolean }) {
   return (
-    <span style={{ fontSize: 10, fontWeight: 700, lineHeight: '14px', padding: '0 6px', borderRadius: 999, flexShrink: 0,
+    <span style={{ fontSize: 11, fontWeight: 700, lineHeight: '14px', padding: '0 6px', borderRadius: 999, flexShrink: 0,
       color: on ? '#fff' : fast ? 'var(--success)' : 'var(--warning)',
       background: on ? 'rgba(255,255,255,0.2)' : `color-mix(in srgb, ${fast ? 'var(--success)' : 'var(--warning)'} 14%, transparent)` }}>
       {fast ? 'Fast' : 'Slow'}
@@ -406,7 +406,7 @@ function ChainLogoImg({ id, size = 32 }: { id: string; size?: number }) {
 function ChainSpeedBadge({ ub }: { ub: boolean }) {
   return (
     <span
-      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold flex-shrink-0"
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-bold flex-shrink-0"
       style={ub
         ? { background: 'color-mix(in srgb, var(--success) 14%, transparent)', color: 'var(--success)', border: '1px solid rgba(34,197,94,0.3)' }
         : { background: 'color-mix(in srgb, var(--text-secondary) 12%, transparent)', color: 'var(--text-secondary)', border: '1px solid color-mix(in srgb, var(--text-secondary) 25%, transparent)' }
