@@ -14,6 +14,12 @@ import { useWalletStore } from '@/store'
 import { refreshScope } from '@/blockchain/BlockchainManager'
 
 export const BALANCES_STALE_EVENT = 'meshport:balances-stale'
+
+// When this wallet last moved funds (any token). Home wasn't necessarily on
+// screen to hear BALANCES_STALE_EVENT (the swap ran on the Swap page), so it
+// checks this when it opens and re-reads EURC / cirBTC until they settle.
+let lastTxAt = 0
+export function msSinceLastTx(): number { return lastTxAt ? Date.now() - lastTxAt : Infinity }
 // Gaps between the follow-up reads while the chain still shows the old value.
 const RETRY_GAPS_MS = [1500, 2000, 3500, 5000]
 
@@ -24,6 +30,7 @@ const sameWallet = (address: string) => {
 
 export function refreshBalancesAfterTx(address: string | null | undefined, opts: { spent?: number } = {}): void {
   if (!address) return
+  lastTxAt = Date.now()
   const store = useWalletStore.getState()
   const before = store.balance
   if (opts.spent && opts.spent > 0 && sameWallet(address)) {
