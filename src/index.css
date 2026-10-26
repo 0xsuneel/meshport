@@ -51,12 +51,16 @@
      this individually. Framer Motion components read this natively via
      useReducedMotion()/MotionConfig where that finer control is needed
      (e.g. skipping a spring entirely rather than just speeding it up);
-     this is the CSS-side backstop for everything else. */
+     this is the CSS-side backstop for everything else.
+     Reduced motion means less movement, not none: transitions keep only
+     their fades and colour changes (at their own short durations), so
+     anything that moved or grew now just changes in place, while presses,
+     selections and appearing content still show feedback. */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 0.001ms !important;
       animation-iteration-count: 1 !important;
-      transition-duration: 0.001ms !important;
+      transition-property: opacity, color, background-color, border-color, box-shadow, fill, stroke !important;
       scroll-behavior: auto !important;
     }
   }

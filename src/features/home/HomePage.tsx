@@ -2133,9 +2133,13 @@ function MobileHeroCarousel({
             // child has a static transform inside an animated parent).
           }}
           onDragEnd={(_e, info) => {
+            // A long drag OR a quick flick switches cards (the flick rule is
+            // the one bottom sheets use, lib/sheetDrag.ts) - a short fast
+            // swipe used to snap back.
             const threshold = CARD_W * 0.15
-            if (info.offset.x < -threshold) revealHeroSide('right')
-            else if (info.offset.x > threshold) revealHeroSide('left')
+            const flick = Math.abs(info.velocity.x) > 500 && Math.abs(info.offset.x) > 20
+            if (info.offset.x < -threshold || (flick && info.velocity.x < 0)) revealHeroSide('right')
+            else if (info.offset.x > threshold || (flick && info.velocity.x > 0)) revealHeroSide('left')
             else snapHeroBack()
           }}
         >
@@ -2302,7 +2306,7 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
       )}
 
       {/* Slides in only when the banner changes - not when Home first opens. */}
-      <div key={idx} className={docked ? 'mp-press' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 0.35s ease' : undefined }}>
+      <div key={idx} className={docked ? 'mp-press' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 220ms cubic-bezier(0.23, 1, 0.32, 1)' : undefined }}>
         <div style={{ width: docked ? 48 : 40, height: docked ? 48 : 40, borderRadius: docked ? '50%' : 12, background: docked ? 'rgba(140,225,205,0.16)' : 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <BannerIcon kind={b.icon} />
         </div>
