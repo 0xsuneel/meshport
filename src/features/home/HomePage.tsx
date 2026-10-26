@@ -36,6 +36,7 @@ import { BALANCES_STALE_EVENT } from '@/lib/balanceRefresh'
 import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { useSettingsStore } from '@/store/settingsStore'
 import { activityLabel, activitySign, type ActivityRecord } from '@/lib/ActivityService'
+import { balanceTrend as computeBalanceTrend, type BalanceTrend } from '@/lib/balanceTrend'
 // Reused so the desktop "Recent Activity" panel shows the exact same
 // title wording as the Activity page itself (Paid to / Received from /
 // Claimed from / Transfer to / P2P Sell Order Cancelled, including
@@ -1506,8 +1507,10 @@ const FALLBACK_CARD_PATH = cardPath(100, 100, 6)
 // That was cutting into the "Available Balance" label and leaving a
 // notch on the Hub card before this was split apart.
 function BowedShapeCard({
-  children, background, cardRef, fill,
-}: { children: ReactNode; background: string; cardRef?: RefObject<HTMLDivElement>; fill?: boolean }) {
+  children, background, cardRef, fill, flat,
+}: { children: ReactNode; background: string; cardRef?: RefObject<HTMLDivElement>; fill?: boolean
+  /** Drawn straight on the Home teal hero panel: no card shape of its own. */
+  flat?: boolean }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<{ w: number; h: number } | null>(null)
   // Re-measure after EVERY commit, before paint. The old version measured only
@@ -1545,12 +1548,14 @@ function BowedShapeCard({
       {/* Always keep the card shape mounted. This prevents iOS Safari from
           flashing an empty/transparent card while ResizeObserver is settling
           after a reload or bfcache restore. */}
-      <svg viewBox={size ? `0 0 ${size.w} ${size.h}` : '0 0 100 100'} preserveAspectRatio="none"
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', overflow: 'visible' }}>
-        {/* Flat fill: the shape alone gives the card its depth - no shading, no shadow. */}
-        <path d={path || fallbackPath} fill={background} />
-      </svg>
-      <div style={{ position: 'relative', zIndex: 1, padding: '16px 26px 16px', boxSizing: 'border-box',
+      {!flat && (
+        <svg viewBox={size ? `0 0 ${size.w} ${size.h}` : '0 0 100 100'} preserveAspectRatio="none"
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', overflow: 'visible' }}>
+          {/* Flat fill: the shape alone gives the card its depth - no shading, no shadow. */}
+          <path d={path || fallbackPath} fill={background} />
+        </svg>
+      )}
+      <div style={{ position: 'relative', zIndex: 1, padding: flat ? '10px 2px 6px' : '16px 26px 16px', boxSizing: 'border-box',
         ...(fill ? { height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' } : null) }}>
         {children}
       </div>
@@ -1613,7 +1618,7 @@ function MultichainHubCard({
   // heroCardHeight, unchanged) - only what's INSIDE it got smaller, so
   // it fits within the same fixed height without clipping the actions row.
   return (
-    <BowedShapeCard background="var(--brand)" fill>
+    <BowedShapeCard background="var(--brand)" fill flat>
       {/* Header - label + eye toggle on the left, circular accent badge
           on the right (replaces the old centered title + translucent
           globe badge, per the approved reference layout). */}
@@ -1716,6 +1721,56 @@ function MultichainHubCard({
 // first moments' recalculation (prices / balances arriving) settle without
 // counting up - the count-up used to replay on every return. Only a real
 // change while Home is open counts up.
+// ── Balance bars (Home hero) - the balance at the end of each of the last
+// 7 days (lib/balanceTrend.ts), one rounded bar per day, today's in mint.
+// Touch / hover shows that day's balance. Hidden balance: bars stay, figures don't.
+const BARS_W = 120
+const BARS_H = 44
+function BalanceBars({ trend, hidden, fmt }: { trend: BalanceTrend; hidden: boolean; fmt: (n: number, symbol?: string) => string }) {
+  const [active, setActive] = useState<number | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const { values, labels, change } = trend
+  const n = values.length, gap = 4
+  const bw = (BARS_W - gap * (n - 1)) / n
+  const hi = Math.max(...values), lo = Math.min(...values) * 0.8
+  const barH = (v: number) => (hi - lo < 0.005 ? BARS_H * 0.55 : Math.max(4, (BARS_H - 2) * (v - lo) / (hi - lo)))
+  const pick = (clientX: number) => {
+    const r = svgRef.current?.getBoundingClientRect()
+    if (!r || r.width === 0) return
+    setActive(Math.max(0, Math.min(n - 1, Math.floor((clientX - r.left) / r.width * n))))
+  }
+  const sign = change >= 0 ? '+' : '−'
+  return (
+    <div style={{ position: 'relative', flexShrink: 0, width: BARS_W }}
+      // Inside the swipeable hero: a touch here reads the bars, it doesn't start a swipe.
+      onPointerDownCapture={e => e.stopPropagation()}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#8FE9CB', marginBottom: 4, fontVariantNumeric: 'tabular-nums', lineHeight: '14px' }}>
+        {hidden ? '••••' : `${sign}$${fmt(Math.abs(change)).replace(/^\$/, '')}`}
+        <span style={{ color: 'rgba(255,255,255,0.78)', fontWeight: 600 }}>7D</span>
+      </div>
+      <svg ref={svgRef} width={BARS_W} height={BARS_H} viewBox={`0 0 ${BARS_W} ${BARS_H}`} role="img" style={{ display: 'block', touchAction: 'none', cursor: 'crosshair' }}
+        aria-label={hidden ? 'Balance over the last 7 days' : `Balance over the last 7 days, from $${values[0].toFixed(2)} to $${values[n - 1].toFixed(2)}`}
+        onPointerMove={e => pick(e.clientX)} onPointerDown={e => pick(e.clientX)}
+        onPointerLeave={() => setActive(null)} onPointerUp={e => { if (e.pointerType !== 'mouse') setActive(null) }}>
+        {values.map((v, i) => {
+          const h = barH(v), x = i * (bw + gap), top = BARS_H - h, r = Math.min(4, h / 2)
+          const fill = i === n - 1 ? '#8FE9CB' : 'rgba(255,255,255,0.55)'
+          return <path key={i} d={`M${x} ${BARS_H} V${top + r} Q${x} ${top} ${x + r} ${top} H${x + bw - r} Q${x + bw} ${top} ${x + bw} ${top + r} V${BARS_H} Z`}
+            fill={fill} opacity={active === null || active === i ? 1 : 0.5} />
+        })}
+      </svg>
+      {active !== null && !hidden && (
+        <div style={{ position: 'absolute', top: -10, left: active * (bw + gap) + bw / 2, transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 2,
+          background: '#fff', color: '#0F2E2B', fontSize: 11, fontWeight: 700, padding: '3px 7px', borderRadius: 7, whiteSpace: 'nowrap',
+          boxShadow: '0 3px 8px rgba(0,0,0,.18)', fontVariantNumeric: 'tabular-nums', lineHeight: '14px' }}>
+          ${values[active].toFixed(2)}
+          <span style={{ display: 'block', fontSize: 9.5, fontWeight: 600, color: '#5A6B68' }}>{labels[active]}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 let lastShownBalance: number | null = null
 const SETTLE_MS = 1500
 function AnimatedBalanceText({ target, children }: { target: number; children: (displayed: number) => ReactNode }) {
@@ -1736,7 +1791,7 @@ function AnimatedBalanceText({ target, children }: { target: number; children: (
 }
 
 function AvailableBalanceCard({
-  portfolioTotal, balanceHidden, onToggleHidden, walletAddress, shortAddr, showToastMessage, navigate, fmt, cardRef,
+  portfolioTotal, balanceHidden, onToggleHidden, walletAddress, shortAddr, showToastMessage, fmt, cardRef, trend,
 }: {
   portfolioTotal: number
   balanceHidden: boolean
@@ -1747,12 +1802,12 @@ function AvailableBalanceCard({
   navigate: NavigateFunction
   fmt: (n: number, symbol?: string) => string
   cardRef?: RefObject<HTMLDivElement>
+  /** End-of-day balances, oldest first (BalanceBars). */
+  trend?: BalanceTrend | null
 }) {
   return (
-    <BowedShapeCard background="var(--brand)" cardRef={cardRef}>
-      {/* Header - label + eye toggle on the left, circular accent badge
-          (wallet glyph) on the right, per the approved reference
-          layout - replaces the old centered title. */}
+    <BowedShapeCard background="var(--brand)" cardRef={cardRef} flat>
+      {/* Label + eye toggle; the 7-day balance bars sit beside the amount below. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
           Available Balance
@@ -1774,16 +1829,11 @@ function AvailableBalanceCard({
             )}
           </button>
         </span>
-        <span style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--accent)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 7H6a2 2 0 010-4h11v4"/>
-            <path d="M3 5v14a2 2 0 002 2h16v-5"/>
-            <path d="M18 12a1.5 1.5 0 000 3h3v-3z"/>
-          </svg>
-        </span>
       </div>
 
+      {/* Amount + address on the left, 7-day balance bars on the right. */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+      <div style={{ minWidth: 0 }}>
       <AnimatedBalanceText target={portfolioTotal}>
         {(displayedBalance) => {
           // Auto-shrink the balance figure so large amounts (6+ digits)
@@ -1833,25 +1883,19 @@ function AvailableBalanceCard({
         }}
       </AnimatedBalanceText>
 
-      {/* Bottom row - address (with copy) on the left, View
-          Transactions on the right, replacing the old centered
-          address row + separate white pill. */}
-      {/* Both sides stay on one line on narrow phones (320–360px): the
-          text scales down with the screen instead of wrapping. */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 9, lineHeight: '16px' }}>
-        <div onClick={() => { copyText(walletAddress || ''); showToastMessage('Address copied', 'success') }}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', minWidth: 0 }}>
-          <span style={{ fontSize: 'clamp(10.5px, 3.2vw, 12.5px)', color: 'rgba(255,255,255,0.72)', fontFamily: 'monospace', letterSpacing: '0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {shortAddr}
-          </span>
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-            <rect x="5" y="1" width="10" height="10" rx="2" stroke="rgba(255,255,255,0.75)" strokeWidth="1.4"/>
-            <path d="M1 5v9a1 1 0 001 1h9" stroke="rgba(255,255,255,0.75)" strokeWidth="1.4" strokeLinecap="round"/>
-          </svg>
-        </div>
-        <span onClick={() => navigate('/activity')} style={{ fontSize: 'clamp(11.5px, 3.6vw, 13.5px)', color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.2px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-          View Transactions
+      {/* Address (with copy). Scales down on narrow phones instead of wrapping. */}
+      <div onClick={() => { copyText(walletAddress || ''); showToastMessage('Address copied', 'success') }}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minWidth: 0, marginTop: 9, lineHeight: '16px' }}>
+        <span style={{ fontSize: 'clamp(11.5px, 3.5vw, 13.5px)', color: 'rgba(255,255,255,0.78)', letterSpacing: '0.2px', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {shortAddr}
         </span>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+          <rect x="5" y="1" width="10" height="10" rx="2" stroke="rgba(255,255,255,0.78)" strokeWidth="1.4"/>
+          <path d="M1 5v9a1 1 0 001 1h9" stroke="rgba(255,255,255,0.78)" strokeWidth="1.4" strokeLinecap="round"/>
+        </svg>
+      </div>
+      </div>
+      {trend && <BalanceBars trend={trend} hidden={balanceHidden} fmt={fmt} />}
       </div>
     </BowedShapeCard>
   )
@@ -1879,8 +1923,9 @@ function AvailableBalanceCard({
 // on this page with the same render-thrashing risk.
 function MobileHeroCarousel({
   portfolioTotal, balanceHidden, onToggleHidden, walletAddress, shortAddr, showToastMessage, navigate, fmt,
-  arcAvailable, claimAvailable, claimLoading, scanChain,
+  arcAvailable, claimAvailable, claimLoading, scanChain, trend,
 }: {
+  trend?: BalanceTrend | null
   portfolioTotal: number
   balanceHidden: boolean
   onToggleHidden: () => void
@@ -1932,8 +1977,10 @@ function MobileHeroCarousel({
   // touch. These cost the card nothing - the outer wrapper (see the
   // render) adds this same amount of EXTRA width on top of the page's
   // normal 89.39% card width instead of subtracting it.
-  const PEEK = 5
-  const PEEK_GAP = 4
+  // 0 on the teal hero panel: the cards are drawn flat on it, and a sliver of
+  // the other card would show as stray text at the screen edges.
+  const PEEK = 0
+  const PEEK_GAP = 0
   const CARD_W = Math.max(0, heroCardWidth - 2 * PEEK - 2 * PEEK_GAP)
   const HERO_REST_X = PEEK - CARD_W
   const heroRowX = useMotionValue(HERO_REST_X)
@@ -2118,7 +2165,7 @@ function MobileHeroCarousel({
             <div style={{ gridArea: '1 / 1', alignSelf: 'center', minWidth: 0, visibility: heroCardIndex === 0 ? 'hidden' : 'visible' }}>
               <AvailableBalanceCard
                 portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={onToggleHidden}
-                walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+                walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt} trend={trend}
                 cardRef={heroCardIndex === 0 ? undefined : balanceCardRef}
               />
             </div>
@@ -2130,7 +2177,7 @@ function MobileHeroCarousel({
             <div style={{ gridArea: '1 / 1', alignSelf: 'center', minWidth: 0, visibility: heroCardIndex === 0 ? 'visible' : 'hidden' }}>
               <AvailableBalanceCard
                 portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={onToggleHidden}
-                walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+                walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt} trend={trend}
                 cardRef={heroCardIndex === 0 ? balanceCardRef : undefined}
               />
             </div>
@@ -2153,7 +2200,7 @@ function MobileHeroCarousel({
             <div style={{ gridArea: '1 / 1', alignSelf: 'center', minWidth: 0, visibility: heroCardIndex === 0 ? 'hidden' : 'visible' }}>
               <AvailableBalanceCard
                 portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={onToggleHidden}
-                walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+                walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt} trend={trend}
               />
             </div>
           </div>
@@ -2167,7 +2214,7 @@ function MobileHeroCarousel({
             onClick={() => { if (i !== heroCardIndex && !heroGestureActive.current) revealHeroSide(i > heroCardIndex ? 'right' : 'left') }}
             style={{
               width: heroCardIndex === i ? 16 : 6, height: 6, borderRadius: 3, border: 'none', padding: 0,
-              background: heroCardIndex === i ? 'var(--brand)' : 'var(--border)', cursor: 'pointer',
+              background: heroCardIndex === i ? '#fff' : 'rgba(255,255,255,0.35)', cursor: 'pointer',
               transition: 'width 0.2s, background 0.2s',
             }} />
         ))}
@@ -2195,7 +2242,13 @@ function BannerIcon({ kind }: { kind: typeof FEATURE_BANNERS[number]['icon'] }) 
   return <ActionIcon name={kind === 'globe' ? 'hub' : kind} size={24} />
 }
 
-function FeatureBanner({ height, onOpen }: { height: number; onOpen: (path: string) => void }) {
+// Mobile Home: the white action panel starts this far up, behind the teal
+// hero's rounded bottom corners.
+const ACTIONS_TUCK = 22
+// Mobile Home: tucked under the white action panel above it (TUCK px of it
+// sit behind that panel's rounded corners), full width, square corners.
+const BANNER_TUCK = 24
+function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (path: string) => void; docked?: boolean }) {
   const hub = useHubLabel()
   const [idx, setIdx] = useState(0)
   const touchX = useRef<number | null>(null)
@@ -2222,31 +2275,50 @@ function FeatureBanner({ height, onOpen }: { height: number; onOpen: (path: stri
         touchX.current = null
         if (Math.abs(dx) > 40) { e.preventDefault(); setIdx(i => (i + (dx < 0 ? 1 : n - 1)) % n) }
       }}
-      style={{
+      style={docked ? {
+        // The column's 18px gap and the tuck are taken back so it starts behind the action panel.
+        position: 'relative', zIndex: 1, overflow: 'hidden', cursor: 'pointer',
+        height: height + BANNER_TUCK + 12, margin: `-${18 + BANNER_TUCK}px -20px 0`, padding: `${BANNER_TUCK}px 16px 8px`,
+        background: 'var(--brand)', display: 'flex', alignItems: 'center', gap: 12, boxSizing: 'border-box',
+      } : {
         position: 'relative', overflow: 'hidden', height, borderRadius: 16, cursor: 'pointer',
         background: `linear-gradient(${110 + idx * 25}deg, var(--brand) 0%, color-mix(in srgb, var(--brand) 55%, #06110F) 100%)`,
         display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px',
         transition: 'background 0.5s ease',
       }}>
-      {/* decorative rings */}
-      <div aria-hidden style={{ position: 'absolute', right: -28, top: -34, width: 120, height: 120, borderRadius: '50%', border: '14px solid rgba(255,255,255,0.07)' }} />
-      <div aria-hidden style={{ position: 'absolute', right: 44, bottom: -46, width: 70, height: 70, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+      {docked ? (
+        <>
+          {/* large soft circles, lighter teal */}
+          <div aria-hidden style={{ position: 'absolute', right: -50, top: 8, width: 190, height: 190, borderRadius: '50%', background: 'rgba(140,225,205,0.09)' }} />
+          <div aria-hidden style={{ position: 'absolute', left: '44%', bottom: -120, width: 200, height: 160, borderRadius: '50%', background: 'rgba(140,225,205,0.08)' }} />
+        </>
+      ) : (
+        <>
+          {/* decorative rings */}
+          <div aria-hidden style={{ position: 'absolute', right: -28, top: -34, width: 120, height: 120, borderRadius: '50%', border: '14px solid rgba(255,255,255,0.07)' }} />
+          <div aria-hidden style={{ position: 'absolute', right: 44, bottom: -46, width: 70, height: 70, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+        </>
+      )}
 
       {/* Slides in only when the banner changes - not when Home first opens. */}
       <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 0.35s ease' : undefined }}>
-        <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <div style={{ width: docked ? 48 : 40, height: docked ? 48 : 40, borderRadius: docked ? '50%' : 12, background: docked ? 'rgba(140,225,205,0.16)' : 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <BannerIcon kind={b.icon} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hub(b.title)}</div>
+          <div style={{ fontSize: docked ? 16 : 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hub(b.title)}</div>
           <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.82)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.text}</div>
         </div>
-        <span style={{ flexShrink: 0, position: 'relative', fontSize: 12, fontWeight: 700, color: 'var(--brand)', background: '#fff', borderRadius: 999, padding: '6px 12px' }}>Try now</span>
+        <span style={{ flexShrink: 0, position: 'relative', fontSize: docked ? 13 : 12, fontWeight: docked ? 600 : 700, color: docked ? '#0F2E2B' : 'var(--brand)', background: '#fff', borderRadius: 999,
+          padding: docked ? '7px 12px' : '6px 12px', display: 'flex', alignItems: 'center', gap: 5, boxShadow: docked ? '0 2px 6px rgba(0,0,0,0.12)' : undefined }}>
+          Try now
+          {docked && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>}
+        </span>
       </div>
 
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 6, display: 'flex', justifyContent: 'center', gap: 4 }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: docked ? 8 : 6, display: 'flex', justifyContent: 'center', gap: docked ? 6 : 4 }}>
         {FEATURE_BANNERS.map((_, i) => (
-          <span key={i} style={{ width: i === idx ? 12 : 4, height: 4, borderRadius: 2, background: i === idx ? '#fff' : 'rgba(255,255,255,0.4)', transition: 'width 0.25s ease' }} />
+          <span key={i} style={{ width: docked ? (i === idx ? 22 : 14) : (i === idx ? 12 : 4), height: 4, borderRadius: 2, background: i === idx ? '#fff' : 'rgba(255,255,255,0.4)', transition: 'width 0.25s ease' }} />
         ))}
       </div>
       <style>{`@keyframes mpBannerIn { from { opacity: 0.5; transform: translateX(14px) } to { opacity: 1; transform: none } }`}</style>
@@ -3642,19 +3714,24 @@ export function HomePage() {
   const [insightsPeriod, setInsightsPeriod] = useState<'week' | 'month' | 'year'>('month')
   const [activityGranularity, setActivityGranularity] = useState<InsightsGranularity>('daily')
   const [homeRecentActivity, setHomeRecentActivity] = useState<ActivityRecord[]>([])
+  // Mobile loads only what the hero's 7-day balance bars need (8 days).
+  const [homeActivityLoaded, setHomeActivityLoaded] = useState(false)
   useEffect(() => {
-    if (!isDesktop || !walletAddress) return
+    if (!walletAddress) return
     let cancelled = false
     let unsub: (() => void) | null = null
     let seq = 0
     const load = async () => {
       const mySeq = ++seq
       const { fetchActivity } = await import('@/lib/ActivityService')
-      const days = PERIOD_DAYS[insightsPeriod]
+      const days = isDesktop ? PERIOD_DAYS[insightsPeriod] : 4
       const since = new Date(Date.now() - days * 2 * 86400000).toISOString()
-      const records = await fetchActivity(walletAddress, { limit: 1000, since })
+      const records = await fetchActivity(walletAddress, { limit: isDesktop ? 1000 : 300, since })
       // A merchant's other-chain → Arc transfer appears only once it has landed.
-      if (!cancelled && mySeq === seq) setHomeRecentActivity(records.filter(r => !((r as any).metadata?.auto_convert && r.status !== 'completed')))
+      if (!cancelled && mySeq === seq) {
+        setHomeRecentActivity(records.filter(r => !((r as any).metadata?.auto_convert && r.status !== 'completed')))
+        setHomeActivityLoaded(true)
+      }
     }
     load()
     // Keep the panel live: a payment made or received while Home is open
@@ -3687,6 +3764,14 @@ export function HomePage() {
       return running
     })
   }, [homeRecentActivity])
+
+  // Mobile hero bars: the balance at the end of each of the last 7 days,
+  // worked out from today's balance and that Activity (lib/balanceTrend.ts).
+  // Nothing is drawn until the Activity has loaded (no flat-then-jump).
+  const mobileBalanceTrend = useMemo(
+    () => (isDesktop || !homeActivityLoaded ? null : computeBalanceTrend(homeRecentActivity, portfolioTotal)),
+    [isDesktop, homeActivityLoaded, homeRecentActivity, portfolioTotal],
+  )
 
   const todayChange = useMemo(() => {
     const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0)
@@ -3847,8 +3932,9 @@ export function HomePage() {
         // Above the page's cards while search is open (its results float over them).
         position: 'sticky', top: 0, zIndex: searchOpen ? 40 : 20,
         // Solid, no backdrop blur: a blur under a sticky header is redrawn on
-        // every frame of a scroll.
-        background: 'var(--bg)',
+        // every frame of a scroll. Mobile: the teal of the hero panel below it
+        // (only colours change here - every size stays as it was).
+        background: isDesktop ? 'var(--bg)' : 'var(--brand)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))',
         paddingBottom: 4, paddingLeft: 20, paddingRight: 20,
         boxSizing: 'border-box',
@@ -3860,7 +3946,7 @@ export function HomePage() {
           {searchOpen ? (
             <>
               <SearchField autoFocus value={searchQuery} onChange={setSearchQuery} placeholder="Search people, services…" />
-              <button onClick={closeSearch} style={{ background: 'none', border: 'none', color: 'var(--brand-text)', fontSize: 14, fontWeight: 600, marginLeft: 10, cursor: 'pointer', flexShrink: 0 }}>
+              <button onClick={closeSearch} style={{ background: 'none', border: 'none', color: isDesktop ? 'var(--brand-text)' : '#fff', fontSize: 14, fontWeight: 600, marginLeft: 10, cursor: 'pointer', flexShrink: 0 }}>
                 Cancel
               </button>
             </>
@@ -3868,14 +3954,14 @@ export function HomePage() {
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                 {user?.avatar ? (
-                  <div onClick={() => navigate('/profile')} style={{ cursor: 'pointer', flexShrink: 0, width: 47, height: 47, borderRadius: '50%', padding: 2, background: 'var(--brand)' }}>
+                  <div onClick={() => navigate('/profile')} style={{ cursor: 'pointer', flexShrink: 0, width: 47, height: 47, borderRadius: '50%', padding: 2, background: isDesktop ? 'var(--brand)' : '#D7F5EC', boxShadow: isDesktop ? undefined : '0 0 12px rgba(143,233,203,0.35)' }}>
                     <img src={user.avatar.split('?')[0]} alt="avatar"
                       loading="eager" decoding="async"
-                      style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--bg)' }}/>
+                      style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: isDesktop ? '2px solid var(--bg)' : '2px solid var(--brand)' }}/>
                   </div>
                 ) : (
-                  <div onClick={() => navigate('/profile')} style={{ cursor: 'pointer', flexShrink: 0, width: 47, height: 47, borderRadius: '50%', padding: 2, background: 'var(--brand)' }}>
-                    <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'var(--brand)', border: '2px solid var(--bg)',
+                  <div onClick={() => navigate('/profile')} style={{ cursor: 'pointer', flexShrink: 0, width: 47, height: 47, borderRadius: '50%', padding: 2, background: isDesktop ? 'var(--brand)' : '#D7F5EC', boxShadow: isDesktop ? undefined : '0 0 12px rgba(143,233,203,0.35)' }}>
+                    <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'var(--brand)', border: isDesktop ? '2px solid var(--bg)' : '2px solid var(--brand)', color: isDesktop ? undefined : '#fff',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 17, fontWeight: 700 }}>
                       {displayName.charAt(0).toUpperCase()}
@@ -3883,7 +3969,7 @@ export function HomePage() {
                   </div>
                 )}
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: isDesktop ? 'var(--text-primary)' : '#fff', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
                   <button
                     onClick={async (e) => {
                       e.stopPropagation()
@@ -3893,28 +3979,29 @@ export function HomePage() {
                       setTimeout(() => setHandleCopied(false), 1500)
                     }}
                     style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, background: 'none', border: 'none', padding: 0, cursor: 'pointer', maxWidth: '100%', minWidth: 0 }}>
-                    <span style={{ fontSize: 11.5, color: 'var(--link)', fontFamily: 'monospace', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
+                    <span style={{ fontSize: 11.5, color: isDesktop ? 'var(--link)' : 'rgba(255,255,255,0.78)', fontFamily: 'monospace', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
                     {handleCopied
-                      ? <Check className="w-3 h-3 text-success flex-shrink-0" />
-                      : <Copy className="w-3 h-3 text-link/60 flex-shrink-0" />}
+                      ? <Check className="w-3 h-3 text-success flex-shrink-0" style={isDesktop ? undefined : { color: '#8FE9CB' }} />
+                      : <Copy className="w-3 h-3 text-link/60 flex-shrink-0" style={isDesktop ? undefined : { color: 'rgba(255,255,255,0.6)' }} />}
                   </button>
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                 {/* Search */}
                 <button onClick={() => setSearchOpen(true)} aria-label="Search"
-                  style={{ width: 38, height: 38, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
-                    border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  style={{ width: 38, height: 38, borderRadius: '50%', background: isDesktop ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'rgba(255,255,255,0.06)',
+                    border: isDesktop ? '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)' : '1px solid rgba(255,255,255,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isDesktop ? 'var(--brand-text)' : '#fff'} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </button>
                 {/* Bell - notifications */}
                 <button onClick={() => navigate('/notifications')} aria-label="Notifications"
                   style={{ position: 'relative', width: 38, height: 38, borderRadius: '50%',
-                    background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)',
+                    background: isDesktop ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'rgba(255,255,255,0.06)',
+                    border: isDesktop ? '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)' : '1px solid rgba(255,255,255,0.28)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-                    <path d="M9 1.5A5.5 5.5 0 0113.5 7v3l1.5 2H3L4.5 10V7A5.5 5.5 0 019 1.5z" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M7 13.5a2 2 0 004 0" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round"/>
+                    <path d="M9 1.5A5.5 5.5 0 0113.5 7v3l1.5 2H3L4.5 10V7A5.5 5.5 0 019 1.5z" stroke={isDesktop ? 'var(--brand-text)' : '#fff'} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M7 13.5a2 2 0 004 0" stroke={isDesktop ? 'var(--brand-text)' : '#fff'} strokeWidth="1.4" strokeLinecap="round"/>
                   </svg>
                   {(unreadCount > 0 || badgeLabel) && (
                     <span style={{ position: 'absolute', top: 7, right: 8, width: 6, height: 6,
@@ -4108,37 +4195,46 @@ export function HomePage() {
               <Sparkline values={balanceTrend} color={todayChange.net >= 0 ? 'var(--success)' : 'var(--danger)'} height={26} fill />
             </div>
           </div>
-        ) : businessAccount ? (
-          // Business accounts: the balance card only - no Cross-chain card
-          // or carousel edges (Cross-chain Transfer is in More actions).
-          <>
-            <AvailableBalanceCard
-              portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
-              walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
-            />
-            <BusinessApprovalBanner />
-          </>
         ) : (
-          <MobileHeroCarousel
-            portfolioTotal={portfolioTotal}
-            balanceHidden={balanceHidden}
-            onToggleHidden={toggleBalanceHidden}
-            walletAddress={walletAddress}
-            shortAddr={shortAddr}
-            showToastMessage={showToastMessage}
-            navigate={navigate}
-            fmt={fmt}
-            arcAvailable={balance}
-            claimAvailable={unifiedBalance ?? 0}
-            claimLoading={unifiedLoading}
-            scanChain={scanChain}
-          />
+          // Mobile hero: a full-width teal panel under the (teal) header, rounded
+          // at the bottom, sitting over the white action panel below it.
+          <div style={{ position: 'relative', zIndex: 3, margin: '0 -20px', padding: '0 20px 12px', background: 'var(--brand)', borderRadius: '0 0 22px 22px' }}>
+            {businessAccount ? (
+              // Business accounts: the balance card only - no Cross-chain card
+              // or carousel edges (Cross-chain Transfer is in More actions).
+              <div style={{ width: '95%', margin: '0 auto' }}>
+                <AvailableBalanceCard
+                  portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
+                  walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+                  trend={mobileBalanceTrend}
+                />
+              </div>
+            ) : (
+              <MobileHeroCarousel
+                portfolioTotal={portfolioTotal}
+                balanceHidden={balanceHidden}
+                onToggleHidden={toggleBalanceHidden}
+                walletAddress={walletAddress}
+                shortAddr={shortAddr}
+                showToastMessage={showToastMessage}
+                navigate={navigate}
+                fmt={fmt}
+                arcAvailable={balance}
+                claimAvailable={unifiedBalance ?? 0}
+                claimLoading={unifiedLoading}
+                scanChain={scanChain}
+                trend={mobileBalanceTrend}
+              />
+            )}
+          </div>
         )}
 
         {/* ── QUICK ACTIONS - all 4, above the Multichain Hub card ──────────── */}
         {/* Mobile only. Desktop is unaffected: it never rendered this row
             (its own Quick Actions card lives in column 2). */}
         {!isDesktop && (
+        <div style={{ position: 'relative', zIndex: 2, margin: `-${18 + ACTIONS_TUCK}px -20px 0`, padding: `${ACTIONS_TUCK + 14}px 20px 14px`,
+          background: 'var(--surface)', borderRadius: '0 0 24px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '95%', margin: '0 auto' }}>
           {[
             { label: 'Pay',     path: '/pay',     icon: <ActionIcon name="pay" size={27} /> },
@@ -4154,7 +4250,7 @@ export function HomePage() {
                 gap: 8, cursor: 'pointer',
               }}>
               <div style={{
-                width: 55, height: 55, borderRadius: '50%', background: 'var(--brand)',
+                width: 58, height: 58, borderRadius: '50%', background: 'var(--brand)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
                 opacity: accountLock.locked && a.path ? 0.45 : 1,
               }}>
@@ -4163,21 +4259,25 @@ export function HomePage() {
                 {a.label === 'More' && ongoingTradesCount > 0 && (
                   <span style={{
                     position: 'absolute', top: 2, right: 2, width: 11, height: 11, borderRadius: '50%',
-                    background: '#EF4444', border: '2px solid var(--bg)',
+                    background: '#EF4444', border: '2px solid var(--surface)',
                   }} />
                 )}
               </div>
-              <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500, lineHeight: 1 }}>{a.label}</span>
+              <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1 }}>{a.label}</span>
             </div>
           ))}
         </div>
+        </div>
         )}
+
+        {/* Business accounts not approved yet: the approval notice, under the action panel. */}
+        {!isDesktop && businessAccount && <BusinessApprovalBanner />}
 
         {/* ── FEATURE BANNERS - promo carousel for what MeshPort can do ─────── */}
         {/* Same width/radius as the old Multichain Hub row, 10% taller. */}
         {/* Business not approved yet: no promos, recents, news or QR - the
             balance, assets and activity stay. */}
-        {!accountLock.locked && <FeatureBanner height={isDesktop ? 64 : 75} onOpen={path => navigate(path)} />}
+        {!accountLock.locked && <FeatureBanner height={isDesktop ? 64 : 75} docked={!isDesktop} onOpen={path => navigate(path)} />}
 
         {/* ── RECENT + UPDATES - side by side, same on desktop and mobile ───── */}
         {!accountLock.locked && <RecentNewsRow navigate={navigate} />}
