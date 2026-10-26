@@ -1197,7 +1197,7 @@ export function PaySendPage() {
   // buttons - with no way to reach it, since this was the innermost clip
   // boundary. Mobile keeps overflow-hidden, unchanged.
   const flow = (
-    <div data-leave-guard={isProcessing ? '' : undefined} className={`flex flex-col ${isDesktop ? 'h-full' : 'h-screen overflow-hidden'}`} style={{ background: 'var(--bg)', borderRadius: isDesktop ? 20 : undefined }}>
+    <div data-leave-guard={isProcessing ? '' : undefined} className={`flex flex-col ${isDesktop ? 'h-full' : 'h-dvh overflow-hidden'}`} style={{ background: 'var(--bg)', borderRadius: isDesktop ? 20 : undefined }}>
       {/* Search → amount → review push like pages (ScreenPush), so two
           screens are never seen through each other mid-change. Desktop:
           ScreenPush's quick fade in place, same as Swap. The screens
@@ -1250,7 +1250,7 @@ export function PaySendPage() {
                 autoFocus={isDesktop && !hasPendingRedirect}
                 value={query}
                 onChange={setQuery}
-                placeholder="Search username or paste 0x address"
+                placeholder="Username or 0x address"
                 ariaLabel="Search username or wallet address"
                 wrap
               />

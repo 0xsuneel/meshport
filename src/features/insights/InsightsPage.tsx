@@ -576,17 +576,17 @@ export function InsightsPage() {
                   onClick={() => setPeriod(p as any)}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: narrow ? 3 : 5, whiteSpace: 'nowrap',
-                    padding: narrow ? '5px 9px' : '5px 11px', marginRight: 6,
+                    padding: narrow ? '5px 8px' : '5px 11px', marginRight: narrow ? 4 : 6,
                     background: period === p ? 'var(--brand)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
                     border: period === p ? '1px solid var(--brand)' : '1px solid color-mix(in srgb, var(--brand) 20%, transparent)',
-                    borderRadius: 22, fontSize: 12, fontWeight: 600,
+                    borderRadius: 22, fontSize: narrow ? 11.5 : 12, fontWeight: 600,
                     color: period === p ? '#fff' : 'var(--brand-text)',
                     cursor: 'pointer', fontFamily: 'inherit',
                   }}
                 >
                   {p === period && !narrow && <Calendar size={12}/>}
                   {p === 'month' ? 'This Month' : p === 'week' ? 'This Week' : 'This Year'}
-                  {p === period && <ChevronDown size={10} color="var(--brand-text)"/>}
+                  {p === period && !narrow && <ChevronDown size={10} color="var(--brand-text)"/>}
                 </button>
               ))}
             </div>

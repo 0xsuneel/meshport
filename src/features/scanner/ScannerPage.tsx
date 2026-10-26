@@ -541,7 +541,7 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
   }
 
   const card = (
-    <div className={`flex flex-col bg-black relative overflow-hidden ${isDesktop || embedded ? 'rounded-3xl' : 'h-screen'}`}
+    <div className={`flex flex-col bg-black relative overflow-hidden ${isDesktop || embedded ? 'rounded-3xl' : 'h-dvh'}`}
       style={embedded ? { height: '100%', width: '100%' } : isDesktop ? { height: '100%', width: alignLeft ? 640 : '100%', maxWidth: alignLeft ? 640 : undefined } : undefined}>
       {/* Camera viewfinder */}
       <div className="flex-1 relative flex items-center justify-center bg-black">
