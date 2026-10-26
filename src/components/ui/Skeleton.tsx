@@ -1,14 +1,17 @@
+import type { CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
 
 interface SkeletonProps {
   className?: string
+  style?: CSSProperties
 }
 
 /** Single shimmer block - compose into row/card skeletons per screen. */
-export function Skeleton({ className }: SkeletonProps) {
+export function Skeleton({ className, style }: SkeletonProps) {
   return (
     <div
       className={cn('rounded-xl bg-border/60 relative overflow-hidden', className)}
+      style={style}
       aria-hidden="true"
     >
       <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-text-primary/[0.06] to-transparent" />

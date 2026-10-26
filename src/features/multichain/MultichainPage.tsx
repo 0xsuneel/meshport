@@ -10,8 +10,22 @@ const ClaimSheetBody = lazy(() => import('./MultichainClaimPage').then(m => ({ d
 // Fetch both flows' code as soon as the Hub opens, so switching tabs or
 // tapping a chain never shows a loading spinner in between.
 const preloadHubFlows = () => { import('./MultichainTransferPage').catch(() => {}); import('./MultichainClaimPage').catch(() => {}) }
+// While a flow's code loads: the shape of its card (title, line, balance box,
+// button) instead of a spinner.
 function InlineSpinner() {
-  return <div style={{ padding: 32, display: 'flex', justifyContent: 'center' }}><div style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid var(--brand)', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }}/></div>
+  return (
+    <div aria-busy="true" aria-label="Loading" style={{ margin: '4px 0', padding: 18, borderRadius: 20, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <Skeleton className="w-11 h-11 rounded-xl flex-shrink-0" />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <Skeleton className="h-4 w-1/2 rounded-full" />
+          <Skeleton className="h-3 w-3/4 rounded-full" />
+        </div>
+      </div>
+      <Skeleton className="h-14 w-full rounded-2xl" />
+      <Skeleton className="h-12 w-full rounded-2xl" />
+    </div>
+  )
 }
 import { UB_CLAIM_CHAINS } from '@/lib/ubClaim'
 import { canBringOverCctp } from '@/lib/gaslessBridge'
@@ -38,6 +52,7 @@ import { HubPage, HubPageBack } from '@/components/multichain/HubPage'
 import { TrackedMove, type TrackedMoveInfo } from '@/components/multichain/TrackedMove'
 import { fetchCctpProgress } from '@/lib/cctpTracker'
 import { isLeaveGuarded, requestLeave, useLeaveGuardStore } from '@/lib/leaveGuard'
+import { Skeleton, SkeletonCards } from '@/components/ui/Skeleton'
 
 // Below half a cent a balance shows as "0" - treat it as empty (no "$0 on
 // 1 chain", no highlighted "0 USDC" row).
@@ -953,9 +968,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
               or divider lines, rows sit on the page. */}
           <div>
             {loadingActivity && filtered.length === 0 ? (
-              <div style={{ padding: 24, display: 'flex', justifyContent: 'center' }}>
-                <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--brand)', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }}/>
-              </div>
+              <SkeletonCards count={3} className="pt-1" />
             ) : filtered.length === 0 ? (
               <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
                 {tab === 'all' ? 'No multichain activity yet' : `No ${tab} transactions`}

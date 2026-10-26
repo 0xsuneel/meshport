@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { fetchRecentContacts, recentInitial, recentShortName, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
 import { NewsArt } from '@/features/news/NewsArt'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { useReconnectCount } from '@/lib/connectivity'
 import { fetchHomeNews, readCachedHomeNews, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT, type NewsItem } from '@/lib/news'
 
@@ -157,9 +158,14 @@ function RecentBox({ navigate }: { navigate: NavigateFunction }) {
 
   let content: ReactNode
   if (!loaded && n === 0) {
+    // Loading: the loaded row's shape (name + "Tap to pay", avatar on the right).
     content = (
-      <div style={{ height: CONTENT_H, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 6 }}>
-        <div style={{ width: AVATAR, height: AVATAR, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+      <div aria-busy="true" aria-label="Loading recent people" style={{ height: CONTENT_H, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingRight: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
+          <Skeleton className="h-3 w-3/5 rounded-full" />
+          <Skeleton className="h-2.5 w-2/5 rounded-full" />
+        </div>
+        <Skeleton className="rounded-full flex-shrink-0" style={{ width: AVATAR, height: AVATAR }} />
       </div>
     )
   } else if (n === 0) {
@@ -257,11 +263,13 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
   const item = items[cur] ?? items[0]
 
   let content: ReactNode
-  if (!n) {
+  if (!n && !loaded) {
+    content = <Skeleton className="rounded-[10px]" style={{ height: CONTENT_H }} />
+  } else if (!n) {
     content = (
       <div style={{ height: CONTENT_H, borderRadius: 10, display: 'flex', alignItems: 'center', padding: '0 8px',
-        background: loaded ? 'color-mix(in srgb, var(--text-primary) 4%, transparent)' : 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-        {loaded && <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.3 }}>Arc, Circle and MeshPort updates show here</span>}
+        background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }}>
+        <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.3 }}>Arc, Circle and MeshPort updates show here</span>
       </div>
     )
   } else {
