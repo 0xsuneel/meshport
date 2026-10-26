@@ -3814,12 +3814,13 @@ export function HomePage() {
     })
   }, [homeRecentActivity])
 
-  // Mobile hero bars: the balance at the end of each of the last 7 days,
-  // worked out from today's balance and that Activity (lib/balanceTrend.ts).
+  // Mobile hero bars: the Arc USDC balance at the end of each of the last 7
+  // days, worked out from today's USDC and that Activity - USDC moves only,
+  // swaps counted by the USDC that went in or came out (lib/balanceTrend.ts).
   // Nothing is drawn until the Activity has loaded (no flat-then-jump).
   const mobileBalanceTrend = useMemo(
-    () => (isDesktop || !homeActivityLoaded ? null : computeBalanceTrend(homeRecentActivity, portfolioTotal)),
-    [isDesktop, homeActivityLoaded, homeRecentActivity, portfolioTotal],
+    () => (isDesktop || !homeActivityLoaded ? null : computeBalanceTrend(homeRecentActivity, balance, new Date(), 7, { asset: 'USDC' })),
+    [isDesktop, homeActivityLoaded, homeRecentActivity, balance],
   )
 
   const todayChange = useMemo(() => {
@@ -4254,14 +4255,18 @@ export function HomePage() {
               // or carousel edges (Cross-chain Transfer is in More actions).
               <div>
                 <AvailableBalanceCard
-                  portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
+                  portfolioTotal={balance} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
                   walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
                   trend={mobileBalanceTrend}
                 />
               </div>
             ) : (
+              // "Available Balance" is the Arc USDC balance - what the explorer
+              // shows and what can be spent. EURC / cirBTC are under Assets
+              // (a total priced EURC at a fixed 1.08 while the testnet pool
+              // pays ~1.38 EURC per USDC, so every swap inflated it).
               <MobileHeroCarousel
-                portfolioTotal={portfolioTotal}
+                portfolioTotal={balance}
                 balanceHidden={balanceHidden}
                 onToggleHidden={toggleBalanceHidden}
                 walletAddress={walletAddress}
