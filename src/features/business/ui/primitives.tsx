@@ -75,7 +75,7 @@ export function Badge({ count, className = '' }: { count: number; className?: st
   if (count <= 0) return null
   return (
     <span
-      className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-brand text-white text-[10px] font-bold tabular-nums ${className}`}
+      className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-brand text-white text-[11px] font-bold tabular-nums ${className}`}
     >
       {count > 99 ? '99+' : count}
     </span>

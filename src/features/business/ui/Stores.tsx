@@ -116,7 +116,7 @@ export function StoresView({ stores, onAdd, onEdit, onQr, onSetPrimary, addLocke
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-text-primary truncate">{store.name}</p>
                     {store.isDefault && (
-                      <span className="px-1.5 py-0.5 rounded bg-brand/10 text-brand-text text-[10px] font-bold">
+                      <span className="px-1.5 py-0.5 rounded bg-brand/10 text-brand-text text-[11px] font-bold">
                         Main
                       </span>
                     )}

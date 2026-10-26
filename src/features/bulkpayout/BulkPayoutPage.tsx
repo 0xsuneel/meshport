@@ -1143,7 +1143,7 @@ export function BulkPayoutPage() {
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-text-muted text-center mt-3">Tap anywhere to dismiss</p>
+              <p className="text-[11px] text-text-muted text-center mt-3">Tap anywhere to dismiss</p>
             </motion.div>
           </div>
         )}

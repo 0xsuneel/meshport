@@ -454,7 +454,7 @@ export function RoleManagersPanel() {
                 }
                 return active.map(b => (
                   <span key={b.label} style={{
-                    fontSize: 10.5, fontWeight: 700, color: COLORS.primaryText,
+                    fontSize: 11, fontWeight: 700, color: COLORS.primaryText,
                     background: 'color-mix(in srgb, var(--brand) 12%, transparent)',
                     border: `1px solid color-mix(in srgb, var(--brand) 35%, transparent)`,
                     borderRadius: 999, padding: '3px 9px',
@@ -485,7 +485,7 @@ export function RoleManagersPanel() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {signerAddresses.map((addr, i) => (
               <div key={addr} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 9, background: 'color-mix(in srgb, var(--brand) 15%, transparent)', color: COLORS.primaryText, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</span>
+                <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 9, background: 'color-mix(in srgb, var(--brand) 15%, transparent)', color: COLORS.primaryText, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</span>
                 <AddressChip address={addr} />
               </div>
             ))}
@@ -679,7 +679,7 @@ export function RoleManagersPanel() {
                       const isMe = !!connectedWallet && connectedWallet.toLowerCase() === addr.toLowerCase()
                       return (
                         <span key={addr} style={{
-                          fontSize: 10.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3,
+                          fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3,
                           color: has ? COLORS.success : COLORS.muted,
                         }}>
                           {has ? <CheckCircle2 size={11} /> : <span style={{ width: 11, height: 11, borderRadius: '50%', border: `1.5px solid ${COLORS.border}`, display: 'inline-block' }} />}
@@ -757,7 +757,7 @@ export function RoleManagersPanel() {
                     fontSize: 11, fontWeight: 700, color: COLORS[meta.color],
                     background: `color-mix(in srgb, ${COLORS[meta.color]} 12%, transparent)`, padding: '2px 8px', borderRadius: 999,
                   }}>{meta.label}</span>
-                  <span style={{ flexShrink: 0, fontSize: 10.5, color: COLORS.muted }}>
+                  <span style={{ flexShrink: 0, fontSize: 11, color: COLORS.muted }}>
                     {e.timestamp ? new Date(e.timestamp * 1000).toLocaleString() : `block ${e.blockNumber}`}
                   </span>
                 </div>
@@ -770,7 +770,7 @@ export function RoleManagersPanel() {
                   ))}
                 </div>
                 <a href={`${ARC.explorerUrl}/tx/${e.txHash}`} target="_blank" rel="noreferrer"
-                  style={{ display: 'inline-block', fontSize: 10, color: COLORS.primaryText, fontFamily: 'monospace', marginTop: 6, textDecoration: 'none' }}>
+                  style={{ display: 'inline-block', fontSize: 11, color: COLORS.primaryText, fontFamily: 'monospace', marginTop: 6, textDecoration: 'none' }}>
                   View transaction ↗
                 </a>
               </div>

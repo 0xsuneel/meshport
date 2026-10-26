@@ -70,7 +70,7 @@ function RevenueBars({ values, labels, highlight }: { values: number[]; labels: 
           }} />
         ))}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10.5, color: 'var(--text-secondary)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: 'var(--text-secondary)' }}>
         {labels.map((l, i) => <span key={i}>{l}</span>)}
       </div>
     </div>

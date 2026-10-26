@@ -86,7 +86,7 @@ export function RequestRow({
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-border/20 transition-colors"
       >
         {/* Kind badge */}
-        <span className="shrink-0 text-[10px] font-semibold text-text-muted bg-border/40 rounded-lg px-2 py-1 uppercase tracking-wide">
+        <span className="shrink-0 text-[11px] font-semibold text-text-muted bg-border/40 rounded-lg px-2 py-1 uppercase tracking-wide">
           {KIND_LABEL[kind]}
         </span>
 
@@ -97,7 +97,7 @@ export function RequestRow({
           {badges.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
               {badges.map(b => (
-                <span key={b.label} className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${BADGE_STYLES[b.tone]}`}>{b.label}</span>
+                <span key={b.label} className={`text-[11px] font-semibold rounded-full px-2 py-0.5 ${BADGE_STYLES[b.tone]}`}>{b.label}</span>
               ))}
             </div>
           )}
@@ -106,7 +106,7 @@ export function RequestRow({
         {/* Amount + status + chevron */}
         <div className="flex flex-col items-end gap-1 shrink-0">
           <span className="text-sm font-bold tabular-nums text-text-primary">{amount}</span>
-          <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${s.bg} ${s.text}`}>
+          <span className={`text-[11px] font-semibold rounded-full px-2 py-0.5 ${s.bg} ${s.text}`}>
             {s.label}
           </span>
         </div>

@@ -11,6 +11,7 @@ import { chainLogoSrc } from '@/lib/chainLogos'
 import { subscribeToClaim } from '@/lib/claimService'
 import { formatAmount } from '@/lib/utils'
 import type { ClaimAllStep } from '@/lib/ubClaim'
+import { pressable } from '@/lib/pressable'
 
 export type ClaimAllChain = { chainId: string; label: string; balance: number }
 
@@ -61,7 +62,7 @@ function ChainRow({ chain, step, first, onTrack }: { chain: ClaimAllChain; step?
   const status = !step ? 'Waiting' : step.state === 'done' ? (live ?? step.msg) : step.msg
   const canTrack = step?.state === 'done' && !!step.claimId
   return (
-    <div onClick={canTrack ? () => onTrack(step!.claimId!) : undefined}
+    <div {...(canTrack ? pressable(() => onTrack(step!.claimId!)) : {})}
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', cursor: canTrack ? 'pointer' : 'default',
         borderTop: first ? 'none' : '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
       {logoOk

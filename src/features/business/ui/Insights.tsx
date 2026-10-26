@@ -46,7 +46,7 @@ export function InsightsChart({ total, sub, bars }: InsightsChartProps) {
                 />
               </div>
               <span
-                className={`text-[9px] font-medium whitespace-nowrap ${isToday ? 'text-brand-text font-semibold' : 'text-text-muted'}`}
+                className={`text-[11px] font-medium whitespace-nowrap ${isToday ? 'text-brand-text font-semibold' : 'text-text-muted'}`}
               >
                 {bar.label}
               </span>

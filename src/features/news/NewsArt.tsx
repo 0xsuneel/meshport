@@ -103,7 +103,7 @@ export function NewsArt({ item, variant, children }: { item: NewsItem; variant: 
       {variant === 'stack' && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '0 6px' }}>
           {tileEl}
-          {subEl || <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{title}</span>}
+          {subEl || <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{title}</span>}
         </div>
       )}
       {variant === 'thumb' && (

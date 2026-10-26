@@ -137,7 +137,7 @@ const CCTP_BRING_TIME = '20–90 s'
 /** Slow / Fast tag on a route button. */
 function SpeedTag({ fast, on }: { fast: boolean; on: boolean }) {
   return (
-    <span style={{ fontSize: 10, fontWeight: 700, lineHeight: '14px', padding: '0 6px', borderRadius: 999, flexShrink: 0,
+    <span style={{ fontSize: 11, fontWeight: 700, lineHeight: '14px', padding: '0 6px', borderRadius: 999, flexShrink: 0,
       color: on ? '#fff' : fast ? 'var(--success)' : 'var(--warning)',
       background: on ? 'rgba(255,255,255,0.2)' : `color-mix(in srgb, ${fast ? 'var(--success)' : 'var(--warning)'} 14%, transparent)` }}>
       {fast ? 'Fast' : 'Slow'}

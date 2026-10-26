@@ -122,7 +122,7 @@ export function FileTypeTile({ name, size = 46 }: { name: string; size?: number 
   const ext = extOf(name)
   return (
     <div style={{ width: size, height: size, flexShrink: 0, borderRadius: 6, background: TYPE_COLOR[ext] || '#6b7780', color: '#fff',
-      fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 6, textTransform: 'uppercase' }}>
+      fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 6, textTransform: 'uppercase' }}>
       {(ext || 'file').slice(0, 4)}
     </div>
   )
@@ -195,7 +195,7 @@ export function ChatFile({ name, url, iv, convKey, isMine, upload, failed, onRet
     <div onClick={() => { if (ready) open(); else if (!upload && progress == null) download() }}
       style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 220, maxWidth: 270, borderRadius: 12, padding: '9px 10px', cursor: 'pointer',
         background: isMine ? 'rgba(0,0,0,0.18)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
-      <div style={{ width: 36, height: 44, borderRadius: 6, flexShrink: 0, background: TYPE_COLOR[ext] ?? '#56626a', color: '#fff', fontSize: 9.5, fontWeight: 800,
+      <div style={{ width: 36, height: 44, borderRadius: 6, flexShrink: 0, background: TYPE_COLOR[ext] ?? '#56626a', color: '#fff', fontSize: 11, fontWeight: 800,
         display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 5, boxSizing: 'border-box' }}>{(ext || 'file').slice(0, 4).toUpperCase()}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</p>
@@ -431,7 +431,7 @@ export function ChatImageViewer({ items, startId, convKey, onClose, onReply, onF
 
   const counter = useMemo(() => items.length > 1 ? `${idx + 1} of ${items.length}` : '', [idx, items.length])
   if (!item) return null
-  const ab: React.CSSProperties = { border: 'none', background: 'none', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 10.5, cursor: 'pointer', minWidth: 52 }
+  const ab: React.CSSProperties = { border: 'none', background: 'none', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11, cursor: 'pointer', minWidth: 52 }
   const time = new Date(item.createdAt)
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={MOBILE_TAB_FADE_TRANSITION}

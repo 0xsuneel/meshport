@@ -212,7 +212,7 @@ function AppearancePreview({ mode }: { mode: ThemeMode }) {
         {/* Mock header */}
         <div className="flex items-center justify-between px-4 py-3" style={{ background: p.surface, borderBottom: `1px solid ${p.border}` }}>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-[10px] font-bold" style={{ background: p.brand }}>M</div>
+            <div className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-[11px] font-bold" style={{ background: p.brand }}>M</div>
             <span className="text-xs font-bold" style={{ color: p.text }}>MeshPort</span>
           </div>
           <div className="w-6 h-6 rounded-full" style={{ background: p.border }} />
@@ -220,12 +220,12 @@ function AppearancePreview({ mode }: { mode: ThemeMode }) {
         {/* Mock balance card */}
         <div className="p-4 space-y-3">
           <div className="rounded-xl p-4" style={{ background: p.brand }}>
-            <p className="text-[10px] mb-1" style={{ color: 'rgba(255,255,255,0.75)' }}>Total Balance</p>
+            <p className="text-[11px] mb-1" style={{ color: 'rgba(255,255,255,0.75)' }}>Total Balance</p>
             <p className="text-lg font-bold text-white">1,240.00 USDC</p>
           </div>
           <div className="flex gap-2">
             {['Pay', 'Receive', 'Swap'].map(label => (
-              <div key={label} className="flex-1 rounded-lg py-2 text-center text-[10px] font-semibold" style={{ background: p.surface, border: `1px solid ${p.border}`, color: p.text }}>
+              <div key={label} className="flex-1 rounded-lg py-2 text-center text-[11px] font-semibold" style={{ background: p.surface, border: `1px solid ${p.border}`, color: p.text }}>
                 {label}
               </div>
             ))}
@@ -233,9 +233,9 @@ function AppearancePreview({ mode }: { mode: ThemeMode }) {
           <div className="rounded-lg p-3 flex items-center justify-between" style={{ background: p.surface, border: `1px solid ${p.border}` }}>
             <div>
               <p className="text-[11px] font-semibold" style={{ color: p.text }}>sunil.arc</p>
-              <p className="text-[10px]" style={{ color: p.textSecondary }}>Sent 25.00 USDC</p>
+              <p className="text-[11px]" style={{ color: p.textSecondary }}>Sent 25.00 USDC</p>
             </div>
-            <span className="text-[10px] font-semibold" style={{ color: p.textSecondary }}>2m ago</span>
+            <span className="text-[11px] font-semibold" style={{ color: p.textSecondary }}>2m ago</span>
           </div>
         </div>
       </div>
@@ -400,7 +400,7 @@ export function ChangePasscodePage() {
               <div className="flex gap-2 justify-center mb-1">
                 {steps.map(s => (
                   <div key={s.key} className="flex flex-col items-center gap-1">
-                    <div className="text-[10px] font-semibold" style={{ color: activeField === s.key ? 'var(--brand-text)' : s.done ? 'var(--success)' : 'var(--text-muted)' }}>{s.label}</div>
+                    <div className="text-[11px] font-semibold" style={{ color: activeField === s.key ? 'var(--brand-text)' : s.done ? 'var(--success)' : 'var(--text-muted)' }}>{s.label}</div>
                     <div className="h-0.5 w-16 rounded-full" style={{ background: activeField === s.key ? 'var(--brand)' : s.done ? 'var(--success)' : 'var(--border)' }} />
                   </div>
                 ))}
@@ -1022,7 +1022,7 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <p className={`text-sm font-semibold ${n.isRead ? 'text-text-secondary' : 'text-text-primary'}`}>{n.title}</p>
-                    <span className="text-[10px] text-text-muted flex-shrink-0">{relTime(n.timestamp)}</span>
+                    <span className="text-[11px] text-text-muted flex-shrink-0">{relTime(n.timestamp)}</span>
                   </div>
                   <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">{n.body}</p>
                 </div>

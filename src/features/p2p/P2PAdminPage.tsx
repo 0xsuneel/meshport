@@ -423,7 +423,7 @@ export function P2PAdminPage() {
                   { label: 'Investigator', on: connectedWalletIsInvestigator },
                   { label: 'Admin', on: connectedWalletIsAdmin },
                 ].filter(b => b.on).map(b => (
-                  <span key={b.label} style={{ fontSize: 10.5, fontWeight: 700, color: COLORS.primaryText, background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)', borderRadius: 999, padding: '3px 9px' }}>{b.label}</span>
+                  <span key={b.label} style={{ fontSize: 11, fontWeight: 700, color: COLORS.primaryText, background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)', borderRadius: 999, padding: '3px 9px' }}>{b.label}</span>
                 ))}
                 {!connectedWalletIsPauser && !connectedWalletIsInvestigator && !connectedWalletIsAdmin && (
                   <span style={{ fontSize: 11, color: COLORS.muted }}>This address holds no privileged role on this contract.</span>
@@ -505,7 +505,7 @@ export function P2PAdminPage() {
           <div key={t.id} style={{ background: COLORS.surface, borderRadius: 16, padding: 14, marginBottom: 10, border: `1px solid ${t.adminFrozen ? 'color-mix(in srgb, var(--danger) 40%, transparent)' : COLORS.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.text }}>{t.amountUsdc} USDC · {currencySymbol(t.currency)}{t.amountFiat}</span>
-              {t.adminFrozen && <span style={{ fontSize: 10, fontWeight: 700, color: COLORS.error, background: 'color-mix(in srgb, var(--danger) 12%, transparent)', padding: '3px 8px', borderRadius: 10 }}>FROZEN</span>}
+              {t.adminFrozen && <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.error, background: 'color-mix(in srgb, var(--danger) 12%, transparent)', padding: '3px 8px', borderRadius: 10 }}>FROZEN</span>}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 11, color: COLORS.muted, marginBottom: 2 }}>
               <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>Buyer: <AddressChip address={t.buyerId} size={11} mono={false} /></span>
@@ -577,8 +577,8 @@ export function P2PAdminPage() {
                     <span style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.text }}>{o.minAmount}–{o.maxAmount} USDC</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {isFrozen && <span style={{ fontSize: 10, fontWeight: 700, color: COLORS.error, background: 'color-mix(in srgb, var(--danger) 12%, transparent)', padding: '3px 8px', borderRadius: 10 }}>FROZEN</span>}
-                    <span style={{ fontSize: 10, fontWeight: 700, color: statusColor, background: `color-mix(in srgb, ${statusColor} 10%, transparent)`, padding: '3px 9px', borderRadius: 10, textTransform: 'uppercase' }}>{o.status}</span>
+                    {isFrozen && <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.error, background: 'color-mix(in srgb, var(--danger) 12%, transparent)', padding: '3px 8px', borderRadius: 10 }}>FROZEN</span>}
+                    <span style={{ fontSize: 11, fontWeight: 700, color: statusColor, background: `color-mix(in srgb, ${statusColor} 10%, transparent)`, padding: '3px 9px', borderRadius: 10, textTransform: 'uppercase' }}>{o.status}</span>
                   </div>
                 </div>
                 <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -671,7 +671,7 @@ export function P2PAdminPage() {
                         fontWeight: 700,
                         color: isAdminMsg ? COLORS.primary : m.isSystem ? COLORS.muted : isBuyer ? COLORS.success : 'var(--accent-text)',
                       }}>{label}</span>
-                      <span style={{ color: COLORS.muted, fontSize: 10 }}>{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span style={{ color: COLORS.muted, fontSize: 11 }}>{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     {imageUrl ? (
                       <img decoding="async"

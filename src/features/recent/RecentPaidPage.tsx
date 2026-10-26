@@ -6,6 +6,7 @@ import { formatAmount } from '@/lib/utils'
 import { fetchRecentContacts, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
+import { pressable } from '@/lib/pressable'
 
 // Same "Recent" as the Home avatar row and the Send page recent row (see
 // src/lib/recentContacts.ts), just scanning more history and showing more
@@ -249,7 +250,7 @@ export function RecentPaidPage() {
             <div style={{ ...card, padding: '14px 16px 6px' }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Most paid</div>
               {mostPaid.map((p, i) => (
-                <div key={p.wallet_address} onClick={() => goSend(p)}
+                <div key={p.wallet_address} {...pressable(() => goSend(p))}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', cursor: 'pointer',
                     borderBottom: i < mostPaid.length - 1 ? '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' : 'none' }}>
                   <Avatar person={p} size={34} color={COLORS[people.indexOf(p) % COLORS.length]} />

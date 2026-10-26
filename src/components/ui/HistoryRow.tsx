@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { ActionIcon, type ActionIconName } from './ActionIcon'
+import { pressable } from '@/lib/pressable'
 
 /** `attention`: needs the person (e.g. Recover) - clock, no spinner. */
 /** `muted`: ended without moving money (cancelled, expired). */
@@ -69,7 +70,7 @@ export function HistoryRow({ icon, title, sub, meta, right, onClick, flash, inPa
   inPanel?: boolean
 }) {
   return (
-    <div onClick={onClick} className={flash ? 'mp-last-opened' : undefined}
+    <div {...pressable(onClick)} className={flash ? 'mp-last-opened' : undefined}
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: inPanel ? '11px 16px' : '11px 4px', cursor: onClick ? 'pointer' : 'default' }}>
       {icon}
       <div style={{ flex: 1, minWidth: 0 }}>

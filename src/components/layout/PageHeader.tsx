@@ -46,7 +46,7 @@ export function PageHeader({ title, showBack = true, showNotifications = false, 
                 initial={{ scale: 0.6 }}
                 animate={{ scale: 1 }}
                 transition={CONTROL_MOTION}
-                className="absolute top-1 right-1 w-4 h-4 bg-danger rounded-full text-[10px] font-bold flex items-center justify-center text-white"
+                className="absolute top-1 right-1 w-4 h-4 bg-danger rounded-full text-[11px] font-bold flex items-center justify-center text-white"
               >
                 {badgeLabel}
               </motion.span>

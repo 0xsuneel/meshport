@@ -46,9 +46,9 @@ function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payme
         <p className="text-sm font-medium text-text-primary truncate">{payment.from}</p>
         <div className="flex items-center gap-1.5 mt-0.5">
           <span className="text-xs text-text-muted">{payment.chainLabel}</span>
-          {payment.blocked && <span className="shrink-0 text-[10px] font-semibold rounded-full px-1.5 py-px bg-danger/10 text-danger">Blocked sender</span>}
-          {!payment.blocked && payment.late && <span className="shrink-0 text-[10px] font-semibold rounded-full px-1.5 py-px bg-warning/10 text-warning">Paid late</span>}
-          {payment.partlyRefunded && <span className="shrink-0 text-[10px] font-semibold rounded-full px-1.5 py-px bg-danger/10 text-danger">Partly refunded {payment.partlyRefunded}</span>}
+          {payment.blocked && <span className="shrink-0 text-[11px] font-semibold rounded-full px-1.5 py-px bg-danger/10 text-danger">Blocked sender</span>}
+          {!payment.blocked && payment.late && <span className="shrink-0 text-[11px] font-semibold rounded-full px-1.5 py-px bg-warning/10 text-warning">Paid late</span>}
+          {payment.partlyRefunded && <span className="shrink-0 text-[11px] font-semibold rounded-full px-1.5 py-px bg-danger/10 text-danger">Partly refunded {payment.partlyRefunded}</span>}
           {payment.order && (
             <>
               <span className="text-text-muted opacity-30">·</span>
@@ -61,7 +61,7 @@ function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payme
         <p className="text-sm font-semibold tabular-nums text-text-primary">{payment.amount}</p>
         <div className="flex items-center justify-end gap-1 mt-0.5">
           <StatusDot status={payment.status} />
-          <span className="text-[10px] text-text-muted">{formatTime(payment.time)}</span>
+          <span className="text-[11px] text-text-muted">{formatTime(payment.time)}</span>
         </div>
       </div>
     </button>

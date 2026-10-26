@@ -106,7 +106,7 @@ export function BuyerList({ buyers, selected, onSelect }: { buyers: BuyerOption[
             <span className="flex items-center gap-1.5">
               <span className="text-[14px] font-semibold text-text-primary truncate">{b.name}</span>
               {b.verified && <ShieldCheck className="size-3.5 text-success shrink-0" />}
-              {b.best && <span className="px-1.5 py-0.5 rounded-full bg-success/12 text-success text-[10px] font-bold">Best</span>}
+              {b.best && <span className="px-1.5 py-0.5 rounded-full bg-success/12 text-success text-[11px] font-bold">Best</span>}
             </span>
             <span className="block text-xs text-text-muted truncate">{b.note || b.detail}</span>
           </span>
@@ -303,7 +303,7 @@ export function CashOutChat({ messages, draft, onDraft, onSend, onClose }: {
             ) : (
               <div className={`max-w-[78%] px-3.5 py-2 rounded-2xl ${m.mine ? 'bg-brand text-white rounded-br-md' : 'bg-card border border-border text-text-primary rounded-bl-md'}`}>
                 <p className="text-sm break-words">{m.text}</p>
-                <p className={`text-[10px] mt-0.5 ${m.mine ? 'text-white/70' : 'text-text-muted'}`}>{m.time}</p>
+                <p className={`text-[11px] mt-0.5 ${m.mine ? 'text-white/70' : 'text-text-muted'}`}>{m.time}</p>
               </div>
             )}
           </div>

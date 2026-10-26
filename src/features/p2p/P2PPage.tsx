@@ -48,6 +48,7 @@ import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { searchTerm } from '@/lib/searchTerm'
 import { SearchField } from '@/components/ui/SearchField'
+import { pressable } from '@/lib/pressable'
 
 export const COLORS = {
   bg: 'var(--bg)', surface: 'var(--surface)', surfaceSecondary: 'var(--surface)',
@@ -384,14 +385,14 @@ export function P2PHubPage() {
           const sym = currencySymbol(offer.currency)
           const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 })
           return (
-            <div key={offer.id} onClick={() => navigate(`/p2p/offer/${offer.id}`, { state: { offerType: offer.offerType } })}
+            <div key={offer.id} {...pressable(() => navigate(`/p2p/offer/${offer.id}`, { state: { offerType: offer.offerType } }))}
               style={{ padding: '14px 16px', borderBottom: `1px solid ${COLORS.border}`, cursor: 'pointer' }}>
               <MerchantLine name={offer.displayName || offer.username || 'Trader'} verified={offer.isVerifiedMerchant} stats={stats.get(offer.userId)} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 10, marginTop: 8 }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 21, fontWeight: 700, color: COLORS.text, letterSpacing: '-0.3px' }}>
                     <span style={{ fontSize: 13, color: COLORS.muted, fontWeight: 500, marginRight: 2 }}>{sym}</span>{price != null ? fmt(price) : '—'}
-                    {offer.priceType === 'floating' && <span style={{ fontSize: 10.5, fontWeight: 700, color: COLORS.primaryText, marginLeft: 6, verticalAlign: 3 }}>LIVE</span>}
+                    {offer.priceType === 'floating' && <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.primaryText, marginLeft: 6, verticalAlign: 3 }}>LIVE</span>}
                   </div>
                   <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 3 }}>
                     Limit <b style={{ color: COLORS.text, fontWeight: 600 }}>{price ? `${sym}${fmt(offer.minAmount * price)} – ${sym}${fmt(maxNow * price)}` : `${offer.minAmount} – ${trimTrailingZeros(maxNow.toFixed(2))} USDC`}</b>
@@ -423,7 +424,7 @@ export function P2PHubPage() {
         <button onClick={() => navigate('/p2p/my-trades')} style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           Orders
           {myTradesCount > 0 && (
-            <span style={{ background: '#EF4444', color: '#fff', fontSize: 10.5, fontWeight: 700, borderRadius: 999, minWidth: 17, height: 17, padding: '0 5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{myTradesCount}</span>
+            <span style={{ background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, minWidth: 17, height: 17, padding: '0 5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{myTradesCount}</span>
           )}
         </button>
         <button onClick={() => navigate('/p2p/my-offers')} style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>My ads</button>
@@ -1572,7 +1573,7 @@ export function P2PTradePage() {
               <button onClick={() => { const el = scrollRef.current; if (el) { nearBottom.current = true; el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }) } }} aria-label="Chat"
                 style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: 6, display: 'flex' }}>
                 <SendIcon size={18} color={COLORS.text} />
-                {unread > 0 && <span style={{ position: 'absolute', top: 0, right: 0, minWidth: 15, height: 15, borderRadius: 999, background: '#EF4444', color: '#fff', fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{unread}</span>}
+                {unread > 0 && <span style={{ position: 'absolute', top: 0, right: 0, minWidth: 15, height: 15, borderRadius: 999, background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{unread}</span>}
               </button>
             } />
             <div style={{ padding: '0 16px 12px' }}>
@@ -1589,7 +1590,7 @@ export function P2PTradePage() {
               {!dead && (
                 <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                   {stepNames.map((n, i) => (
-                    <div key={n} style={{ flex: 1, fontSize: 10.5, color: i < stepIdx ? COLORS.text : COLORS.muted, fontWeight: i < stepIdx ? 600 : 500 }}>
+                    <div key={n} style={{ flex: 1, fontSize: 11, color: i < stepIdx ? COLORS.text : COLORS.muted, fontWeight: i < stepIdx ? 600 : 500 }}>
                       <div style={{ height: 3, borderRadius: 2, marginBottom: 5, background: i < stepIdx ? COLORS.success : COLORS.border }} />{n}
                     </div>
                   ))}
@@ -1740,7 +1741,7 @@ export function P2PTradePage() {
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: i < timelineSteps.length - 1 ? 10 : 0 }}>
                       <div style={{ width: 7, height: 7, borderRadius: '50%', background: COLORS.success, flexShrink: 0 }} />
                       <div style={{ flex: 1, fontSize: 12, color: COLORS.text }}>{step.label}</div>
-                      <div style={{ fontSize: 10.5, color: COLORS.muted }}>{new Date(step.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      <div style={{ fontSize: 11, color: COLORS.muted }}>{new Date(step.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                   ))}
                 </div>
@@ -1774,7 +1775,7 @@ export function P2PTradePage() {
           // system-log pill below (which would read as an automated line,
           // easy to miss or misread as impersonal).
           <div key={m.id} style={{ alignSelf: 'center', maxWidth: '85%' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: COLORS.warning, textAlign: 'center', marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.3 }}>Admin</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.warning, textAlign: 'center', marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.3 }}>Admin</div>
             <div style={{ background: 'color-mix(in srgb, var(--warning) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)', color: COLORS.text, borderRadius: 14, padding: '9px 13px', fontSize: 13.5 }}>{m.content}</div>
           </div>
         ) : m.isSystem ? (
@@ -2230,7 +2231,7 @@ export function P2PMyOffersPage() {
               {o.priceType === 'floating'
                 ? <>Market {o.floatMarginPct != null && o.floatMarginPct >= 0 ? '+' : ''}{o.floatMarginPct}%</>
                 : <><span style={{ fontSize: 13, color: COLORS.muted, fontWeight: 500 }}>{currencySymbol(o.currency)}</span>{o.pricePerUsdc}</>}
-              {o.autoAccept && <span style={{ fontSize: 10.5, fontWeight: 700, color: COLORS.primaryText, marginLeft: 8, verticalAlign: 3 }}>INSTANT</span>}
+              {o.autoAccept && <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.primaryText, marginLeft: 8, verticalAlign: 3 }}>INSTANT</span>}
             </div>
             <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 2 }}>
               Limit {o.minAmount}–{o.status === 'active' ? Math.min(o.maxAmount, remaining.get(o.id) ?? o.maxAmount) : o.maxAmount} USDC · {o.paymentMethods.map(m => m.replace(/\s*\(Demo\)$/, '')).join(', ')}

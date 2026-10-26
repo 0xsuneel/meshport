@@ -35,6 +35,7 @@ import { ARC_EXPLORER } from '@/lib/chainExplorers'
 import { refreshBalancesAfterTx, BALANCES_STALE_EVENT } from '@/lib/balanceRefresh'
 import { readArcBalanceOrThrow } from '@/blockchain/BlockchainManager'
 import { useLeaveGuard } from '@/lib/leaveGuard'
+import { pressable } from '@/lib/pressable'
 
 // ── Token definitions ─────────────────────────────────────────────────────────
 // Arc Testnet: only USDC, EURC, cirBTC supported for swap (per Arc docs)
@@ -153,7 +154,7 @@ function SwapHistoryItem({ r, onOpen, flash, inPanel }: { r: SwapRecord; onOpen:
   return (
     // A clean list like the main Activity: no divider lines; the row last
     // opened flashes once when its receipt closes.
-    <div onClick={onOpen} className={flash ? 'mp-last-opened' : undefined} style={{
+    <div {...pressable(onOpen)} className={flash ? 'mp-last-opened' : undefined} style={{
       display: 'flex', alignItems: 'center', gap: 12, padding: inPanel ? '11px 16px' : '11px 4px',
       cursor: 'pointer',
     }}>
@@ -395,7 +396,7 @@ function SwapChecklist({ step, error, txHash, progress }: { step: string; error:
                 const h = (i === 0 ? progress.approveHash : swapHash)!
                 return (
                   <a href={`${ARC_EXPLORER}/tx/${h}`} target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize: 10, color: 'var(--brand-text)', fontFamily: 'monospace', marginTop: 2, display: 'block', textDecoration: 'none' }}>
+                    style={{ fontSize: 11, color: 'var(--brand-text)', fontFamily: 'monospace', marginTop: 2, display: 'block', textDecoration: 'none' }}>
                     {h.slice(0, 16)}…
                   </a>
                 )

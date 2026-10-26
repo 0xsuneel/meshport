@@ -23,6 +23,7 @@ import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { fetchPointHistory, rewardsUserId, rewardTaskOf } from '@/lib/rewards'
+import { pressable } from '@/lib/pressable'
 
 type ActivityTab = ActivityType | 'all' | 'p2p' | 'merchant' | 'rewards'
 
@@ -438,7 +439,7 @@ export function ActivityRow({ record, isFirst, isLast, onSelect, flash, inPanel 
   const oneLine: React.CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }
 
   return (
-    <div onClick={onSelect} data-activity-id={record.id} className={flash ? 'mp-last-opened' : undefined} style={{
+    <div {...pressable(onSelect)} data-activity-id={record.id} className={flash ? 'mp-last-opened' : undefined} style={{
       // A clean list: no card or divider lines, rows sit on the page.
       display: 'flex', alignItems: 'center', gap: 12, padding: inPanel ? '11px 16px' : '11px 4px',
       cursor: 'pointer',

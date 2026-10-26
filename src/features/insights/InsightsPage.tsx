@@ -181,7 +181,7 @@ function BarChart({ data, labels, highlightIdx, tooltip }:
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
         }}>
           {(max >= 3 ? [max, Math.round(max * 0.67), Math.round(max * 0.33), 0] : [max, '', '', 0]).map((v, i) => (
-            <span key={i} style={{ fontSize: 9, color: 'var(--text-muted)', textAlign: 'right', lineHeight: 1 }}>{v}</span>
+            <span key={i} style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right', lineHeight: 1 }}>{v}</span>
           ))}
         </div>
         {data.map((v, i) => {
@@ -205,7 +205,7 @@ function BarChart({ data, labels, highlightIdx, tooltip }:
       {/* x-axis */}
       <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: 22, paddingTop: 5 }}>
         {labels.map((l, i) => (
-          <span key={i} style={{ fontSize: 9.5, color: 'var(--text-secondary)' }}>{l}</span>
+          <span key={i} style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{l}</span>
         ))}
       </div>
     </div>
@@ -608,7 +608,7 @@ export function InsightsPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
               {/* Net Flow */}
               <div style={{ paddingRight: 8 }}>
-                <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
                   Net Flow
                 </div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: stats.netFlow >= 0 ? 'var(--success)' : 'var(--danger)', letterSpacing: '-.4px', lineHeight: 1 }}>
@@ -618,7 +618,7 @@ export function InsightsPage() {
 
               {/* Most Active Contact */}
               <div style={{ paddingRight: 8, minWidth: 0 }}>
-                <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 5 }}>Most Active Contact</div>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 5 }}>Most Active Contact</div>
                 {!stats.mostActiveContact ? (
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 4 }}>-</div>
                 ) : (
@@ -627,7 +627,7 @@ export function InsightsPage() {
                     width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
                     background: 'var(--brand)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 9, fontWeight: 700, color: '#fff',
+                    fontSize: 11, fontWeight: 700, color: '#fff',
                   }}>
                     {(stats.mostActiveContact[0] || 'U').toUpperCase()}
                   </div>
@@ -641,13 +641,13 @@ export function InsightsPage() {
 
               {/* Swap Volume */}
               <div>
-                <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
                   Swap Volume
                 </div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-text)', letterSpacing: '-.4px', lineHeight: 1, marginBottom: 2 }}>
                   ${formatAmount(stats.swapVol)}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{stats.swapCount} swaps</div>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{stats.swapCount} swaps</div>
               </div>
             </div>
 
@@ -706,9 +706,9 @@ export function InsightsPage() {
               display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 7 }}>
               {c.icon}
             </div>
-            <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 500, marginBottom: 5 }}>{c.label}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500, marginBottom: 5 }}>{c.label}</div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-.4px', marginBottom: 3 }}>{c.value}</div>
-            <div style={{ fontSize: 9, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 2, marginBottom: 6,
+            <div style={{ fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 2, marginBottom: 6,
               color: c.pctPositive
                 ? (c.pct >= 0 ? 'var(--success)' : 'var(--danger)')
                 : (c.pct <= 0 ? 'var(--success)' : 'var(--danger)') }}>
@@ -818,7 +818,7 @@ export function InsightsPage() {
                   transition: 'width .5s ease',
                 }}/>
               </div>
-              <div style={{ fontSize: 9.5, color: 'var(--text-secondary)', textAlign: 'right' }}>{count} txs</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', textAlign: 'right' }}>{count} txs</div>
             </div>
           ))}
 
@@ -892,7 +892,7 @@ export function InsightsPage() {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 {row.icon}
-                <span style={{ fontSize: 10.5, color: 'var(--text-secondary)' }}>{row.label}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{row.label}</span>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontSize: 11.5, fontWeight: 700,
@@ -900,7 +900,7 @@ export function InsightsPage() {
                   {row.value}
                 </div>
                 {row.sub && (
-                  <div style={{ fontSize: 9, color: 'var(--text-secondary)' }}>{row.sub}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{row.sub}</div>
                 )}
               </div>
             </div>

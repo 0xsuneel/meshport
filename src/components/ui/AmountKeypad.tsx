@@ -428,7 +428,8 @@ export function AmountKeypad({
               background: 'var(--surface)',
               borderRadius: '24px 24px 0 0',
               borderTop: '1px solid var(--border)',
-              boxShadow: 'var(--shadow-3)',
+              // The fill below its edge: pulled up a little, no gap shows.
+              boxShadow: 'var(--shadow-3), 0 80px 0 var(--surface)',
               padding: short ? '8px 20px calc(env(safe-area-inset-bottom, 0px) + 16px)' : '10px 24px 32px',
             }}
           >
