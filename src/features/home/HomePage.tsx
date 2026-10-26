@@ -2276,15 +2276,8 @@ function BannerIcon({ kind }: { kind: typeof FEATURE_BANNERS[number]['icon'] }) 
   return <ActionIcon name={kind === 'globe' ? 'hub' : kind} size={24} />
 }
 
-// Mobile Home: the white action panel starts this far up, behind the teal
-// hero's rounded bottom corners.
-const ACTIONS_TUCK = 24
-// The three Home cards' shared corner: the hero's all round, the tucked
-// cards' bottom corners.
+// The Home cards' shared corner radius (hero card and promo banner).
 const HERO_RADIUS = 24
-// Mobile Home: a card the width of the action card, tucked under it (TUCK px of it
-// sit behind that panel's rounded corners), full width, square corners.
-const BANNER_TUCK = 24
 function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (path: string) => void; docked?: boolean }) {
   const hub = useHubLabel()
   const [idx, setIdx] = useState(0)
@@ -2315,10 +2308,10 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
         if (Math.abs(dx) > 40) { e.preventDefault(); setIdx(i => (i + (dx < 0 ? 1 : n - 1)) % n) }
       }}
       style={docked ? {
-        // The column's 18px gap and the tuck are taken back so it starts behind the action panel.
+        // Its own card 14px under the hero card (the column's gap is 18).
         position: 'relative', zIndex: 1, overflow: 'hidden', cursor: 'pointer',
-        margin: `-${18 + BANNER_TUCK}px 0 0`, padding: `${BANNER_TUCK + 12}px 16px 10px`, borderRadius: `0 0 ${HERO_RADIUS}px ${HERO_RADIUS}px`,
-        // A deeper teal than the hero, so the three cards read as three layers.
+        margin: '-4px 0 0', padding: '14px 16px 10px', borderRadius: HERO_RADIUS,
+        // A deeper teal than the hero, so it reads as a separate card.
         background: 'color-mix(in srgb, var(--brand) 78%, #000)', display: 'flex', flexDirection: 'column', alignItems: 'stretch', boxSizing: 'border-box',
       } : {
         position: 'relative', overflow: 'hidden', height, borderRadius: 16, cursor: 'pointer',
@@ -4241,9 +4234,12 @@ export function HomePage() {
             </div>
           </div>
         ) : (
-          // Mobile hero: a teal card in the page's 20px margins, over the
-          // action card and the banner card (same width, each tucked under).
-          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: '16px 0', background: 'var(--brand)', borderRadius: HERO_RADIUS }}>
+          // Mobile hero: ONE card in the page's 20px margins with the theme's
+          // border (like Recent / Updates below) - the teal balance on top,
+          // the four actions inside it underneath.
+          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: HERO_RADIUS, overflow: 'hidden' }}>
+          <div style={{ position: 'relative', padding: '16px 0', background: 'var(--brand)',
+            borderRadius: `${HERO_RADIUS - 1}px ${HERO_RADIUS - 1}px ${HERO_RADIUS}px ${HERO_RADIUS}px` }}>
             {businessAccount ? (
               // Business accounts: the balance card only - no Cross-chain card
               // or carousel edges (Cross-chain Transfer is in More actions).
@@ -4272,15 +4268,11 @@ export function HomePage() {
               />
             )}
           </div>
-        )}
 
-        {/* ── QUICK ACTIONS - all 4, above the Multichain Hub card ──────────── */}
+        {/* ── QUICK ACTIONS - all 4, inside the hero card under the balance ── */}
         {/* Mobile only. Desktop is unaffected: it never rendered this row
             (its own Quick Actions card lives in column 2). */}
-        {!isDesktop && (
-        <div style={{ position: 'relative', zIndex: 2, margin: `-${18 + ACTIONS_TUCK}px 0 0`, padding: `${ACTIONS_TUCK + 14}px 10px 16px`,
-          background: 'var(--surface)', borderRadius: `0 0 ${HERO_RADIUS}px ${HERO_RADIUS}px` }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
+        <div style={{ padding: '16px 10px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
           {[
             { label: 'Pay',     path: '/pay',     icon: <ActionIcon name="pay" size={24} /> },
             { label: 'Receive', path: '/receive', icon: <ActionIcon name="receive" size={24} /> },
@@ -4312,7 +4304,7 @@ export function HomePage() {
             </div>
           ))}
         </div>
-        </div>
+          </div>
         )}
 
         {/* Business accounts not approved yet: the approval notice, under the action panel. */}
