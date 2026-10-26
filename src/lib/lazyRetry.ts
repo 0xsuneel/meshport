@@ -59,6 +59,22 @@ export async function recoverFromStaleBuild(force = false): Promise<boolean> {
   return true
 }
 
+/**
+ * Listener for Vite's `vite:preloadError`. It must NOT call preventDefault():
+ * when that event is cancelled, Vite resolves the failed import() with
+ * `undefined` instead of throwing (vite 5 preload helper:
+ * `baseModule().catch(handlePreloadError)`), so a route's
+ * `.then(m => ({ default: m.HomePage }))` threw "Cannot read properties of
+ * undefined (reading 'HomePage')" - not recognised as a stale build, so the
+ * user got "Something went wrong" instead of the update reload. Left alone,
+ * the import throws "Failed to fetch dynamically imported module", which
+ * lazyRetry (and the unhandledrejection handler) turn into a reload onto the
+ * current build.
+ */
+export function onVitePreloadError(e: Event): void {
+  console.warn('[stale build] a file of an older version failed to load', (e as Event & { payload?: unknown }).payload)
+}
+
 /** Call once the app has rendered fine, so a later deploy gets fresh retries. */
 export function markBuildHealthy() {
   try { sessionStorage.removeItem(RELOAD_KEY) } catch { /* ignore */ }
