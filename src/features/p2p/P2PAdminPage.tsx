@@ -634,7 +634,7 @@ export function P2PAdminPage() {
             </div>
             <div style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>User: <AddressChip address={banTarget} size={12} mono={false} /></div>
             <textarea value={banReason} onChange={e => setBanReason(e.target.value)} placeholder="Reason for ban" rows={3}
-              style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 10, fontSize: 13, marginBottom: 12, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+              style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 10, fontSize: 'max(var(--fs-field, 0px), 13px)', marginBottom: 12, boxSizing: 'border-box', fontFamily: 'inherit' }} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setBanTarget(null)} style={{ flex: 1, padding: '11px 0', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 13 }}>Cancel</button>
               <button onClick={doBan} style={{ flex: 1, padding: '11px 0', borderRadius: 10, border: '1px solid color-mix(in srgb, black 12%, transparent)', background: COLORS.error, color: '#fff', fontSize: 13, fontWeight: 700 }}>Confirm Ban</button>
@@ -692,7 +692,7 @@ export function P2PAdminPage() {
             <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
               <input value={adminChatInput} onChange={e => setAdminChatInput(e.target.value)} placeholder="Message both parties (e.g. ask for proof of payment)…"
                 onKeyDown={e => { if (e.key === 'Enter') doSendAdminMessage() }}
-                style={{ flex: 1, background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '9px 11px', fontSize: 12.5, boxSizing: 'border-box' }} />
+                style={{ flex: 1, background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '9px 11px', fontSize: 'max(var(--fs-field, 0px), 12.5px)', boxSizing: 'border-box' }} />
               <button onClick={doSendAdminMessage} disabled={!adminChatInput.trim() || sendingAdminMessage}
                 style={{ padding: '9px 14px', borderRadius: 10, border: 'none', background: COLORS.primary, color: '#fff', fontSize: 12, fontWeight: 700, opacity: (!adminChatInput.trim() || sendingAdminMessage) ? 0.5 : 1 }}>
                 {sendingAdminMessage ? '…' : 'Send'}
@@ -747,7 +747,7 @@ export function P2PAdminPage() {
                         Step 1: Pauser review. Freeze this trade and forward it to an Investigator - a reason is required so the Investigator knows why it was escalated.
                       </p>
                       <textarea value={freezeReason} onChange={e => setFreezeReason(e.target.value)} placeholder="Reason for freezing / forwarding to Investigator…" rows={2}
-                        style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 9, fontSize: 12.5, marginBottom: 8, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                        style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 9, fontSize: 'max(var(--fs-field, 0px), 12.5px)', marginBottom: 8, boxSizing: 'border-box', fontFamily: 'inherit' }} />
                       <button onClick={doFreezeDispute} disabled={!canFreeze || !freezeReason.trim() || freezing}
                         style={{ width: '100%', padding: '10px 0', borderRadius: 10, border: 'none', background: COLORS.warning, color: '#fff', fontSize: 12.5, fontWeight: 700, opacity: (!canFreeze || !freezeReason.trim() || freezing) ? 0.6 : 1 }}>
                         {freezing ? 'Signing…' : 'Freeze & Forward to Investigator'}
@@ -763,7 +763,7 @@ export function P2PAdminPage() {
                         A reason is required so Admin knows why this was forwarded.
                       </p>
                       <textarea value={investigateReason} onChange={e => setInvestigateReason(e.target.value)} placeholder="Reason for this recommendation…" rows={2}
-                        style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 9, fontSize: 12.5, marginBottom: 8, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                        style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 9, fontSize: 'max(var(--fs-field, 0px), 12.5px)', marginBottom: 8, boxSizing: 'border-box', fontFamily: 'inherit' }} />
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button onClick={() => doInvestigate(true)} disabled={!canInvestigate || !investigateReason.trim() || investigating}
                           style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: COLORS.success, color: '#fff', fontSize: 12, fontWeight: 700, opacity: (!canInvestigate || !investigateReason.trim() || investigating) ? 0.6 : 1 }}>
@@ -786,7 +786,7 @@ export function P2PAdminPage() {
                         </strong>. Connected wallet must be Admin and different from both whoever froze and whoever investigated this trade.
                       </p>
                       <textarea value={resolveNote} onChange={e => setResolveNote(e.target.value)} placeholder="Closing note (optional)…" rows={2}
-                        style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 9, fontSize: 12.5, marginBottom: 8, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                        style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 9, fontSize: 'max(var(--fs-field, 0px), 12.5px)', marginBottom: 8, boxSizing: 'border-box', fontFamily: 'inherit' }} />
                       <button onClick={doExecuteResolution} disabled={!canExecute || resolving}
                         style={{ width: '100%', padding: '11px 0', borderRadius: 10, border: 'none', background: COLORS.text, color: COLORS.bg, fontSize: 12.5, fontWeight: 700, opacity: (!canExecute || resolving) ? 0.6 : 1 }}>
                         {resolving ? 'Executing…' : `Execute: ${disputeOnChain.investigatedApproveRelease ? 'Release to Buyer' : 'Refund to Seller'}`}

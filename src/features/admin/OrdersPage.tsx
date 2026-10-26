@@ -104,7 +104,7 @@ export function OrdersPage() {
         {STATUS_TABS.map(t => <Chip key={t.key} active={status === t.key} onClick={() => setStatus(t.key)}>{t.label}</Chip>)}
       </div>
       <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search order number, username or wallet"
-        style={{ width: '100%', boxSizing: 'border-box', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '10px 14px', fontSize: 13, color: 'var(--text-primary)', outline: 'none' }} />
+        style={{ width: '100%', boxSizing: 'border-box', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '10px 14px', fontSize: 'max(var(--fs-field, 0px), 13px)', color: 'var(--text-primary)', outline: 'none' }} />
 
       {shown.length === 0 ? (
         <AdminCard>

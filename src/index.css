@@ -710,3 +710,13 @@ html.mp-locking #root { visibility: hidden; }
    press doesn't select the label. Content text stays selectable. */
 button, a, [role="button"], [role="tab"] { touch-action: manipulation; }
 button, [role="button"], [role="tab"] { -webkit-user-select: none; user-select: none; }
+
+/* Form fields on touch screens: at least 16px, or iOS zooms the whole page
+   into a field when it's focused (and doesn't zoom back out). Fields sized
+   smaller on desktop use max(var(--fs-field, 0px), <their size>), so they
+   keep that size with a mouse and get 16px on a phone; unsized fields get
+   this rule. Pinch-zoom stays on (index.html). */
+@media (pointer: coarse) {
+  :root { --fs-field: 16px; }
+  input, textarea, select { font-size: max(16px, 1em); }
+}

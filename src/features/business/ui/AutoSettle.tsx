@@ -64,7 +64,7 @@ export function AutoSettleCard({
             type="time"
             value={time}
             onChange={e => onTime(e.target.value)}
-            className="h-10 px-3 rounded-xl bg-bg border border-border text-text-primary text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand/40"
+            className="h-10 px-3 rounded-xl bg-bg border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] tabular-nums focus:outline-none focus:ring-2 focus:ring-brand/40"
           />
         </div>
       )}

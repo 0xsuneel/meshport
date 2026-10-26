@@ -680,7 +680,7 @@ export function BulkPayoutPage() {
           onChange={e => { if (e.target.value.length <= 120) setPurpose(e.target.value) }}
           placeholder="What's it for? (optional)"
           rows={2}
-          className="w-full bg-surface/50 border border-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-brand/50 resize-none"
+          className="w-full bg-surface/50 border border-border rounded-xl px-3 py-2.5 text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] text-text-primary placeholder-text-muted focus:outline-none focus:border-brand/50 resize-none"
         />
         <p className="text-right text-xs text-text-muted mt-1">{purpose.length}/120</p>
       </div>

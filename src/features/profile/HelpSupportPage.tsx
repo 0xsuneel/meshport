@@ -119,7 +119,7 @@ export function HelpSupportPage({ embedded, onClose }: { embedded?: boolean; onC
             onChange={e => setMessage(e.target.value)}
             placeholder="Tell us what's going on..."
             rows={4}
-            className="w-full bg-surface border border-border rounded-2xl px-4 py-3 text-sm text-text-primary placeholder-text-secondary outline-none focus:border-brand resize-none"
+            className="w-full bg-surface border border-border rounded-2xl px-4 py-3 text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] text-text-primary placeholder-text-secondary outline-none focus:border-brand resize-none"
           />
 
           <button onClick={handleSubmit} disabled={submitting}

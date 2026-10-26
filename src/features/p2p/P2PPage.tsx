@@ -295,7 +295,7 @@ export function P2PHubPage() {
     color: on ? COLORS.text : COLORS.muted,
   })
   const selectStyle: CSSProperties = {
-    flexShrink: 0, padding: '6px 10px', borderRadius: 999, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+    flexShrink: 0, padding: '6px 10px', borderRadius: 999, fontSize: 'max(var(--fs-field, 0px), 12.5px)', fontWeight: 600, cursor: 'pointer',
     border: 'none', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: COLORS.text, outline: 'none',
   }
 
@@ -346,7 +346,7 @@ export function P2PHubPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: COLORS.surface, borderRadius: 12, padding: '10px 12px', border: `1px solid ${COLORS.border}` }}>
                 <span style={{ fontSize: 13, color: COLORS.muted, whiteSpace: 'nowrap' }}>{buying ? 'I want to pay' : 'I want to receive'}</span>
                 <input inputMode="decimal" value={fiatAmount} onChange={e => setFiatAmount(sanitizeAmountInput(e.target.value, 2))} placeholder="Any amount"
-                  style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', color: COLORS.text, fontSize: 14, fontWeight: 600, textAlign: 'right' }} />
+                  style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', color: COLORS.text, fontSize: 'max(var(--fs-field, 0px), 14px)', fontWeight: 600, textAlign: 'right' }} />
                 <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{currency || 'fiat'}</span>
               </div>
               <div style={{ display: 'flex' }}>
@@ -612,7 +612,7 @@ export function P2PCreateOfferPage() {
     await doSubmit()
   }
 
-  const inputStyle: CSSProperties = { width: '100%', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', color: COLORS.text, border: '1px solid transparent', borderRadius: 12, padding: '12px 14px', fontSize: 14.5, outline: 'none', boxSizing: 'border-box' }
+  const inputStyle: CSSProperties = { width: '100%', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', color: COLORS.text, border: '1px solid transparent', borderRadius: 12, padding: '12px 14px', fontSize: 'max(var(--fs-field, 0px), 14.5px)', outline: 'none', boxSizing: 'border-box' }
   const labelStyle: CSSProperties = { fontSize: 13, color: COLORS.muted, marginBottom: 8, fontWeight: 600 }
   const sym = currencySymbol(currency)
   const pill = (on: boolean, color?: string): CSSProperties => ({
@@ -766,11 +766,11 @@ export function P2PCreateOfferPage() {
             </div>
             <div>
               <div style={labelStyle}>Terms (optional)</div>
-              <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={3} maxLength={500} placeholder="e.g. Pay from an account in your own name. No third-party payments." style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', fontSize: 13.5 }} />
+              <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={3} maxLength={500} placeholder="e.g. Pay from an account in your own name. No third-party payments." style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', fontSize: 'max(var(--fs-field, 0px), 13.5px)' }} />
             </div>
             <div>
               <div style={labelStyle}>Auto-reply (sent when an order opens)</div>
-              <textarea value={autoReply} onChange={e => setAutoReply(e.target.value)} rows={2} maxLength={280} placeholder='e.g. Hi! Pay to the account shown and tap "Transferred".' style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', fontSize: 13.5 }} />
+              <textarea value={autoReply} onChange={e => setAutoReply(e.target.value)} rows={2} maxLength={280} placeholder='e.g. Hi! Pay to the account shown and tap "Transferred".' style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', fontSize: 'max(var(--fs-field, 0px), 13.5px)' }} />
             </div>
             <div>
               <div style={labelStyle}>Region</div>
@@ -1835,7 +1835,7 @@ export function P2PTradePage() {
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
           placeholder={proofFile ? 'Add a note (optional)…' : 'Message your trade partner…'}
           style={{ flex: 1, minWidth: 0, background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 21, padding: '10px 16px', color: COLORS.text,
-            fontSize: 15, lineHeight: '20px', height: 42, maxHeight: 120, outline: 'none', resize: 'none', overflowY: 'hidden', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+            fontSize: 'max(var(--fs-field, 0px), 15px)', lineHeight: '20px', height: 42, maxHeight: 120, outline: 'none', resize: 'none', overflowY: 'hidden', fontFamily: 'inherit', boxSizing: 'border-box' }} />
         {/* mousedown/touch doesn't take focus from the box → keyboard stays open */}
         <button onMouseDown={e => e.preventDefault()} onTouchEnd={e => { e.preventDefault(); if (!uploadingProof) send() }} onClick={send}
           disabled={uploadingProof || (!input.trim() && !proofFile)} aria-label="Send"
@@ -1853,7 +1853,7 @@ export function P2PTradePage() {
               <p style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>Open a dispute</p>
               <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 16 }}>Tell us what went wrong - an admin will review the chat and step in.</p>
               <textarea value={disputeReason} onChange={e => setDisputeReason(e.target.value)} placeholder="e.g. Payment was marked sent but I never received it"
-                rows={4} style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12, fontSize: 13.5, marginBottom: 16, boxSizing: 'border-box', fontFamily: 'inherit', resize: 'none' }} />
+                rows={4} style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12, fontSize: 'max(var(--fs-field, 0px), 13.5px)', marginBottom: 16, boxSizing: 'border-box', fontFamily: 'inherit', resize: 'none' }} />
               <button onClick={handleOpenDispute} disabled={disputeSubmitting} style={{ width: '100%', padding: '14px 0', borderRadius: 14, border: 'none', background: COLORS.warning, color: '#1A1A1A', fontSize: 14, fontWeight: 700, marginBottom: 10, opacity: disputeSubmitting ? 0.6 : 1 }}>
                 {disputeSubmitting ? 'Submitting…' : 'Submit Dispute'}
               </button>
@@ -2287,7 +2287,7 @@ export function P2PMyOffersPage() {
               </div>
               <input inputMode="decimal" value={editingOffer.priceType === 'floating' ? editMargin : editPrice}
                 onChange={e => editingOffer.priceType === 'floating' ? setEditMargin(signedAmountInput(e.target.value, 2)) : setEditPrice(sanitizeAmountInput(e.target.value, 2))}
-                style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+                style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 'max(var(--fs-field, 0px), 14px)', outline: 'none', boxSizing: 'border-box' }} />
             </div>
 
             <div style={{ marginBottom: 14 }}>
@@ -2296,12 +2296,12 @@ export function P2PMyOffersPage() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>Min per trade</div>
                   <input inputMode="decimal" value={editMinAmount} onChange={e => setEditMinAmount(sanitizeAmountInput(e.target.value, tokenDecimals('USDC')))}
-                    style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+                    style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 'max(var(--fs-field, 0px), 14px)', outline: 'none', boxSizing: 'border-box' }} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>Max per trade</div>
                   <input inputMode="decimal" value={editMaxAmount} onChange={e => setEditMaxAmount(sanitizeAmountInput(e.target.value, tokenDecimals('USDC')))}
-                    style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+                    style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 'max(var(--fs-field, 0px), 14px)', outline: 'none', boxSizing: 'border-box' }} />
                 </div>
               </div>
               {editingOffer.offerType === 'sell' && (
@@ -2334,7 +2334,7 @@ export function P2PMyOffersPage() {
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 6, fontWeight: 600 }}>Terms (optional)</div>
               <textarea value={editTerms} onChange={e => setEditTerms(e.target.value)} rows={3} placeholder="Any notes for the other party…"
-                style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
+                style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 'max(var(--fs-field, 0px), 14px)', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
             </div>
 
             <button onClick={submitEdit} disabled={editSaving || !editPriceOk || editMethodNames.length === 0 || !editLimitsValid} style={{
@@ -2372,7 +2372,7 @@ export function P2PMyOffersPage() {
               Deposits additional USDC into this offer's escrow and raises its available capacity by the same amount.
             </p>
             <input inputMode="decimal" value={topUpAmount} onChange={e => setTopUpAmount(sanitizeAmountInput(e.target.value, tokenDecimals('USDC')))} placeholder="Amount in USDC"
-              style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 14, boxSizing: 'border-box' }} />
+              style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 12, fontSize: 'max(var(--fs-field, 0px), 14px)', marginBottom: 14, boxSizing: 'border-box' }} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setToppingUpOffer(null)} style={{ flex: 1, padding: '11px 0', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 13 }}>Cancel</button>
               <button onClick={submitTopUp} disabled={topUpSaving || !topUpAmount || parseFloat(topUpAmount) <= 0}

@@ -215,7 +215,7 @@ export function StoreForm({
           value={name}
           onChange={e => onName(e.target.value)}
           placeholder="e.g. Sharma General Store"
-          className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
+          className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] focus:outline-none focus:ring-2 focus:ring-brand/40"
         />
       </label>
 
@@ -225,7 +225,7 @@ export function StoreForm({
           <select
             value={type}
             onChange={e => onType(e.target.value)}
-            className="w-full h-12 pl-4 pr-10 rounded-2xl bg-card border border-border text-text-primary text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-brand/40"
+            className="w-full h-12 pl-4 pr-10 rounded-2xl bg-card border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] appearance-none focus:outline-none focus:ring-2 focus:ring-brand/40"
           >
             {types.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -240,7 +240,7 @@ export function StoreForm({
           value={address}
           onChange={e => onAddress(e.target.value)}
           placeholder="e.g. 12 MG Road, Bangalore"
-          className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
+          className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] focus:outline-none focus:ring-2 focus:ring-brand/40"
         />
       </label>
 
@@ -252,7 +252,7 @@ export function StoreForm({
           onChange={e => onTaxId(e.target.value)}
           maxLength={40}
           placeholder="GST, VAT, EIN, ABN…"
-          className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
+          className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] focus:outline-none focus:ring-2 focus:ring-brand/40"
         />
         <span className="text-xs text-text-muted">This store's own tax number — leave empty to use the business's.</span>
       </label>

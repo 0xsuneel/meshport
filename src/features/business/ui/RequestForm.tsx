@@ -36,7 +36,7 @@ export const TextInput = React.forwardRef<HTMLInputElement, TextInputProps>(
       <input
         ref={ref}
         {...rest}
-        className={`w-full rounded-2xl bg-surface border border-border px-4 py-3.5 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-brand-text transition-colors min-h-[52px] ${className}`}
+        className={`w-full rounded-2xl bg-surface border border-border px-4 py-3.5 text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] text-text-primary placeholder:text-text-muted outline-none focus:border-brand-text transition-colors min-h-[52px] ${className}`}
       />
     )
   },

@@ -68,7 +68,7 @@ export function MaintenancePage() {
           placeholder="MeshPort is under maintenance."
           style={{
             width: '100%', marginTop: 8, background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 14, padding: 12, color: 'var(--text-primary)', fontSize: 14, resize: 'vertical', fontFamily: 'inherit',
+            borderRadius: 14, padding: 12, color: 'var(--text-primary)', fontSize: 'max(var(--fs-field, 0px), 14px)', resize: 'vertical', fontFamily: 'inherit',
           }}
         />
         <button

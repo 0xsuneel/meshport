@@ -118,7 +118,7 @@ export function SupportTicketsPage() {
               onChange={e => setReply(e.target.value)}
               placeholder="Type your response…"
               rows={4}
-              style={{ width: '100%', background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)', borderRadius: 14, padding: 12, fontSize: 13, color: 'var(--text-primary)', outline: 'none', resize: 'none', marginBottom: 12 }}
+              style={{ width: '100%', background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)', borderRadius: 14, padding: 12, fontSize: 'max(var(--fs-field, 0px), 13px)', color: 'var(--text-primary)', outline: 'none', resize: 'none', marginBottom: 12 }}
             />
 
             <div style={{ display: 'flex', gap: 8 }}>

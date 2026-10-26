@@ -154,7 +154,7 @@ export function HelpView({
               placeholder="0x…"
               value={txHash}
               onChange={(e) => onTxHash(e.target.value)}
-              className="flex-1 bg-transparent text-sm font-mono text-text-primary placeholder:text-text-muted outline-none"
+              className="flex-1 bg-transparent text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] font-mono text-text-primary placeholder:text-text-muted outline-none"
             />
           </div>
         </div>

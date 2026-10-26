@@ -257,7 +257,7 @@ export function DesktopHeader() {
               onChange={e => { setQuery(e.target.value); setOpen(true) }}
               onFocus={() => setOpen(true)}
               placeholder="Search people, services…"
-              style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 13.5 }}
+              style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 'max(var(--fs-field, 0px), 13.5px)' }}
             />
             {query && (
               <button
