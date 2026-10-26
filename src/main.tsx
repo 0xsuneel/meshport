@@ -33,19 +33,33 @@ import './lib/leaveGuard'
 import App from './App.tsx'
 import './index.css'
 import { clearLegacyData } from './lib/clearLegacyData'
-import { recoverFromStaleBuild, markBuildHealthy } from './lib/lazyRetry'
+import { recoverFromStaleBuild, markBuildHealthy, onVitePreloadError, isChunkLoadError } from './lib/lazyRetry'
 
-// A chunk preload failing (app updated while this tab was open) → reload onto
-// the new build instead of crashing. Once the app has run fine for a bit,
-// reset the retry counter so the next deploy gets fresh retries too.
-window.addEventListener('vite:preloadError', (e) => {
-  e.preventDefault()
-  recoverFromStaleBuild()
-})
+// A file of an older version failing to load (app updated while this tab was
+// open, or an old installed page on a slow network) → reload onto the current
+// build. The import is left to throw (see onVitePreloadError): lazyRetry
+// reloads for a page, the unhandledrejection handler below for anything else.
+// Once the app has run fine for a bit, reset the retry counter so the next
+// deploy gets fresh retries too.
+window.addEventListener('vite:preloadError', onVitePreloadError)
 window.setTimeout(markBuildHealthy, 15_000)
+// The app's stylesheet failed (an older index.html whose CSS a deploy
+// replaced): the app would run with no styles at all - reload onto the
+// current build instead.
+{
+  const css = document.querySelector<HTMLLinkElement>('link[rel="stylesheet"][href*="/assets/"]')
+  if (css && !css.sheet) {
+    const failed = () => { if (!css.sheet) void recoverFromStaleBuild() }
+    css.addEventListener('error', failed)
+    window.addEventListener('load', failed, { once: true })
+  }
+}
 // Uncaught errors reach client_errors too (the error screen reports its own).
 window.addEventListener('error', e => { void import('./lib/errorReport').then(m => m.reportClientError('uncaught', e.error ?? e.message)) })
-window.addEventListener('unhandledrejection', e => { void import('./lib/errorReport').then(m => m.reportClientError('rejection', e.reason)) })
+window.addEventListener('unhandledrejection', e => {
+  if (isChunkLoadError(e.reason)) void recoverFromStaleBuild()
+  void import('./lib/errorReport').then(m => m.reportClientError('rejection', e.reason))
+})
 // The ?_v=… an update reload adds is only for the service worker's handling of
 // that one page load (sw.ts) - take it out of the address bar straight away so
 // the app never shows meshport.xyz/?_v=123… instead of the normal address.
