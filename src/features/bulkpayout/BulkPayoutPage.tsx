@@ -850,8 +850,8 @@ export function BulkPayoutPage() {
             import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
             setStep('review')
           }} disabled={bulkInsufficient}
-          className="flex-1 py-3.5 rounded-2xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40"
-          style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
+          className="flex-1 py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 disabled:opacity-40"
+          style={{ background: 'var(--mustard)', color: 'var(--mustard-ink)', border: 'none' }}>
           Review Payout <Send className="w-4 h-4" />
         </button>
       )}
@@ -871,8 +871,8 @@ export function BulkPayoutPage() {
           else executePayout()
         }}
         disabled={bulkInsufficient}
-        className="flex-1 py-3.5 rounded-2xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40"
-        style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
+        className="flex-1 py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 disabled:opacity-40"
+        style={{ background: 'var(--mustard)', color: 'var(--mustard-ink)', border: 'none' }}>
         Pay <Send className="w-4 h-4" />
       </button>
     </div>

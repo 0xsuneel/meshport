@@ -522,7 +522,7 @@ export function InsightsPage() {
           style={{
             borderRadius: 20,
             background: 'var(--surface)',
-            border: '1px solid color-mix(in srgb, var(--brand) 28%, transparent)',
+            border: '1px solid var(--soft-edge)', boxShadow: 'var(--card-soft)',
             padding: '16px 16px 14px', position: 'relative', overflow: 'hidden',
           }}
         >
@@ -585,9 +585,9 @@ export function InsightsPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, minWidth: 0 }}>
                   <div style={{
                     width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
-                    background: 'var(--brand)',
+                    background: 'var(--tile-mint)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 700, color: '#fff',
+                    fontSize: 11, fontWeight: 700, color: 'var(--tile-mint-ink)',
                   }}>
                     {(stats.mostActiveContact[0] || 'U').toUpperCase()}
                   </div>
@@ -626,7 +626,7 @@ export function InsightsPage() {
           <div
             key={c.label}
             style={{
-              background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
+              background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--card-soft)',
               borderRadius: 16, padding: '11px 10px 10px', overflow: 'hidden',
             }}
           >
