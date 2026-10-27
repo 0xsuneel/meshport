@@ -710,9 +710,14 @@ body { overflow-wrap: break-word; }
    without the blur they look the same; popups live outside #root and keep
    their own styling. */
 @media (hover: none) and (pointer: coarse) {
-  #root *, #root *::before, #root *::after {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+  /* iPhone/iPad keep the frosting: the flash was Android Chrome's, and
+     WebKit draws backdrop blur natively (-webkit-touch-callout is only
+     supported by iOS WebKit, which every iOS browser uses). */
+  @supports not (-webkit-touch-callout: none) {
+    #root *, #root *::before, #root *::after {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
   }
 }
 
