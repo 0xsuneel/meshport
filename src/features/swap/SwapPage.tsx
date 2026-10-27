@@ -1823,7 +1823,7 @@ export function SwapPage() {
                 <button onClick={() => { setQuoteChangedNotice(''); setPassEntry(''); setPassError(''); setShowPasscodeSheet(true) }}
                   disabled={gasShortfall > 0 || !estimate}
                   className="w-full rounded-2xl text-base font-bold active:scale-[0.98] transition-transform disabled:opacity-40 disabled:active:scale-100"
-                  style={{ height: 56, background: 'var(--mustard)', color: 'var(--mustard-ink)', border: 'none' }}>
+                  style={{ height: 56, background: 'var(--brand)', color: '#fff', border: 'none' }}>
                   Confirm swap
                 </button>
                 <button onClick={() => { setStep('idle'); setError(''); setQuoteChangedNotice('') }}
@@ -1939,7 +1939,7 @@ export function SwapPage() {
             onClick={() => { setPassEntry(''); setPassError(''); handleReview() }}
             disabled={!canReview}
             className="w-full py-4 rounded-2xl text-base font-bold disabled:opacity-35 transition-opacity"
-            style={{ background: 'var(--mustard)', color: 'var(--mustard-ink)', border: 'none' }}>
+            style={{ background: 'var(--brand)', color: '#fff', border: 'none' }}>
             {quoteLoading ? 'Getting quote...' : `Swap ${tokenIn.id} → ${tokenOut.id}`}
           </motion.button>
           </div>

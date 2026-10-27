@@ -1607,9 +1607,9 @@ export function PaySendPage() {
                     disabled={!ready}
                     className="w-full py-4 rounded-2xl text-[15px] font-bold active:scale-[.98]"
                     style={{
-                      background: ready ? 'var(--mustard)' : 'var(--border)',
+                      background: ready ? 'var(--brand)' : 'var(--border)',
                       border: 'none',
-                      color: ready ? 'var(--mustard-ink)' : 'var(--text-secondary)',
+                      color: ready ? '#fff' : 'var(--text-secondary)',
                       opacity: ready ? 1 : 0.5,
                     }}>
                     Review
@@ -1863,9 +1863,8 @@ export function PaySendPage() {
             {!isProcessing && !isDone && processStage !== 'failed' && (
               <div className="px-5 pb-6 pt-2 flex-shrink-0">
                 <button onClick={openPasscodeSheet}
-                  // Pay is the warm accent, as on Home's balance card.
                   className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-[15px] font-bold active:scale-[.98]"
-                  style={{ background: 'var(--mustard)', color: 'var(--mustard-ink)', border: 'none' }}>
+                  style={{ background: 'var(--brand)', color: '#fff', border: 'none' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 118 0v3" />
                   </svg>
@@ -2035,7 +2034,7 @@ function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast
         )}
       </div>
       <span className="flex-shrink-0 rounded-full px-4 text-[14px] font-bold flex items-center"
-        style={{ height: 32, background: 'var(--mustard)', color: 'var(--mustard-ink)' }}>Pay</span>
+        style={{ height: 32, background: 'var(--brand)', color: '#fff' }}>Pay</span>
     </button>
   )
 }

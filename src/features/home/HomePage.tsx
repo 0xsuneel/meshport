@@ -3916,7 +3916,7 @@ export function HomePage() {
                 <div {...pressable(() => navigate('/profile'), 'Open profile')} className="mp-press"
                   style={{ cursor: 'pointer', flexShrink: 0, width: 38, height: 38, borderRadius: '50%', padding: 2, background: 'var(--brand)', boxSizing: 'border-box' }}>
                   <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--bg)', boxSizing: 'border-box',
-                    background: 'var(--mustard)', color: 'var(--mustard-ink)', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700 }}>
+                    background: 'var(--brand)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700 }}>
                     {user?.avatar
                       ? <img src={user.avatar.split('?')[0]} alt="avatar" loading="eager" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       : displayName.charAt(0).toUpperCase()}
