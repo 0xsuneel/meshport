@@ -3293,7 +3293,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 <button onClick={() => setFormSheet(1)}
                   className="active:scale-[.98] transition"
                   style={{ width: '100%', padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, border: 'none',
-                    cursor: 'pointer', color: '#fff', background: 'var(--brand)' }}>
+                    cursor: 'pointer', color: 'var(--mustard-ink)', background: 'var(--mustard)' }}>
                   Transfer Funds
                 </button>
               </div>
