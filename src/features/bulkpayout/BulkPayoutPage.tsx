@@ -851,7 +851,7 @@ export function BulkPayoutPage() {
             setStep('review')
           }} disabled={bulkInsufficient}
           className="flex-1 py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 disabled:opacity-40"
-          style={{ background: 'var(--mustard)', color: 'var(--mustard-ink)', border: 'none' }}>
+          style={{ background: 'var(--brand)', color: '#fff', border: 'none' }}>
           Review Payout <Send className="w-4 h-4" />
         </button>
       )}
@@ -872,7 +872,7 @@ export function BulkPayoutPage() {
         }}
         disabled={bulkInsufficient}
         className="flex-1 py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 disabled:opacity-40"
-        style={{ background: 'var(--mustard)', color: 'var(--mustard-ink)', border: 'none' }}>
+        style={{ background: 'var(--brand)', color: '#fff', border: 'none' }}>
         Pay <Send className="w-4 h-4" />
       </button>
     </div>

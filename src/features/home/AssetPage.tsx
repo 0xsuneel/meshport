@@ -129,7 +129,7 @@ export function AssetPage() {
       <div style={{ maxWidth: isDesktop ? 560 : undefined, margin: '0 auto' }}>
         {/* Balance and actions: one teal card, the same as Home's balance
             card - the token, its value, then the actions as pills (Pay in
-            the warm accent). */}
+            Home's balance card). */}
         <div style={{ margin: '4px 20px 24px', padding: '16px 16px', borderRadius: 22, color: '#fff',
           background: 'var(--glass-sheen), var(--brand)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -144,14 +144,12 @@ export function AssetPage() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${actions.length}, minmax(0, 1fr))`, gap: 6, marginTop: 16 }}>
             {actions.map(a => {
-              const accent = a.label === 'Pay'
               return (
                 <button key={a.label} onClick={() => navigate(a.path)} className="mp-press"
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 40, borderRadius: 20, border: 'none',
                     cursor: 'pointer', font: 'inherit', fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', minWidth: 0,
-                    background: accent ? 'var(--mustard)' : 'rgba(255,255,255,0.12)',
-                    color: accent ? 'var(--mustard-ink)' : '#fff',
-                    boxShadow: accent ? 'none' : 'inset 0 0 0 1px rgba(255,255,255,0.16)' }}>
+                    background: 'rgba(255,255,255,0.12)', color: '#fff',
+                    boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.16)' }}>
                   <ActionIcon name={a.icon} size={15} color="currentColor" />
                   {a.label}
                 </button>

@@ -127,7 +127,7 @@ export function ProfilePage() {
         <div style={{ padding: 3, borderRadius: '50%', background: 'var(--brand)' }}>
           {user.avatar
             ? <Avatar name={displayName} src={user.avatar} size="xl" className="!w-[72px] !h-[72px]" style={{ border: '3px solid var(--bg)', boxSizing: 'border-box' }} />
-            : <div style={{ width: 72, height: 72, borderRadius: '50%', border: '3px solid var(--bg)', boxSizing: 'border-box', background: 'var(--mustard)', color: 'var(--mustard-ink)', display: 'grid', placeItems: 'center', fontSize: 24, fontWeight: 700 }}>
+            : <div style={{ width: 72, height: 72, borderRadius: '50%', border: '3px solid var(--bg)', boxSizing: 'border-box', background: 'var(--brand)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 24, fontWeight: 700 }}>
                 {displayName.trim().split(/\s+/).map(w => w.charAt(0)).join('').slice(0, 2).toUpperCase()}
               </div>}
         </div>

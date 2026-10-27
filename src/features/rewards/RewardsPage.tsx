@@ -430,7 +430,7 @@ export function RewardsPage() {
           </div>
         </div>
         <div style={{ height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.16)', marginTop: 14, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${Math.min(100, (totalPoints / MIN_CLAIM_POINTS) * 100)}%`, background: 'var(--mustard)', borderRadius: 3, transition: 'width .4s' }} />
+          <div style={{ height: '100%', width: `${Math.min(100, (totalPoints / MIN_CLAIM_POINTS) * 100)}%`, background: '#fff', borderRadius: 3, transition: 'width .4s' }} />
         </div>
       </div>
       <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '10px 4px 0' }}>

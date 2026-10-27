@@ -428,7 +428,7 @@ export function P2PHubPage() {
           )}
         </button>
         <button onClick={() => navigate('/p2p/my-offers')} style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>My ads</button>
-        <button onClick={() => navigate('/p2p/create')} disabled={!walletAddress} style={{ flex: 1.15, padding: '13px 0', borderRadius: 14, background: 'var(--mustard)', border: 'none', color: 'var(--mustard-ink)', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        <button onClick={() => navigate('/p2p/create')} disabled={!walletAddress} style={{ flex: 1.15, padding: '13px 0', borderRadius: 14, background: 'var(--brand)', border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           <Plus size={15} /> Post ad
         </button>
       </div>

@@ -147,7 +147,7 @@ export function MyRequestsPage() {
             ) : shown.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '36px 12px', color: 'var(--text-secondary)', fontSize: 14 }}>
                 <p style={{ margin: '0 0 14px' }}>{filter === 'all' ? "You haven't requested a payment yet." : `No ${filter} requests.`}</p>
-                <button onClick={newRequest} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', background: 'var(--mustard)', color: 'var(--mustard-ink)', fontSize: 14, fontWeight: 700 }}>
+                <button onClick={newRequest} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', background: 'var(--brand)', color: '#fff', fontSize: 14, fontWeight: 700 }}>
                   <Plus size={16} /> Request payment
                 </button>
               </div>
