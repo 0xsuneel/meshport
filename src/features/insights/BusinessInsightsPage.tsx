@@ -44,7 +44,7 @@ const chainName = (id: string) => id === 'Arc_Testnet' ? 'Arc'
   : id.replace(/_(Sepolia|Testnet|Fuji|Apothem)$/, '').replace(/_/g, ' ')
 const chainLogo = (id: string) => id === 'Arc_Testnet' ? '/logos/chains/arc.svg' : chainLogoSrc(id)
 
-const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: 16 }
+const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 20, padding: 16 }
 const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }
 
 function Change({ value, suffix }: { value: number; suffix: string }) {

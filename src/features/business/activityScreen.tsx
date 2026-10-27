@@ -96,7 +96,7 @@ export function ActivityScreen({ open, onBack }: { open: boolean; onBack: () => 
             {groups.map(([key, items]) => (
               <div key={key}>
                 <p className="px-1 pt-2 pb-2 text-xs font-semibold text-text-muted">{formatDay(new Date(key).toISOString())}</p>
-                <div className="rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
+                <div className="rounded-2xl bg-surface soft-card overflow-hidden divide-y divide-border">
                   {items.map(r => (
                     <div key={r.id} className="flex items-start gap-3 px-4 py-3">
                       <span className="flex-1 min-w-0">

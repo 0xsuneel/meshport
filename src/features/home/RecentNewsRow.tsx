@@ -35,7 +35,7 @@ function Box({ title, onViewAll, children }: { title: string; onViewAll?: () => 
   // Desktop: the same drop shadow as Home's other desktop cards.
   const isDesktop = useMediaQuery('(min-width: 980px)')
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 10, minWidth: 0, boxShadow: isDesktop ? 'var(--shadow-1)' : undefined }}>
+    <div style={{ background: 'var(--glass-fill)', border: isDesktop ? '1px solid var(--border)' : '1px solid var(--glass-edge)', borderRadius: 16, padding: 10, minWidth: 0, boxShadow: isDesktop ? 'var(--shadow-1)' : 'var(--glass-card)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4, marginBottom: 4 }}>
         <span style={{ fontSize: 'min(15px, 4.2vw)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}>{title}</span>
         {onViewAll && (

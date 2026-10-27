@@ -104,19 +104,19 @@ export function CircleWalletPage() {
         )}
 
         {phase === 'off' && (
-          <div className="bg-surface border border-border rounded-3xl p-5">
+          <div className="bg-surface soft-card rounded-3xl p-5">
             <p className="text-sm text-text-secondary">Circle wallets aren&apos;t switched on yet.</p>
           </div>
         )}
 
         {phase === 'meshport' && (
-          <div className="bg-surface border border-border rounded-3xl p-5">
+          <div className="bg-surface soft-card rounded-3xl p-5">
             <p className="text-sm text-text-secondary">Sign in to MeshPort with Google to use a Circle wallet.</p>
           </div>
         )}
 
         {phase === 'signin' && (
-          <div className="bg-surface border border-border rounded-3xl p-5 space-y-3">
+          <div className="bg-surface soft-card rounded-3xl p-5 space-y-3">
             <p className="text-sm font-semibold text-text-primary">Sign in to your Circle wallet on this device</p>
             <p className="text-sm text-text-secondary">Use the same Google account as MeshPort.</p>
             {circleGoogleConfigured() && (
@@ -128,7 +128,7 @@ export function CircleWalletPage() {
         )}
 
         {phase === 'ready' && (
-          <div className="bg-surface border border-border rounded-3xl p-5 space-y-3">
+          <div className="bg-surface soft-card rounded-3xl p-5 space-y-3">
             <div className="flex items-center gap-2 text-success text-sm font-semibold">
               <ShieldCheck className="w-4 h-4" /> {inUse ? 'Your MeshPort wallet is this Circle wallet' : 'Signed in to Circle'}
             </div>

@@ -101,7 +101,7 @@ export function HelpSupportPage({ embedded, onClose }: { embedded?: boolean; onC
 
       <div className={embedded ? 'px-5 pb-6 pt-4 space-y-6 max-h-[70vh] overflow-y-auto' : 'px-5 pb-8 pt-2 space-y-6'}>
         {/* ── New ticket form ── */}
-        <div className="bg-surface border border-border rounded-3xl p-5 space-y-4">
+        <div className="bg-surface soft-card rounded-3xl p-5 space-y-4">
           <p className="text-sm font-semibold text-text-primary">Describe your issue</p>
 
           <div className="flex flex-wrap gap-2">
@@ -137,7 +137,7 @@ export function HelpSupportPage({ embedded, onClose }: { embedded?: boolean; onC
           {loadingTickets ? (
             <SkeletonCards count={2} />
           ) : tickets.length === 0 ? (
-            <div className="bg-surface border border-border rounded-3xl p-6 text-center">
+            <div className="bg-surface soft-card rounded-3xl p-6 text-center">
               <p className="text-sm text-text-secondary">No tickets yet - anything you submit above will show up here.</p>
             </div>
           ) : (
@@ -145,7 +145,7 @@ export function HelpSupportPage({ embedded, onClose }: { embedded?: boolean; onC
               {tickets.map(t => {
                 const s = STATUS_STYLE[t.status]
                 return (
-                  <div key={t.id} className="bg-surface border border-border rounded-3xl p-4 space-y-3">
+                  <div key={t.id} className="bg-surface soft-card rounded-3xl p-4 space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-text-primary">{t.subject}</p>

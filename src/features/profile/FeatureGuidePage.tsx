@@ -50,7 +50,7 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
         <p className="text-sm text-text-secondary px-1">Everything MeshPort can do, with the real screens. Tap a feature to jump to it.</p>
 
         {/* ── All features ── */}
-        <div className="bg-surface border border-border rounded-3xl p-4 space-y-4">
+        <div className="bg-surface soft-card rounded-3xl p-4 space-y-4">
           {sections.map(section => (
             <div key={section.heading}>
               <p className="text-[12px] font-semibold text-text-secondary mb-2 px-1">{section.heading}</p>

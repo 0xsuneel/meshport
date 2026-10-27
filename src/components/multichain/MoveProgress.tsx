@@ -99,7 +99,7 @@ export function MoveProgress({
     requestAnimationFrame(() => listRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }))
   }
 
-  const card = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 22, padding: 16 } as const
+  const card = { background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 22, padding: 16 } as const
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 12 }}>

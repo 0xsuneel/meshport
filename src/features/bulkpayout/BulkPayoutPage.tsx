@@ -383,7 +383,7 @@ export function BulkPayoutPage() {
   // desktop's wider layout.
 
   const addRecipientsSection = (
-    <div className={isDesktop ? "bg-surface border border-border rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0" : "bg-surface border border-border rounded-2xl overflow-hidden"}>
+    <div className={isDesktop ? "bg-surface soft-card rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0" : "bg-surface border border-border rounded-2xl overflow-hidden"}>
       <div className={isDesktop ? "px-4 pt-4 pb-3 border-b border-border flex-shrink-0" : "px-4 pt-4 pb-3 border-b border-border"}>
         <p className="text-sm font-semibold text-text-primary">1. Add Recipients</p>
         {/* Mode tabs */}
@@ -670,7 +670,7 @@ export function BulkPayoutPage() {
   )
 
   const purposeSection = (
-    <div className="bg-surface border border-border rounded-2xl p-4">
+    <div className="bg-surface soft-card rounded-2xl p-4">
       <p className="text-sm font-semibold text-text-primary mb-3">
         2. Purpose <span className="text-text-secondary font-normal text-xs">(Optional)</span>
       </p>
@@ -692,7 +692,7 @@ export function BulkPayoutPage() {
   // higher up on shorter browser windows without needing to scroll past
   // the OS taskbar to reach them. Mobile sizing untouched.
   const summarySection = recipients.length > 0 && (
-    <div className={isDesktop ? "bg-surface border border-border rounded-2xl p-3" : "bg-surface border border-border rounded-2xl p-4"}>
+    <div className={isDesktop ? "bg-surface soft-card rounded-2xl p-3" : "bg-surface border border-border rounded-2xl p-4"}>
       <p className={isDesktop ? "text-sm font-semibold text-text-primary mb-2" : "text-sm font-semibold text-text-primary mb-3"}>3. Summary</p>
       {insufficientNote && <div className="mb-3">{insufficientNote}</div>}
       <div className={isDesktop ? "grid grid-cols-2 gap-2 mb-2" : "grid grid-cols-2 gap-3 mb-3"}>
@@ -732,7 +732,7 @@ export function BulkPayoutPage() {
   const reviewContent = (
     <>
       {insufficientNote}
-      <div className="bg-surface border border-border rounded-2xl p-4 space-y-2">
+      <div className="bg-surface soft-card rounded-2xl p-4 space-y-2">
         <div className="flex justify-between"><span className="text-text-secondary text-sm">Recipients</span><span className="text-text-primary text-sm font-semibold">{resolvedCount}</span></div>
         <div className="flex justify-between"><span className="text-text-secondary text-sm">Total Amount</span><span className="text-success text-sm font-semibold">${formatAmount(totalAmount)} USDC</span></div>
         <div className="flex justify-between"><span className="text-text-secondary text-sm">Network</span><span className="text-text-primary text-sm font-semibold">Arc Testnet · 1 Batch Tx</span></div>
@@ -795,7 +795,7 @@ export function BulkPayoutPage() {
           <ExternalLink className="w-4 h-4" /> View transaction on ArcScan
         </a>
       )}
-      <div className="bg-surface border border-border rounded-2xl divide-y divide-border">
+      <div className="bg-surface soft-card rounded-2xl divide-y divide-border">
         {results.map(r => (
           <div key={r.recipient.id} className="flex items-center gap-3 px-4 py-3">
             {r.status === 'success' ? <CheckCircle className="w-5 h-5 text-success flex-shrink-0" /> : <XCircle className="w-5 h-5 text-danger flex-shrink-0" />}

@@ -72,7 +72,7 @@ function Badge() {
 
 export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with MeshPort or any wallet', tag = 'USDC · any network', paid = false, children, top }: QrCardProps) {
   return (
-    <div className="w-full max-w-[340px] mx-auto rounded-3xl overflow-hidden bg-surface border border-border" style={{ boxShadow: 'var(--shadow-1)' }}>
+    <div className="w-full max-w-[340px] mx-auto rounded-3xl overflow-hidden bg-surface soft-card" style={{ boxShadow: 'var(--shadow-1)' }}>
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 text-white" style={{ background: TEAL }}>
         <Badge />

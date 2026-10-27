@@ -190,7 +190,7 @@ export function OverviewView({
 
       {/* ── Settle bar (always) ──────────────────────────────── */}
       <div className="mx-5 flex flex-col gap-2">
-        {!toSettle.hidden && <div className="flex items-center gap-3 rounded-2xl bg-card border border-border px-3.5 py-3">
+        {!toSettle.hidden && <div className="flex items-center gap-3 rounded-2xl bg-card soft-card px-3.5 py-3">
           <span className="flex shrink-0">
             {hasSettle ? chains.slice(0, 3).map((c, i) => (
               <ChainLogo key={c.label} src={c.logo} label={c.label} size={28}
@@ -237,7 +237,7 @@ export function OverviewView({
             </button>
           )}
         </div>
-        <div className="rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
+        <div className="rounded-2xl bg-surface soft-card overflow-hidden divide-y divide-border">
           {loading ? (
             <div className="flex flex-col gap-3 px-4 pt-2 pb-4">
               {[0, 1, 2].map(i => (

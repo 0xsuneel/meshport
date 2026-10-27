@@ -497,8 +497,8 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
       // Mobile: pull up into the column's 18px gap so it sits 10px under
       // the QR's Download · Request · Share row.
       margin: isDesktop ? '10px auto 0' : '-8px auto 0', boxSizing: 'border-box',
-      background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 15,
-      padding: '11.5px 13.5px', boxShadow: isDesktop ? 'var(--shadow-1)' : undefined,
+      background: 'var(--glass-fill)', border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)', borderRadius: 15,
+      padding: '11.5px 13.5px',
     }}>
       <div style={{
         width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
@@ -755,7 +755,7 @@ function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: {
   const { locked } = useAccountLock()
   return (
     <div style={{
-      background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
+      background: 'var(--glass-fill)', borderRadius: 16, border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)',
       padding: '12px 14px',
     }}>
       <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Quick Actions</div>
@@ -948,7 +948,7 @@ function BusinessInsightsColumn({ walletAddress, period, setPeriod, navigate }: 
     }
   }, [mod, sales, report, days, period])
   const periodWord = period === 'week' ? 'last 7 days' : period === 'month' ? 'last 30 days' : 'last 12 months'
-  const card = { background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)' } as const
+  const card = { background: 'var(--glass-fill)', borderRadius: 16, border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)' } as const
   const small = { fontSize: 11, color: 'var(--text-secondary)' } as const
   const sum = view?.sum
 
@@ -1079,7 +1079,7 @@ function InsightStatCard({ label, value, changePct }: {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 4,
-      background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)',
+      background: 'var(--glass-fill)', borderRadius: 14, border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)',
       padding: '11px 12px',
     }}>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</div>
@@ -1096,7 +1096,7 @@ function InsightStatCard({ label, value, changePct }: {
 function MultichainUsageCard({ chains, total }: { chains: { name: string; pct: number; count: number }[]; total: number }) {
   return (
     <div style={{
-      background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)',
+      background: 'var(--glass-fill)', borderRadius: 14, border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)',
       padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 5,
     }}>
       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Multichain Usage</div>
@@ -1132,7 +1132,7 @@ function PaymentIntelligenceCard({ avgPayment, largestPayment, activeHourLabel, 
   )
   return (
     <div style={{
-      background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)',
+      background: 'var(--glass-fill)', borderRadius: 14, border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)',
       padding: '10px 12px',
     }}>
       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Payment Intelligence</div>
@@ -1165,7 +1165,7 @@ function ActivityChartCard({ buckets, granularity, setGranularity, totalCount, p
   const labelStep = Math.max(1, Math.ceil(buckets.length / 6))
   return (
     <div style={{
-      background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
+      background: 'var(--glass-fill)', borderRadius: 16, border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)',
       padding: '14px 16px', minWidth: 0,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
@@ -3849,7 +3849,7 @@ export function HomePage() {
 
   return (
     <div ref={scrollContainerRef} style={{
-      flex: 1, overflowY: 'auto', background: 'var(--bg)',
+      flex: 1, overflowY: 'auto', background: 'var(--glass-wash), var(--bg)', backgroundAttachment: 'local',
       // Desktop: sized to exactly fill the viewport at 100% browser zoom (see
       // the compact card sizing throughout this column) so nothing scrolls
       // under normal conditions - but overflowY stays 'auto', never 'hidden',
@@ -3867,8 +3867,8 @@ export function HomePage() {
         // Above the page's cards while search is open (its results float over them).
         position: 'sticky', top: 0, zIndex: searchOpen ? 40 : 20,
         // Solid, no backdrop blur: a blur under a sticky header is redrawn on
-        // every frame of a scroll.
-        background: 'var(--bg)',
+        // every frame of a scroll. Carries the page's wash so it has no seam.
+        background: 'var(--glass-wash), var(--bg)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))',
         paddingBottom: 4, paddingLeft: 20, paddingRight: 20,
         boxSizing: 'border-box',
@@ -3922,15 +3922,15 @@ export function HomePage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                 {/* Search */}
-                <button onClick={() => setSearchOpen(true)} aria-label="Search"
-                  style={{ width: 38, height: 38, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
-                    border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                <button onClick={() => setSearchOpen(true)} aria-label="Search" className="mp-press"
+                  style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--glass-fill)',
+                    border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-chip)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </button>
                 {/* Bell - notifications */}
-                <button onClick={() => navigate('/notifications')} aria-label="Notifications"
+                <button onClick={() => navigate('/notifications')} aria-label="Notifications" className="mp-press"
                   style={{ position: 'relative', width: 38, height: 38, borderRadius: '50%',
-                    background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)',
+                    background: 'var(--glass-fill)', border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-chip)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
                     <path d="M9 1.5A5.5 5.5 0 0113.5 7v3l1.5 2H3L4.5 10V7A5.5 5.5 0 019 1.5z" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
@@ -4063,7 +4063,7 @@ export function HomePage() {
              change (computed from homeRecentActivity, not fabricated). Mobile
              branch below is byte-identical to before this change. */}
         {isDesktop ? (
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '14px 18px' }}>
+          <div style={{ background: 'var(--glass-fill)', border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)', borderRadius: 16, padding: '14px 18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Total Balance</span>
@@ -4133,8 +4133,8 @@ export function HomePage() {
           // Mobile hero: ONE card in the page's 20px margins with the theme's
           // border (like Recent / Updates below) - the teal balance card inset
           // 6px inside it, the four actions underneath.
-          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: HERO_RADIUS + 6, overflow: 'hidden' }}>
-          <div style={{ position: 'relative', padding: '14px 0', background: 'var(--brand)', borderRadius: HERO_RADIUS }}>
+          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: 6, background: 'var(--glass-fill)', border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)', borderRadius: HERO_RADIUS + 6, overflow: 'hidden' }}>
+          <div style={{ position: 'relative', padding: '14px 0', background: 'var(--glass-sheen), var(--brand)', borderRadius: HERO_RADIUS, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2)' }}>
             {businessAccount ? (
               // Business accounts: the balance card only - no Cross-chain card
               // or carousel edges (Cross-chain Transfer is in More actions).
@@ -4183,7 +4183,7 @@ export function HomePage() {
                 gap: 8, cursor: 'pointer', padding: 0, border: 'none', background: 'none', font: 'inherit', color: 'inherit', width: '100%',
               }}>
               <span style={{
-                width: 52, height: 52, borderRadius: '50%', background: 'var(--brand)',
+                width: 52, height: 52, borderRadius: '50%', background: 'var(--glass-sheen), var(--brand)', boxShadow: 'var(--glass-raise)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
                 opacity: accountLock.locked && a.path ? 0.45 : 1,
               }}>
@@ -4238,7 +4238,7 @@ export function HomePage() {
               <span style={{ minWidth: 90, textAlign: 'right' }}>Value (USD)</span>
             </div>
           )}
-          <div style={{ background: 'var(--surface)', borderRadius: isDesktop ? 18 : 16, border: '1px solid var(--border)', overflow: 'hidden', boxShadow: isDesktop ? 'var(--shadow-1)' : undefined }}>
+          <div style={{ background: 'var(--glass-fill)', borderRadius: isDesktop ? 18 : 16, border: isDesktop ? '1px solid var(--border)' : '1px solid var(--glass-edge)', overflow: 'hidden', boxShadow: isDesktop ? 'var(--shadow-1)' : 'var(--glass-card)' }}>
             <AssetRow
               icon="/logos/tokens/usdc.png"
               fallbackColor="var(--usdc-icon)" fallbackChar="$"
@@ -4305,7 +4305,7 @@ export function HomePage() {
           <div style={{
             position: 'absolute', inset: 0,
             display: 'flex', flexDirection: 'column', overflowY: 'auto',
-            background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
+            background: 'var(--glass-fill)', borderRadius: 16, border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)',
             padding: '12px 14px',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
@@ -4347,7 +4347,7 @@ export function HomePage() {
           ) : (<>
           <div style={{
             display: 'flex', flexDirection: 'column', gap: 8,
-            background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
+            background: 'var(--glass-fill)', borderRadius: 16, border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)',
             padding: '12px 16px',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

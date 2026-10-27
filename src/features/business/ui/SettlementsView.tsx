@@ -138,7 +138,7 @@ export function SettlementsView({
     <div className="flex flex-col gap-5 pb-8">
       {/* ── Hero card ────────────────────────────────────────────────────── */}
       <div className="mx-5">
-        <div className="rounded-3xl bg-card border border-border p-5">
+        <div className="rounded-3xl bg-card soft-card p-5">
           {/* Header */}
           <div className="flex items-start justify-between mb-4">
             <div>
@@ -215,7 +215,7 @@ export function SettlementsView({
       {/* ── Per-chain balances ──────────────────────────────────────────── */}
       <div className="mx-5">
         <p className="text-xs font-semibold text-text-muted mb-2">On each chain</p>
-        <div className="rounded-2xl bg-surface border border-border px-4 py-1">
+        <div className="rounded-2xl bg-surface soft-card px-4 py-1">
           {scanning ? (
             <div className="flex flex-col gap-4 py-3">
               {[0, 1, 2].map((i) => (

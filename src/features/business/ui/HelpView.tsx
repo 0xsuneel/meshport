@@ -221,7 +221,7 @@ export function HelpView({
             {unmatched.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center gap-3 rounded-2xl bg-surface border border-border px-4 py-3.5"
+                className="flex items-center gap-3 rounded-2xl bg-surface soft-card px-4 py-3.5"
               >
                 <ChainLogo src="" label={p.chainLabel} size={36} />
                 <div className="flex-1 min-w-0">
@@ -258,7 +258,7 @@ export function HelpView({
             <p className="text-sm text-text-muted">No FAQ items</p>
           </div>
         ) : (
-          <div className="rounded-2xl bg-surface border border-border px-4">
+          <div className="rounded-2xl bg-surface soft-card px-4">
             {faq.map((item, i) => <FaqRow key={i} q={item.q} a={item.a} />)}
           </div>
         )}

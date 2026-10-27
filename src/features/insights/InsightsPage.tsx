@@ -841,7 +841,7 @@ export function InsightsPage() {
 // Insights while Activity loads: the page's shape - the volume card, the
 // three stat tiles and the activity chart.
 function InsightsSkeleton() {
-  const card = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20 } as const
+  const card = { background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 20 } as const
   return (
     <div aria-busy="true" aria-label="Loading insights" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '0 14px 24px' }}>
       <div style={{ ...card, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>

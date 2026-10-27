@@ -138,7 +138,7 @@ export function CashOutScreen({ open, onBack }: { open: boolean; onBack: () => v
         <BusinessScreen open={open} title="Cash out history" onBack={() => setView('main')} step="history">
           <div className="flex flex-col gap-4 px-5 pt-5 pb-6">
             {trades.length > 0 && (
-              <div className="rounded-2xl bg-card border border-border p-4 flex items-end justify-between gap-3">
+              <div className="rounded-2xl bg-card soft-card p-4 flex items-end justify-between gap-3">
                 <div><p className="text-xs text-text-muted">Cashed out this month</p><p className="text-[22px] font-bold tabular-nums text-text-primary">{inr(monthTotal.fiat)}</p></div>
                 <p className="text-xs text-text-muted">{monthTotal.count} cash out{monthTotal.count === 1 ? '' : 's'}</p>
               </div>

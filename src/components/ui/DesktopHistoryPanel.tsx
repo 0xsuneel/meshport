@@ -21,7 +21,7 @@ export function DesktopHistoryPanel({ title, onViewAll, viewAllLabel = 'View all
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0,
-      background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18,
+      background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 18,
       overflow: 'hidden',
     }}>
       <div style={{

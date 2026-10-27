@@ -664,7 +664,7 @@ function ShopLimitsCard({ open, handle }: { open: boolean; handle: string }) {
   }
   const clean = (v: string) => v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').slice(0, 9)
   return (
-    <div className="flex flex-col gap-3 rounded-2xl bg-surface border border-border p-4">
+    <div className="flex flex-col gap-3 rounded-2xl bg-surface soft-card p-4">
       <span>
         <span className="block text-sm font-semibold text-text-primary">Payment limits</span>
         <span className="block text-xs text-text-muted">For amounts customers type on your QR and payment link. Leave empty for no limit.</span>
@@ -1068,7 +1068,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
   )
   const sub = (c: Customer) => `${c.username ? '' : c.bridge ? 'Through a bridge · ' : 'Not on MeshPort · '}${c.payments.length} payment${c.payments.length === 1 ? '' : 's'}${c.refunded ? ` · ${c.refunded} refunded` : ''}`
   const stat = (label: string, value: string, tone = 'text-text-primary') => (
-    <div className="rounded-2xl bg-surface border border-border px-4 py-3 min-w-0">
+    <div className="rounded-2xl bg-surface soft-card px-4 py-3 min-w-0">
       <p className="text-xs text-text-muted truncate">{label}</p>
       <p className={`text-lg font-bold tabular-nums truncate ${tone}`}>{value}</p>
     </div>
@@ -1078,7 +1078,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
     <BusinessScreen open={open} title={current ? current.name : title} onBack={current ? () => setSelected(null) : onBack} step={current?.key ?? ''}>
       {current ? (
         <div className="flex flex-col gap-5 px-5 pt-2 pb-6">
-          <div className="flex items-center gap-3 rounded-2xl bg-surface border border-border p-4">
+          <div className="flex items-center gap-3 rounded-2xl bg-surface soft-card p-4">
             {avatar(current, 52)}
             <span className="flex-1 min-w-0">
               <span className="block text-[15px] font-bold text-text-primary truncate">{current.name}</span>
@@ -1101,7 +1101,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
                 {stat('Outstanding', money(currentKhata.outstanding), currentKhata.outstanding > 0 ? 'text-warning' : 'text-text-primary')}
               </div>
               {openBills.length > 0 && (
-                <div className="rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
+                <div className="rounded-2xl bg-surface soft-card overflow-hidden divide-y divide-border">
                   {openBills.map(i => {
                     const d = dueText(i.dueDate, true)
                     const r = canRemindAt(i.lastRemindedAt)
@@ -1167,7 +1167,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
               <p className="text-xs text-text-muted mt-1">People who pay you show up here.</p>
             </div>
           ) : (
-            <div className="rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
+            <div className="rounded-2xl bg-surface soft-card overflow-hidden divide-y divide-border">
               {shown.map(c => {
                 const k = khata.get(c.key)
                 return (

@@ -223,7 +223,7 @@ export function RecentPaidPage() {
   const others = people.filter(p => !p.isSelf)
   const totalSent = others.reduce((sum, p) => sum + (p.total_sent || 0), 0)
   const mostPaid = [...others].sort((a, b) => b.total_sent - a.total_sent).slice(0, 3)
-  const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16 }
+  const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 16 }
   // The shared desktop layout (DesktopTwoColumn): each column scrolls on its
   // own, so the summary stays in view beside a long list.
   return (
