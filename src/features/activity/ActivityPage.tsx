@@ -1190,7 +1190,7 @@ export function ActivityPage() {
         {error && !loading && (
           <div className="mx-4 mt-4 p-4 rounded-2xl lg:max-w-[1068px] lg:mx-auto" style={{ background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 20%, transparent)' }}>
             <p className="text-sm text-danger">{error}</p>
-            <button onClick={refresh} className="mt-2 text-xs text-danger underline">Try again</button>
+            <button onClick={refresh} className="mp-hit mt-2 text-xs text-danger underline">Try again</button>
           </div>
         )}
 

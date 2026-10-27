@@ -634,7 +634,7 @@ export function RewardsPage() {
     <div className="header-row sticky top-0 z-20 bg-bg flex-shrink-0 gap-3 px-5 pt-header pb-header">
       <h1 className="text-xl font-bold text-text-primary">Rewards</h1>
       <button ref={howBtnRef} onClick={() => setShowEarnInfo(o => !o)} aria-expanded={showEarnInfo}
-        className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
+        className="mp-hit mp-hit-sm ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
         style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', color: 'var(--brand-text)', border: 'none', cursor: 'pointer' }}>
         <Info className="w-3.5 h-3.5" /> How it works
       </button>
