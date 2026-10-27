@@ -140,7 +140,7 @@ export function SecurityPage() {
             <Shield className="w-6 h-6 text-success" />
           </div>
           <div className="min-w-0">
-            <p className="text-[15px] font-bold text-success">Account secured</p>
+            <p className="text-[15px] font-bold" style={{ color: 'var(--success-text)' }}>Account secured</p>
             <p className="text-xs text-text-secondary mt-0.5">Your passcode keeps your wallet safe</p>
           </div>
         </div>

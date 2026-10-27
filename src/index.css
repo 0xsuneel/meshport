@@ -95,8 +95,8 @@
   color-scheme: dark;
   --brand:          #12665F;
   --mesh-loader:    #12665F;  /* moving logo: brand teal */
-  --brand-text:     #12665F;  /* brand-coloured TEXT (links, highlights): the brand teal */
-  --brand-text-rgb: 18 102 95;
+  --brand-text:     #24A193;  /* brand-coloured TEXT (links, highlights): a lighter step of the brand teal, readable on black */
+  --brand-text-rgb: 36 161 147;
   --nav-idle:       #B4B4B4;  /* inactive bottom-bar tabs */
   --nav-active-bg:  var(--brand);   /* selected tab: brand teal, white icon */
   --nav-active-fg:  #FFFFFF;
@@ -104,16 +104,16 @@
   --header-text:    #FFFFFF;
   --header-subtext: #CDEDE2;
   --accent:         #1E9488;  /* brand teal family */
-  --accent-text:    #12665F;
+  --accent-text:    #24A193;
   --success:        #15806B;
   --warning:        #E5A93B;
   --danger:         #D63B40;
   /* Status colours as TEXT: the fills above are bright tones for dots,
      badges and tints; as text they need >=4.5:1 on cards and the page. */
-  --success-text:   #12665F;
+  --success-text:   #24A193;
   --warning-text:   #E5A93B;
   --danger-text:    #F0686C;
-  --success-text-rgb: 18 102 95;  --warning-text-rgb: 229 169 59; --danger-text-rgb: 240 104 108;
+  --success-text-rgb: 36 161 147;  --warning-text-rgb: 229 169 59; --danger-text-rgb: 240 104 108;
   --text-primary:   #FFFFFF;
   --text-secondary: #B4B4B4;
   --text-muted:     #949494;
@@ -121,7 +121,7 @@
   --surface:        #111111;
   --card:           #111111;
   --border:         #1F1F1F;
-  --link:           #12665F;
+  --link:           #24A193;
   --avatar-1: #1D9E75; --avatar-2: #97C459; --avatar-3: #7F77DD; --avatar-4: #F0997B;
   --usdc-bg:   #0C447C33;
   --usdc-icon: #85B7EB;
@@ -136,11 +136,11 @@
      these are purely additive for the Tailwind color config. */
   --brand-rgb: 18 102 95;      --header-rgb: 18 102 95;
   --header-text-rgb: 255 255 255; --header-subtext-rgb: 205 237 226;
-  --accent-rgb: 30 148 136;    --accent-text-rgb: 18 102 95;
+  --accent-rgb: 30 148 136;    --accent-text-rgb: 36 161 147;
   --success-rgb: 21 128 107;   --warning-rgb: 229 169 59; --danger-rgb: 214 59 64;
   --text-primary-rgb: 255 255 255; --text-secondary-rgb: 180 180 180; --text-muted-rgb: 148 148 148;
   --bg-rgb: 0 0 0; --surface-rgb: 17 17 17; --card-rgb: 17 17 17; --border-rgb: 31 31 31;
-  --link-rgb: 18 102 95;
+  --link-rgb: 36 161 147;
   --avatar-1-rgb: 29 158 117; --avatar-2-rgb: 151 196 89; --avatar-3-rgb: 127 119 221; --avatar-4-rgb: 240 153 123;
   --usdc-icon-rgb: 133 183 235;
   /* Soft elevation - no glow anywhere. Alpha-black shadows read correctly
@@ -163,7 +163,7 @@
   --card-soft:   inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px #1A1A1A;
   /* Pastel tiles (quick actions, recent people) and the warm accent. */
   --tile-peach:      #2B1C14;  --tile-peach-ink:  #F0A57C;
-  --tile-mint:       #0F2421;  --tile-mint-ink:   #12665F;
+  --tile-mint:       #0F2421;  --tile-mint-ink:   #24A193;
   --tile-butter:     #2A2210;  --tile-butter-ink: #E9BC4C;
   --mustard:         #E9BC4C;  --mustard-ink:     #3A2C06;
   --shadow-1: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
@@ -182,8 +182,8 @@
   color-scheme: dark;
   --brand:          #12665F;
   --mesh-loader:    #12665F;  /* moving logo: brand teal */
-  --brand-text:     #12665F;  /* brand-coloured TEXT (links, highlights): the brand teal */
-  --brand-text-rgb: 18 102 95;
+  --brand-text:     #24A193;  /* brand-coloured TEXT (links, highlights): a lighter step of the brand teal, readable on black */
+  --brand-text-rgb: 36 161 147;
   --nav-idle:       #B4B4B4;  /* inactive bottom-bar tabs */
   --nav-active-bg:  var(--brand);   /* selected tab: brand teal, white icon */
   --nav-active-fg:  #FFFFFF;
@@ -191,16 +191,16 @@
   --header-text:    #FFFFFF;
   --header-subtext: #CDEDE2;
   --accent:         #1E9488;  /* brand teal family */
-  --accent-text:    #12665F;
+  --accent-text:    #24A193;
   --success:        #15806B;
   --warning:        #E5A93B;
   --danger:         #D63B40;
   /* Status colours as TEXT: the fills above are bright tones for dots,
      badges and tints; as text they need >=4.5:1 on cards and the page. */
-  --success-text:   #12665F;
+  --success-text:   #24A193;
   --warning-text:   #E5A93B;
   --danger-text:    #F0686C;
-  --success-text-rgb: 18 102 95;  --warning-text-rgb: 229 169 59; --danger-text-rgb: 240 104 108;
+  --success-text-rgb: 36 161 147;  --warning-text-rgb: 229 169 59; --danger-text-rgb: 240 104 108;
   --text-primary:   #FFFFFF;
   --text-secondary: #B4B4B4;
   --text-muted:     #949494;
@@ -208,17 +208,17 @@
   --surface:        #111111;
   --card:           #111111;
   --border:         #1F1F1F;
-  --link:           #12665F;
+  --link:           #24A193;
   --avatar-1: #1D9E75; --avatar-2: #97C459; --avatar-3: #7F77DD; --avatar-4: #F0997B;
   --usdc-bg:   #0C447C33;
   --usdc-icon: #85B7EB;
   --brand-rgb: 18 102 95;      --header-rgb: 18 102 95;
   --header-text-rgb: 255 255 255; --header-subtext-rgb: 205 237 226;
-  --accent-rgb: 30 148 136;    --accent-text-rgb: 18 102 95;
+  --accent-rgb: 30 148 136;    --accent-text-rgb: 36 161 147;
   --success-rgb: 21 128 107;   --warning-rgb: 229 169 59; --danger-rgb: 214 59 64;
   --text-primary-rgb: 255 255 255; --text-secondary-rgb: 180 180 180; --text-muted-rgb: 148 148 148;
   --bg-rgb: 0 0 0; --surface-rgb: 17 17 17; --card-rgb: 17 17 17; --border-rgb: 31 31 31;
-  --link-rgb: 18 102 95;
+  --link-rgb: 36 161 147;
   --avatar-1-rgb: 29 158 117; --avatar-2-rgb: 151 196 89; --avatar-3-rgb: 127 119 221; --avatar-4-rgb: 240 153 123;
   --usdc-icon-rgb: 133 183 235;
   /* Soft UI: on black a shadow doesn't show, so depth is a faint top highlight. */
@@ -238,7 +238,7 @@
   --card-soft:   inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px #1A1A1A;
   /* Pastel tiles (quick actions, recent people) and the warm accent. */
   --tile-peach:      #2B1C14;  --tile-peach-ink:  #F0A57C;
-  --tile-mint:       #0F2421;  --tile-mint-ink:   #12665F;
+  --tile-mint:       #0F2421;  --tile-mint-ink:   #24A193;
   --tile-butter:     #2A2210;  --tile-butter-ink: #E9BC4C;
   --mustard:         #E9BC4C;  --mustard-ink:     #3A2C06;
   --shadow-1: 0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.24);
@@ -272,7 +272,7 @@
   --danger:         #C41C29;
   /* Status colours as TEXT: the fills above are bright tones for dots,
      badges and tints; as text they need >=4.5:1 on cards and the page. */
-  --success-text:   #2F7A45;
+  --success-text:   #256B3D;
   --warning-text:   #92400E;
   --danger-text:    #C41C29;
   --success-text-rgb: 47 122 69;   --warning-text-rgb: 146 64 14;   --danger-text-rgb: 196 28 41;
