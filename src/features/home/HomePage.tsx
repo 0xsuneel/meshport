@@ -10,7 +10,7 @@ import { isUbChain } from '@/lib/ubChains'
 import {useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject, type MutableRefObject, type CSSProperties, type ReactNode} from 'react'
 import { flushSync, createPortal } from 'react-dom'
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
-import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace, ArrowUpRight, ArrowDownLeft, ArrowLeftRight } from 'lucide-react'
+import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
 import { useMotionValue, animate, motion, AnimatePresence } from 'framer-motion'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { tradeStepCard, type TradeLive } from '@/lib/p2pTradeStep'
@@ -33,7 +33,7 @@ import { searchUsersDb, getOrCreateConversation, fetchContactsDb, type DbUser } 
 import { filterServices } from '@/lib/searchServices'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 import { LockBadge } from '@/components/LockedFeature'
-import { RecentNewsRow, RecentNewsStack } from './RecentNewsRow'
+import { RecentNewsRow } from './RecentNewsRow'
 import { BALANCES_STALE_EVENT, msSinceLastTx } from '@/lib/balanceRefresh'
 import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -1555,7 +1555,7 @@ function BowedShapeCard({
 }
 
 function MultichainHubCard({
-  arcAvailable, claimAvailable, claimLoading, scanChain = null, balanceHidden, onToggleHidden, fmt, navigate,
+  arcAvailable, claimAvailable, claimLoading, scanChain = null, balanceHidden, onToggleHidden, fmt,
 }: {
   arcAvailable: number
   claimAvailable: number
@@ -1568,11 +1568,6 @@ function MultichainHubCard({
 }) {
   const isMerchantHero = useMerchant().isMerchant
   const hub = useHubLabel()
-  // Tap handling for "View in Hub": navigate on pointer-up when the finger barely moved,
-  // so it doesn't depend on a synthesized click (which the carousel's drag layer can swallow
-  // on the first tap). onClick stays as a fallback for mouse/keyboard, de-duplicated.
-  const hubTapStart = useRef<{ x: number; y: number } | null>(null)
-  const hubTapFired = useRef(false)
   // Auto-shrink each stat figure independently by its own whole-digit count -
   // same tiering approach as the Balance hero card's amountFontSize, just
   // starting from this card's own 21px base (scaled down 20% from the
@@ -1662,26 +1657,9 @@ function MultichainHubCard({
         </div>
       </div>
 
-      {/* Bottom row - single action, right-aligned like "View
-          Transactions" on the Balance card's bottom row. */}
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        {/* Invisible touch area: padding makes the tap target ~44px tall,
-            the equal negative margin cancels it so the label's position
-            and the card's layout/height stay exactly as before. */}
-        <div role="button" tabIndex={0}
-          onPointerDown={(e) => { hubTapStart.current = { x: e.clientX, y: e.clientY }; hubTapFired.current = false }}
-          onPointerUp={(e) => {
-            const d = hubTapStart.current; hubTapStart.current = null
-            if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 12) { hubTapFired.current = true; navigate('/multichain') }
-          }}
-          onPointerCancel={() => { hubTapStart.current = null }}
-          onClick={() => { if (hubTapFired.current) { hubTapFired.current = false; return } navigate('/multichain') }}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/multichain') }}
-          style={{ cursor: 'pointer', fontSize: 14, fontWeight: 600, letterSpacing: '0.2px', color: '#8FE9CB',
-            padding: '14px 44px', margin: '-14px -44px', lineHeight: '16px', touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent', userSelect: 'none' }}>
-          View in Hub
-        </div>
-      </div>
+      {/* Room for the pager dots at the bottom right (the actions are the pills under the card). */}
+      <div aria-hidden style={{ height: 18 }} />
+
     </BowedShapeCard>
   )
 }
@@ -1844,9 +1822,11 @@ const HERO_DOT = 5, HERO_DOT_GAP = 7, HERO_PILL = 14
 // on this page with the same render-thrashing risk.
 function MobileHeroCarousel({
   portfolioTotal, balanceHidden, onToggleHidden, walletAddress, shortAddr, showToastMessage, navigate, fmt,
-  arcAvailable, claimAvailable, claimLoading, scanChain, trend,
+  arcAvailable, claimAvailable, claimLoading, scanChain, trend, onSideChange,
 }: {
   trend?: BalanceTrend | null
+  /** 0 = balance card showing, 1 = Multichain Hub card (Home swaps its pills). */
+  onSideChange?: (side: 0 | 1) => void
   portfolioTotal: number
   balanceHidden: boolean
   onToggleHidden: () => void
@@ -1879,6 +1859,7 @@ function MobileHeroCarousel({
   // construction, pixel-identical (the "infinite 2-item loop" trick), so
   // nothing visibly jumps.
   const [heroCardIndex, setHeroCardIndex] = useState(0)
+  useEffect(() => { onSideChange?.(heroCardIndex === 0 ? 0 : 1) }, [heroCardIndex]) // eslint-disable-line react-hooks/exhaustive-deps
   const heroCarouselRef = useRef<HTMLDivElement>(null)
   const [heroCardWidth, setHeroCardWidth] = useState(0)
   // Measured before the first paint, so the card never shows up a frame late.
@@ -2803,6 +2784,9 @@ export function HomePage() {
 
   // CHANGE 1: More sheet state
   const [showMore, setShowMore] = useState(false)
+  // Which hero card is showing: the pills under it follow (Pay / Receive /
+  // Swap on the balance, Transfer / Bring / Activity on the Multichain Hub).
+  const [heroSide, setHeroSide] = useState<0 | 1>(0)
 
   // ── Desktop-only: customizable Quick Actions grid ─────────────────────────
   // Persisted so the chosen set survives a reload. Falls back to the
@@ -3927,12 +3911,16 @@ export function HomePage() {
                   )}
                 </button>
                 {/* Profile */}
+                {/* Same size as search and the bell, with the brand ring the
+                    Chats header puts around your picture. */}
                 <div {...pressable(() => navigate('/profile'), 'Open profile')} className="mp-press"
-                  style={{ cursor: 'pointer', flexShrink: 0, width: 40, height: 40, borderRadius: '50%', overflow: 'hidden',
-                    background: 'var(--mustard)', color: 'var(--mustard-ink)', display: 'grid', placeItems: 'center', fontSize: 14, fontWeight: 700 }}>
-                  {user?.avatar
-                    ? <img src={user.avatar.split('?')[0]} alt="avatar" loading="eager" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : displayName.charAt(0).toUpperCase()}
+                  style={{ cursor: 'pointer', flexShrink: 0, width: 38, height: 38, borderRadius: '50%', padding: 2, background: 'var(--brand)', boxSizing: 'border-box' }}>
+                  <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--bg)', boxSizing: 'border-box',
+                    background: 'var(--mustard)', color: 'var(--mustard-ink)', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700 }}>
+                    {user?.avatar
+                      ? <img src={user.avatar.split('?')[0]} alt="avatar" loading="eager" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : displayName.charAt(0).toUpperCase()}
+                  </div>
                 </div>
               </div>
             </>
@@ -4154,6 +4142,7 @@ export function HomePage() {
                 claimLoading={unifiedLoading}
                 scanChain={scanChain}
                 trend={mobileBalanceTrend}
+                onSideChange={setHeroSide}
               />
             )}
           </div>
@@ -4163,11 +4152,15 @@ export function HomePage() {
             (its own Quick Actions card lives in column 2). Pay is the warm
             accent; the rest of the actions are in Quick actions below. */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, padding: '14px 16px 0' }}>
-          {[
-            { label: 'Pay',     path: '/pay',     icon: <ArrowUpRight size={15} strokeWidth={2.4} />, accent: true },
-            { label: 'Receive', path: '/receive', icon: <ArrowDownLeft size={15} strokeWidth={2.4} />, accent: false },
-            { label: 'Swap',    path: '/swap',    icon: <ArrowLeftRight size={15} strokeWidth={2.4} />, accent: false },
-          ].map(a => (
+          {(heroSide === 1 && !businessAccount ? [
+            { label: 'Transfer', path: '/multichain?tab=transfer', icon: 'hub' as const,     accent: true },
+            { label: 'Bring',    path: '/multichain?tab=bring',    icon: 'receive' as const, accent: false },
+            { label: 'Activity', path: '/multichain?tab=activity', icon: 'clock' as const,   accent: false },
+          ] : [
+            { label: 'Pay',     path: '/pay',     icon: 'pay' as const,     accent: true },
+            { label: 'Receive', path: '/receive', icon: 'receive' as const, accent: false },
+            { label: 'Swap',    path: '/swap',    icon: 'swap' as const,    accent: false },
+          ]).map(a => (
             <button key={a.label} type="button" onClick={() => navigate(a.path)} className="mp-press"
               style={{
                 position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40, borderRadius: 20,
@@ -4177,7 +4170,7 @@ export function HomePage() {
                 boxShadow: a.accent ? 'none' : 'inset 0 0 0 1px rgba(255,255,255,0.16)',
                 opacity: accountLock.locked ? 0.45 : 1,
               }}>
-              {a.icon}{a.label}
+              <ActionIcon name={a.icon} size={17} color="currentColor" />{a.label}
               {accountLock.locked && <LockBadge />}
             </button>
           ))}
@@ -4230,10 +4223,10 @@ export function HomePage() {
         {/* Same width/radius as the old Multichain Hub row, 10% taller. */}
         {/* Business not approved yet: no promos, recents, news or QR - the
             balance, assets and activity stay. */}
-        {!accountLock.locked && isDesktop && <FeatureBanner height={64} docked={false} onOpen={path => navigate(path)} />}
+        {!accountLock.locked && <FeatureBanner height={isDesktop ? 64 : 75} docked={!isDesktop} onOpen={path => navigate(path)} />}
 
         {/* ── RECENT + UPDATES - side by side, same on desktop and mobile ───── */}
-        {!accountLock.locked && (isDesktop ? <RecentNewsRow navigate={navigate} /> : <RecentNewsStack navigate={navigate} />)}
+        {!accountLock.locked && <RecentNewsRow navigate={navigate} />}
 
         {/* ── ASSETS - all 3 tokens ────────────────────────────────────────── */}
         <div ref={assetsCardRef}>
