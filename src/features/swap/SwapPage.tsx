@@ -1538,7 +1538,7 @@ export function SwapPage() {
           {/* You pay - the amount field rings while the number pad is open */}
           <div ref={amountBoxRef} className="rounded-3xl" style={{
             padding: '16px 18px 14px', background: 'var(--surface)',
-            border: '1px solid var(--border)',
+            border: '1px solid var(--soft-edge)', boxShadow: 'var(--card-soft)',
           }}>
             <div className="flex items-center justify-between">
               <p className="text-[13px] text-text-secondary">You pay</p>
@@ -1622,7 +1622,7 @@ export function SwapPage() {
           </div>
 
           {/* You receive */}
-          <div className="rounded-3xl" style={{ padding: '16px 18px', background: 'color-mix(in srgb, var(--brand) 5%, var(--surface))', border: '1px solid var(--border)' }}>
+          <div className="rounded-3xl" style={{ padding: '16px 18px', background: 'var(--tile-mint)', border: 'none' }}>
             <div className="flex items-center justify-between">
               <p className="text-[13px] text-text-secondary">You receive</p>
               <p className="text-[13px] text-text-secondary">Balance {fmtBal(tokenOut.id, outBalance)}</p>
@@ -1822,8 +1822,8 @@ export function SwapPage() {
               <div className="flex flex-col items-stretch" style={{ position: 'relative', gap: 6, paddingTop: 12, ...(stickyCta ? STICKY_CTA : {}) }}>
                 <button onClick={() => { setQuoteChangedNotice(''); setPassEntry(''); setPassError(''); setShowPasscodeSheet(true) }}
                   disabled={gasShortfall > 0 || !estimate}
-                  className="w-full rounded-2xl text-base font-bold text-white active:scale-[0.98] transition-transform disabled:opacity-40 disabled:active:scale-100"
-                  style={{ height: 56, background:'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)', boxShadow: (gasShortfall > 0 || !estimate) ? 'none' : 'var(--shadow-2)' }}>
+                  className="w-full rounded-2xl text-base font-bold active:scale-[0.98] transition-transform disabled:opacity-40 disabled:active:scale-100"
+                  style={{ height: 56, background: 'var(--mustard)', color: 'var(--mustard-ink)', border: 'none' }}>
                   Confirm swap
                 </button>
                 <button onClick={() => { setStep('idle'); setError(''); setQuoteChangedNotice('') }}
@@ -1938,8 +1938,8 @@ export function SwapPage() {
           <motion.button whileTap={{ scale:.98 }}
             onClick={() => { setPassEntry(''); setPassError(''); handleReview() }}
             disabled={!canReview}
-            className="w-full py-4 rounded-2xl text-base font-bold text-white disabled:opacity-35 transition-opacity"
-            style={{ background:'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)', boxShadow: canReview ? 'var(--shadow-2)' : 'none' }}>
+            className="w-full py-4 rounded-2xl text-base font-bold disabled:opacity-35 transition-opacity"
+            style={{ background: 'var(--mustard)', color: 'var(--mustard-ink)', border: 'none' }}>
             {quoteLoading ? 'Getting quote...' : `Swap ${tokenIn.id} → ${tokenOut.id}`}
           </motion.button>
           </div>

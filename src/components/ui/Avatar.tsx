@@ -1,5 +1,12 @@
 import type { CSSProperties } from 'react'
-import { cn, getInitials, getAvatarColor } from '@/lib/utils'
+import { cn, getInitials } from '@/lib/utils'
+
+// Letter avatars (no photo): the pastel tiles, picked by the name's first letter.
+const TONES = ['mint', 'peach', 'butter'] as const
+function toneOf(name: string) {
+  const t = TONES[(name.toLowerCase().charCodeAt(0) || 0) % TONES.length]
+  return { background: `var(--tile-${t})`, color: `var(--tile-${t}-ink)` }
+}
 
 interface AvatarProps {
   name: string
@@ -20,7 +27,7 @@ const sizeMap = {
 
 export function Avatar({ name, src, size = 'md', className, showRing, style }: AvatarProps) {
   const initials = getInitials(name)
-  const gradient = getAvatarColor(name.toLowerCase())
+  const tone = toneOf(name)
   // A query string that changes between fetches of the same underlying
   // image (even an unintentional one - e.g. a stale cache-busting param
   // left over from an old upload flow) makes the browser treat every
@@ -50,8 +57,9 @@ export function Avatar({ name, src, size = 'md', className, showRing, style }: A
           const parent = el.parentElement
           if (parent) {
             const div = document.createElement('div')
-            div.className = el.className.replace('object-cover', '') +
-              ` ${gradient} flex items-center justify-center font-semibold text-white`
+            div.className = el.className.replace('object-cover', '') + ' flex items-center justify-center font-semibold'
+            div.style.background = tone.background
+            div.style.color = tone.color
             div.textContent = initials
             parent.replaceChild(div, el)
           }
@@ -62,11 +70,10 @@ export function Avatar({ name, src, size = 'md', className, showRing, style }: A
 
   return (
     <div
-      style={style}
+      style={{ ...tone, ...style }}
       className={cn(
         sizeMap[size],
-        gradient,
-        'rounded-full flex items-center justify-center flex-shrink-0 font-semibold text-white',
+        'rounded-full flex items-center justify-center flex-shrink-0 font-semibold',
         showRing && 'ring-2 ring-brand ring-offset-2 ring-offset-surface',
         className
       )}

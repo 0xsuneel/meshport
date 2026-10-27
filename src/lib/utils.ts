@@ -104,12 +104,6 @@ export function getInitials(name: string): string {
 // Cycles through the 4 exact avatar colors from the design spec
 // (src/index.css --avatar-1..4, theme-aware) instead of an arbitrary
 // Tailwind gradient palette - keeps every avatar in the app on-brand.
-export function getAvatarColor(username: string): string {
-  const colors = ['bg-avatar-1', 'bg-avatar-2', 'bg-avatar-3', 'bg-avatar-4']
-  const index = username.charCodeAt(0) % colors.length
-  return colors[index]
-}
-
 export function formatTVL(tvl: number): string {
   if (tvl >= 1_000_000) return `$${(tvl / 1_000_000).toFixed(1)}M`
   if (tvl >= 1_000) return `$${(tvl / 1_000).toFixed(0)}K`
