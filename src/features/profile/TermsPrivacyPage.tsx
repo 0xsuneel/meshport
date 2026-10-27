@@ -97,7 +97,7 @@ export function TermsPrivacyPage() {
 
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-surface border border-border rounded-3xl p-5">
+    <div className="bg-surface soft-card rounded-3xl p-5">
       <p className="text-sm font-semibold text-text-primary mb-2">{title}</p>
       <div className="text-sm text-text-secondary leading-relaxed space-y-2">{children}</div>
     </div>

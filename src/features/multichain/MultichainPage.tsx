@@ -904,7 +904,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   // needs finishing - a failure where nothing moved has nothing to recover.
   const failedCount  = allItems.filter(i => i.status === 'failed' && i.needsRecovery).length
 
-  const cardS = { background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)' }
+  const cardS = { background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)' }
   const isUbChain = (id: string) => UB_CLAIM_CHAINS.has(id === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : id)
   // Only chains Bring Funds can actually move: the gasless router (CCTP) or
   // Unified Balance. Merchants: CCTP chains only - MeshPort's relayer pays

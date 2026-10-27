@@ -55,7 +55,7 @@ export interface DetailListProps {
 
 export function DetailList({ rows }: DetailListProps) {
   return (
-    <div className="rounded-2xl bg-surface border border-border overflow-hidden">
+    <div className="rounded-2xl bg-surface soft-card overflow-hidden">
       {rows.map((row, i) => (
         <React.Fragment key={row.label}>
           {i > 0 && <Divider className="mx-4" />}

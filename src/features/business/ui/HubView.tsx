@@ -70,7 +70,7 @@ export function HubView({
 
       {/* Sales · pending orders · available balance */}
       <div className="mx-5">
-        <div className="rounded-2xl bg-card border border-border p-4 flex flex-col gap-2">
+        <div className="rounded-2xl bg-card soft-card p-4 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[13px] text-text-muted">{periodLabel === 'Today' ? "Today's sales" : 'Sales'}</p>
             {onPeriod && (
@@ -112,7 +112,7 @@ export function HubView({
 
       {/* Latest verified payments */}
       {!hideRecent && <div className="mx-5">
-        <div className="rounded-2xl bg-card border border-border overflow-hidden">
+        <div className="rounded-2xl bg-card soft-card overflow-hidden">
           <div className="flex items-center justify-between px-3.5 pt-2.5 pb-1">
             <p className="text-[15px] font-semibold text-text-primary">Verified payments</p>
             {recent.length > 0 && (
@@ -157,7 +157,7 @@ export function LockedHubView({ banner, terms = bizTerms(null) }: { banner: Reac
     <div className="flex flex-col gap-3 pb-8">
       {banner}
       <div className="mx-5">
-        <div className="rounded-2xl bg-card border border-border overflow-hidden">
+        <div className="rounded-2xl bg-card soft-card overflow-hidden">
           <p className="px-4 pt-4 pb-2 text-[13px] font-semibold text-text-muted">Turns on after approval</p>
           <div className="divide-y divide-border">
             {rows.map(([Icon, title, sub]) => (

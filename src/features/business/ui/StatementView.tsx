@@ -97,7 +97,7 @@ export function StatementView({
       <p className="px-5 text-xs text-text-muted">{periodLabel}</p>
 
       {/* Summary card */}
-      <div className="mx-5 rounded-3xl bg-card border border-border overflow-hidden">
+      <div className="mx-5 rounded-3xl bg-card soft-card overflow-hidden">
         {loading ? (
           <div className="flex flex-col gap-0">
             {[0, 1, 2, 3].map((i) => (

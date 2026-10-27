@@ -337,7 +337,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <div>
       <p className="text-xs font-bold text-text-secondary mb-3 px-1">{title}</p>
-      <div className="bg-surface border border-border rounded-3xl divide-y divide-border">{children}</div>
+      <div className="bg-surface soft-card rounded-3xl divide-y divide-border">{children}</div>
     </div>
   )
 }

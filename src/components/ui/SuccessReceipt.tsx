@@ -218,7 +218,7 @@ export function SuccessReceipt({
         // when it fits; when it's taller than the screen (details open) the
         // auto margins collapse to 0 and it scrolls from the top as before.
         position: 'relative', maxWidth: 480, margin: 'auto', width: '100%', flexShrink: 0, boxSizing: 'border-box',
-        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 30, overflow: 'hidden', paddingBottom: 16,
+        background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 30, overflow: 'hidden', paddingBottom: 16,
       }}>
         {burst && <Confetti />}
         <div style={{ position: 'relative', height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', background: HEADER_BG[status] }}>

@@ -89,7 +89,7 @@ export function SolanaPayPanel({ to, amount, code, orderNumber, label, onPaid }:
   }
 
   return (
-    <div className="bg-surface border border-border rounded-3xl p-4 flex flex-col items-center gap-3">
+    <div className="bg-surface soft-card rounded-3xl p-4 flex flex-col items-center gap-3">
       <p className="text-sm font-semibold text-text-primary">Pay with a Solana wallet</p>
       <div style={{ background: '#fff', borderRadius: 16, padding: 10 }}>
         <canvas ref={canvasRef} width={220} height={220} style={{ display: 'block', width: 220, height: 220 }} />

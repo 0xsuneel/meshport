@@ -1049,7 +1049,7 @@ export function ActivityPage() {
               {groups.map(group => (
                 <div key={group.label} className="mb-6">
                   <p className="text-xs font-bold text-text-secondary mb-2 px-1">{group.label}</p>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 16, overflow: 'hidden' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)' }}>
                         {['Type', 'Details', 'Chain', 'Status', 'Time', 'Amount'].map((h, i) => (

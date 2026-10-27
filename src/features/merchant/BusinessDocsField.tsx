@@ -52,7 +52,7 @@ export function BusinessDocsField({ docs, onChange, onError }: {
       {docs.length > 0 && (
         <ul className="space-y-2">
           {docs.map(d => (
-            <li key={d.path} className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-3 py-2">
+            <li key={d.path} className="flex items-center gap-3 rounded-2xl soft-card bg-surface px-3 py-2">
               {d.path.endsWith('.pdf') ? <FileText className="w-4 h-4 shrink-0 text-text-secondary" /> : <ImageIcon className="w-4 h-4 shrink-0 text-text-secondary" />}
               <span className="flex-1 min-w-0">
                 <span className="block text-xs font-semibold text-text-primary">{kindLabel(d.kind)}</span>

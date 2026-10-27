@@ -76,7 +76,7 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
     showToastMessage(ok ? `${what} copied` : 'Could not copy', ok ? 'success' : 'error')
   }
 
-  const box: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }
+  const box: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 20, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }
   const btn: React.CSSProperties = { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '13px 14px', borderRadius: 14, border: '1px solid color-mix(in srgb, black 12%, transparent)', background: 'var(--brand)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }
   const row = (k: string, v: string, full?: string, what?: string) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>

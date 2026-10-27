@@ -105,7 +105,7 @@ export function StaffModePage() {
           onSeeAllPayments={() => setScreen('payments')} onPayment={() => {}} />
         {/* Managers: the store's requests and its statement. */}
         {manager && (
-          <div className="mx-5 mt-4 rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
+          <div className="mx-5 mt-4 rounded-2xl bg-surface soft-card overflow-hidden divide-y divide-border">
             {row(<ClipboardList className="size-[18px]" />, 'Requests', 'Requests and bills · share, cancel your own', () => setScreen('requests'))}
             {row(<FileText className="size-[18px]" />, 'Statement', 'CSV or PDF of the store\'s payments', openStatement)}
           </div>

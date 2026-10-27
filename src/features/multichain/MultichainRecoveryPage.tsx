@@ -27,7 +27,7 @@ import {
 } from '@/lib/cctpRecovery'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 
-const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 16 }
+const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 16, padding: 16 }
 // How long Circle's hold on a failed delivery can last before the 7-day
 // withdrawal of the on-chain balance is offered (it normally ends in hours).
 const STUCK_HOLD_FALLBACK_MS = 6 * 60 * 60 * 1000

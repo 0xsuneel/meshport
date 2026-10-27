@@ -203,7 +203,7 @@ function AppearancePreview({ mode }: { mode: ThemeMode }) {
   const resolved = resolveTheme(mode)
   const p = PREVIEW_PALETTE[resolved]
   return (
-    <div className="rounded-3xl border border-border bg-card p-5">
+    <div className="rounded-3xl soft-card bg-card p-5">
       <p className="text-sm font-semibold text-text-primary mb-1">Preview</p>
       <p className="text-xs text-text-secondary mb-4">
         {mode === 'system' ? `Following your device - currently ${resolved}.` : `How MeshPort looks in ${resolved} mode.`}
@@ -848,7 +848,7 @@ export function EditProfilePage() {
         // available content width, matching Swap's desktop spacing. Fields
         // themselves stay a comfortable readable width, centered inside it.
         <div style={{ padding: '20px 24px 14px' }}>
-          <div className="bg-surface border border-border rounded-3xl" style={{ padding: '32px 24px 28px' }}>
+          <div className="bg-surface soft-card rounded-3xl" style={{ padding: '32px 24px 28px' }}>
             <div className="space-y-5" style={{ maxWidth: 420, margin: '0 auto' }}>
               {formFields}
             </div>

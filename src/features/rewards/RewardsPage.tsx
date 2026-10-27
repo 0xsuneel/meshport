@@ -638,7 +638,7 @@ export function RewardsPage() {
               height (flex items would otherwise shrink and cut off Claim USDC). */}
           <div style={{ flex: '1 1 0%', minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18, padding: 2, margin: -2 }}>
             <div style={{ flexShrink: 0 }}>{hero}</div>
-            <div style={{ flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: '14px 14px 6px' }}>{tasks}</div>
+            <div style={{ flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 18, padding: '14px 14px 6px' }}>{tasks}</div>
           </div>
           <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0 }}>{history}</div>
         </div>

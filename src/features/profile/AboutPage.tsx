@@ -52,7 +52,7 @@ export function AboutPage() {
           </div>
         </div>
 
-        <div className="bg-surface border border-border rounded-3xl p-5 space-y-3">
+        <div className="bg-surface soft-card rounded-3xl p-5 space-y-3">
           <p className="text-[15px] font-semibold text-text-primary leading-snug">
             Sending money should feel like sending a message.
           </p>
@@ -82,7 +82,7 @@ export function AboutPage() {
           ))}
         </div>
 
-        <div className="bg-surface border border-border rounded-3xl p-5 space-y-3">
+        <div className="bg-surface soft-card rounded-3xl p-5 space-y-3">
           <p className="text-sm font-semibold text-text-primary">Built on Arc</p>
           <p className="text-sm text-text-secondary leading-relaxed">
             MeshPort runs on <span className="text-text-primary font-medium">Arc</span>, a blockchain from Circle - the
@@ -105,7 +105,7 @@ export function AboutPage() {
           </p>
         </div>
 
-        <div className="bg-surface border border-border rounded-3xl divide-y divide-border">
+        <div className="bg-surface soft-card rounded-3xl divide-y divide-border">
           {[
             { label: 'Feature Guide', path: '/feature-guide' },
             { label: 'Terms & Privacy', path: '/terms-privacy' },

@@ -20,7 +20,7 @@ export function StatTriple({ items }: StatTripleProps) {
       {items.map((item, i) => (
         <div
           key={i}
-          className="flex flex-col gap-1 rounded-2xl bg-surface border border-border px-3 py-3.5"
+          className="flex flex-col gap-1 rounded-2xl bg-surface soft-card px-3 py-3.5"
         >
           <span className="text-[11px] font-medium text-text-muted leading-tight">{item.label}</span>
           <span className="display text-lg font-bold tabular-nums text-text-primary leading-tight">

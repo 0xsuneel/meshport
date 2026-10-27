@@ -360,7 +360,7 @@ export function AmountKeypad({
             exit={{ opacity: 0 }}
             transition={DESKTOP_FADE_TRANSITION}
             style={{
-              background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18,
+              background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 18,
               padding: '20px 22px',
             }}
           >

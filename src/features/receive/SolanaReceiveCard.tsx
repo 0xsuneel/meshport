@@ -22,7 +22,7 @@ export function SolanaReceiveCard() {
   }
 
   return (
-    <div className="w-full bg-surface border border-border rounded-2xl p-4 space-y-3" style={{ maxWidth: 340, boxSizing: 'border-box' }}>
+    <div className="w-full bg-surface soft-card rounded-2xl p-4 space-y-3" style={{ maxWidth: 340, boxSizing: 'border-box' }}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold text-text-primary">Solana <span className="text-xs font-normal text-text-secondary">· devnet</span></p>
         <p className="text-sm font-semibold text-text-primary">{usdc ?? '…'} <span className="text-xs font-normal text-text-secondary">USDC</span></p>

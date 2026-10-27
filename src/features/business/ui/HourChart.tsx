@@ -22,7 +22,7 @@ export function HourChart({ title, sub, bars, peak }: HourChartProps) {
   const max = Math.max(...bars.map((b) => b.value), 1)
 
   return (
-    <div className="rounded-3xl bg-card border border-border p-5">
+    <div className="rounded-3xl bg-card soft-card p-5">
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div>

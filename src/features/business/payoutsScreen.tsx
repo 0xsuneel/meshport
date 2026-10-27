@@ -169,7 +169,7 @@ export function PayoutsScreen({ open, onBack }: { open: boolean; onBack: () => v
             )}
             <div>
               <p className="text-xs font-semibold text-text-secondary mb-2">Pay groups</p>
-              <div className="rounded-2xl bg-card border border-border divide-y divide-border">
+              <div className="rounded-2xl bg-card soft-card divide-y divide-border">
                 {list.map(p => {
                   const chip = dueChip(p)
                   return (
@@ -335,7 +335,7 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
             <p className="text-[30px] font-bold tabular-nums text-text-primary">{money(phase.total)}</p>
             <p className="text-sm text-text-secondary">{initial.name} · {people(phase.paid.length)}</p>
           </div>
-          <div className="w-full rounded-2xl bg-card border border-border divide-y divide-border">
+          <div className="w-full rounded-2xl bg-card soft-card divide-y divide-border">
             {phase.paid.map(r => (
               <div key={r.key} className="flex items-center gap-3 px-3.5 py-3">
                 <Avatar name={name(r)} src={r.payee?.avatarUrl ?? undefined} size="sm" />
@@ -389,7 +389,7 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
               </div>
             ))}
           </div>
-          <div className="rounded-2xl bg-card border border-border p-3.5 flex flex-col gap-1.5 text-[13px]">
+          <div className="rounded-2xl bg-card soft-card p-3.5 flex flex-col gap-1.5 text-[13px]">
             <div className="flex justify-between text-text-secondary"><span>People</span><span className="font-semibold text-text-primary tabular-nums">{chosen.length}</span></div>
             <div className="flex justify-between text-text-secondary"><span>Network fee</span><span className="font-semibold text-text-primary tabular-nums">≈ ${fee.toFixed(3)}</span></div>
             <div className="flex justify-between text-text-secondary"><span>Your balance</span><span className={`font-semibold tabular-nums ${notEnough ? 'text-danger' : 'text-text-primary'}`}>{money(balance)}</span></div>
@@ -533,7 +533,7 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
           {draft.rows.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-center text-xs text-text-muted">Search above to add the people you pay.</p>
           ) : (
-            <div className="rounded-2xl bg-card border border-border divide-y divide-border">
+            <div className="rounded-2xl bg-card soft-card divide-y divide-border">
               {draft.rows.map((r, i) => (
                 <div key={r.to} className="flex items-center gap-3 px-3.5 py-2.5">
                   <Avatar name={r.name} src={r.avatar ?? undefined} size="sm" />

@@ -188,7 +188,7 @@ export function NewsArticlePage() {
             ))}
           </div>
           {facts.length > 0 && (
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: '14px 16px 4px' }}>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 18, padding: '14px 16px 4px' }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Details</span>
               {facts.map(([k, v], i) => (
                 <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '10px 0', fontSize: 13, borderBottom: i < facts.length - 1 ? '1px solid var(--border)' : 'none' }}>

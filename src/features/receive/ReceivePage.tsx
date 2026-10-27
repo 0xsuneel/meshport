@@ -308,7 +308,7 @@ export function ReceivePage() {
         // The request fills the page like Business's Collect payment (its own
         // keypad and button at the bottom); a centred card on desktop.
         <div className="flex-1 min-h-0 flex flex-col" style={isDesktop ? { padding: '16px 16px 4px', alignItems: 'center' } : undefined}>
-          <div className="flex-1 min-h-0 flex flex-col w-full" style={isDesktop ? { maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 24, overflow: 'hidden' } : undefined}>
+          <div className="flex-1 min-h-0 flex flex-col w-full" style={isDesktop ? { maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 24, overflow: 'hidden' } : undefined}>
             {/* A business picks the store here too (the same pick as My QR's). */}
             <RequestQrPanel initialCustomer={params.get('customer') ?? undefined}
               stores={business ? stores : undefined} storeId={store?.id ?? null} onStore={setQrPick} />

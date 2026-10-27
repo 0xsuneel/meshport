@@ -126,7 +126,7 @@ export function MerchantPayPage() {
           {view.orderNumber && <p className="text-sm font-semibold text-text-primary">{orderTitle(orderKindOf(view), view.orderNumber, { paid: view.status === 'paid' })}</p>}
           {view.note && <p className="text-sm text-text-secondary">{view.note}</p>}
           {view.kind === 'invoice' && !!view.items?.length && (
-            <div className="bg-surface border border-border rounded-2xl p-4 text-left mt-2">
+            <div className="bg-surface soft-card rounded-2xl p-4 text-left mt-2">
               <p className="text-xs font-bold text-text-secondary mb-2">Bill</p>
               {view.items.map((i, k) => (
                 <div key={k} className="flex justify-between gap-3 text-sm py-1">
@@ -180,7 +180,7 @@ export function MerchantPayPage() {
           </div>
         )}
         {(view.status === 'expired' || view.status === 'cancelled') && (
-          <div className="bg-surface border border-border rounded-3xl p-6 text-center text-sm text-text-secondary">
+          <div className="bg-surface soft-card rounded-3xl p-6 text-center text-sm text-text-secondary">
             This payment request {view.status === 'expired' ? 'has expired' : 'was cancelled'}. Ask {view.merchantName} for a new one.
           </div>
         )}
