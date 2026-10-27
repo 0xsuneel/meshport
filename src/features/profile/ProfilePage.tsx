@@ -123,11 +123,14 @@ export function ProfilePage() {
   const userCardSection = (
     <div className="w-full">
       <div className="flex flex-col items-center text-center">
-        {user.avatar
-          ? <Avatar name={displayName} src={user.avatar} size="xl" className="!w-[72px] !h-[72px]" />
-          : <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--mustard)', color: 'var(--mustard-ink)', display: 'grid', placeItems: 'center', fontSize: 24, fontWeight: 700 }}>
-              {displayName.trim().split(/\s+/).map(w => w.charAt(0)).join('').slice(0, 2).toUpperCase()}
-            </div>}
+        {/* The brand ring around your picture, as on Home and Chats. */}
+        <div style={{ padding: 3, borderRadius: '50%', background: 'var(--brand)' }}>
+          {user.avatar
+            ? <Avatar name={displayName} src={user.avatar} size="xl" className="!w-[72px] !h-[72px]" style={{ border: '3px solid var(--bg)', boxSizing: 'border-box' }} />
+            : <div style={{ width: 72, height: 72, borderRadius: '50%', border: '3px solid var(--bg)', boxSizing: 'border-box', background: 'var(--mustard)', color: 'var(--mustard-ink)', display: 'grid', placeItems: 'center', fontSize: 24, fontWeight: 700 }}>
+                {displayName.trim().split(/\s+/).map(w => w.charAt(0)).join('').slice(0, 2).toUpperCase()}
+              </div>}
+        </div>
         <p className="text-text-primary font-bold text-[20px] leading-tight tracking-tight truncate max-w-full mt-3">{displayName}</p>
         <div className="flex items-center gap-2 mt-3">
           <button onClick={() => navigate('/edit-profile')} className="mp-press inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[13px] font-semibold"
