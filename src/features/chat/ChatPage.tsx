@@ -1158,20 +1158,21 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
               <button key={id} role="tab" aria-selected={on} onClick={() => setListTab(id)}
                 className={`flex-1 min-w-0 rounded-full flex items-center justify-center gap-1 ${requestsOn ? 'text-[13px]' : 'text-[14px]'} transition-colors`}
                 style={{ height: 36, fontWeight: on ? 700 : 600, cursor: 'pointer',
-                  background: on ? 'color-mix(in srgb, var(--brand) 25%, transparent)' : 'transparent',
+                  // Same chips as News: the chosen one solid teal, the rest white.
+                  background: on ? 'var(--brand)' : 'var(--surface)',
                   border: `1px solid ${on ? 'var(--brand)' : 'var(--border)'}`,
-                  color: on ? 'var(--brand-text)' : 'var(--text-secondary)' }}>
+                  color: on ? '#fff' : 'var(--text-secondary)' }}>
                 {label}
                 {id === 'archived' && archivedUnread > 0 && (
-                  <span className="text-[12px] font-bold" style={{ color: 'var(--brand-text)' }}>+{archivedUnread > 99 ? '99' : archivedUnread}</span>
+                  <span className="text-[12px] font-bold" style={{ color: on ? '#fff' : 'var(--brand-text)' }}>+{archivedUnread > 99 ? '99' : archivedUnread}</span>
                 )}
                 {id === 'requests' && requestConvs.length > 0 && (
                   <span className="rounded-full text-[11px] font-bold text-white inline-flex items-center justify-center"
-                    style={{ minWidth: 18, height: 18, padding: '0 5px', background: 'var(--brand)' }}>{requestConvs.length}</span>
+                    style={{ minWidth: 18, height: 18, padding: '0 5px', background: on ? 'rgba(255,255,255,0.25)' : 'var(--brand)' }}>{requestConvs.length}</span>
                 )}
                 {id === 'unread' && unreadChats > 0 && (
                   <span className="rounded-full text-[11px] font-bold text-white inline-flex items-center justify-center"
-                    style={{ minWidth: 18, height: 18, padding: '0 5px', background: 'var(--brand)' }}>{unreadChats > 99 ? '99+' : unreadChats}</span>
+                    style={{ minWidth: 18, height: 18, padding: '0 5px', background: on ? 'rgba(255,255,255,0.25)' : 'var(--brand)' }}>{unreadChats > 99 ? '99+' : unreadChats}</span>
                 )}
               </button>
             )
