@@ -1137,7 +1137,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
           <h1 className="text-xl font-bold text-text-primary" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>Chats</h1>
           <motion.button whileTap={{ scale: 0.9 }} aria-label={searchOpen ? 'Close search' : 'Search chats'}
             onClick={() => { if (searchOpen) setSearch(''); setSearchOpen(o => !o) }}
-            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+            className="mp-hit mp-hit-sm w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
             style={{ background: searchOpen ? 'var(--surface)' : 'transparent', border: 'none' }}>
             {searchOpen ? <X className="w-5 h-5 text-text-primary" /> : <Search className="w-[21px] h-[21px] text-text-primary" />}
           </motion.button>
@@ -1156,7 +1156,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
             const on = listTab === id
             return (
               <button key={id} role="tab" aria-selected={on} onClick={() => setListTab(id)}
-                className={`flex-1 min-w-0 rounded-full flex items-center justify-center gap-1 ${requestsOn ? 'text-[13px]' : 'text-[14px]'} transition-colors`}
+                className={`mp-hit-y flex-1 min-w-0 rounded-full flex items-center justify-center gap-1 ${requestsOn ? 'text-[13px]' : 'text-[14px]'} transition-colors`}
                 style={{ height: 36, fontWeight: on ? 700 : 600, cursor: 'pointer',
                   // Same chips as News: the chosen one solid teal, the rest white.
                   background: on ? 'var(--brand)' : 'var(--surface)',
