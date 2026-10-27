@@ -17,7 +17,6 @@ import { ModeToggle } from '@/components/admin/ModeToggle'
 import { useAuthStore, useP2PTradesCountStore, useWalletStore, useUIStore } from '@/store'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useVisibleFrame, useFrameScrollGuard, visibleFrame } from '@/hooks/useVisibleViewportHeight'
-import { useKeyboardOpen } from '@/hooks/useKeyboardOpen'
 import { supabase, syncAuthUidToProfile } from '@/lib/supabase'
 import { notifyClaimArrived } from '@/lib/bridgeTracker'
 import { notifyPaymentReceived, notifyPaymentReceivedFromAddress } from '@/lib/notifications'
@@ -76,10 +75,11 @@ export function AppLayout() {
   })
   const showNav = !isNoNavRoute(location.pathname)
   const isDesktop = useMediaQuery('(min-width: 980px)')
-  // The bottom tab bar steps aside while the phone keyboard is up (typing in
-  // any search box, form or message field) and the page gets its space back.
-  const keyboardOpen = useKeyboardOpen(!isDesktop)
-  const navVisible = showNav && !keyboardOpen
+  // The bottom tab bar steps aside while the phone keyboard is up - done in
+  // CSS from the frame's data-kb (useVisibleFrame), in the same frame the
+  // keyboard takes its space. Hiding it on focus (before the keyboard rose)
+  // dropped the page by the bar's height and then pushed it back up.
+  const navVisible = showNav
   const navHidden = useUIStore(s => s.navHidden)
   const walletAddress = useAuthStore(s => s.walletAddress)
   const userId = useAuthStore(s => s.user?.id)
@@ -774,7 +774,7 @@ export function AppLayout() {
       }}>
         {/* Home scrolls under the frosted bottom nav (it pads its own end);
             every other page stops above it. */}
-        <div data-no-scroll="" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', paddingBottom: navVisible && location.pathname !== '/' ? 'calc(65px + env(safe-area-inset-bottom, 0px))' : 0, minHeight: 0 }}>
+        <div data-no-scroll="" data-nav-pad="" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', paddingBottom: navVisible && location.pathname !== '/' ? 'calc(65px + env(safe-area-inset-bottom, 0px))' : 0, minHeight: 0 }}>
           <PageTransition locationKey={location.pathname}>
             <Outlet key={reloadKey} />
           </PageTransition>

@@ -870,3 +870,8 @@ button, [role="button"], [role="tab"] { -webkit-user-select: none; user-select: 
 }
 ::selection { background: color-mix(in srgb, var(--brand) 26%, transparent); }
 input, textarea { caret-color: var(--brand-text); }
+
+/* Phone keyboard up (useVisibleFrame sets data-kb on the app frame): the
+   bottom nav steps aside and the page takes its space back. */
+[data-kb] [data-bottom-nav] { display: none; }
+[data-kb] [data-nav-pad] { padding-bottom: 0 !important; }

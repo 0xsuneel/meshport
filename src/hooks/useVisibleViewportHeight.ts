@@ -99,8 +99,20 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     // it changed: these events fire on every scroll, and a height write
     // re-lays-out the whole app.
     let lastTop = -1, lastHeight = ''
+    // Keyboard up = a text field has focus AND the visible area has actually
+    // shrunk from its full height (at this width). Marked on the frame as
+    // data-kb so CSS hides the bottom nav in the very frame the keyboard
+    // takes the space - never earlier (on focus) or later (a re-render).
+    // It clears only when the space comes back, so the nav doesn't pop up
+    // above a keyboard that is still closing.
+    let fullH = 0, fullW = 0, kb = false
     const apply = () => {
       const { top, height } = visibleFrame()
+      if (window.innerWidth !== fullW) { fullW = window.innerWidth; fullH = 0 }
+      fullH = Math.max(fullH, height)
+      const shrunk = height < fullH - 120
+      const nextKb = kb ? shrunk : shrunk && opensKeyboard(document.activeElement)
+      if (nextKb !== kb) { kb = nextKb; if (kb) el.dataset.kb = ''; else delete el.dataset.kb }
       // Visible area = the whole layout viewport (no keyboard, or Android,
       // whose keyboard shrinks the layout viewport itself): plain 100%, so
       // the browser resizes the frame in the same layout pass as the
@@ -126,7 +138,7 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
       if (h < lastH - 80) settle()
       lastH = h
     }
-    const onFocus = () => { if (visibleFrame().height < window.innerHeight - 80) settle() }
+    const onFocus = () => { apply(); if (visibleFrame().height < window.innerHeight - 80) settle() }
     document.addEventListener('focusin', onFocus)
     apply()
     vv?.addEventListener('resize', schedule)
