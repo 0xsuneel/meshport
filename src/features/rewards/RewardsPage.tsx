@@ -415,18 +415,25 @@ export function RewardsPage() {
 
   // ── Pieces ─────────────────────────────────────────────────────────────
   const hero = newUser ? (
-    // First claim not reached yet: progress ring to 100 pts.
-    <div style={{ textAlign: 'center', padding: '6px 16px 0' }}>
-      <div style={{ width: 150, height: 150, borderRadius: '50%', margin: '0 auto',
-        background: `conic-gradient(var(--success) 0 ${Math.min(100, (totalPoints / MIN_CLAIM_POINTS) * 100)}%, color-mix(in srgb, var(--text-primary) 7%, transparent) 0 100%)`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 124, height: 124, borderRadius: '50%', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <b style={{ fontSize: 28, color: 'var(--text-primary)' }}>{totalPoints}</b>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>of {MIN_CLAIM_POINTS} pts</span>
+    // First claim not reached yet: a teal card - your points and how many
+    // are left to the first claim, with the progress to 100 pts under them.
+    <div style={{ margin: isDesktop ? 0 : '0 16px' }}>
+      <div style={{ borderRadius: 22, padding: '16px 16px 14px', color: '#fff', background: 'var(--glass-sheen), var(--brand)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+          <div>
+            <div style={{ fontSize: 12.5, opacity: 0.75 }}>Your points</div>
+            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{totalPoints}<span style={{ fontSize: 13, fontWeight: 600, opacity: 0.7 }}> / {MIN_CLAIM_POINTS}</span></div>
+          </div>
+          <div style={{ borderLeft: '1px solid rgba(255,255,255,0.16)', paddingLeft: 14 }}>
+            <div style={{ fontSize: 12.5, opacity: 0.75 }}>To first claim</div>
+            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{MIN_CLAIM_POINTS - totalPoints}<span style={{ fontSize: 13, fontWeight: 600, opacity: 0.7 }}> pts</span></div>
+          </div>
+        </div>
+        <div style={{ height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.16)', marginTop: 14, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${Math.min(100, (totalPoints / MIN_CLAIM_POINTS) * 100)}%`, background: 'var(--mustard)', borderRadius: 3, transition: 'width .4s' }} />
         </div>
       </div>
-      <p style={{ fontSize: 14, margin: '12px 0 0', color: 'var(--text-primary)' }}><b>{MIN_CLAIM_POINTS - totalPoints} more points</b> to your first USDC claim</p>
-      <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+      <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '10px 4px 0' }}>
         Each task below earns +{POINTS_PER_TX} pts once a day · <span style={{ whiteSpace: 'nowrap' }}>{MIN_CLAIM_POINTS} pts = ${formatAmount(pointsToUSDC(MIN_CLAIM_POINTS))}</span>
       </p>
     </div>
@@ -464,11 +471,17 @@ export function RewardsPage() {
       <div style={{ margin: isDesktop ? '4px 2px 8px' : '4px 18px 8px', height: 6, borderRadius: 999, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${(earnedToday / MAX_DAILY_EARN_POINTS) * 100}%`, background: 'var(--success)', borderRadius: 999, transition: 'width .4s' }} />
       </div>
-      {TASKS.map(t => {
+      {/* One white card; each task's icon on a pastel square. */}
+      <div style={{ margin: isDesktop ? '8px 0 0' : '8px 16px 0', background: 'var(--surface)', borderRadius: 18, boxShadow: 'var(--card-soft)', padding: '2px 12px' }}>
+      {TASKS.map((t, i) => {
         const done = doneToday.has(`tx_reward:${t.type}`)
+        const tone = (['mint', 'peach', 'butter'] as const)[i % 3]
         return (
-          <div key={t.type} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isDesktop ? '9px 2px' : '9px 18px' }}>
-            <HistoryIcon tone={done ? 'in' : 'out'} icon={t.action} />
+          <div key={t.type} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}>
+            <span style={{ width: 36, height: 36, borderRadius: 11, flexShrink: 0, display: 'grid', placeItems: 'center',
+              background: `var(--tile-${tone})`, color: `var(--tile-${tone}-ink)` }}>
+              <ActionIcon name={t.action} size={18} color={`var(--tile-${tone}-ink)`} />
+            </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <b style={{ display: 'block', fontSize: 14, color: 'var(--text-primary)', fontWeight: 600 }}>{t.label}</b>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>+{POINTS_PER_TX} pts</span>
@@ -476,12 +489,13 @@ export function RewardsPage() {
             {done ? (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700, color: 'var(--success-text)' }}><Check size={14} strokeWidth={2.5} aria-hidden />Done</span>
             ) : (
-              <button onClick={() => navigate(t.path)} style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
-                background: 'color-mix(in srgb, var(--brand) 16%, transparent)', color: 'var(--brand-text)' }}>Go</button>
+              <button onClick={() => navigate(t.path)} className="mp-press" style={{ fontSize: 13, fontWeight: 700, padding: '7px 16px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                background: 'var(--tile-mint)', color: 'var(--tile-mint-ink)' }}>Go</button>
             )}
           </div>
         )
       })}
+      </div>
     </div>
   )
 

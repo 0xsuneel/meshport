@@ -72,7 +72,7 @@
    value sets).
    Both palettes come from values measured on real wallet screens (the
    taste-skill app library), with MeshPort teal as the one brand hue:
-   - Light: neutral off-white page (#F3F5F7), white cards, near-black ink,
+   - Light: warm off-white page (#F5F4F0), white cards, near-black ink,
      quiet money colours.
    - Dark: true black page (#000000) with cards one lightness step up
      (#111111); elevation is lightness alone, borders (#1F1F1F) barely show.
@@ -152,16 +152,20 @@
   --soft-raise: inset 0 1px 0 rgba(255,255,255,0.14);
   --soft-inset: inset 0 1px 2px rgba(0,0,0,0.6);
   --soft-well:  #111111;
-  /* Soft glass (Home): translucent cards over a faint teal wash. */
-  --glass-fill:  rgba(255,255,255,0.05);
-  --glass-edge:  rgba(255,255,255,0.06);
-  --glass-card:  inset 0 1px 0 rgba(255,255,255,0.1), inset 0 0 0 1px rgba(255,255,255,0.02), 0 18px 36px -20px rgba(0,0,0,0.9);
-  --glass-chip:  inset 0 1px 0 rgba(255,255,255,0.12);
+  /* Home cards: solid surface, a faint edge and a top highlight. */
+  --glass-fill:  #111111;
+  --glass-edge:  #1F1F1F;
+  --glass-card:  inset 0 1px 0 rgba(255,255,255,0.05);
+  --glass-chip:  inset 0 1px 0 rgba(255,255,255,0.1);
   --glass-raise: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 16px -8px rgba(0,0,0,0.9);
-  --glass-sheen: linear-gradient(160deg, rgba(255,255,255,0.14), rgba(255,255,255,0) 42%);
-  --glass-wash:  radial-gradient(70% 280px at 12% 250px, rgba(18,102,95,0.34), transparent 72%),
-                 radial-gradient(60% 320px at 100% 560px, rgba(43,160,146,0.16), transparent 72%),
-                 radial-gradient(70% 340px at 0% 980px, rgba(18,102,95,0.2), transparent 72%);
+  --glass-sheen: radial-gradient(190px 190px at 88% -12%, rgba(255,255,255,0.12), rgba(255,255,255,0) 70%);
+  --glass-wash:  linear-gradient(transparent, transparent);
+  --card-soft:   inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px #1A1A1A;
+  /* Pastel tiles (quick actions, recent people) and the warm accent. */
+  --tile-peach:      #2B1C14;  --tile-peach-ink:  #F0A57C;
+  --tile-mint:       #0F2421;  --tile-mint-ink:   #5CCFC4;
+  --tile-butter:     #2A2210;  --tile-butter-ink: #E9BC4C;
+  --mustard:         #E9BC4C;  --mustard-ink:     #3A2C06;
   --shadow-1: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
   --shadow-2: 0 4px 16px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
   --shadow-3: 0 12px 32px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.08);
@@ -223,16 +227,20 @@
   --soft-raise: inset 0 1px 0 rgba(255,255,255,0.14);
   --soft-inset: inset 0 1px 2px rgba(0,0,0,0.6);
   --soft-well:  #111111;
-  /* Soft glass (Home): translucent cards over a faint teal wash. */
-  --glass-fill:  rgba(255,255,255,0.05);
-  --glass-edge:  rgba(255,255,255,0.06);
-  --glass-card:  inset 0 1px 0 rgba(255,255,255,0.1), inset 0 0 0 1px rgba(255,255,255,0.02), 0 18px 36px -20px rgba(0,0,0,0.9);
-  --glass-chip:  inset 0 1px 0 rgba(255,255,255,0.12);
+  /* Home cards: solid surface, a faint edge and a top highlight. */
+  --glass-fill:  #111111;
+  --glass-edge:  #1F1F1F;
+  --glass-card:  inset 0 1px 0 rgba(255,255,255,0.05);
+  --glass-chip:  inset 0 1px 0 rgba(255,255,255,0.1);
   --glass-raise: inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 16px -8px rgba(0,0,0,0.9);
-  --glass-sheen: linear-gradient(160deg, rgba(255,255,255,0.14), rgba(255,255,255,0) 42%);
-  --glass-wash:  radial-gradient(70% 280px at 12% 250px, rgba(18,102,95,0.34), transparent 72%),
-                 radial-gradient(60% 320px at 100% 560px, rgba(43,160,146,0.16), transparent 72%),
-                 radial-gradient(70% 340px at 0% 980px, rgba(18,102,95,0.2), transparent 72%);
+  --glass-sheen: radial-gradient(190px 190px at 88% -12%, rgba(255,255,255,0.12), rgba(255,255,255,0) 70%);
+  --glass-wash:  linear-gradient(transparent, transparent);
+  --card-soft:   inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px #1A1A1A;
+  /* Pastel tiles (quick actions, recent people) and the warm accent. */
+  --tile-peach:      #2B1C14;  --tile-peach-ink:  #F0A57C;
+  --tile-mint:       #0F2421;  --tile-mint-ink:   #5CCFC4;
+  --tile-butter:     #2A2210;  --tile-butter-ink: #E9BC4C;
+  --mustard:         #E9BC4C;  --mustard-ink:     #3A2C06;
   --shadow-1: 0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.24);
   --shadow-2: 0 4px 16px rgba(0,0,0,0.40), 0 2px 6px rgba(0,0,0,0.24);
   --shadow-3: 0 12px 32px rgba(0,0,0,0.50), 0 4px 12px rgba(0,0,0,0.30);
@@ -271,7 +279,7 @@
   --text-primary:   #1B1D1F;
   --text-secondary: #45494D;
   --text-muted:     #5C6064;
-  --bg:             #F3F5F7;
+  --bg:             #F5F4F0;
   --surface:        #FFFFFF;
   --card:           #FFFFFF;
   --border:         #E6E6E6;
@@ -284,7 +292,7 @@
   --accent-rgb: 30 148 136;    --accent-text-rgb: 15 92 87;
   --success-rgb: 47 122 69;   --warning-rgb: 194 122 18; --danger-rgb: 196 28 41;
   --text-primary-rgb: 27 29 31; --text-secondary-rgb: 69 73 77; --text-muted-rgb: 92 96 100;
-  --bg-rgb: 243 245 247; --surface-rgb: 255 255 255; --card-rgb: 255 255 255; --border-rgb: 230 230 230;
+  --bg-rgb: 245 244 240; --surface-rgb: 255 255 255; --card-rgb: 255 255 255; --border-rgb: 230 230 230;
   --link-rgb: 15 92 87;
   --avatar-1-rgb: 29 158 117; --avatar-2-rgb: 99 153 34; --avatar-3-rgb: 83 74 183; --avatar-4-rgb: 216 90 48;
   --usdc-icon-rgb: 12 68 124;
@@ -295,16 +303,20 @@
   --soft-raise: inset 0 1px 0 rgba(255,255,255,0.18), 0 6px 14px -6px rgba(18,102,95,0.45);
   --soft-inset: inset 0 1px 3px rgba(16,24,32,0.08), inset 0 -1px 0 rgba(255,255,255,0.7);
   --soft-well:  #ECEFF2;
-  /* Soft glass (Home): translucent cards over a faint teal wash. */
-  --glass-fill:  rgba(255,255,255,0.6);
-  --glass-edge:  rgba(255,255,255,0.85);
-  --glass-card:  inset 0 1px 0 rgba(255,255,255,1), inset 0 -1px 0 rgba(16,24,32,0.03), 0 1px 2px rgba(16,24,32,0.05), 0 16px 34px -18px rgba(16,24,32,0.2);
-  --glass-chip:  inset 0 1px 0 rgba(255,255,255,1), 0 1px 2px rgba(16,24,32,0.06), 0 6px 12px -6px rgba(16,24,32,0.16);
+  /* Home cards: solid white on the warm page, a contact + ambient shadow. */
+  --glass-fill:  #FFFFFF;
+  --glass-edge:  transparent;
+  --glass-card:  0 1px 2px rgba(22,32,30,0.04), 0 8px 20px -12px rgba(22,32,30,0.12);
+  --glass-chip:  0 1px 2px rgba(22,32,30,0.05), 0 6px 14px -8px rgba(22,32,30,0.16);
   --glass-raise: inset 0 1px 0 rgba(255,255,255,0.25), 0 1px 2px rgba(18,102,95,0.25), 0 8px 16px -8px rgba(18,102,95,0.5);
-  --glass-sheen: linear-gradient(160deg, rgba(255,255,255,0.16), rgba(255,255,255,0) 42%);
-  --glass-wash:  radial-gradient(70% 280px at 12% 250px, rgba(18,102,95,0.16), transparent 72%),
-                 radial-gradient(60% 320px at 100% 560px, rgba(43,160,146,0.13), transparent 72%),
-                 radial-gradient(70% 340px at 0% 980px, rgba(18,102,95,0.1), transparent 72%);
+  --glass-sheen: radial-gradient(190px 190px at 88% -12%, rgba(255,255,255,0.12), rgba(255,255,255,0) 70%);
+  --glass-wash:  linear-gradient(transparent, transparent);
+  --card-soft:   0 1px 2px rgba(22,32,30,0.04), 0 8px 20px -12px rgba(22,32,30,0.12);
+  /* Pastel tiles (quick actions, recent people) and the warm accent. */
+  --tile-peach:      #F8E7DB;  --tile-peach-ink:  #A4532A;
+  --tile-mint:       #E1EFE9;  --tile-mint-ink:   #12665F;
+  --tile-butter:     #F8EDC9;  --tile-butter-ink: #8A6510;
+  --mustard:         #E9BC4C;  --mustard-ink:     #3A2C06;
   --shadow-1: 0 1px 3px rgba(16,24,32,0.06), 0 1px 2px rgba(16,24,32,0.04);
   --shadow-2: 0 4px 16px rgba(16,24,32,0.08), 0 2px 6px rgba(16,24,32,0.04);
   --shadow-3: 0 12px 32px rgba(16,24,32,0.12), 0 4px 12px rgba(16,24,32,0.06);
@@ -345,6 +357,9 @@
 /* Soft UI resting card: a faint edge and the theme's soft lift (--soft-card)
    instead of a hard 1px border. Light: a wide soft shadow and a white top
    edge; dark: a faint top highlight only. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 .soft-card {
   border: 1px solid var(--soft-edge);
   box-shadow: var(--soft-card);

@@ -8,6 +8,7 @@ import { NewsArt } from '@/features/news/NewsArt'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useReconnectCount } from '@/lib/connectivity'
 import { fetchHomeNews, readCachedHomeNews, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT, type NewsItem } from '@/lib/news'
+import { timeAgo } from '@/lib/utils'
 
 // ── Home: Recent + News, side by side ───────────────────────────────────────
 // Two equal boxes under the feature banner (Home, desktop and mobile), each with a 64px
@@ -339,5 +340,193 @@ export function RecentNewsRow({ navigate }: { navigate: NavigateFunction }) {
       <RecentBox navigate={navigate} />
       <NewsBox navigate={navigate} />
     </div>
+  )
+}
+
+// ── Mobile: Recent and Updates stacked, full width ──────────────────────────
+// Recent: a row of the last people you paid (tap a face to pay them) and a
+// "Pay new" button. Updates: news cards that scroll sideways, the next one
+// peeking in. Desktop keeps the side-by-side boxes above.
+
+const TILES = [
+  { bg: 'var(--tile-mint)', ink: 'var(--tile-mint-ink)' },
+  { bg: 'var(--tile-peach)', ink: 'var(--tile-peach-ink)' },
+  { bg: 'var(--tile-butter)', ink: 'var(--tile-butter-ink)' },
+]
+
+export function SectionHead({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '0 2px 10px' }}>
+      <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.2px', color: 'var(--text-primary)' }}>{title}</span>
+      {action && onAction && (
+        <button type="button" onClick={onAction}
+          style={{ background: 'none', border: 'none', padding: '4px 0', margin: '-4px 0', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
+          {action}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function PastelFace({ c, i, size }: { c: RecentContact; i: number; size: number }) {
+  const [ok, setOk] = useState(true)
+  const t = TILES[i % TILES.length]
+  if (c.avatar_url && ok) {
+    return <img decoding="async" src={c.avatar_url} alt="" draggable={false} onError={() => setOk(false)}
+      style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
+  }
+  return (
+    <span style={{ width: size, height: size, borderRadius: '50%', background: t.bg, color: t.ink, display: 'grid', placeItems: 'center', fontSize: 15, fontWeight: 650 }}>
+      {recentInitial(c)}
+    </span>
+  )
+}
+
+function useRecentPeople(limit: number) {
+  const walletAddress = useAuthStore(s => s.walletAddress)
+  // Same cache key as the desktop box, so the list is there instantly.
+  const cacheKey = walletAddress ? `meshport_recents_${walletAddress.toLowerCase()}_5` : ''
+  const [people, setPeople] = useState<RecentContact[]>(() => {
+    try { const c = cacheKey ? JSON.parse(localStorage.getItem(cacheKey) || 'null') : null; return Array.isArray(c) ? c : [] } catch { return [] }
+  })
+  const [loaded, setLoaded] = useState(() => { try { return !!cacheKey && localStorage.getItem(cacheKey) != null } catch { return false } })
+  const reconnects = useReconnectCount() // back online → load again
+  useEffect(() => {
+    if (!walletAddress) return
+    let cancelled = false
+    fetchRecentContacts(walletAddress, { activityLimit: 20, maxAddresses: 10, resultLimit: 5 })
+      .then(list => {
+        if (cancelled) return
+        setPeople(list)
+        try { if (cacheKey) localStorage.setItem(cacheKey, JSON.stringify(list)) } catch { /* storage full */ }
+      })
+      .catch(e => console.error('RecentStrip load error:', e))
+      .finally(() => { if (!cancelled) setLoaded(true) })
+    return () => { cancelled = true }
+  }, [walletAddress, cacheKey, reconnects])
+  return { people: people.slice(0, limit), loaded }
+}
+
+const FACE = 46
+
+function RecentStrip({ navigate }: { navigate: NavigateFunction }) {
+  const { people, loaded } = useRecentPeople(4)
+  const pay = (c: RecentContact) => navigate(`/pay?to=${encodeURIComponent(recentSendTarget(c))}`, { state: { returnTo: '/' } })
+  const cell = { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 6, width: 58, background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }
+  const name = { fontSize: 11.5, fontWeight: 500, color: 'var(--text-secondary)', maxWidth: 58, whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' }
+  let body: ReactNode
+  if (!loaded && people.length === 0) {
+    body = (
+      <div aria-busy="true" aria-label="Loading recent people" style={{ display: 'flex', justifyContent: 'space-between' }}>
+        {[0, 1, 2, 3, 4].map(k => (
+          <div key={k} style={{ ...cell, cursor: 'default' }}>
+            <Skeleton className="rounded-full" style={{ width: FACE, height: FACE }} />
+            <Skeleton className="h-2.5 w-10 rounded-full" />
+          </div>
+        ))}
+      </div>
+    )
+  } else if (people.length === 0) {
+    body = (
+      <button type="button" onClick={() => navigate('/pay')} className="mp-press"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', textAlign: 'left' }}>
+        <span>
+          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>No one yet</span>
+          <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 2 }}>People you pay show here</span>
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 650, color: 'var(--brand-text)' }}>Pay someone ›</span>
+      </button>
+    )
+  } else {
+    const full = people.length >= 4
+    body = (
+      <div style={{ display: 'flex', justifyContent: full ? 'space-between' : 'flex-start', gap: full ? 0 : 14 }}>
+        {people.map((c, i) => (
+          <button key={c.wallet_address} type="button" onClick={() => pay(c)} className="mp-press" aria-label={`Pay ${recentShortName(c)}`} style={cell}>
+            <PastelFace c={c} i={i} size={FACE} />
+            <span style={name}>{recentShortName(c)}</span>
+          </button>
+        ))}
+        <button type="button" onClick={() => navigate('/pay')} className="mp-press" aria-label="Pay someone new" style={cell}>
+          <span style={{ width: FACE, height: FACE, borderRadius: '50%', boxShadow: 'inset 0 0 0 1.5px var(--border)', color: 'var(--brand-text)', display: 'grid', placeItems: 'center' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </span>
+          <span style={name}>Pay new</span>
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div>
+      <SectionHead title="Recent" action={people.length ? 'See all' : undefined} onAction={() => navigate('/recent-paid', { state: { from: '/' } })} />
+      <div style={{ background: 'var(--surface)', borderRadius: 16, boxShadow: 'var(--card-soft)', padding: '14px 12px 12px' }}>{body}</div>
+    </div>
+  )
+}
+
+function NewsStrip({ navigate }: { navigate: NavigateFunction }) {
+  const [items, setItems] = useState<NewsItem[]>(() => readCachedHomeNews())
+  const [loaded, setLoaded] = useState(() => items.length > 0)
+  const [broken, setBroken] = useState<Record<string, true>>({})
+  const reconnects = useReconnectCount() // back online → load again
+  useEffect(() => {
+    let cancelled = false
+    if (reconnects) setBroken({}) // covers that failed offline get another try
+    fetchHomeNews(4).then(list => { if (!cancelled) setItems(list) }).finally(() => { if (!cancelled) setLoaded(true) })
+    return () => { cancelled = true }
+  }, [reconnects])
+  const card = { flex: '0 0 78%', maxWidth: 290, background: 'var(--surface)', borderRadius: 16, boxShadow: 'var(--card-soft)', padding: 8,
+    display: 'flex', gap: 10, alignItems: 'center', scrollSnapAlign: 'start' as const }
+  let body: ReactNode
+  if (!items.length && !loaded) {
+    body = <Skeleton className="rounded-2xl" style={{ height: 80 }} />
+  } else if (!items.length) {
+    body = (
+      <div style={{ background: 'var(--surface)', borderRadius: 16, boxShadow: 'var(--card-soft)', padding: '16px 14px', fontSize: 13, color: 'var(--text-secondary)' }}>
+        Arc, Circle and MeshPort updates show here
+      </div>
+    )
+  } else {
+    body = (
+      // Scrolls sideways. The row runs to the screen edges (the page has 20px
+      // margins) so the next card peeks in, and its padding leaves room for
+      // the cards' shadows.
+      <div className="no-scrollbar" style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollSnapType: 'x mandatory',
+        margin: '-12px -20px -16px', padding: '12px 20px 16px', scrollPaddingLeft: 20 }}>
+        {items.map((it, k) => (
+          <button key={it.id} type="button" onClick={() => navigate(`/news/${it.id}`)} className="mp-press"
+            style={{ ...card, border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+            <span style={{ position: 'relative', width: 64, height: 64, borderRadius: 11, overflow: 'hidden', flexShrink: 0, background: NEWS_SOURCE_TINT[it.source] }}>
+              {it.image_url && !broken[it.id]
+                ? <img decoding="async" src={it.image_url} alt="" draggable={false} loading={k === 0 ? 'eager' : 'lazy'}
+                    onError={() => setBroken(b => ({ ...b, [it.id]: true }))}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <NewsArt item={it} variant="thumb" />}
+            </span>
+            <span style={{ minWidth: 0, flex: 1 }}>
+              <span style={{ display: 'block', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.4px', textTransform: 'uppercase', color: 'var(--brand-text)' }}>{NEWS_SOURCE_LABEL[it.source]}</span>
+              <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                fontSize: 13, fontWeight: 600, lineHeight: 1.3, color: 'var(--text-primary)', marginTop: 2 }}>{it.title}</span>
+              <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>{timeAgo(it.published_at)}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    )
+  }
+  return (
+    <div>
+      <SectionHead title="Updates" action="View all" onAction={() => navigate('/news')} />
+      {body}
+    </div>
+  )
+}
+
+export function RecentNewsStack({ navigate }: { navigate: NavigateFunction }) {
+  return (
+    <>
+      <RecentStrip navigate={navigate} />
+      <NewsStrip navigate={navigate} />
+    </>
   )
 }

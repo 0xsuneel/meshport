@@ -192,7 +192,7 @@ const APPEARANCE_OPTIONS: { mode: ThemeMode; label: string; description: string;
 // what light/dark actually look like regardless of the page's own current
 // theme - pulled straight from the light/dark blocks in index.css.
 const PREVIEW_PALETTE: Record<'light' | 'dark', { bg: string; surface: string; border: string; text: string; textSecondary: string; brand: string }> = {
-  light: { bg: '#F3F5F7', surface: '#FFFFFF', border: '#E6E6E6', text: '#1B1D1F', textSecondary: '#45494D', brand: '#12665F' },
+  light: { bg: '#F5F4F0', surface: '#FFFFFF', border: '#E6E6E6', text: '#1B1D1F', textSecondary: '#45494D', brand: '#12665F' },
   dark:  { bg: '#000000', surface: '#111111', border: '#1F1F1F', text: '#FFFFFF', textSecondary: '#B4B4B4', brand: '#12665F' },
 }
 

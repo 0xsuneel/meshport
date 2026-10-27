@@ -70,7 +70,7 @@
          attribute is already set by the bootstrap script above by the
          time these rules are evaluated, so the very first pixel already
          matches the resolved theme. Values mirror --bg in src/index.css. */
-      html, body { background: #F3F5F7; }
+      html, body { background: #F5F4F0; }
       html[data-theme="dark"], html[data-theme="dark"] body { background: #000000; }
       /* App open: the page itself is the launch-screen teal from its very
          first frame (set by boot.js, removed with the splash). The phone's
@@ -140,7 +140,7 @@
       /* Refresh (this tab already opened the app): no teal brand screen -
          just the normal page background, and a small logo only if loading
          takes more than a moment. html.mp-refresh is set by the script below. */
-      html.mp-refresh #splash { background: #F3F5F7; color: #0F5C57; }
+      html.mp-refresh #splash { background: #F5F4F0; color: #0F5C57; }
       html.mp-refresh[data-theme="dark"] #splash { background: #000000; color: #5CCFC4; }
       html.mp-refresh #splash .txt { display: none; }
       html.mp-refresh #splash .tile { width: 56px; height: 56px; background: transparent; border-radius: 0; opacity: 0; animation: mpSplashIn .3s ease .5s forwards; }
