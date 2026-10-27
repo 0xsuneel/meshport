@@ -536,7 +536,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
 export function MultichainRecoveryPage() {
   // Its own scroll area: the app shell clips anything taller than the screen.
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
       <RecoveryPanel showHeader />
     </div>
   )

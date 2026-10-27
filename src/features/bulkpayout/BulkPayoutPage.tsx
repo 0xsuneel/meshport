@@ -941,7 +941,7 @@ export function BulkPayoutPage() {
         // The shared desktop layout (DesktopTwoColumn), filling the space
         // under the page header.
         <div style={{ flex: 1, minHeight: 0 }}>
-          {/* BUG FIX (2026-09-03): this column used to be overflowY: 'auto'
+          {/* BUG FIX (2026-09-03): this column used to be overflowY: 'auto', overflowX: 'hidden'
               itself, WHILE the recipient list inside addRecipientsSection
               also had its own overflow-y-auto + maxHeight: 40vh - two
               nested scroll containers competing for the same wheel input.

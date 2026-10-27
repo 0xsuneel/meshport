@@ -136,7 +136,7 @@ export function NewsArticlePage() {
 
   if (!isDesktop) {
     return (
-      <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 100 }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg)', paddingBottom: 100 }}>
         {cover}
         {article}
       </div>

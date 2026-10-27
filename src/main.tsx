@@ -30,6 +30,8 @@ import { MotionConfig } from 'framer-motion'
 // Before App (and its router): the leave guard's Back listener must be added
 // ahead of React Router's - window listeners run in the order they're added.
 import './lib/leaveGuard'
+// No iPhone zoom-in on small text fields (they're raised to 16px on touch).
+import './lib/inputZoomGuard'
 import App from './App.tsx'
 // Geist, self-hosted (no Google Fonts request on every open).
 import '@fontsource-variable/geist'

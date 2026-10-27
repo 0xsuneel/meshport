@@ -83,9 +83,20 @@ export function successFeedback() {
   buzz([18, 60, 28])
 }
 
-// Browsers only allow sound after the person has touched the page. Unlock the
-// audio engine on the first touch so the success ding can play later.
+// Browsers only allow sound after the person has touched the page, so a touch
+// unlocks (resumes) the audio engine for the success ding later. The engine
+// itself is made while the page is idle, never inside a tap: starting it can
+// block for a moment, and doing it in the first tap froze that tap (opening
+// Swap from Home waited on it).
 if (typeof window !== 'undefined') {
-  const unlock = () => { audio(); window.removeEventListener('pointerdown', unlock, true) }
+  const warm = () => { audio() }
+  // Called on window itself: Safari throws when it's called detached.
+  const w = window as unknown as { requestIdleCallback?: (cb: () => void) => number }
+  if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(warm); else setTimeout(warm, 3000)
+  const unlock = () => {
+    if (!ctx) return // not made yet: the idle callback makes it, the next touch resumes it
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => {})
+    window.removeEventListener('pointerdown', unlock, true)
+  }
   window.addEventListener('pointerdown', unlock, true)
 }

@@ -47,8 +47,8 @@ export function DesktopTwoColumn({ main, side, mainRef, sideRef, mainProps, side
   return (
     <div className={className} style={{ display: 'flex', height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
       <div {...mainProps} ref={mainRef} style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0,
-        ...(stage ? { position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' } : { overflowY: 'auto' }), ...mainProps?.style }}>{main}</div>
-      <div {...sideProps} ref={sideRef} style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', ...sideProps?.style }}>{side}</div>
+        ...(stage ? { position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' } : { overflowY: 'auto', overflowX: 'hidden' }), ...mainProps?.style }}>{main}</div>
+      <div {...sideProps} ref={sideRef} style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', ...sideProps?.style }}>{side}</div>
       {extra}
     </div>
   )

@@ -33,7 +33,7 @@ export function TokenMenu({ options = [], selected = '', onSelect = () => {}, on
       {...MENU_MOTION}
       style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, ...(width ? { width } : { left: 0 }), zIndex: 41, transformOrigin: width ? 'top right' : 'top center',
         display: 'flex', flexDirection: 'column', gap: 2, padding: 4, borderRadius: 22,
-        ...(maxHeight ? { maxHeight, overflowY: 'auto', overscrollBehavior: 'contain' } : {}),
+        ...(maxHeight ? { maxHeight, overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain' } : {}),
         background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 12px 28px rgba(0,0,0,0.3)' }}>
       {children ?? options.map(o => {
         const on = o.id === selected

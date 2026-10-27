@@ -48,11 +48,12 @@
      overflow-x: auto by default, so anything that briefly sticks out (an
      avatar mid-animation, a long word) let a sideways swipe drag the whole
      page left and right on iPhone and Android. Rows meant to scroll sideways
-     (chips, carousels, wide tables) set overflow-x themselves and keep it. */
+     (chips, carousels, wide tables) set overflow-x themselves and keep it.
+     Inline-styled scrollers set overflowX: 'hidden' in their own style: a
+     selector on the style attribute would re-match on every inline style
+     change (every animation frame), which WebKit pays for on each one. */
   .overflow-y-auto:not(.overflow-x-auto):not(.overflow-x-scroll):not(.overflow-auto),
-  .overflow-y-scroll:not(.overflow-x-auto):not(.overflow-x-scroll),
-  [style*="overflow-y: auto"]:not([style*="overflow-x"]):not(.overflow-x-auto):not(.overflow-x-scroll),
-  [style*="overflow-y: scroll"]:not([style*="overflow-x"]):not(.overflow-x-auto):not(.overflow-x-scroll) {
+  .overflow-y-scroll:not(.overflow-x-auto):not(.overflow-x-scroll) {
     overflow-x: hidden;
     overscroll-behavior-x: none;
   }

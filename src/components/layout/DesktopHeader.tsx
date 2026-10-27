@@ -270,7 +270,7 @@ export function DesktopHeader() {
           </div>
 
           {open && query.trim() && (
-            <div style={{ borderTop: '1px solid var(--border)', padding: '4px 10px 10px', maxHeight: '55vh', overflowY: 'auto' }}>
+            <div style={{ borderTop: '1px solid var(--border)', padding: '4px 10px 10px', maxHeight: '55vh', overflowY: 'auto', overflowX: 'hidden' }}>
               {searching && people.length === 0 && (
                 <p style={{ color: 'var(--text-secondary)', fontSize: 12, textAlign: 'center', padding: '16px 0' }}>Searching...</p>
               )}

@@ -542,7 +542,7 @@ export function RewardsPage() {
           </button>
         ))}
       </div>
-      <div style={isDesktop ? { overflowY: 'auto', flex: 1, minHeight: 0, padding: '4px 0' } : { padding: '4px 0 24px' }}>
+      <div style={isDesktop ? { overflowY: 'auto', overflowX: 'hidden', flex: 1, minHeight: 0, padding: '4px 0' } : { padding: '4px 0 24px' }}>
         {loading ? <SkeletonRows count={4} className="px-4" /> : historyRows}
         {!loading && (historyTab === 'earned' ? earnedRows.length : claimsHistory.length) > 0 && (
           <button onClick={() => navigate(`/activity?filter=rewards&rewards=${historyTab}`)}
@@ -650,7 +650,7 @@ export function RewardsPage() {
         <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 28, padding: '8px 24px 14px', boxSizing: 'border-box' }}>
           {/* Scrolls when the window is short; the cards keep their full
               height (flex items would otherwise shrink and cut off Claim USDC). */}
-          <div style={{ flex: '1 1 0%', minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18, padding: 2, margin: -2 }}>
+          <div style={{ flex: '1 1 0%', minWidth: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 18, padding: 2, margin: -2 }}>
             <div style={{ flexShrink: 0 }}>{hero}</div>
             <div style={{ flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 18, padding: '14px 14px 6px' }}>{tasks}</div>
           </div>

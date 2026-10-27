@@ -83,7 +83,7 @@ export function TransactionComplete({
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + 48px)',
         paddingLeft: 20, paddingRight: 20, paddingBottom: 40,
         boxSizing: 'border-box',
-        overflowY: 'auto',
+        overflowY: 'auto', overflowX: 'hidden',
       }}>
 
       {/* ── Icon ── */}

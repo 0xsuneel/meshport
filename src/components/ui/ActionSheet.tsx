@@ -173,5 +173,5 @@ export function SheetChips<T extends string>({ options, value, onChange, label }
 }
 
 /** The sheet's text box (note, customer): soft filled, brand ring on focus. */
-export const sheetInputClass = 'w-full rounded-[14px] px-3.5 py-3 text-[15px] text-text-primary outline-none placeholder:text-text-muted border border-border focus:border-[var(--brand-text)]'
+export const sheetInputClass = 'w-full rounded-[14px] px-3.5 py-3 text-[15px] [font-size:max(var(--fs-field,0px),15px)] text-text-primary outline-none placeholder:text-text-muted border border-border focus:border-[var(--brand-text)]'
 export const sheetInputStyle: React.CSSProperties = { background: 'var(--bg)' }

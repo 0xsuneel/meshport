@@ -56,6 +56,10 @@ function takeSnapshot(page: HTMLElement, key: string): Snapshot {
     }
     // No duplicate ids / test hooks while the copy is on screen.
     if (c.id) c.removeAttribute('id')
+    // The picture slides away under the new page: a frosted header in it
+    // would be re-blurred every frame of the slide (costly on iPhone) for
+    // no visible gain.
+    if (c.style.backdropFilter) { c.style.backdropFilter = ''; c.style.setProperty('-webkit-backdrop-filter', '') }
     if (c.hasAttribute('data-amount-keypad-sheet')) c.removeAttribute('data-amount-keypad-sheet')
   }
   node.removeAttribute('id')
@@ -64,6 +68,7 @@ function takeSnapshot(page: HTMLElement, key: string): Snapshot {
   const liveNav = shell.querySelector<HTMLElement>('[data-bottom-nav]')
   const nav = liveNav ? (liveNav.cloneNode(true) as HTMLElement) : null
   nav?.querySelectorAll('[id]').forEach(e => e.removeAttribute('id'))
+  nav?.querySelectorAll<HTMLElement>('*').forEach(e => { if (e.style.backdropFilter) { e.style.backdropFilter = ''; e.style.setProperty('-webkit-backdrop-filter', '') } })
   return { key, node, scrolls, top: pr.top - sr.top, height: pr.height, nav }
 }
 

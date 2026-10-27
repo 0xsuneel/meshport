@@ -87,7 +87,7 @@ export function DesktopTransactionAuthDialog({
         exit="leave"
         transition={DIALOG_CARD.transition}
         style={{
-          position: 'relative', width: '100%', maxWidth, maxHeight: '85vh', overflowY: 'auto', pointerEvents: 'auto',
+          position: 'relative', width: '100%', maxWidth, maxHeight: '85vh', overflowY: 'auto', overflowX: 'hidden', pointerEvents: 'auto',
           background: 'var(--surface)', border: `1px solid color-mix(in srgb, ${accent} 25%, var(--border))`, borderRadius: 22,
           boxShadow: `0 0 0 1px color-mix(in srgb, ${accent} 12%, transparent), var(--shadow-3)`,
         }}

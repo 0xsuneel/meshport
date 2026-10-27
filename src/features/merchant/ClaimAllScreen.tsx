@@ -131,7 +131,7 @@ export function ClaimAllScreen({ chains, steps, running, onClose, onRetry, onTra
           background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-secondary)' }}><X size={17} /></button>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 8 }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: 8 }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '18px 20px 8px', textAlign: 'center' }}>
           <div style={{ position: 'relative', width: 76, height: 76 }}>
             {phase === 'running' && <div style={{ position: 'absolute', inset: 4 }}><MeshLoader size={68} label="Claiming" /></div>}

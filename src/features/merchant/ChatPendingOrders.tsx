@@ -124,7 +124,7 @@ export function ChatPendingOrders({ otherUserId, refreshKey }: { otherUserId: st
           {open ? <ChevronUp size={16} color="var(--text-secondary)" /> : <ChevronDown size={16} color="var(--text-secondary)" />}
         </button>
         {open && (
-          <div style={{ borderTop: '1px solid var(--border)', maxHeight: 220, overflowY: 'auto' }}>
+          <div style={{ borderTop: '1px solid var(--border)', maxHeight: 220, overflowY: 'auto', overflowX: 'hidden' }}>
             {shownOrders.map(o => (
               <div key={o.code} className="flex items-center gap-2" style={{ padding: '9px 12px', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
                 <button onClick={() => { if (!scrollTo(o) && !o.iAmMerchant) void pay(o) }} className="flex-1 min-w-0 text-left"

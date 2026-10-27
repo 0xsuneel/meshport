@@ -138,7 +138,7 @@ export function NewsPage() {
   const stories = items.filter(it => !showLive.some(l => l.id === it.id))
 
   return (
-    <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 90 }}>
+    <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg)', paddingBottom: 90 }}>
       <div style={{
         position: 'sticky', top: 0, zIndex: 20,
         background: 'var(--bg)',

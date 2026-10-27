@@ -95,11 +95,14 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     if (!enabled || !el) return
     const vv = window.visualViewport
     // Applied right in the event (not a frame later), so the frame moves
-    // in the same frame as the pan - no one-frame jump.
+    // in the same frame as the pan - no one-frame jump. Written only when
+    // it changed: these events fire on every scroll, and a height write
+    // re-lays-out the whole app.
+    let lastTop = -1, lastHeight = -1
     const apply = () => {
       const { top, height } = visibleFrame()
-      el.style.top = `${top}px`
-      el.style.height = `${height}px`
+      if (top !== lastTop) { el.style.top = `${top}px`; lastTop = top }
+      if (height !== lastHeight) { el.style.height = `${height}px`; lastHeight = height }
       // The document itself never scrolls in this app: undo a sideways
       // shift, and the scroll iOS can leave behind once the keyboard closes.
       if (window.scrollX) window.scrollTo(0, window.scrollY)
@@ -150,17 +153,33 @@ export function useFrameScrollGuard(ref: RefObject<HTMLElement | null>, enabled 
   useEffect(() => {
     const frame = ref.current
     if (!enabled || !frame) return
+    // This runs on every scroll event of every list, and reading computed
+    // style there forces a style pass each time. A box found free to scroll
+    // both ways (the lists people actually scroll) is remembered; a locked
+    // one is read again each time, since a box can unlock later (a sheet
+    // that locked the page closes) and must never be snapped back after.
+    // Kept per direction: a page list scrolls up and down freely while
+    // staying locked sideways.
+    const freeX = new WeakSet<HTMLElement>(), freeY = new WeakSet<HTMLElement>()
+    const lockedX = (el: HTMLElement) => {
+      if (freeX.has(el)) return false
+      const ox = getComputedStyle(el).overflowX
+      const locked = ox === 'hidden' || ox === 'clip'
+      if (!locked) freeX.add(el)
+      return locked
+    }
+    const lockedY = (el: HTMLElement) => {
+      if (freeY.has(el)) return false
+      const oy = getComputedStyle(el).overflowY
+      const locked = el === frame || el.hasAttribute('data-no-scroll') || oy === 'hidden' || oy === 'clip'
+      if (!locked) freeY.add(el)
+      return locked
+    }
     const onScroll = (e: Event) => {
       const el = e.target
-      if (!(el instanceof HTMLElement) || el.closest('.mp-page-snapshot')) return
-      if (el.scrollLeft) {
-        const ox = getComputedStyle(el).overflowX
-        if (ox === 'hidden' || ox === 'clip') el.scrollLeft = 0
-      }
-      if (el.scrollTop) {
-        const oy = getComputedStyle(el).overflowY
-        if (el === frame || el.hasAttribute('data-no-scroll') || oy === 'hidden' || oy === 'clip') el.scrollTop = 0
-      }
+      if (!(el instanceof HTMLElement) || (!el.scrollLeft && !el.scrollTop) || el.closest('.mp-page-snapshot')) return
+      if (el.scrollLeft && lockedX(el)) el.scrollLeft = 0
+      if (el.scrollTop && lockedY(el)) el.scrollTop = 0
     }
     frame.addEventListener('scroll', onScroll, true)
     return () => frame.removeEventListener('scroll', onScroll, true)

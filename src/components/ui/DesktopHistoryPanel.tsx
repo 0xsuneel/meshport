@@ -35,7 +35,7 @@ export function DesktopHistoryPanel({ title, onViewAll, viewAllLabel = 'View all
           </span>
         )}
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
         {children}
       </div>
     </div>

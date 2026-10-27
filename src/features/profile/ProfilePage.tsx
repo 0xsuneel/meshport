@@ -316,7 +316,7 @@ export function ProfilePage() {
         // Desktop: the Settings menu (Wallet / Support pages) is the column
         // beside this one (SettingsDesktopSplit), so this pane is the profile
         // itself: card, Sign Out, footer.
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px 14px', boxSizing: 'border-box' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '0 20px 14px', boxSizing: 'border-box' }}>
           <div className="space-y-6">
             {userCardSection}
             {signOutSection}
