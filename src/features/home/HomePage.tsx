@@ -10,7 +10,7 @@ import { isUbChain } from '@/lib/ubChains'
 import {useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject, type MutableRefObject, type CSSProperties, type ReactNode} from 'react'
 import { flushSync, createPortal } from 'react-dom'
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
-import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
+import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace, ArrowUpRight, ArrowDownLeft, ArrowLeftRight } from 'lucide-react'
 import { useMotionValue, animate, motion, AnimatePresence } from 'framer-motion'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { tradeStepCard, type TradeLive } from '@/lib/p2pTradeStep'
@@ -33,7 +33,7 @@ import { searchUsersDb, getOrCreateConversation, fetchContactsDb, type DbUser } 
 import { filterServices } from '@/lib/searchServices'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 import { LockBadge } from '@/components/LockedFeature'
-import { RecentNewsRow } from './RecentNewsRow'
+import { RecentNewsRow, RecentNewsStack } from './RecentNewsRow'
 import { BALANCES_STALE_EVENT, msSinceLastTx } from '@/lib/balanceRefresh'
 import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -575,64 +575,69 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; 
     }).catch(() => {})
     return () => { live = false }
   }, [business, wallet, staffKey, open])
-  // Two groups, four across (Money, then Explore).
-  const groups: { title: string; actions: { label: string; path: string; icon: React.ReactNode }[] }[] = [
-    { title: 'Money', actions: [
-      { label: 'Pay',      path: '/pay',         icon: <ActionIcon name="pay" size={27} /> },
-      { label: 'Receive',  path: '/receive',     icon: <ActionIcon name="receive" size={27} /> },
-      { label: 'Swap',     path: '/swap',        icon: <ActionIcon name="swap" size={27} /> },
-      { label: 'Bulk Pay', path: '/bulk-payout', icon: <ActionIcon name="bulk" size={27} /> },
+  // Two groups of pastel tiles, three across (Move money, then More). Pay,
+  // Receive and Swap's own pills sit on the balance card; Swap is here too.
+  // Long names shortened to fit a tile; the line under says the rest.
+  const SHORT_TILE_LABEL: Record<string, string> = { 'Multichain Hub': 'Multichain', 'Cross-chain Transfer': 'Cross-chain', 'Business Insights': 'Insights' }
+  type Tone = 'peach' | 'mint' | 'butter'
+  const tile = (name: Parameters<typeof ActionIcon>[0]['name'], tone: Tone) =>
+    ({ tone, icon: <ActionIcon name={name} size={18} color={`var(--tile-${tone}-ink)`} /> })
+  const groups: { title: string; actions: { label: string; sub: string; path: string; tone: Tone; icon: React.ReactNode }[] }[] = [
+    { title: 'Move money', actions: [
+      { label: 'Bulk Pay',       sub: 'Pay a team',         path: '/bulk-payout',       ...tile('bulk', 'peach') },
+      { label: 'Multichain Hub', sub: 'All your chains',    path: '/multichain',        ...tile('hub', 'mint') },
+      { label: 'P2P',            sub: 'Buy & sell USDC',    path: '/p2p',               ...tile('p2p', 'butter') },
+      { label: 'Request',        sub: 'Ask for money',      path: '/receive?request=1', ...tile('receive', 'mint') },
+      { label: 'Scan QR',        sub: 'Pay a code',         path: '/scanner',           ...tile('qr', 'butter') },
+      { label: 'Swap',           sub: 'USDC ⇄ EURC',        path: '/swap',              ...tile('swap', 'peach') },
     ] },
-    { title: 'Explore', actions: [
-      { label: 'Multichain Hub', path: '/multichain', icon: <ActionIcon name="hub" size={27} /> },
-      { label: 'P2P',            path: '/p2p',        icon: <ActionIcon name="p2p" size={27} /> },
-      ...(business ? [] : [{ label: 'Rewards', path: '/rewards', icon: <ActionIcon name="rewards" size={27} /> }]),
+    { title: 'More', actions: [
+      ...(business ? [] : [{ label: 'Rewards', sub: 'Earn points', path: '/rewards', ...tile('rewards', 'butter') }]),
       // A business sees its own sales and customers (Business → Reports).
       isMerchant
-        ? { label: 'Business Insights', path: '/business?screen=reports', icon: <ActionIcon name="insights" size={27} /> }
-        : { label: 'Insights',          path: '/insights',                icon: <ActionIcon name="insights" size={27} /> },
-      ...(staffOf && !locked ? [{ label: 'Staff mode', path: '/business', icon: <ActionIcon name="clock" size={27} /> }] : []),
+        ? { label: 'Business Insights', sub: 'Sales & customers', path: '/business?screen=reports', ...tile('insights', 'peach') }
+        : { label: 'Insights',          sub: 'Where it went',     path: '/insights',                ...tile('insights', 'peach') },
+      ...(staffOf && !locked ? [{ label: 'Staff mode', sub: 'Your shop', path: '/business', ...tile('clock', 'mint') }] : []),
+      { label: 'Help', sub: 'Get support', path: '/help-support', ...tile('chat', 'mint') },
     ] },
   ]
   const content = (
     <>
-      <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)', marginBottom: 14 }}>Actions</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>Quick actions</span>
+        <button type="button" onClick={onClose} aria-label="Close" className="mp-press"
+          style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'var(--surface)', boxShadow: 'var(--card-soft)',
+            display: 'grid', placeItems: 'center', color: 'var(--text-secondary)' }}>
+          <X size={16} />
+        </button>
+      </div>
       {groups.map(g => (
-        <div key={g.title} style={{ marginBottom: 6 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', margin: '0 2px 2px' }}>{g.title}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0 }}>
+        <div key={g.title} style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '0 2px 8px' }}>{g.title}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
             {g.actions.map(a => (
               <button key={a.label} type="button"
                 onClick={() => { if (a.path === '/scanner') prewarmCamera(); onClose(); navigate(a.path) }}
                 className="mp-press"
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '14px 4px', cursor: 'pointer', border: 'none', background: 'none', font: 'inherit', color: 'inherit' }}>
-                <span style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--brand)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative',
+                style={{ position: 'relative', height: 92, borderRadius: 16, border: 'none', cursor: 'pointer', font: 'inherit', textAlign: 'left',
+                  background: `var(--tile-${a.tone})`, padding: 10, display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
                   opacity: locked && isLockedPath(a.path) ? 0.45 : 1 }}>
+                <span style={{ position: 'relative', width: 32, height: 32, borderRadius: 10, background: 'color-mix(in srgb, var(--surface) 70%, transparent)', display: 'grid', placeItems: 'center' }}>
                   {a.icon}
-                  {locked && isLockedPath(a.path) && <LockBadge />}
                   {a.label === 'P2P' && hasOngoingP2P && (
-                    <span style={{
-                      position: 'absolute', top: 2, right: 2, width: 12, height: 12, borderRadius: '50%',
-                      background: 'var(--danger)', border: '2px solid var(--bg)',
-                    }} />
+                    <span style={{ position: 'absolute', top: -3, right: -3, width: 10, height: 10, borderRadius: '50%', background: 'var(--danger)', border: '2px solid var(--bg)' }} />
                   )}
                 </span>
-                <span style={{
-                  fontSize: hub(a.label).length > 10 ? 11 : 12, color: 'var(--text-primary)', fontWeight: 400, textAlign: 'center',
-                  lineHeight: 1.25, width: '100%', wordBreak: 'break-word',
-                }}>{hub(a.label)}</span>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 650, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{SHORT_TILE_LABEL[hub(a.label)] ?? hub(a.label)}</span>
+                  <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.sub}</span>
+                </span>
+                {locked && isLockedPath(a.path) && <LockBadge />}
               </button>
             ))}
           </div>
         </div>
       ))}
-      <button onClick={onClose} style={{
-        width: '100%', padding: 14, borderRadius: 14, fontSize: 15, fontWeight: 500,
-        background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-primary)',
-        border: '1px solid var(--border)', cursor: 'pointer',
-        marginTop: 8, fontFamily: 'var(--font-sans)',
-      }}>Close</button>
     </>
   )
 
@@ -1750,49 +1755,42 @@ function AvailableBalanceCard({
   /** End-of-day balances, oldest first (the 7-day change). */
   trend?: BalanceTrend | null
 }) {
-  // Address row (avatar, address, copy), then the balance with its cents
-  // dimmed and the 7-day change; the pager dots sit at the bottom right.
-  const user = useAuthStore(s => s.user)
-  const initial = (user?.displayName || user?.username || '?').charAt(0).toUpperCase()
+  // "Total balance" + eye on the left, the wallet address as a small copy
+  // pill on the right; then the balance with its cents dimmed and the 7-day
+  // change. The pager dots sit at the bottom right.
   const change = trend?.change ?? 0
   const flat = !trend || Math.abs(change) < 0.005
   const eyeStroke = 'rgba(255,255,255,.8)'
   const fade = useFirstShowFade()
   return (
     <BowedShapeCard background="var(--brand)" cardRef={cardRef} flat>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.14)' }}>
-        {user?.avatar
-          ? <img src={user.avatar.split('?')[0]} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-          : <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.16)', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 15, flexShrink: 0 }}>{initial}</div>}
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.72)' }}>Address</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortAddr}</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>
+          Total balance
+          <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
+            style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            {balanceHidden ? (
+              <svg width="17" height="14" viewBox="0 0 22 18" fill="none">
+                <path d="M2 2l18 14" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
+                <circle cx="11" cy="9" r="3" stroke={eyeStroke} strokeWidth="1.5"/>
+              </svg>
+            ) : (
+              <svg width="17" height="12" viewBox="0 0 22 16" fill="none">
+                <ellipse cx="11" cy="8" rx="10" ry="7" stroke={eyeStroke} strokeWidth="1.5"/>
+                <circle cx="11" cy="8" r="3" stroke={eyeStroke} strokeWidth="1.5"/>
+              </svg>
+            )}
+          </button>
         </div>
-        <button type="button" aria-label="Copy wallet address"
+        <button type="button" aria-label="Copy wallet address" className="mp-press"
           onClick={() => { copyText(walletAddress || ''); showToastMessage('Address copied', 'success') }}
-          style={{ width: 36, height: 36, borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.12)', display: 'grid', placeItems: 'center', cursor: 'pointer', color: '#fff', flexShrink: 0 }}>
-          <Copy size={17} />
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 14, color: 'rgba(255,255,255,0.85)' }}>
-        Balance
-        <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
-          style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-          {balanceHidden ? (
-            <svg width="19" height="15.5" viewBox="0 0 22 18" fill="none">
-              <path d="M2 2l18 14" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
-              <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
-              <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
-              <circle cx="11" cy="9" r="3" stroke={eyeStroke} strokeWidth="1.5"/>
-            </svg>
-          ) : (
-            <svg width="19" height="13.5" viewBox="0 0 22 16" fill="none">
-              <ellipse cx="11" cy="8" rx="10" ry="7" stroke={eyeStroke} strokeWidth="1.5"/>
-              <circle cx="11" cy="8" r="3" stroke={eyeStroke} strokeWidth="1.5"/>
-            </svg>
-          )}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 10px', borderRadius: 14, border: 'none', cursor: 'pointer',
+            background: 'rgba(255,255,255,0.14)', color: '#fff', fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 0 }}>
+          {shortAddr}
+          <Copy size={12} style={{ opacity: 0.8, flexShrink: 0 }} />
         </button>
       </div>
 
@@ -3886,24 +3884,11 @@ export function HomePage() {
             </>
           ) : (
             <>
+              {/* "Hello, <first name>", the username under it (tap to copy);
+                  search, bell and the profile avatar on the right. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                {user?.avatar ? (
-                  <div {...pressable(() => navigate('/profile'), 'Open profile')} style={{ cursor: 'pointer', flexShrink: 0, width: 47, height: 47, borderRadius: '50%', padding: 2, background: 'var(--brand)' }}>
-                    <img src={user.avatar.split('?')[0]} alt="avatar"
-                      loading="eager" decoding="async"
-                      style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--bg)' }}/>
-                  </div>
-                ) : (
-                  <div {...pressable(() => navigate('/profile'), 'Open profile')} style={{ cursor: 'pointer', flexShrink: 0, width: 47, height: 47, borderRadius: '50%', padding: 2, background: 'var(--brand)' }}>
-                    <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'var(--brand)', border: '2px solid var(--bg)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 17, fontWeight: 700 }}>
-                      {displayName.charAt(0).toUpperCase()}
-                    </div>
-                  </div>
-                )}
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Hello, {displayName.trim().split(/\s+/)[0]}</div>
                   <button
                     onClick={async (e) => {
                       e.stopPropagation()
@@ -3912,8 +3897,8 @@ export function HomePage() {
                       showToastMessage(ok ? 'Username copied' : 'Could not copy username', ok ? 'success' : 'error')
                       setTimeout(() => setHandleCopied(false), 1500)
                     }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, background: 'none', border: 'none', padding: 0, cursor: 'pointer', maxWidth: '100%', minWidth: 0 }}>
-                    <span style={{ fontSize: 12, color: 'var(--link)', fontFamily: 'monospace', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, background: 'none', border: 'none', padding: 0, cursor: 'pointer', maxWidth: '100%', minWidth: 0 }}>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--brand-text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
                     {handleCopied
                       ? <Check data-tick className="w-3 h-3 text-success flex-shrink-0" />
                       : <Copy className="w-3 h-3 text-link/60 flex-shrink-0" />}
@@ -3941,6 +3926,14 @@ export function HomePage() {
                       background: 'var(--danger)', borderRadius: '50%' }}/>
                   )}
                 </button>
+                {/* Profile */}
+                <div {...pressable(() => navigate('/profile'), 'Open profile')} className="mp-press"
+                  style={{ cursor: 'pointer', flexShrink: 0, width: 40, height: 40, borderRadius: '50%', overflow: 'hidden',
+                    background: 'var(--mustard)', color: 'var(--mustard-ink)', display: 'grid', placeItems: 'center', fontSize: 14, fontWeight: 700 }}>
+                  {user?.avatar
+                    ? <img src={user.avatar.split('?')[0]} alt="avatar" loading="eager" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : displayName.charAt(0).toUpperCase()}
+                </div>
               </div>
             </>
           )}
@@ -4130,11 +4123,11 @@ export function HomePage() {
             )}
           </div>
         ) : (
-          // Mobile hero: ONE card in the page's 20px margins with the theme's
-          // border (like Recent / Updates below) - the teal balance card inset
-          // 6px inside it, the four actions underneath.
-          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: 6, background: 'var(--glass-fill)', border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)', borderRadius: HERO_RADIUS + 6, overflow: 'hidden' }}>
-          <div style={{ position: 'relative', padding: '14px 0', background: 'var(--glass-sheen), var(--brand)', borderRadius: HERO_RADIUS, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2)' }}>
+          // Mobile hero: ONE teal card in the page's 20px margins - the
+          // balance (swipe for the Multichain Hub card), then Pay / Receive /
+          // Swap as pills along its bottom.
+          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: '16px 0 16px', background: 'var(--glass-sheen), var(--brand)', borderRadius: 22, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)', overflow: 'hidden' }}>
+          <div style={{ position: 'relative' }}>
             {businessAccount ? (
               // Business accounts: the balance card only - no Cross-chain card
               // or carousel edges (Cross-chain Transfer is in More actions).
@@ -4165,41 +4158,68 @@ export function HomePage() {
             )}
           </div>
 
-        {/* ── QUICK ACTIONS - all 4, inside the hero card under the balance ── */}
+        {/* ── PAY / RECEIVE / SWAP - pills along the hero card's bottom ───── */}
         {/* Mobile only. Desktop is unaffected: it never rendered this row
-            (its own Quick Actions card lives in column 2). */}
-        <div style={{ padding: '16px 10px', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
+            (its own Quick Actions card lives in column 2). Pay is the warm
+            accent; the rest of the actions are in Quick actions below. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, padding: '14px 16px 0' }}>
           {[
-            { label: 'Pay',     path: '/pay',     icon: <ActionIcon name="pay" size={24} /> },
-            { label: 'Receive', path: '/receive', icon: <ActionIcon name="receive" size={24} /> },
-            { label: 'Swap',    path: '/swap',    icon: <ActionIcon name="swap" size={24} /> },
-            { label: 'More',    path: null,       icon: <ActionIcon name="more" size={24} /> },
+            { label: 'Pay',     path: '/pay',     icon: <ArrowUpRight size={15} strokeWidth={2.4} />, accent: true },
+            { label: 'Receive', path: '/receive', icon: <ArrowDownLeft size={15} strokeWidth={2.4} />, accent: false },
+            { label: 'Swap',    path: '/swap',    icon: <ArrowLeftRight size={15} strokeWidth={2.4} />, accent: false },
           ].map(a => (
-            <button key={a.label} type="button"
-              onClick={() => a.path ? navigate(a.path) : setShowMore(true)}
-              className="mp-press"
+            <button key={a.label} type="button" onClick={() => navigate(a.path)} className="mp-press"
               style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                gap: 8, cursor: 'pointer', padding: 0, border: 'none', background: 'none', font: 'inherit', color: 'inherit', width: '100%',
+                position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40, borderRadius: 20,
+                border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 14, fontWeight: 650, whiteSpace: 'nowrap',
+                background: a.accent ? 'var(--mustard)' : 'rgba(255,255,255,0.12)',
+                color: a.accent ? 'var(--mustard-ink)' : '#fff',
+                boxShadow: a.accent ? 'none' : 'inset 0 0 0 1px rgba(255,255,255,0.16)',
+                opacity: accountLock.locked ? 0.45 : 1,
               }}>
-              <span style={{
-                width: 52, height: 52, borderRadius: '50%', background: 'var(--glass-sheen), var(--brand)', boxShadow: 'var(--glass-raise)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
-                opacity: accountLock.locked && a.path ? 0.45 : 1,
-              }}>
-                {a.icon}
-                {accountLock.locked && a.path && <LockBadge />}
-                {a.label === 'More' && ongoingTradesCount > 0 && (
-                  <span style={{
-                    position: 'absolute', top: 2, right: 2, width: 11, height: 11, borderRadius: '50%',
-                    background: 'var(--danger)', border: '2px solid var(--surface)',
-                  }} />
-                )}
-              </span>
-              <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1 }}>{a.label}</span>
+              {a.icon}{a.label}
+              {accountLock.locked && <LockBadge />}
             </button>
           ))}
         </div>
+          </div>
+        )}
+
+        {/* ── QUICK ACTIONS - three tiles; See all opens the full sheet ──── */}
+        {!isDesktop && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '0 2px 10px' }}>
+              <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.2px' }}>Quick actions</span>
+              <button type="button" onClick={() => setShowMore(true)}
+                style={{ position: 'relative', background: 'none', border: 'none', padding: '4px 0', margin: '-4px 0', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
+                See all
+                {ongoingTradesCount > 0 && (
+                  // An open P2P trade: the same red dot "More" used to carry.
+                  <span aria-label="Open P2P trade" style={{ position: 'absolute', top: 1, right: -9, width: 7, height: 7, borderRadius: '50%', background: 'var(--danger)' }} />
+                )}
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+              {[
+                { label: 'Bulk Pay', sub: 'Pay a team', path: '/bulk-payout', icon: <ActionIcon name="bulk" size={18} color="var(--tile-peach-ink)" />, bg: 'var(--tile-peach)' },
+                { label: 'Multichain', sub: 'All your chains', path: '/multichain', icon: <ActionIcon name="hub" size={18} color="var(--tile-mint-ink)" />, bg: 'var(--tile-mint)' },
+                businessAccount
+                  ? { label: 'Insights', sub: 'Your reports', path: '/business?screen=reports', icon: <ActionIcon name="insights" size={18} color="var(--tile-butter-ink)" />, bg: 'var(--tile-butter)' }
+                  : { label: 'Rewards', sub: 'Earn points', path: '/rewards', icon: <ActionIcon name="rewards" size={18} color="var(--tile-butter-ink)" />, bg: 'var(--tile-butter)' },
+              ].map(t => (
+                <button key={t.label} type="button" onClick={() => navigate(t.path)} className="mp-press"
+                  style={{ position: 'relative', height: 98, borderRadius: 16, border: 'none', cursor: 'pointer', font: 'inherit', textAlign: 'left',
+                    background: t.bg, padding: '10px 10px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+                    opacity: accountLock.locked ? 0.45 : 1 }}>
+                  <span style={{ width: 32, height: 32, borderRadius: 10, background: 'color-mix(in srgb, var(--surface) 70%, transparent)', display: 'grid', placeItems: 'center' }}>{t.icon}</span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 650, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.label}</span>
+                    <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.sub}</span>
+                  </span>
+                  {accountLock.locked && <LockBadge />}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -4210,10 +4230,10 @@ export function HomePage() {
         {/* Same width/radius as the old Multichain Hub row, 10% taller. */}
         {/* Business not approved yet: no promos, recents, news or QR - the
             balance, assets and activity stay. */}
-        {!accountLock.locked && <FeatureBanner height={isDesktop ? 64 : 75} docked={!isDesktop} onOpen={path => navigate(path)} />}
+        {!accountLock.locked && isDesktop && <FeatureBanner height={64} docked={false} onOpen={path => navigate(path)} />}
 
         {/* ── RECENT + UPDATES - side by side, same on desktop and mobile ───── */}
-        {!accountLock.locked && <RecentNewsRow navigate={navigate} />}
+        {!accountLock.locked && (isDesktop ? <RecentNewsRow navigate={navigate} /> : <RecentNewsStack navigate={navigate} />)}
 
         {/* ── ASSETS - all 3 tokens ────────────────────────────────────────── */}
         <div ref={assetsCardRef}>

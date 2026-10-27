@@ -98,55 +98,55 @@ export function ProfilePage() {
   // Held in variables - not returned directly - so mobile (single stacked
   // column, unchanged order/output) and desktop (left column: profile +
   // wallet, right column: support) never duplicate this JSX.
+  // Avatar and name in the middle, Edit profile / Share under them, then the
+  // username and wallet address in one card, each with its own copy button.
+  const handle = `${(displayUsername || displayName).replace(/\.arc$/, '')}.arc`
+  const copyHandle = async () => {
+    const ok = await copyToClipboard(handle)
+    setUsernameCopied(true)
+    showToastMessage(ok ? 'Username copied' : 'Could not copy username', ok ? 'success' : 'error')
+    setTimeout(() => setUsernameCopied(false), 1500)
+  }
+  const idRow = (label: string, value: string, done: boolean, onCopy: () => void, mono?: boolean) => (
+    <button type="button" onClick={onCopy} aria-label={`Copy ${label.toLowerCase()}`} className="mp-press"
+      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 0', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)' }}>{label}</span>
+        <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginTop: 2, fontVariantNumeric: 'tabular-nums',
+          fontFamily: mono ? 'var(--font-mono, ui-monospace, monospace)' : undefined, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>
+      </span>
+      <span style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--tile-mint)', color: 'var(--tile-mint-ink)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+        {done ? <Check data-tick className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+      </span>
+    </button>
+  )
   const userCardSection = (
-    <div className="w-full bg-surface border border-border rounded-3xl p-5">
-      <div className="flex items-center gap-3.5">
-        <div className="relative flex-shrink-0">
-          <div className="w-16 h-16 rounded-full p-[2.5px]" style={{ background: 'var(--brand)' }}>
-            <Avatar name={displayName} src={user.avatar} size="xl"
-              className="!w-full !h-full border-2 border-surface" />
-          </div>
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-text-primary font-extrabold text-[19px] leading-tight tracking-tight truncate">{displayName}</p>
-          <button
-            onClick={async () => {
-              const cleanHandle = (displayUsername || displayName).replace(/\.arc$/, '') + '.arc'
-              const ok = await copyToClipboard(cleanHandle)
-              setUsernameCopied(true)
-              showToastMessage(ok ? 'Username copied' : 'Could not copy username', ok ? 'success' : 'error')
-              setTimeout(() => setUsernameCopied(false), 1500)
-            }}
-            className="inline-flex items-center gap-1.5 mt-1 bg-accent/10 border border-accent/25 text-link text-xs font-semibold px-2.5 py-0.5 rounded-full max-w-full">
-            <span className="truncate">{(displayUsername || displayName).replace(/\.arc$/, '')}.arc</span>
-            {usernameCopied
-              ? <Check data-tick className="w-3 h-3 text-success flex-shrink-0" />
-              : <Copy className="w-3 h-3 text-link/70 flex-shrink-0" />}
+    <div className="w-full">
+      <div className="flex flex-col items-center text-center">
+        {user.avatar
+          ? <Avatar name={displayName} src={user.avatar} size="xl" className="!w-[72px] !h-[72px]" />
+          : <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--mustard)', color: 'var(--mustard-ink)', display: 'grid', placeItems: 'center', fontSize: 24, fontWeight: 700 }}>
+              {displayName.trim().split(/\s+/).map(w => w.charAt(0)).join('').slice(0, 2).toUpperCase()}
+            </div>}
+        <p className="text-text-primary font-bold text-[20px] leading-tight tracking-tight truncate max-w-full mt-3">{displayName}</p>
+        <div className="flex items-center gap-2 mt-3">
+          <button onClick={() => navigate('/edit-profile')} className="mp-press inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[13px] font-semibold"
+            style={{ background: 'var(--tile-mint)', color: 'var(--tile-mint-ink)', border: 'none' }}>
+            <User className="w-3.5 h-3.5" /> Edit profile
+          </button>
+          <button onClick={handleSharePaymentLink} className="mp-press inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[13px] font-semibold text-text-primary"
+            style={{ background: 'var(--surface)', boxShadow: 'var(--card-soft)', border: 'none' }}>
+            <Share2 className="w-3.5 h-3.5" /> Share
           </button>
         </div>
       </div>
-
-      {walletAddress && (
-        <button onClick={handleCopyWallet}
-          className="flex items-center justify-between w-full mt-4 bg-[rgb(var(--text-primary-rgb)/0.03)] border border-border rounded-xl px-3.5 py-2.5 text-text-secondary hover:text-text-primary transition-colors">
-          <span className="text-xs font-mono text-text-secondary">{walletAddress.slice(0, 6)}...{walletAddress.slice(-6)}</span>
-          <span className="flex items-center gap-1 text-[11px] font-bold text-brand-text">
-            {copied ? <Check data-tick className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
-            {copied ? 'Copied' : 'Copy'}
-          </span>
-        </button>
-      )}
-
-      <div className="flex items-center gap-2.5 mt-3">
-        <button onClick={() => navigate('/edit-profile')}
-          className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-2xl text-white text-[14px] font-bold active:scale-95 transition-transform"
-          style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
-          <User className="w-4 h-4" /> Edit Profile
-        </button>
-        <button onClick={handleSharePaymentLink}
-          className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-2xl text-text-primary text-[14px] font-bold active:scale-95 transition-transform bg-[rgb(var(--text-primary-rgb)/0.05)] border border-border">
-          <Share2 className="w-4 h-4" /> Share
-        </button>
+      <div className="mt-5" style={{ background: 'var(--surface)', borderRadius: 18, boxShadow: 'var(--card-soft)', padding: '2px 14px' }}>
+        {idRow('Username', handle, usernameCopied, () => void copyHandle())}
+        {walletAddress && (
+          <div style={{ borderTop: '1px solid var(--border)' }}>
+            {idRow('Wallet address', `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`, copied, handleCopyWallet, true)}
+          </div>
+        )}
       </div>
     </div>
   )
