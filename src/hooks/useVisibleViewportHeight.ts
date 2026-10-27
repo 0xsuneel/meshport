@@ -132,13 +132,29 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     let lastH = visibleFrame().height
     let raf = 0
     const settle = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(keepFocusedInView) }
+    // Measured again once things settle: Android can fire the resize while
+    // the viewport still reports the keyboard-up size, and no event follows -
+    // the frame then stayed short after the keyboard was hidden, with an
+    // empty band under the chat box. Re-measuring a frame later and after
+    // the keyboard's own animation fixes it; apply() only writes on change.
+    let recheckRaf = 0, recheckTimer = 0
+    const recheck = () => {
+      cancelAnimationFrame(recheckRaf); clearTimeout(recheckTimer)
+      recheckRaf = requestAnimationFrame(apply)
+      recheckTimer = window.setTimeout(apply, 350)
+    }
     const schedule = () => {
       apply()
+      recheck()
       const h = visibleFrame().height
       if (h < lastH - 80) settle()
       lastH = h
     }
     const onFocus = () => { apply(); if (visibleFrame().height < window.innerHeight - 80) settle() }
+    // The keyboard can be hidden (back gesture / hide key) without the field
+    // losing focus, and closed by a blur: either way, look again.
+    const onFocusOut = () => recheck()
+    document.addEventListener('focusout', onFocusOut)
     document.addEventListener('focusin', onFocus)
     apply()
     vv?.addEventListener('resize', schedule)
@@ -147,6 +163,8 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     window.addEventListener('scroll', schedule)
     return () => {
       cancelAnimationFrame(raf)
+      cancelAnimationFrame(recheckRaf); clearTimeout(recheckTimer)
+      document.removeEventListener('focusout', onFocusOut)
       document.removeEventListener('focusin', onFocus)
       vv?.removeEventListener('resize', schedule)
       vv?.removeEventListener('scroll', schedule)
