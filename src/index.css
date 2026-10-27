@@ -875,3 +875,20 @@ input, textarea { caret-color: var(--brand-text); }
    bottom nav steps aside and the page takes its space back. */
 [data-kb] [data-bottom-nav] { display: none; }
 [data-kb] [data-nav-pad] { padding-bottom: 0 !important; }
+
+/* Taller touch area only (44pt, Apple HIG) for pills sitting side by side,
+   where a sideways extension would overlap the neighbour. Nothing visible. */
+.mp-hit-y { position: relative; }
+.mp-hit-y::after { content: ''; position: absolute; inset: -6px 0; }
+
+/* iPhone Settings > Accessibility: Reduce Transparency / Increase Contrast.
+   Frosted surfaces turn solid (no blur, nothing showing through), and with
+   more contrast the bars get a defined edge. Looks unchanged otherwise. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  [style*="backdrop-filter"] { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  [data-frost="surface"] { background: var(--surface) !important; }
+  [data-frost="bg"] { background: var(--bg) !important; }
+}
+@media (prefers-contrast: more) {
+  [data-frost="surface"] { border-top-color: var(--text-secondary) !important; }
+}

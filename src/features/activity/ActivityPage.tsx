@@ -1117,8 +1117,8 @@ export function ActivityPage() {
               </button>
             )}
           </div>
-          <button onClick={refresh} disabled={loading}
-            className="w-9 h-9 rounded-2xl flex items-center justify-center active:scale-95 disabled:opacity-40"
+          <button onClick={refresh} disabled={loading} aria-label="Refresh"
+            className="mp-hit mp-hit-sm w-9 h-9 rounded-2xl flex items-center justify-center active:scale-95 disabled:opacity-40"
             style={{ background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
             <RefreshCw className={cn('w-4 h-4 text-text-secondary', loading && 'animate-spin')} />
           </button>
@@ -1136,7 +1136,7 @@ export function ActivityPage() {
                 <div ref={filterBtnRef} className="flex-shrink-0 flex items-center rounded-full"
                   style={{ height: 34, background: on ? 'var(--brand)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)', color: on ? '#fff' : 'var(--text-primary)' }}>
                   <button type="button" onClick={() => setFilterOpen(o => !o)} aria-label={on ? `Filter: ${label}` : 'Filter'} aria-expanded={filterOpen}
-                    className="h-full flex items-center gap-1.5 active:opacity-70"
+                    className="mp-hit-y h-full flex items-center gap-1.5 active:opacity-70"
                     style={{ padding: on ? '0 4px 0 12px' : '0 13px 0 12px', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
                       <path d="M4 6h16M4 12h11M4 18h6" />

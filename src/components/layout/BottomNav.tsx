@@ -170,7 +170,7 @@ export function BottomNav() {
       boxSizing: 'border-box',
     }}>
       {/* Standard bottom nav bar - flush to the screen edges/bottom */}
-      <div style={{
+      <div data-frost="surface" style={{
         // Frosted: mostly the surface colour, with what scrolls behind it
         // showing through softly blurred (Home's content runs under the bar).
         background: 'color-mix(in srgb, var(--surface) 96%, transparent)',

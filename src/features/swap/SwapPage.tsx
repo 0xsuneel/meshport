@@ -1468,7 +1468,7 @@ export function SwapPage() {
           {isActive && (
           <motion.button key="slippage" onClick={() => setShowSettings(s => !s)} aria-label="Slippage settings"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={MOBILE_TAB_FADE_TRANSITION}
-            className="w-9 h-9 rounded-2xl flex items-center justify-center active:scale-95"
+            className="mp-hit mp-hit-sm w-9 h-9 rounded-2xl flex items-center justify-center active:scale-95"
             style={showSettings ? { background:'var(--brand)' } : { background:'var(--surface)', border:'1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
             <Settings className="w-4 h-4 text-text-secondary"/>
           </motion.button>

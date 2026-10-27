@@ -3850,7 +3850,7 @@ export function HomePage() {
           app-wide, so this block only mounts there while actively searching
           (opened via DesktopHeader's search box, see isDesktop above). */}
       {(!isDesktop || searchOpen) && (
-      <div ref={stickyHeaderRef} style={{
+      <div ref={stickyHeaderRef} data-frost="bg" style={{
         // Above the page's cards while search is open (its results float over them).
         position: 'sticky', top: 0, zIndex: searchOpen ? 40 : 20,
         // Frosted like the bottom nav: mostly the page colour, the cards that

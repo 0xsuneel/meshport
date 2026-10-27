@@ -133,11 +133,11 @@ export function ProfilePage() {
         </div>
         <p className="text-text-primary font-bold text-[20px] leading-tight tracking-tight truncate max-w-full mt-3">{displayName}</p>
         <div className="flex items-center gap-2 mt-3">
-          <button onClick={() => navigate('/edit-profile')} className="mp-press inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[13px] font-semibold"
+          <button onClick={() => navigate('/edit-profile')} className="mp-press mp-hit-y inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[13px] font-semibold"
             style={{ background: 'var(--tile-mint)', color: 'var(--tile-mint-ink)', border: 'none' }}>
             <User className="w-3.5 h-3.5" /> Edit profile
           </button>
-          <button onClick={handleSharePaymentLink} className="mp-press inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[13px] font-semibold text-text-primary"
+          <button onClick={handleSharePaymentLink} className="mp-press mp-hit-y inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[13px] font-semibold text-text-primary"
             style={{ background: 'var(--surface)', boxShadow: 'var(--card-soft)', border: 'none' }}>
             <Share2 className="w-3.5 h-3.5" /> Share
           </button>
@@ -267,7 +267,7 @@ export function ProfilePage() {
           <button
             onClick={() => setMode(isDark ? 'light' : 'dark')}
             aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-surface border border-border text-text-secondary active:scale-90 transition-transform"
+            className="mp-hit w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-surface border border-border text-text-secondary active:scale-90 transition-transform"
           >
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
