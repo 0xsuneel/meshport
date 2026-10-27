@@ -1012,7 +1012,7 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
             <button key={n.id} onClick={() => handleNotifTap(n)}
               className={`w-full p-4 rounded-2xl border text-left transition active:scale-[.98] ${
                 n.isRead
-                  ? 'bg-surface border-border hover:border-border'
+                  ? 'bg-surface soft-card'
                   : 'bg-brand/5 border-brand/20 hover:border-brand/35'
               }`}>
               <div className="flex items-start gap-3">
