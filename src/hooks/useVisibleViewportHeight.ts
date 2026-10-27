@@ -98,11 +98,18 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     // in the same frame as the pan - no one-frame jump. Written only when
     // it changed: these events fire on every scroll, and a height write
     // re-lays-out the whole app.
-    let lastTop = -1, lastHeight = -1
+    let lastTop = -1, lastHeight = ''
     const apply = () => {
       const { top, height } = visibleFrame()
+      // Visible area = the whole layout viewport (no keyboard, or Android,
+      // whose keyboard shrinks the layout viewport itself): plain 100%, so
+      // the browser resizes the frame in the same layout pass as the
+      // keyboard - a pixel value set from this event lands a frame or more
+      // late, and the bottom of the screen (the chat box) was cut off and
+      // then jumped back. Only iPhone's panned keyboard needs pixels.
+      const h = top === 0 && Math.abs(height - window.innerHeight) <= 1 ? '100%' : `${height}px`
       if (top !== lastTop) { el.style.top = `${top}px`; lastTop = top }
-      if (height !== lastHeight) { el.style.height = `${height}px`; lastHeight = height }
+      if (h !== lastHeight) { el.style.height = h; lastHeight = h }
       // The document itself never scrolls in this app: undo a sideways
       // shift, and the scroll iOS can leave behind once the keyboard closes.
       if (window.scrollX) window.scrollTo(0, window.scrollY)

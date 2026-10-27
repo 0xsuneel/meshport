@@ -173,9 +173,9 @@ export function BottomNav() {
       <div style={{
         // Frosted: mostly the surface colour, with what scrolls behind it
         // showing through softly blurred (Home's content runs under the bar).
-        background: 'color-mix(in srgb, var(--surface) 92%, transparent)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
+        background: 'color-mix(in srgb, var(--surface) 96%, transparent)',
+        backdropFilter: 'blur(28px)',
+        WebkitBackdropFilter: 'blur(28px)',
         borderTop: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-around',
         height: 65,

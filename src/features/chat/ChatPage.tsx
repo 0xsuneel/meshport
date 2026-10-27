@@ -4280,55 +4280,12 @@ export function ChatConversationPage() {
   // fetch in setupConversation() silently refresh it - `loading` staying
   // true during that refresh should never re-block the UI that's already
   // showing real content.
-  // ── Real, dynamic viewport height - the actual fix for keyboard handling ──
-  // 100dvh does NOT reliably shrink when the mobile software keyboard opens
-  // (browser support/behavior for this varies widely) - VisualViewport.height
-  // does, on every platform that has a keyboard at all (Android Chrome, iOS
-  // Safari). Desktop/no-keyboard environments fall back to window.innerHeight
-  // via the resize event. Feeding this real, current pixel height directly
-  // into the root container's height means flexbox (header flex-shrink-0,
-  // messages flex-1, composer flex-shrink-0) does ALL the space-splitting
-  // math itself, automatically, every time - no hardcoded padding, no manual
-  // keyboard-height guessing, no per-device tuning. The composer's actual
-  // rendered height (which already grows/shrinks naturally with multi-line
-  // text, attachments, reply previews, etc., since it's a normal DOM flex
-  // child) is inherently accounted for by the same mechanism, for free.
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null)
-  const hasSettledInitialHeightRef = useRef(false)
-  useEffect(() => {
-    const vv = window.visualViewport
-    let isFirstCall = true
-    const update = () => {
-      setViewportHeight(vv ? vv.height : window.innerHeight)
-      if (isFirstCall) {
-        isFirstCall = false
-        // Flip this shortly after - not immediately - so the initial jump
-        // from the 100dvh fallback to the real measured height always
-        // renders with transition:'none' first. Flipping it right away
-        // would apply the transition to that very first jump too, which
-        // was the actual bug: the scroll-to-first-unread positioning could
-        // then run while the container was still mid-transition,
-        // measuring a temporary/wrong size and landing the scroll past the
-        // unread content entirely.
-        setTimeout(() => { hasSettledInitialHeightRef.current = true }, 200)
-      }
-    }
-    update()
-    if (vv) {
-      vv.addEventListener('resize', update)
-      vv.addEventListener('scroll', update)
-    } else {
-      window.addEventListener('resize', update)
-    }
-    return () => {
-      if (vv) {
-        vv.removeEventListener('resize', update)
-        vv.removeEventListener('scroll', update)
-      } else {
-        window.removeEventListener('resize', update)
-      }
-    }
-  }, [])
+  // Height: the chat simply fills the app frame (AppLayout), which already
+  // tracks the area above the keyboard. It used to measure the viewport
+  // itself into React state and animate its height over 0.15s - always a
+  // few frames behind the keyboard, so on Android the chat box was cut off
+  // and then slid back up (the "dancing" when the keyboard opens/closes).
+  // Now it resizes in the same layout pass as the frame.
 
   // Tracks whether the user is currently at/near the bottom - the single
   // source of truth for two related rules: (a) if they were at the bottom
@@ -4463,6 +4420,9 @@ export function ChatConversationPage() {
     if (!content || typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver(() => keepAnchorRef.current())
     ro.observe(content)
+    // The list box itself shrinks/grows with the keyboard: keep the latest
+    // message (or the one being read) in place, before that frame paints.
+    if (messagesAreaRef.current) ro.observe(messagesAreaRef.current)
     return () => ro.disconnect()
   }, [messagesReady])
   // Messages added / removed: correct in the same frame, before paint.
@@ -4500,21 +4460,6 @@ export function ChatConversationPage() {
     el.addEventListener('load', onLoad, true)
     return () => el.removeEventListener('load', onLoad, true)
   })
-
-  // Re-anchor to the latest message across a viewport height change (keyboard
-  // open/close) ONLY if the user was already at the bottom beforehand -
-  // otherwise leave their scroll position alone so reading history is never
-  // interrupted by the keyboard toggling.
-  const prevViewportHeightRef = useRef<number | null>(null)
-  useLayoutEffect(() => {
-    if (viewportHeight === null) return
-    const changed = prevViewportHeightRef.current !== null && prevViewportHeightRef.current !== viewportHeight
-    prevViewportHeightRef.current = viewportHeight
-    if (changed && wasNearBottomRef.current) {
-      const el = messagesAreaRef.current
-      if (el) el.scrollTop = el.scrollHeight
-    }
-  }, [viewportHeight])
 
   // No whole-page placeholder any more: the header and composer render at
   // once, and until the messages are positioned the message area shows chat
@@ -4701,24 +4646,10 @@ export function ChatConversationPage() {
       // composer look like they were "hiding": they weren't hiding, this
       // whole panel just didn't fit in the space it was given. height:
       // '100%' simply fills that column instead.
-      height: isDesktop ? '100%' : (viewportHeight ? `${viewportHeight}px` : '100dvh'),
-      maxHeight: isDesktop ? '100%' : (viewportHeight ? `${viewportHeight}px` : '100dvh'),
+      height: '100%',
+      flex: isDesktop ? undefined : '1 1 0',
+      minHeight: 0,
       overflow: 'hidden',
-      // Smooth, not instant - requirement #3 ("restore smoothly" on keyboard
-      // close). Keyboard-open transitions happen fast enough that this
-      // reads as responsive, not laggy, while keyboard-close gets a real
-      // eased transition instead of an abrupt snap.
-      //
-      // Only applies AFTER the first real measurement - this transition
-      // was also firing on the very first jump from the 100dvh fallback to
-      // the real measured pixel height, which meant the initial
-      // scroll-to-first-unread positioning could run while the container
-      // was still mid-animation, measuring a temporary/wrong size and
-      // landing the scroll position past the unread content entirely
-      // (only revealed by manually scrolling up) - exactly this bug.
-      // Desktop never animates its height at all (no keyboard, so no
-      // height changes to smooth over - '100%' is stable).
-      transition: isDesktop ? 'none' : (hasSettledInitialHeightRef.current ? 'height 0.15s ease-out' : 'none'),
     }}>
       {/* Wallpaper - a sibling of the scrollable messages area (not a child
           of it), pinned via position:absolute to this whole conversation
