@@ -655,6 +655,10 @@ export function EmailOTPPage() {
               {otp.map((digit, i) => (
                 <input key={i} ref={el => inputRefs.current[i] = el}
                   type="text" inputMode="numeric" maxLength={6}
+                  // The first box takes the emailed code from the keyboard's
+                  // suggestion (iOS / Android); handleOtpKey spreads it over all six.
+                  autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                  aria-label={`Digit ${i + 1} of 6`}
                   value={digit} onChange={e => handleOtpKey(i, e.target.value)}
                   onKeyDown={e => e.key === 'Backspace' && !otp[i] && i > 0 && inputRefs.current[i - 1]?.focus()}
                   onFocus={e => e.target.select()}

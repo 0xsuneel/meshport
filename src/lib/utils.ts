@@ -110,9 +110,14 @@ export function formatTVL(tvl: number): string {
   return `$${tvl}`
 }
 
+// A copy confirms with a tiny tick on phones that vibrate (Android; iOS has
+// no web vibration and simply ignores it).
+function copyTick() { try { navigator.vibrate?.(8) } catch { /* not supported */ } }
+
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text)
+    copyTick()
     return true
   } catch {
     try {
@@ -122,6 +127,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       el.select()
       document.execCommand('copy')
       document.body.removeChild(el)
+      copyTick()
       return true
     } catch {
       return false

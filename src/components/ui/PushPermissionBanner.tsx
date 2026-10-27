@@ -98,7 +98,7 @@ export function PushPermissionBanner({ bottom = 12, desktop = false }: { bottom?
           {busy ? '…' : 'Turn on'}
         </button>
       )}
-      <button onClick={snooze} aria-label="Not now" style={{ flexShrink: 0, background: 'none', border: 'none', padding: 4, color: 'var(--text-secondary)' }}>
+      <button onClick={snooze} aria-label="Not now" className="mp-hit" style={{ flexShrink: 0, background: 'none', border: 'none', padding: 4, color: 'var(--text-secondary)' }}>
         <X size={16} />
       </button>
     </div>

@@ -57,7 +57,7 @@ import { biometricLabel } from '@/lib/biometric'
 import { ServiceIcon } from '@/components/ui/ServiceIcon'
 import { pressable } from '@/lib/pressable'
 
-function copyText(text: string) { try { navigator.clipboard.writeText(text) } catch {} }
+function copyText(text: string) { try { void navigator.clipboard.writeText(text).then(() => { try { navigator.vibrate?.(8) } catch { /* no vibration */ } }) } catch {} }
 
 // ── Insights bucketing - pure, real-data only ───────────────────────────────
 // Builds the full ordered list of time buckets covering `spanDays` ending
@@ -1616,7 +1616,7 @@ function MultichainHubCard({
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
           {hub('Multichain Hub')}
-          <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
+          <button onClick={onToggleHidden} aria-label="Toggle balance visibility" className="mp-hit"
             style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             {balanceHidden ? (
@@ -1750,7 +1750,7 @@ function AvailableBalanceCard({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>
           Total balance
-          <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
+          <button onClick={onToggleHidden} aria-label="Toggle balance visibility" className="mp-hit"
             style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             {balanceHidden ? (
@@ -1768,7 +1768,7 @@ function AvailableBalanceCard({
             )}
           </button>
         </div>
-        <button type="button" aria-label="Copy wallet address" className="mp-press"
+        <button type="button" aria-label="Copy wallet address" className="mp-press mp-hit mp-hit-sm"
           onClick={() => { copyText(walletAddress || ''); showToastMessage('Address copied', 'success') }}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 10px', borderRadius: 14, border: 'none', cursor: 'pointer',
             background: 'rgba(255,255,255,0.14)', color: '#fff', fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 0 }}>
@@ -3880,7 +3880,7 @@ export function HomePage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Hello, {displayName.trim().split(/\s+/)[0]}</div>
-                  <button
+                  <button className="mp-hit" aria-label="Copy username"
                     onClick={async (e) => {
                       e.stopPropagation()
                       const ok = await copyToClipboard(arcHandle)

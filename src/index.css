@@ -594,6 +594,23 @@
    shrink the moment it is touched, so the tap is felt before the next page opens. */
 .mp-press { transition: transform 160ms var(--ease-out); -webkit-tap-highlight-color: transparent; }
 .mp-press:active { transform: scale(0.97); }
+/* Every other control still answers the touch: while pressed it dims a
+   little (the iOS button highlight), so no tap goes unacknowledged. :where()
+   keeps this weaker than any component's own press style, and controls that
+   already have one (mp-press, keypad keys, Tailwind active: classes, the
+   primary buttons, back buttons) are left to it. */
+:where(button, [role="button"], a[href]):where(:not(:disabled, .mp-press, .mp-key, .btn-primary, .btn-secondary, .back-btn, [class*="active:"])):active {
+  opacity: 0.7;
+}
+/* A small control's touch area grows to about 44px (Apple's minimum)
+   without changing how it looks: an invisible ring around it. */
+.mp-hit { position: relative; }
+.mp-hit::after { content: ''; position: absolute; inset: -10px; }
+.mp-hit-sm::after { inset: -8px; }
+
+/* Headings break into even lines; paragraphs avoid a lone last word. */
+h1, h2, h3 { text-wrap: balance; }
+p { text-wrap: pretty; }
 
 /* Error / alert messages: one entrance, and long text (addresses, hashes,
    API messages) always wraps inside the screen instead of running off it. */
