@@ -1607,9 +1607,9 @@ export function PaySendPage() {
                     disabled={!ready}
                     className="w-full py-4 rounded-2xl text-[15px] font-bold active:scale-[.98]"
                     style={{
-                      background: ready ? 'var(--brand)' : 'var(--border)',
-                      border: ready ? '1px solid color-mix(in srgb, black 12%, transparent)' : 'none',
-                      color: ready ? '#FFFFFF' : 'var(--text-secondary)',
+                      background: ready ? 'var(--mustard)' : 'var(--border)',
+                      border: 'none',
+                      color: ready ? 'var(--mustard-ink)' : 'var(--text-secondary)',
                       opacity: ready ? 1 : 0.5,
                     }}>
                     Review

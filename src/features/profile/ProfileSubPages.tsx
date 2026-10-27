@@ -812,7 +812,12 @@ export function EditProfilePage() {
     <>
       <div className="flex flex-col items-center py-4">
         <div className="relative">
-          <Avatar name={displayName || 'User'} src={avatarUrl} size="xl" showRing />
+          {/* Your own avatar: the photo, or your initials on the warm accent (as on Profile). */}
+          {avatarUrl
+            ? <Avatar name={displayName || 'User'} src={avatarUrl} size="xl" />
+            : <div style={{ width: 84, height: 84, borderRadius: '50%', background: 'var(--mustard)', color: 'var(--mustard-ink)', display: 'grid', placeItems: 'center', fontSize: 26, fontWeight: 700 }}>
+                {(displayName || 'User').trim().split(/\s+/).map(w => w.charAt(0)).join('').slice(0, 2).toUpperCase()}
+              </div>}
           {uploading && (
             <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
               <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />

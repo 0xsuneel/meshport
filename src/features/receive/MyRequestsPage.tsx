@@ -121,9 +121,11 @@ export function MyRequestsPage() {
                 const n = id === 'all' ? 0 : counts[id]
                 return (
                   <button key={id} role="tab" aria-selected={on} onClick={() => setFilter(id)}
-                    style={{ padding: '6px 13px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                      background: on ? 'color-mix(in srgb, var(--brand) 22%, transparent)' : 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-                      color: on ? 'var(--brand-text)' : 'var(--text-secondary)' }}>
+                    style={{ padding: '6px 13px', borderRadius: 999, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                      // Chosen chip solid teal, the rest white (as News and Chats).
+                      border: `1px solid ${on ? 'var(--brand)' : 'var(--border)'}`,
+                      background: on ? 'var(--brand)' : 'var(--surface)',
+                      color: on ? '#fff' : 'var(--text-secondary)' }}>
                     {label}{id === 'waiting' && n > 0 ? ` ${n}` : ''}
                   </button>
                 )
@@ -145,7 +147,7 @@ export function MyRequestsPage() {
             ) : shown.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '36px 12px', color: 'var(--text-secondary)', fontSize: 14 }}>
                 <p style={{ margin: '0 0 14px' }}>{filter === 'all' ? "You haven't requested a payment yet." : `No ${filter} requests.`}</p>
-                <button onClick={newRequest} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', background: 'var(--brand)', color: '#fff', fontSize: 14, fontWeight: 700 }}>
+                <button onClick={newRequest} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 18px', borderRadius: 14, border: 'none', cursor: 'pointer', background: 'var(--mustard)', color: 'var(--mustard-ink)', fontSize: 14, fontWeight: 700 }}>
                   <Plus size={16} /> Request payment
                 </button>
               </div>

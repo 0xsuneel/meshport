@@ -127,30 +127,37 @@ export function AssetPage() {
       </div>
 
       <div style={{ maxWidth: isDesktop ? 560 : undefined, margin: '0 auto' }}>
-        {/* Balance */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6px 20px 4px' }}>
-          <TokenLogo token={token} />
-          <div style={{ marginTop: 14, fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>
+        {/* Balance and actions: one teal card, the same as Home's balance
+            card - the token, its value, then the actions as pills (Pay in
+            the warm accent). */}
+        <div style={{ margin: '4px 20px 24px', padding: '16px 16px', borderRadius: 22, color: '#fff',
+          background: 'var(--glass-sheen), var(--brand)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <TokenLogo token={token} />
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>{TOKENS[token].name}</span>
+          </div>
+          <div style={{ marginTop: 12, fontSize: 34, fontWeight: 650, letterSpacing: '-0.03em', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
             {hidden ? '••••' : usdStr}
           </div>
-          <div style={{ marginTop: 4, fontSize: 15, fontWeight: 600, color: 'var(--brand-text)' }}>
+          <div style={{ marginTop: 4, fontSize: 14, color: 'rgba(255,255,255,0.75)', fontVariantNumeric: 'tabular-nums' }}>
             {hidden ? '••••' : `${fmtTokenAmount(amount, token)} ${token}`}
           </div>
-        </div>
-
-        {/* Actions - same round buttons as Home */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: actions.length === 4 ? 18 : 30, padding: '20px 20px 24px' }}>
-          {actions.map(a => (
-            <button key={a.label} onClick={() => navigate(a.path)}
-              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, background: 'none', border: 'none',
-                padding: 0, cursor: 'pointer', color: 'var(--text-primary)', font: 'inherit', minWidth: 64 }}>
-              <span style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--brand)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ActionIcon name={a.icon} size={27} />
-              </span>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>{a.label}</span>
-            </button>
-          ))}
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${actions.length}, minmax(0, 1fr))`, gap: 6, marginTop: 16 }}>
+            {actions.map(a => {
+              const accent = a.label === 'Pay'
+              return (
+                <button key={a.label} onClick={() => navigate(a.path)} className="mp-press"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 40, borderRadius: 20, border: 'none',
+                    cursor: 'pointer', font: 'inherit', fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', minWidth: 0,
+                    background: accent ? 'var(--mustard)' : 'rgba(255,255,255,0.12)',
+                    color: accent ? 'var(--mustard-ink)' : '#fff',
+                    boxShadow: accent ? 'none' : 'inset 0 0 0 1px rgba(255,255,255,0.16)' }}>
+                  <ActionIcon name={a.icon} size={15} color="currentColor" />
+                  {a.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* History */}
@@ -193,10 +200,10 @@ function TokenLogo({ token }: { token: AssetToken }) {
   const info = TOKENS[token]
   const [imgOk, setImgOk] = useState(true)
   return (
-    <div style={{ width: 56, height: 56, borderRadius: '50%', overflow: 'hidden', background: info.fallbackColor,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 24, fontWeight: 800 }}>
+    <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', background: info.fallbackColor, flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 16, fontWeight: 800 }}>
       {imgOk
-        ? <img decoding="async" src={info.logo} alt={token} style={{ width: 56, height: 56, objectFit: 'cover' }} onError={() => setImgOk(false)} />
+        ? <img decoding="async" src={info.logo} alt={token} style={{ width: 36, height: 36, objectFit: 'cover' }} onError={() => setImgOk(false)} />
         : info.fallbackChar}
     </div>
   )
