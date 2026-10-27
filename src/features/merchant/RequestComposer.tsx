@@ -153,8 +153,8 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
             // Keep the keyboard up while tapping the button (the text box blur
             // would otherwise move it before the tap lands).
             onMouseDown={e => e.preventDefault()}
-            className="flex-1 py-3.5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40 active:scale-95 transition-transform"
-            style={{ background: 'var(--brand)' }}>
+            className="flex-1 py-3.5 rounded-2xl text-[15px] font-bold disabled:opacity-40 active:scale-95 transition-transform"
+            style={{ background: 'var(--mustard)', color: 'var(--mustard-ink)' }}>
             {busy ? busyText : valid ? `${verb} $${amtLabel}` : verb}
           </button>
         </div>

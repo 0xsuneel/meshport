@@ -130,9 +130,9 @@ export function RecentPaidPage() {
               People you pay will appear here
             </div>
             <button onClick={() => navigate('/pay')}
-              style={{ padding: '13px 32px', borderRadius: 14, background: 'var(--brand)',
-                color: '#fff', fontSize: 15, fontWeight: 600,
-                border: '1px solid color-mix(in srgb, black 12%, transparent)', cursor: 'pointer' }}>
+              style={{ padding: '13px 32px', borderRadius: 14, background: 'var(--mustard)',
+                color: 'var(--mustard-ink)', fontSize: 15, fontWeight: 650,
+                border: 'none', cursor: 'pointer' }}>
               Make your first payment
             </button>
           </div>
