@@ -3850,9 +3850,9 @@ export function HomePage() {
         position: 'sticky', top: 0, zIndex: searchOpen ? 40 : 20,
         // Frosted like the bottom nav: mostly the page colour, the cards that
         // scroll under it showing through softly blurred.
-        background: 'color-mix(in srgb, var(--bg) 85%, transparent)',
-        backdropFilter: 'blur(16px) saturate(160%)',
-        WebkitBackdropFilter: 'blur(16px) saturate(160%)',
+        background: 'color-mix(in srgb, var(--bg) 80%, transparent)',
+        backdropFilter: 'blur(24px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))',
         paddingBottom: 4, paddingLeft: 20, paddingRight: 20,
         boxSizing: 'border-box',
@@ -3887,7 +3887,7 @@ export function HomePage() {
                     <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--brand-text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
                     {handleCopied
                       ? <Check data-tick className="w-3 h-3 text-success flex-shrink-0" />
-                      : <Copy className="w-3 h-3 text-link/60 flex-shrink-0" />}
+                      : <Copy className="w-3 h-3 text-link flex-shrink-0" />}
                   </button>
                 </div>
               </div>
@@ -4284,7 +4284,7 @@ export function HomePage() {
               name="cirBTC" sub="Circle Bitcoin"
               cryptoAmount={`${cirBtcBalance > 0 ? trimTrailingZeros(cirBtcBalance < 0.0001 ? cirBtcBalance.toFixed(8) : cirBtcBalance.toFixed(6)) : '0'} cirBTC`}
               usdValue={cirBtcBalance > 0 && btcPrice === 0 ? "Fetching..." : `$${trimTrailingZeros((cirBtcBalance * btcPrice).toFixed(2)).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`}
-              usdColor="var(--warning)"
+              usdColor="var(--warning-text)"
               onClick={() => navigate('/asset/cirBTC')}
               hidden={balanceHidden}
               changePct={isDesktop ? assetChange24h.cirBTC : undefined}
