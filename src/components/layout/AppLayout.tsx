@@ -772,7 +772,9 @@ export function AppLayout() {
         flexDirection: 'column',
         overflow: 'hidden',
       }}>
-        <div data-no-scroll="" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', paddingBottom: navVisible ? 'calc(65px + env(safe-area-inset-bottom, 0px))' : 0, minHeight: 0 }}>
+        {/* Home scrolls under the frosted bottom nav (it pads its own end);
+            every other page stops above it. */}
+        <div data-no-scroll="" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', paddingBottom: navVisible && location.pathname !== '/' ? 'calc(65px + env(safe-area-inset-bottom, 0px))' : 0, minHeight: 0 }}>
           <PageTransition locationKey={location.pathname}>
             <Outlet key={reloadKey} />
           </PageTransition>

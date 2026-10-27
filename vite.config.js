@@ -129,18 +129,14 @@ export default defineConfig({
                 description: 'One Gateway Every Chain',
                 // The installed PWA's Android system bars - notably the BOTTOM
                 // navigation/gesture bar - take a STATIC colour from the manifest and
-                // (unlike the top bar and browser tabs, which follow the live
-                // <meta name="theme-color">) do NOT change with the in-app light/dark
-                // theme. Chrome uses theme_color for that bar, falling back to
-                // background_color when it's absent - so brand teal in either slot
-                // left a teal band under the app. There is no manifest value that can
-                // follow the theme, so pin it to the dark app background: a neutral
-                // dark strip that matches dark mode and is unobtrusive in light mode,
-                // instead of off-brand teal. The live status bar still follows the
-                // in-app theme via #mp-theme-color. background_color stays brand teal
-                // for the native launch-screen tile behind the logo.
-                theme_color: '#000000',
-                background_color: '#0F5C57',
+                // (unlike the top bar, which follows the live <meta name="theme-color">)
+                // do NOT change with the in-app light/dark theme. With theme_color black
+                // and background_color brand teal the bar still showed teal under the
+                // app, so both are the light page ground (--bg): the bar matches the
+                // default light theme, and the launch screen is the same light ground
+                // behind the logo tile. No manifest value can follow the theme.
+                theme_color: '#F5F4F0',
+                background_color: '#F5F4F0',
                 display: 'standalone',
                 orientation: 'portrait',
                 scope: '/',

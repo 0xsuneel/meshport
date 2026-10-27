@@ -2155,8 +2155,6 @@ function BannerIcon({ kind }: { kind: typeof FEATURE_BANNERS[number]['icon'] }) 
   return <ActionIcon name={kind === 'globe' ? 'hub' : kind} size={24} />
 }
 
-// The Home cards' shared corner radius (hero card and promo banner).
-const HERO_RADIUS = 24
 function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (path: string) => void; docked?: boolean }) {
   const hub = useHubLabel()
   const [idx, setIdx] = useState(0)
@@ -2196,7 +2194,7 @@ function FeatureBanner({ height, onOpen, docked }: { height: number; onOpen: (pa
       style={docked ? {
         // Its own card 14px under the hero card (the column's gap is 18).
         position: 'relative', zIndex: 1, overflow: 'hidden', cursor: 'pointer',
-        margin: '-4px 0 0', padding: '14px 16px 10px', borderRadius: HERO_RADIUS,
+        margin: '-4px 0 0', padding: '14px 16px 10px', borderRadius: 16,
         // A deeper teal than the hero, so it reads as a separate card.
         background: 'color-mix(in srgb, var(--brand) 78%, #000)', display: 'flex', flexDirection: 'column', alignItems: 'stretch', boxSizing: 'border-box',
       } : {
@@ -3832,6 +3830,8 @@ export function HomePage() {
   return (
     <div ref={scrollContainerRef} style={{
       flex: 1, overflowY: 'auto', background: 'var(--glass-wash), var(--bg)', backgroundAttachment: 'local',
+      // Phone: the page runs under the frosted bottom nav, so its end clears it.
+      paddingBottom: isDesktop ? undefined : 'calc(65px + env(safe-area-inset-bottom, 0px))',
       // Desktop: sized to exactly fill the viewport at 100% browser zoom (see
       // the compact card sizing throughout this column) so nothing scrolls
       // under normal conditions - but overflowY stays 'auto', never 'hidden',
@@ -3848,9 +3848,11 @@ export function HomePage() {
       <div ref={stickyHeaderRef} style={{
         // Above the page's cards while search is open (its results float over them).
         position: 'sticky', top: 0, zIndex: searchOpen ? 40 : 20,
-        // Solid, no backdrop blur: a blur under a sticky header is redrawn on
-        // every frame of a scroll. Carries the page's wash so it has no seam.
-        background: 'var(--glass-wash), var(--bg)',
+        // Frosted like the bottom nav: mostly the page colour, the cards that
+        // scroll under it showing through softly blurred.
+        background: 'color-mix(in srgb, var(--bg) 85%, transparent)',
+        backdropFilter: 'blur(16px) saturate(160%)',
+        WebkitBackdropFilter: 'blur(16px) saturate(160%)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))',
         paddingBottom: 4, paddingLeft: 20, paddingRight: 20,
         boxSizing: 'border-box',
