@@ -122,7 +122,7 @@ export function HubPage({ open, level = 0, behind = false, leaveUnder = false, h
       pointerEvents: open ? undefined : 'none',
     }}>
       {c.header}
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>{c.children}</div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>{c.children}</div>
       {c.footer && (
         <div style={{ flexShrink: 0, padding: isDesktop ? '10px 16px 16px' : '10px 16px calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>{c.footer}</div>
       )}

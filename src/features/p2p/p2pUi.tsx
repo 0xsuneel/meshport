@@ -91,7 +91,7 @@ const inputStyle: React.CSSProperties = {
 export function P2PSheet({ open, onClose, title, children, id }: { open: boolean; onClose: () => void; title: string; children: ReactNode; id: string }) {
   return (
     <ActionSheet open={open} onClose={onClose} id={id} fixed zIndex={201}>
-      <div style={{ overflowY: 'auto', padding: '6px 20px calc(env(safe-area-inset-bottom, 0px) + 22px)' }}>
+      <div style={{ overflowY: 'auto', overflowX: 'hidden', padding: '6px 20px calc(env(safe-area-inset-bottom, 0px) + 22px)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h2>
           <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}>

@@ -304,7 +304,7 @@ export function P2PHubPage() {
   // either as the whole page (mobile) or as the left column of the desktop
   // 2-column layout below - never duplicated.
   const flow = (
-    <div style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: isDesktop ? 24 : 96 }}>
+    <div style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden', paddingBottom: isDesktop ? 24 : 96 }}>
       {/* Desktop: history already sits in the P2P History panel on the right. */}
       <Header title="P2P" onBack={() => navigate('/')} right={isDesktop ? undefined :
         <button onClick={() => navigate('/p2p/history')} style={{ background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }} aria-label="Order history">
@@ -639,7 +639,7 @@ export function P2PCreateOfferPage() {
   )
 
   return (
-    <div className="lg:max-w-[720px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: 110 }}>
+    <div className="lg:max-w-[720px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden', paddingBottom: 110 }}>
       <Header title="Post ad" onBack={() => (step > 1 ? setStep(s => (s - 1) as 1 | 2) : goBack())} />
 
       {/* Steps */}
@@ -1014,7 +1014,7 @@ export function P2POfferDetailPage() {
   }
 
   if (!offer) return (
-    <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto' }}>
+    <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
       {/* Same title the loaded page will have (known from the list), so it
           doesn't change after the page has slid in. */}
       <Header title={offerTypeHint === 'sell' ? 'Buy USDC' : offerTypeHint === 'buy' ? 'Sell USDC' : 'Offer'} onBack={goBack} />
@@ -1045,7 +1045,7 @@ export function P2POfferDetailPage() {
   )
 
   return (
-    <div className="lg:max-w-[720px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: 110 }}>
+    <div className="lg:max-w-[720px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden', paddingBottom: 110 }}>
       <Header title={buyingUsdc ? 'Buy USDC' : 'Sell USDC'} onBack={goBack} />
 
       <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1332,7 +1332,7 @@ export function P2PTradePage() {
   }, [trade?.id])
 
   if (!trade || !user) return (
-    <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto' }}>
+    <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
       <Header title="Trade Details" onBack={goBack} />
       <SkeletonCards count={4} className="pt-2" />
     </div>
@@ -1537,7 +1537,7 @@ export function P2PTradePage() {
   return (
     <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', display: 'flex', flexDirection: 'column', height: '100vh' }}>
       {/* Order details and chat scroll together; the composer stays put. */}
-      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
       {(() => {
         const sym = currencySymbol(trade.currency)
         const fmtMoney = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -2184,7 +2184,7 @@ export function P2PMyOffersPage() {
   }
 
   return (
-    <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: 40 }}>
+    <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden', paddingBottom: 40 }}>
       {user?.id && (
         <PaymentMethodSheet open={showPmSheet} onClose={() => setShowPmSheet(false)} userId={user.id}
           defaultName={user.displayName ?? ''}
@@ -2476,7 +2476,7 @@ export function P2PMyTradesPage() {
   }, [user?.id, anyMoving])
 
   return (
-    <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: 40 }}>
+    <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden', paddingBottom: 40 }}>
       <Header title="My Trades" onBack={() => navigate('/p2p')} right={
         <button onClick={() => navigate('/p2p/history')} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', display: 'flex' }} aria-label="Transaction history">
           <History size={20} color={COLORS.text} />

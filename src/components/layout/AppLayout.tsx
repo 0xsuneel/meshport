@@ -703,7 +703,7 @@ export function AppLayout() {
               only works relative to ITS OWN nearest scrolling ancestor -
               if the wrong ancestor was the one actually scrolling, the
               header just scrolled away with everything else). */}
-          <div data-desktop-content="" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div data-desktop-content="" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <PageTransition locationKey={desktopPageKey(location.pathname)}>
               <Outlet key={reloadKey} />
             </PageTransition>

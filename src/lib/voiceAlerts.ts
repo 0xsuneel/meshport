@@ -83,9 +83,12 @@ function audioContext(): AudioContext | null {
 
 let unlocked = false
 function unlock() {
-  // Every tap: iOS suspends the context again after a call or Siri.
-  const ctx = audioContext()
+  // Every tap: iOS suspends the context again after a call or Siri. Only
+  // resumed here - the context is made while the page is idle (below), as
+  // making it inside a tap held that tap up.
+  const ctx = audio
   if (ctx && ctx.state !== 'running') void ctx.resume().catch(() => {})
+  if (!ctx) return // not made yet: the next tap unlocks
   if (unlocked) return
   unlocked = true
   // Ready the chime and the most common ending before the first payment.
@@ -100,6 +103,10 @@ function unlock() {
   }
 }
 if (typeof window !== 'undefined') {
+  const warm = () => { audioContext() }
+  // Called on window itself: Safari throws when it's called detached.
+  const w = window as unknown as { requestIdleCallback?: (cb: () => void) => number }
+  if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(warm); else setTimeout(warm, 3000)
   const opts = { capture: true, passive: true } as const
   for (const ev of ['pointerdown', 'touchend', 'keydown'] as const) window.addEventListener(ev, unlock, opts)
   // Coming back to the tab: a context the browser suspended is woken again.

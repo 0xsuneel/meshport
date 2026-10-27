@@ -98,7 +98,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
           </button>
         </div>
 
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto' }}>
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto', overflowX: 'hidden' }}>
           {navItems.map((item) => (
             <NavLink
               key={item.to}

@@ -205,7 +205,7 @@ export function P2PHistoryPage() {
   }, [trades, user?.id])
 
   const page = (
-    <div style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: 40 }}>
+    <div style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden', paddingBottom: 40 }}>
       <Header title="P2P History" onBack={() => navigate('/p2p')} />
 
       {/* Search */}

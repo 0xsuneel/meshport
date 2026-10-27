@@ -384,7 +384,7 @@ export function P2PAdminPage() {
   }
 
   return (
-    <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: 40 }}>
+    <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden', paddingBottom: 40 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 16px 6px' }}>
         {!isDesktop && (
           <button onClick={() => ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0 ? navigate(-1) : navigate(`${ADMIN_PATH}/dashboard`, { replace: true })} className="back-btn" aria-label="Back"
@@ -653,7 +653,7 @@ export function P2PAdminPage() {
             <p style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, marginBottom: 12 }}>Resolve Dispute</p>
 
             <p style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Trade chat</p>
-            <div style={{ maxHeight: 220, overflowY: 'auto', background: COLORS.surface, borderRadius: 12, border: `1px solid ${COLORS.border}`, padding: 10, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ maxHeight: 220, overflowY: 'auto', overflowX: 'hidden', background: COLORS.surface, borderRadius: 12, border: `1px solid ${COLORS.border}`, padding: 10, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {disputeMessagesLoading ? (
                 <p style={{ textAlign: 'center', color: COLORS.muted, fontSize: 12, padding: 12 }}>Loading messages…</p>
               ) : disputeMessages.length === 0 ? (

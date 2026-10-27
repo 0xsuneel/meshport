@@ -199,16 +199,21 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
     const container = scrollContainerRef.current, assets = assetsCardRef.current, card = cardRef.current
     if (!container || !assets || !card) return
     const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    let assetsBottom = 0, cardH = 1, viewH = 0, frame = 0
+    let assetsBottom = 0, cardH = 1, viewH = 0, frame = 0, lastP = -1
     const measure = () => {
       const c = container.getBoundingClientRect()
       assetsBottom = assets.getBoundingClientRect().bottom - c.top + container.scrollTop
       cardH = card.offsetHeight || 1
       viewH = c.height
+      lastP = -1
     }
     const apply = () => {
       frame = 0
       const p = still ? 1 : Math.min(1, Math.max(0, (container.scrollTop + viewH - assetsBottom) / cardH))
+      // Most of the scroll is above the card (p = 0) or past it (p = 1):
+      // nothing changes there, so nothing is written.
+      if (p === lastP) return
+      lastP = p
       card.style.transform = `scale(${(0.4 + 0.6 * p).toFixed(4)})`
       card.style.opacity = Math.min(1, p * 6).toFixed(3)
       // The scan runs from just above the code (-7%) to just below it (107%).
@@ -650,7 +655,7 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; 
   return createPortal(
     <ActionSheet open={open} onClose={onClose} isDesktop={isDesktop} id="home-more" fixed zIndex={9991} desktopMaxWidth={420}>
       <div style={{
-        overflowY: 'auto', overscrollBehavior: 'contain',
+        overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain',
         padding: isDesktop ? '24px 20px 28px' : '6px 20px calc(env(safe-area-inset-bottom, 0px) + 28px)',
       }}>{content}</div>
     </ActionSheet>,
@@ -1392,7 +1397,7 @@ function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {popups.map(n => {
             const isReminder = n.type === 'trade_expiring_soon' || n.type === 'grace_period_ending'
             const isWarning = isReminder || n.type === 'payment_marked_completed'
@@ -3829,7 +3834,7 @@ export function HomePage() {
 
   return (
     <div ref={scrollContainerRef} style={{
-      flex: 1, overflowY: 'auto', background: 'var(--glass-wash), var(--bg)', backgroundAttachment: 'local',
+      flex: 1, overflowY: 'auto', overflowX: 'hidden', background: 'var(--glass-wash), var(--bg)', backgroundAttachment: 'local',
       // Phone: the page runs under the frosted bottom nav, so its end clears it.
       paddingBottom: isDesktop ? undefined : 'calc(65px + env(safe-area-inset-bottom, 0px))',
       // Desktop: sized to exactly fill the viewport at 100% browser zoom (see
@@ -3850,9 +3855,9 @@ export function HomePage() {
         position: 'sticky', top: 0, zIndex: searchOpen ? 40 : 20,
         // Frosted like the bottom nav: mostly the page colour, the cards that
         // scroll under it showing through softly blurred.
-        background: 'color-mix(in srgb, var(--bg) 88%, transparent)',
-        backdropFilter: 'blur(40px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+        background: 'color-mix(in srgb, var(--bg) 92%, transparent)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))',
         paddingBottom: 4, paddingLeft: 20, paddingRight: 20,
         boxSizing: 'border-box',
@@ -3934,7 +3939,7 @@ export function HomePage() {
         {searchOpen && searchQuery.trim() && (
           <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 20, right: 20, zIndex: 1,
             background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--brand) 25%, transparent)', borderRadius: 18, padding: '4px 10px 10px',
-            maxHeight: '60vh', overflowY: 'auto', overscrollBehavior: 'contain', boxShadow: '0 12px 32px rgba(0,0,0,0.18)' }}>
+            maxHeight: '60vh', overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain', boxShadow: '0 12px 32px rgba(0,0,0,0.18)' }}>
             {searching && searchPeople.length === 0 && (
               <p style={{ color: 'var(--text-secondary)', fontSize: 12, textAlign: 'center', padding: '16px 0' }}>Searching...</p>
             )}
@@ -4319,7 +4324,7 @@ export function HomePage() {
           <div style={{ flex: 1, minHeight: 240, position: 'relative' }}>
           <div style={{
             position: 'absolute', inset: 0,
-            display: 'flex', flexDirection: 'column', overflowY: 'auto',
+            display: 'flex', flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden',
             background: 'var(--glass-fill)', borderRadius: 16, border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-card)',
             padding: '12px 14px',
           }}>

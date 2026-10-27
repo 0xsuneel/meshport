@@ -1775,7 +1775,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           </div>
 
           {/* Body */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: `${SPACING.md}px ${SPACING.md}px ${SPACING.xl}px`, minHeight: 0 }}>
+          <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: `${SPACING.md}px ${SPACING.md}px ${SPACING.xl}px`, minHeight: 0 }}>
             {/* Available Total Card */}
             <motion.div
               initial={pushScreens ? false : { opacity: 0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity: 1, y: 0 }} transition={MOBILE_TAB_FADE_TRANSITION}
@@ -2189,7 +2189,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: confirmPhase === 'done' ? { duration: 0 } : MOBILE_TAB_FADE_TRANSITION }}
               transition={MOBILE_TAB_FADE_TRANSITION}
               {...(pushScreens ? INSTANT_STEP : {})}
-              style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', padding: '0 12px 12px' }}
+              style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', overflowX: 'hidden', padding: '0 12px 12px' }}
             >
               <MoveProgress
                 kind="bring" route={route} fromLabel={chainProgress.length > 1 ? `${chainProgress.length} chains` : srcLabel} toLabel="Arc"

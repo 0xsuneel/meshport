@@ -74,7 +74,7 @@ export function DesktopSidebar() {
       width: 240, flexShrink: 0, height: '100%',
       background: 'var(--surface)', borderRight: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column',
-      padding: '20px 14px', overflowY: 'auto',
+      padding: '20px 14px', overflowY: 'auto', overflowX: 'hidden',
     }}>
       <div
         onClick={() => navigate('/')}

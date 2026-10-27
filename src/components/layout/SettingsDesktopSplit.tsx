@@ -63,7 +63,7 @@ export function SettingsDesktopSplit() {
 
   return (
     <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
-      <nav aria-label="Settings" style={{ width: 290, flexShrink: 0, height: '100%', minHeight: 0, overflowY: 'auto', borderRight: '1px solid var(--border)', padding: '20px 14px 24px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <nav aria-label="Settings" style={{ width: 290, flexShrink: 0, height: '100%', minHeight: 0, overflowY: 'auto', overflowX: 'hidden', borderRight: '1px solid var(--border)', padding: '20px 14px 24px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', padding: '0 6px 12px' }}>Settings</div>
         <button onClick={() => go('/profile')}
           style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: 12, marginBottom: 8, borderRadius: 16, cursor: 'pointer', textAlign: 'left',

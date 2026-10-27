@@ -212,9 +212,10 @@ function RecentBox({ navigate }: { navigate: NavigateFunction }) {
                 ? { duration: 0.8, times: [0, 0.45, 0.47, 1], ease: 'easeOut' }
                 : { type: 'spring', stiffness: 260, damping: 22, delay: reduce ? 0 : slot * 0.045 }}
               style={{ position: 'absolute', left: 0, top: (CONTENT_H - AVATAR) / 2, width: AVATAR, height: AVATAR, zIndex: 10 - slot,
+                // Depth from size and opacity only (the pose): a colour filter
+                // on each photo was redrawn on every step of the queue.
                 borderRadius: '50%', boxShadow: slot === 0 ? FRONT_SHADOW : 'none',
-                filter: slot === 0 ? 'none' : `saturate(${0.75 - (slot - 1) * 0.1}) brightness(${1.04 + (slot - 1) * 0.04})`,
-                transition: 'box-shadow .6s ease, filter .6s ease', transformOrigin: 'center' }}>
+                transition: 'box-shadow .6s ease', transformOrigin: 'center' }}>
               <Face c={c} i={i} />
             </motion.div>
           )

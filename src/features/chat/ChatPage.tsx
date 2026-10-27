@@ -5587,7 +5587,7 @@ export function ChatConversationPage() {
                 onClick={e => e.stopPropagation()}
                 style={{
                   position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: payStep === 'confirm' || payDrawerLow ? 99 : 141,
-                  width: CHAT_PAY_DRAWER_WIDTH, overflowY: 'auto',
+                  width: CHAT_PAY_DRAWER_WIDTH, overflowY: 'auto', overflowX: 'hidden',
                   background: 'var(--surface)', borderLeft: '1px solid var(--border)',
                   boxShadow: 'var(--shadow-3)',
                 }}
@@ -5738,7 +5738,7 @@ export function ChatConversationPage() {
                 style={{
                   position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 141, width: CHAT_PAY_DRAWER_WIDTH,
                   background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: 'var(--shadow-3)',
-                  display: 'flex', flexDirection: 'column', justifyContent: payStep === 'processing' ? 'center' : undefined, overflowY: 'auto',
+                  display: 'flex', flexDirection: 'column', justifyContent: payStep === 'processing' ? 'center' : undefined, overflowY: 'auto', overflowX: 'hidden',
                 }}>
                 {/* The receipt card gets room inside the drawer (it touched both
                     edges and the window's edge). */}

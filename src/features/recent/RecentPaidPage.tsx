@@ -190,7 +190,7 @@ export function RecentPaidPage() {
 
   if (!isDesktop) {
     return (
-      <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 90 }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg)', paddingBottom: 90 }}>
       {/* Header */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 20,
