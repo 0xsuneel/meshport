@@ -44,6 +44,19 @@
   ::-webkit-scrollbar { display: none; }
   * { scrollbar-width: none; -ms-overflow-style: none; }
 
+  /* Pages scroll up and down only. A box with overflow-y: auto also gets
+     overflow-x: auto by default, so anything that briefly sticks out (an
+     avatar mid-animation, a long word) let a sideways swipe drag the whole
+     page left and right on iPhone and Android. Rows meant to scroll sideways
+     (chips, carousels, wide tables) set overflow-x themselves and keep it. */
+  .overflow-y-auto:not(.overflow-x-auto):not(.overflow-x-scroll):not(.overflow-auto),
+  .overflow-y-scroll:not(.overflow-x-auto):not(.overflow-x-scroll),
+  [style*="overflow-y: auto"]:not([style*="overflow-x"]):not(.overflow-x-auto):not(.overflow-x-scroll),
+  [style*="overflow-y: scroll"]:not([style*="overflow-x"]):not(.overflow-x-auto):not(.overflow-x-scroll) {
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
+
   /* Respect the OS-level "reduce motion" accessibility setting app-wide -
      collapses (near-)instant any animation/transition that isn't already
      scoped tighter, rather than requiring every single component to check

@@ -479,7 +479,7 @@ export function ActivityRow({ record, isFirst, isLast, onSelect, flash, inPanel 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', ...oneLine }}>{title}</div>
         {subtitle ? (
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: counterpartyLabel && !isSwap ? 'monospace' : undefined }}>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {subtitle}
           </div>
         ) : null}
@@ -1064,7 +1064,7 @@ export function ActivityPage() {
                           <tr key={item.id} data-activity-id={item.id} onClick={() => openDetail(item)} className={`desktop-table-row${item.id === flashId ? ' mp-last-opened' : ''}`}
                             style={{ cursor: 'pointer', borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)', background: 'var(--dt-hover-bg, transparent)', transition: 'background-color 150ms ease' }}>
                             <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{row.title}</td>
-                            <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)', fontFamily: row.counterpartyLabel && !row.isSwap ? 'monospace' : undefined }}>{row.subtitle || '-'}</td>
+                            <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{row.subtitle || '-'}</td>
                             <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{row.chain || '-'}</td>
                             <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: row.statusColor }}>{row.statusLabel}</td>
                             <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)' }}>{timeAgo(row.createdAt)}</td>

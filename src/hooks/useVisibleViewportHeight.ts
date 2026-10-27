@@ -140,8 +140,11 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
  * bring a focused field into view - e.g. a field focused while its page is
  * still sliding in from the right - and leaves the whole screen shifted
  * half off the side. Puts any such sideways scroll straight back, and keeps
- * the frame's own boxes (never meant to scroll: the frame itself and
- * anything marked data-no-scroll) at the top.
+ * every box that is never meant to scroll at the top: the frame itself,
+ * anything marked data-no-scroll, and any overflow:hidden box. When the
+ * keyboard opens, iPhone scrolls the page's overflow:hidden wrappers up to
+ * reach the focused field, which pushed the header off the screen and left
+ * an empty band above the keys (Receive's request form, the chat box).
  */
 export function useFrameScrollGuard(ref: RefObject<HTMLElement | null>, enabled = true) {
   useEffect(() => {
@@ -154,7 +157,10 @@ export function useFrameScrollGuard(ref: RefObject<HTMLElement | null>, enabled 
         const ox = getComputedStyle(el).overflowX
         if (ox === 'hidden' || ox === 'clip') el.scrollLeft = 0
       }
-      if (el.scrollTop && (el === frame || el.hasAttribute('data-no-scroll'))) el.scrollTop = 0
+      if (el.scrollTop) {
+        const oy = getComputedStyle(el).overflowY
+        if (el === frame || el.hasAttribute('data-no-scroll') || oy === 'hidden' || oy === 'clip') el.scrollTop = 0
+      }
     }
     frame.addEventListener('scroll', onScroll, true)
     return () => frame.removeEventListener('scroll', onScroll, true)
