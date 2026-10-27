@@ -3855,9 +3855,9 @@ export function HomePage() {
         position: 'sticky', top: 0, zIndex: searchOpen ? 40 : 20,
         // Frosted like the bottom nav: mostly the page colour, the cards that
         // scroll under it showing through softly blurred.
-        background: 'color-mix(in srgb, var(--bg) 92%, transparent)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
+        background: 'color-mix(in srgb, var(--bg) 96%, transparent)',
+        backdropFilter: 'blur(28px)',
+        WebkitBackdropFilter: 'blur(28px)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))',
         paddingBottom: 4, paddingLeft: 20, paddingRight: 20,
         boxSizing: 'border-box',
