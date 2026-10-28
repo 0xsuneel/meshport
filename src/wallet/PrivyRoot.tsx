@@ -23,6 +23,10 @@ import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 import { useAuthStore } from '@/store'
 import { privyAccount, privyAppId, setPrivyBridge } from './privy'
 import { useSupabaseSession } from './PrivyGate'
+import { useWalletReadiness } from '@/lib/walletReadiness'
+
+// How long Privy gets to load before a stalled start is begun again (see PrivyBridgeSync).
+const PRIVY_LOAD_MS = 8_000
 
 // Privy signs only on chains it is told about: Arc plus every other chain in
 // MeshPort's registry with a verified chain id (Multichain transfers and
@@ -168,6 +172,25 @@ function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => vo
     const t = setTimeout(() => stuckRef.current('wallet not connected 5 s after sign-in'), 5_000)
     return () => clearTimeout(t)
   }, [ready, authenticated, hasLinkedWallet, addresses])
+  // Privy itself never loaded: started while the phone had no connection,
+  // its first request hangs and Privy never retries it - field: "ready=false"
+  // for the whole 30 s while the app's own requests got through again from
+  // 10 s on, then "Your wallet didn't open". Once the network is shown
+  // working (Arc answered) and Privy has had its normal time (ready by 6 s
+  // at worst in the field), start it again on a fresh connection.
+  useEffect(() => {
+    if (ready) return
+    let due = false
+    let fired = false
+    const check = () => {
+      if (fired || !due || !useWalletReadiness.getState().networkReady) return
+      fired = true
+      stuckRef.current('Privy not loaded with the network working')
+    }
+    const t = setTimeout(() => { due = true; check() }, PRIVY_LOAD_MS)
+    const unsub = useWalletReadiness.subscribe(check)
+    return () => { clearTimeout(t); unsub() }
+  }, [ready])
   useEffect(() => () => setPrivyBridge(null), [])
   return null
 }
