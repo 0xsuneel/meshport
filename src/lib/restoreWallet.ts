@@ -40,7 +40,7 @@ import { useAuthStore, useUIStore } from '@/store'
 // There are 13+ call sites of restorePrivateKey() across the app, several
 // firing automatically on mount. Sharing one in-flight attempt avoids
 // redundant concurrent network calls when multiple components ask at once.
-let inFlightRestore: Promise<boolean> | null = null
+let inFlightRestore: { promise: Promise<boolean>; passcode: string | null } | null = null
 
 // PERF FIX (transaction-speed audit, 2026-09-17): `silent`, used by
 // PaySendPage/ChatPage/SwapPage/MultichainTransferPage/MultichainClaimPage
@@ -71,9 +71,20 @@ export function walletUnavailableMessage(): string {
 }
 
 export async function restorePrivateKey(rawPasscode?: string, opts?: { silent?: boolean }): Promise<boolean> {
-  if (inFlightRestore) return inFlightRestore
+  const running = inFlightRestore
+  if (running) {
+    const ok = await running.promise
+    // The attempt we joined may have started without this caller's passcode
+    // (the mount-time restores in App / AppLayout / Home pass none). Its
+    // failure says nothing about this passcode: a create / import wallet
+    // after the lock screen stayed locked for the whole session, and the
+    // next payment failed with "Couldn't access your wallet".
+    if (ok || !rawPasscode || running.passcode === rawPasscode) return ok
+    if (inFlightRestore === running) inFlightRestore = null
+    return restorePrivateKey(rawPasscode, opts)
+  }
 
-  inFlightRestore = (async () => {
+  const promise = (async () => {
     const restored = await attemptRestore(rawPasscode)
     if (!opts?.silent) {
       const hasWallet = !!useAuthStore.getState().walletAddress
@@ -81,11 +92,13 @@ export async function restorePrivateKey(rawPasscode?: string, opts?: { silent?: 
     }
     return restored
   })()
+  const entry = { promise, passcode: rawPasscode ?? null }
+  inFlightRestore = entry
 
   try {
-    return await inFlightRestore
+    return await promise
   } finally {
-    inFlightRestore = null
+    if (inFlightRestore === entry) inFlightRestore = null
   }
 }
 
