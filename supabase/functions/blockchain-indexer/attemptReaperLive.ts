@@ -47,7 +47,10 @@ export function makeLiveAttemptReaperUpdateRepository(supabase: SupabaseClient):
     async dropAttemptAndFailIntent(attemptId, intentId) {
       const { error: attemptErr, count } = await supabase
         .from('transaction_attempts')
-        .update({ status: 'DROPPED' })
+        // Never sent (tx_hash null): free its nonce too, like pay-intent's
+        // reclaim does - a closed row that kept it left a gap every later
+        // payment from the wallet waited behind on Arc, forever.
+        .update({ status: 'DROPPED', nonce: null, failure_code: 'REAPED_NEVER_SENT' })
         .eq('id', attemptId)
         .eq('status', 'CREATED')
         .is('tx_hash', null)

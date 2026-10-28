@@ -139,6 +139,9 @@ let _swapReceipt: any = null
 // lost (timeout, network blip) may still have reached the chain - this is how
 // the error path below finds out what really happened.
 let _swapSendAttempted = false
+// Swap timing (lib/perfTrace): when it started, when the swap transaction went
+// out, when Arc confirmed it.
+let _swapTimes: { start: number; sent?: number; confirmed?: number } | null = null
 
 // A different swap hash drops any receipt held for the previous one, so a
 // confirmation can only ever belong to the transaction it was read for.
@@ -155,6 +158,7 @@ function noteSwapSends(reqs: any[], Transaction: any) {
       const tx = Transaction.from(req.params[0])
       if (isApprovalCalldata(tx.data)) continue
       _swapSendAttempted = true
+      if (_swapTimes && _swapTimes.sent == null) _swapTimes.sent = performance.now()
       if (tx.hash) noteSwapHash(String(tx.hash))
     } catch { /* bookkeeping only */ }
   }
@@ -175,6 +179,7 @@ function reportSwapProgress(reqs: any[], results: any[], Transaction: any) {
         if (_swapHash && String(res.result.transactionHash).toLowerCase() === _swapHash && res.result.status === '0x1') {
           _swapReceipt = res.result
           _swapConfirmed = true
+          if (_swapTimes && _swapTimes.confirmed == null) _swapTimes.confirmed = performance.now()
         }
         emit({ kind: 'confirmed', hash: res.result.transactionHash, success: res.result.status === '0x1' })
       }
@@ -188,6 +193,7 @@ function reportSwapProgress(reqs: any[], results: any[], Transaction: any) {
 // in-process forward() swap-proxy.js used server-side (there's no
 // same-process call available from the browser - this is the real network
 // hop equivalent of it).
+const SWAP_RPC_TIMEOUT_MS = 20_000
 function buildArcForwardProvider(JsonRpcProvider: any, Transaction: any) {
   class ArcForwardProvider extends JsonRpcProvider {
     constructor() {
@@ -199,10 +205,14 @@ function buildArcForwardProvider(JsonRpcProvider: any, Transaction: any) {
       const isBatch = Array.isArray(payload)
       noteSwapSends(isBatch ? payload : [payload], Transaction)
       try {
+        // Bounded like every other Arc call (arcRpcJson): a request stuck on a
+        // dead connection used to hold the swap forever. A send that timed
+        // out is settled from Arc itself below (settleSwapTx).
         const res = await fetch('/api/arc-rpc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(SWAP_RPC_TIMEOUT_MS),
         })
         const result = await res.json()
         const results = isBatch ? result : [result]
@@ -434,11 +444,20 @@ export async function executeSwapLocal(params: ExecuteSwapParams): Promise<{ txH
   _confirmedHashes = new Set()
   _swapBroadcast = false; _swapSendAttempted = false
   _swapHash = null; _swapConfirmed = false; _swapReceipt = null
+  const times = _swapTimes = { start: performance.now() } as NonNullable<typeof _swapTimes>
+  let outcome = 'failed'
   try {
-    return await runSwap(params)
+    const out = await runSwap(params)
+    outcome = 'success'
+    return out
   } finally {
     _onSwapProgress = null
     _swapConfirmed = false
+    _swapTimes = null
+    const { reportSwap } = await import('./perfTrace')
+    reportSwap(times.sent != null ? times.sent - times.start : undefined,
+      times.sent != null && times.confirmed != null ? times.confirmed - times.sent : undefined,
+      times.sent == null ? `${outcome}, not sent` : outcome)
   }
 }
 
