@@ -51,10 +51,28 @@ async function adoptWaitingCopy(): Promise<void> {
   try { reg?.waiting?.postMessage({ type: 'SKIP_WAITING' }) } catch { /* next time */ }
 }
 
-/** Resolves once a new offline copy is waiting (or after `ms`). */
+// ── Download progress of the new version (sw.ts reports each file saved) ───
+let progress = { saved: 0, total: 0, at: 0 }
+let listening = false
+function listenForProgress(): void {
+  if (listening || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  listening = true
+  navigator.serviceWorker.addEventListener('message', (e: MessageEvent) => {
+    const d = e.data as { type?: string; saved?: number; total?: number } | null
+    if (d?.type !== 'MP_UPDATE_PROGRESS' || !d.total) return
+    progress = { saved: d.saved ?? 0, total: d.total, at: Date.now() }
+    renderProgress(progress.saved / progress.total)
+  })
+}
+
+/** Resolves once a new offline copy is waiting - while it's still downloading
+ *  (files keep arriving) it keeps waiting, up to 90 s; after `ms` with no
+ *  progress it stops. */
 async function untilWaiting(reg: ServiceWorkerRegistration, ms: number): Promise<void> {
-  const end = Date.now() + ms
-  while (!reg.waiting && Date.now() < end) {
+  const started = Date.now()
+  const end = started + ms
+  const downloading = () => Date.now() - progress.at < 5_000 && Date.now() - started < 90_000
+  while (!reg.waiting && (Date.now() < end || downloading())) {
     if (!reg.installing) { try { await reg.update() } catch { /* offline */ } }
     await new Promise(r => setTimeout(r, 250))
   }
@@ -67,7 +85,9 @@ async function switchToNewVersion(): Promise<boolean> {
     if (Date.now() - Number(sessionStorage.getItem(GUARD_KEY) || 0) < 30_000) return false
     sessionStorage.setItem(GUARD_KEY, String(Date.now()))
   } catch { /* private mode */ }
+  listenForProgress()
   showUpdating()
+  if (progress.total) renderProgress(progress.saved / progress.total) // it may have started downloading already
   // Keep the message up through the reload too (boot.js puts it back on
   // the new page's opening screen), and on screen long enough to read.
   try {
@@ -84,6 +104,7 @@ async function switchToNewVersion(): Promise<boolean> {
     // old copy so the reload has to come from the server (it re-installs).
     await untilWaiting(reg, 10_000)
     const waiting = reg.waiting
+    if (waiting) renderProgress(1) // the whole new version is on the device
     if (waiting) {
       await new Promise<void>(resolve => {
         navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })
@@ -167,6 +188,7 @@ function showReadyPill(): void {
 /** Keep looking for new versions while the app stays open / in memory, and switch as soon as it's safe. */
 export function watchForUpdates(): () => void {
   if (typeof document === 'undefined' || !('serviceWorker' in navigator)) return () => {}
+  listenForProgress() // a background download already reports how far it got
   let last = Date.now()
   const maybeCheck = () => {
     if (Date.now() - last < 30_000) return
@@ -239,11 +261,49 @@ export function showUpdating(): void {
     const logo = document.createElement('div')
     Object.assign(logo.style, { width: '56px', height: '56px' })
     const label = document.createElement('div')
+    label.setAttribute('data-role', 'label')
     label.textContent = text
     Object.assign(label.style, { position: 'absolute', left: '0', right: '0', top: 'calc(50% + 60px + 24px)', textAlign: 'center', fontSize: '13px', fontWeight: '600' })
     el.append(logo, label)
     document.body.appendChild(el)
     // Same animated MeshPort logo as the opening screen and the app's loaders.
     logo.innerHTML = meshLoaderSvgMarkup(56, ink)
+  } catch { /* cosmetic only */ }
+}
+
+/**
+ * The real download progress under "Updating MeshPort…": a bar and the
+ * percentage (sw.ts counts the files saved). Same place on the opening
+ * screen and the update screen, and after the reload (index.html draws the
+ * finished bar there).
+ */
+function renderProgress(fraction: number): void {
+  try {
+    const pct = Math.max(0, Math.min(100, Math.round(fraction * 100)))
+    const splash = document.getElementById('splash')
+    if (splash && !splash.classList.contains('splash-hide')) splash.setAttribute('data-update-pct', ` ${pct}%`)
+    const label = document.querySelector('#mp-updating [data-role="label"]')
+    if (label) label.textContent = `Updating MeshPort… ${pct}%`
+    let bar = document.getElementById('mp-update-progress')
+    if (!bar) {
+      if (!document.documentElement.classList.contains('mp-updating')) return // not on an update screen
+      const opening = !!splash && !splash.classList.contains('splash-hide') && !document.documentElement.classList.contains('mp-refresh')
+      const dark = document.documentElement.getAttribute('data-theme') === 'dark'
+      const ink = opening ? '#A9D9CF' : dark ? '#24A193' : '#0F5C57'
+      bar = document.createElement('div')
+      bar.id = 'mp-update-progress'
+      bar.setAttribute('role', 'progressbar')
+      bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', '100')
+      Object.assign(bar.style, {
+        position: 'fixed', left: '50%', top: 'calc(50% + 60px + 24px + 28px)', transform: 'translateX(-50%)', zIndex: '10002',
+        width: '160px', height: '4px', borderRadius: '2px', overflow: 'hidden', background: `color-mix(in srgb, ${ink} 25%, transparent)`,
+      })
+      const fill = document.createElement('div')
+      Object.assign(fill.style, { height: '100%', width: '0%', borderRadius: '2px', background: ink, transition: 'width .2s ease' })
+      bar.appendChild(fill)
+      document.body.appendChild(bar)
+    }
+    bar.setAttribute('aria-valuenow', String(pct))
+    ;(bar.firstElementChild as HTMLElement).style.width = `${pct}%`
   } catch { /* cosmetic only */ }
 }
