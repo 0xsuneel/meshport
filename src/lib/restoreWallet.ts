@@ -79,7 +79,15 @@ export async function restorePrivateKey(rawPasscode?: string, opts?: { silent?: 
     // failure says nothing about this passcode: a create / import wallet
     // after the lock screen stayed locked for the whole session, and the
     // next payment failed with "Couldn't access your wallet".
-    if (ok || !rawPasscode || running.passcode === rawPasscode) return ok
+    if (ok || !rawPasscode || running.passcode === rawPasscode) {
+      // The attempt may have been a silent one (the lock screen's): this
+      // caller isn't, so a failure shows the recovery banner as its own would.
+      if (!ok && !opts?.silent) {
+        const { walletAddress, signer } = useAuthStore.getState()
+        useUIStore.getState().setWalletRecoveryNeeded(!!walletAddress && !signer)
+      }
+      return ok
+    }
     if (inFlightRestore === running) inFlightRestore = null
     return restorePrivateKey(rawPasscode, opts)
   }
