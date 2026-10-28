@@ -1582,7 +1582,7 @@ function MultichainHubCard({
   // columns) rather than the full card.
   const statFontSize = (n: number) => {
     const digitCount = Math.trunc(Math.abs(n)).toString().length
-    return digitCount >= 9 ? 13 : digitCount >= 8 ? 15 : digitCount >= 7 ? 17 : digitCount >= 6 ? 20 : digitCount >= 5 ? 23 : 26
+    return digitCount >= 9 ? 15 : digitCount >= 8 ? 17 : digitCount >= 7 ? 20 : digitCount >= 6 ? 23 : digitCount >= 5 ? 27 : 32
   }
   // Whole part large, cents smaller + lighter (same treatment as the balance card).
   const renderStat = (n: number, _size: number | string) => {
@@ -1662,8 +1662,9 @@ function MultichainHubCard({
         </div>
       </div>
 
-      {/* Room for the pager dots at the bottom right (the actions are the pills under the card). */}
-      <div aria-hidden style={{ height: 18 }} />
+      {/* Bottom room, kept so the card is the same height: the figures grew
+          by what this gave up (the pager dots moved under the pills). */}
+      <div aria-hidden style={{ height: 12 }} />
 
     </BowedShapeCard>
   )
@@ -1805,6 +1806,10 @@ function AvailableBalanceCard({
 
 // Hero pager: dot size, gap, and the sliding pill's width.
 const HERO_DOT = 5, HERO_DOT_GAP = 7, HERO_PILL = 14
+// The mobile hero's pills under the carousel: the gap above them, their
+// height, and the card's padding under them. The pager dots sit centred in
+// that bottom padding, so the carousel places them this far below itself.
+const HERO_PILLS_GAP = 14, HERO_PILLS_H = 40, HERO_BOTTOM_PAD = 16
 // ── Mobile Hero Carousel - Balance card / Multichain Hub card, swipeable ───
 // BUG FIX (swipe required twice + visible flicker): this carousel's state
 // (heroCardIndex, heroRowX, the drag handlers) used to live directly on
@@ -2117,8 +2122,8 @@ function MobileHeroCarousel({
         </motion.div>
       </div>
 
-      {/* ── Dot indicators - tap either to jump slides. On the card's last
-           row, right side (the address sits on the left of it). ─────────── */}
+      {/* ── Dot indicators - tap either to jump slides. Centred in the
+           hero's bottom padding, under the pills. ─────────────────────── */}
       {/* The dots stay still; one white pill slides to the active one
            (transform only - animating a dot's width re-laid out the row).
            With two cards the pager is ONE button that switches them: a 24px+
@@ -2126,7 +2131,11 @@ function MobileHeroCarousel({
       <button type="button"
         aria-label={heroCardIndex === 0 ? 'Show multichain hub card' : 'Show balance card'}
         onClick={() => { if (!heroGestureActive.current) revealHeroSide(heroCardIndex === 0 ? 'right' : 'left') }}
-        style={{ position: 'absolute', right: 8, bottom: 2, padding: '10px', border: 'none', background: 'none', cursor: 'pointer', display: 'flex' }}>
+        style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+          // Dots' centre in the middle of the padding under the pills; the
+          // button's 10px padding keeps the tap area (the hero clips its edge).
+          bottom: -(HERO_PILLS_GAP + HERO_PILLS_H + HERO_BOTTOM_PAD) + HERO_BOTTOM_PAD / 2 - HERO_DOT / 2 - 10,
+          padding: '10px', border: 'none', background: 'none', cursor: 'pointer', display: 'flex' }}>
         <span style={{ position: 'relative', display: 'flex', gap: HERO_DOT_GAP }}>
           {[0, 1].map(i => (
             <span key={i} style={{ width: HERO_DOT, height: HERO_DOT, borderRadius: 3, background: 'rgba(255,255,255,0.35)' }} />
@@ -4121,7 +4130,7 @@ export function HomePage() {
           // Mobile hero: ONE teal card in the page's 20px margins - the
           // balance (swipe for the Multichain Hub card), then Pay / Receive /
           // Swap as pills along its bottom.
-          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: '16px 0 16px', background: 'var(--glass-sheen), var(--hero-card)', borderRadius: 22, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)', overflow: 'hidden' }}>
+          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: `16px 0 ${HERO_BOTTOM_PAD}px`, background: 'var(--glass-sheen), var(--hero-card)', borderRadius: 22, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)', overflow: 'hidden' }}>
           <div style={{ position: 'relative' }}>
             {businessAccount ? (
               // Business accounts: the balance card only - no Cross-chain card
@@ -4158,7 +4167,7 @@ export function HomePage() {
         {/* Mobile only. Desktop is unaffected: it never rendered this row
             (its own Quick Actions card lives in column 2). Pay is the warm
             accent; the rest of the actions are in Quick actions below. */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, padding: '14px 16px 0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, padding: `${HERO_PILLS_GAP}px 16px 0` }}>
           {(heroSide === 1 && !businessAccount ? [
             { label: 'Transfer', path: '/multichain?tab=transfer', icon: 'hub' as const,     accent: true },
             { label: 'Bring',    path: '/multichain?tab=bring',    icon: 'receive' as const, accent: false },
@@ -4170,7 +4179,7 @@ export function HomePage() {
           ]).map(a => (
             <button key={a.label} type="button" onClick={() => navigate(a.path)} className="mp-press"
               style={{
-                position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40, borderRadius: 20,
+                position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: HERO_PILLS_H, borderRadius: 20,
                 border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 14, fontWeight: 650, whiteSpace: 'nowrap',
                 background: a.accent ? 'var(--mustard)' : 'rgba(255,255,255,0.12)',
                 color: a.accent ? 'var(--mustard-ink)' : '#fff',
