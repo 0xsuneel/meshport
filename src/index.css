@@ -900,3 +900,35 @@ input, textarea { caret-color: var(--brand-text); }
 @media (prefers-contrast: more) {
   [data-frost="surface"] { border-top-color: var(--text-secondary) !important; }
 }
+
+/* Home → My QR card reveal (HomePage MyQrCard). data-shown is set when the
+   card is in view: the card grows from 40% at its top edge, the code prints
+   in behind a teal scan line (above the line printed, below a faint teal
+   copy), and it folds back when scrolled away. CSS transitions, not scroll
+   events: iPhone scrolls off the main thread, so a scroll-scrubbed reveal
+   froze mid-flick. Transitions retarget, so quick back-and-forth scrolls
+   reverse smoothly from wherever they are. */
+.mp-qr-reveal {
+  transform: scale(0.4); opacity: 0;
+  transition: transform 520ms cubic-bezier(0.23, 1, 0.32, 1), opacity 220ms ease-out;
+}
+.mp-qr-reveal[data-shown] { transform: none; opacity: 1; }
+.mp-qr-reveal .mp-qr-code { clip-path: inset(0 0 100% 0); transition: clip-path 900ms cubic-bezier(0.65, 0, 0.35, 1) 120ms; }
+.mp-qr-reveal .mp-qr-ghost { clip-path: inset(0 0 0 0); transition: clip-path 900ms cubic-bezier(0.65, 0, 0.35, 1) 120ms; }
+.mp-qr-reveal[data-shown] .mp-qr-code { clip-path: inset(0 0 0 0); }
+.mp-qr-reveal[data-shown] .mp-qr-ghost { clip-path: inset(100% 0 0 0); }
+.mp-qr-reveal .mp-qr-scan { transform: translateY(0); opacity: 0; }
+.mp-qr-reveal[data-shown] .mp-qr-scan { animation: mp-qr-scan 900ms cubic-bezier(0.65, 0, 0.35, 1) 120ms both; }
+@keyframes mp-qr-scan {
+  0%   { transform: translateY(0);    opacity: 0; }
+  12%  { opacity: 1; }
+  82%  { opacity: 1; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mp-qr-reveal, .mp-qr-reveal .mp-qr-code, .mp-qr-reveal .mp-qr-ghost { transition: none; }
+  .mp-qr-reveal { transform: none; opacity: 1; }
+  .mp-qr-reveal .mp-qr-code { clip-path: none; }
+  .mp-qr-reveal .mp-qr-ghost { clip-path: inset(100% 0 0 0); }
+  .mp-qr-reveal[data-shown] .mp-qr-scan { animation: none; }
+}

@@ -131,19 +131,45 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
       // the browser resizes the frame in the same layout pass as the
       // keyboard - a pixel value set from this event lands a frame or more
       // late, and the bottom of the screen (the chat box) was cut off and
-      // then jumped back. Only iPhone's panned keyboard needs pixels.
-      const h = top === 0 && Math.abs(height - window.innerHeight) <= 1 ? '100%' : `${height}px`
+      // then jumped back.
+      // Compared with the LAYOUT viewport (what 100% of this fixed frame is),
+      // never window.innerHeight: iPhone shrinks innerHeight with the
+      // keyboard while the layout viewport stays full, so "matches
+      // innerHeight" gave the frame 100% = full height with the keyboard up,
+      // and Pay's message box / Transfer's routes sat under the keys.
+      const layoutH = document.documentElement.clientHeight
+      const h = top === 0 && Math.abs(height - layoutH) <= 1 ? '100%' : `${height}px`
       if (top !== lastTop) { el.style.top = `${top}px`; lastTop = top }
       if (h !== lastHeight) { el.style.height = h; lastHeight = h }
       // The visible height for sheets inside (ActionSheet etc.): dvh units
       // don't shrink for a keyboard on iPhone, nor for one drawn over the
       // app on Android.
       if (height !== lastPx) { el.style.setProperty('--frame-h', `${height}px`); lastPx = height }
-      // The document itself never scrolls in this app: undo a sideways
-      // shift, and the scroll iOS can leave behind once the keyboard closes.
-      if (window.scrollX) window.scrollTo(0, window.scrollY)
-      if (top === 0 && window.scrollY) window.scrollTo(0, 0)
+      // The document's own scroll is corrected separately (queueDocFix).
+      queueDocFix()
     }
+    // The document itself never scrolls in this app: undo a sideways shift,
+    // and the scroll iOS can leave behind once the keyboard closes. Only once
+    // things are still - no finger down and no scroll event for 500 ms - and
+    // instantly: when a list reaches its end iPhone hands the swipe to the
+    // document (the rubber-band). Correcting that mid-gesture or mid-bounce
+    // (animated, too - html has scroll-behavior: smooth) fought the finger:
+    // the list stuck at the bottom or half-way, and the next tap (often Back)
+    // only stopped that scroll.
+    let touching = false, docFixTimer = 0
+    const fixDocScroll = () => {
+      if (touching) return
+      const { top } = visibleFrame()
+      if (window.scrollX || (top === 0 && window.scrollY)) {
+        window.scrollTo({ left: 0, top: top === 0 ? 0 : window.scrollY, behavior: 'instant' as ScrollBehavior })
+      }
+    }
+    function queueDocFix() {
+      clearTimeout(docFixTimer)
+      docFixTimer = window.setTimeout(fixDocScroll, 500)
+    }
+    const onTouchStart = () => { touching = true; clearTimeout(docFixTimer) }
+    const onTouchEnd = (e: TouchEvent) => { if (e.touches.length === 0) { touching = false; queueDocFix() } }
     // Keyboard opened (or another field focused while it's up): once the
     // frame has its new size, bring the field into view.
     let lastH = visibleFrame().height
@@ -167,7 +193,11 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
       if (h < lastH - 80) settle()
       lastH = h
     }
-    const onFocus = () => { apply(); if (visibleFrame().height < window.innerHeight - 80) settle() }
+    // Layout viewport, not innerHeight (which iPhone shrinks with the keyboard).
+    const onFocus = () => { apply(); if (visibleFrame().height < document.documentElement.clientHeight - 80) settle() }
+    document.addEventListener('touchstart', onTouchStart, { passive: true, capture: true })
+    document.addEventListener('touchend', onTouchEnd, { passive: true, capture: true })
+    document.addEventListener('touchcancel', onTouchEnd, { passive: true, capture: true })
     // The keyboard can be hidden (back gesture / hide key) without the field
     // losing focus, and closed by a blur: either way, look again.
     const onFocusOut = () => recheck()
@@ -187,7 +217,10 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
       vk?.removeEventListener('geometrychange', schedule)
       releaseOverlay()
       cancelAnimationFrame(raf)
-      cancelAnimationFrame(recheckRaf); clearTimeout(recheckTimer)
+      cancelAnimationFrame(recheckRaf); clearTimeout(recheckTimer); clearTimeout(docFixTimer)
+      document.removeEventListener('touchstart', onTouchStart, { capture: true })
+      document.removeEventListener('touchend', onTouchEnd, { capture: true })
+      document.removeEventListener('touchcancel', onTouchEnd, { capture: true })
       document.removeEventListener('focusout', onFocusOut)
       document.removeEventListener('focusin', onFocus)
       vv?.removeEventListener('resize', schedule)
