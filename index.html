@@ -143,9 +143,13 @@
          just the normal page background, and a small logo only if loading
          takes more than a moment. html.mp-refresh is set by the script below. */
       html.mp-refresh #splash { background: #F5F4F0; color: #0F5C57; }
-      html.mp-refresh[data-theme="dark"] #splash { background: #000000; color: #12665F; }
+      /* Dark: the brighter brand teal - #12665F on black read as a black screen. */
+      html.mp-refresh[data-theme="dark"] #splash { background: #000000; color: #24A193; }
       html.mp-refresh #splash .txt { display: none; }
-      html.mp-refresh #splash .tile { width: 56px; height: 56px; background: transparent; border-radius: 0; opacity: 0; animation: mpSplashIn .3s ease .5s forwards; }
+      /* The logo comes up almost at once (0.15 s) and pulses: a refresh that has
+         to download a new version takes seconds on a weak connection, and a
+         blank page for the first 0.5 s of that looked like the app was broken. */
+      html.mp-refresh #splash .tile { width: 56px; height: 56px; background: transparent; border-radius: 0; opacity: 0; animation: mpSplashIn .2s ease .15s forwards; }
       html.mp-refresh #splash .mark { width: 56px; height: 56px; }
       html.mp-refresh #splash .mark g { stroke: currentColor; }
       /* Updating: the logo is already on screen from before the reload (lib/swUpdate.ts) - keep it, no fade-in gap. */
