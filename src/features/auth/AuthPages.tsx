@@ -833,6 +833,8 @@ export function CreateWalletPage() {
         // are both lost, this wallet is unrecoverable. The frame keeps both
         // passcode-encrypted (and device-sealed) for BackupRecoveryPhrasePage.
         await setWalletPasscode(walletData.address, rawPasscode)
+        // The frame now checks this passcode: no hash kept here (security.ts FRAME_PASSCODE).
+        { const { FRAME_PASSCODE } = await import('@/lib/security'); useAuthStore.getState().setPasscode(FRAME_PASSCODE) }
         // The word check on the previous screen proved the phrase was saved.
         await markWalletBackedUp(walletData.address)
       } catch (e) { console.warn('[Wallet] Local key backup failed:', e) }
@@ -1058,6 +1060,8 @@ export function ImportWalletPage() {
         // their own key - is the *only* thing standing between them and
         // permanent loss if this device's storage is ever cleared.
         await setWalletPasscode(result.address, rawPasscodeImport)
+        // The frame now checks this passcode: no hash kept here (security.ts FRAME_PASSCODE).
+        { const { FRAME_PASSCODE } = await import('@/lib/security'); useAuthStore.getState().setPasscode(FRAME_PASSCODE) }
         // Imported → the owner already holds the phrase / key they typed in.
         await markWalletBackedUp(result.address)
       } catch {}
