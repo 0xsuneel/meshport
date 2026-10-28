@@ -7,11 +7,13 @@ import { ADMIN_PATH } from '@/lib/adminPath'
 import {
   LayoutDashboard, ToggleLeft, Coins, Link2, Landmark,
   BarChart3, AlertTriangle, ScrollText, Settings, Bell, X, LifeBuoy, Handshake, Wrench,
-  Store, Newspaper, ReceiptText,
+  Store, Newspaper, ReceiptText, ArrowLeftRight, Activity, Users,
 } from 'lucide-react'
+import { useAdminStore } from '@/store/adminStore'
 
 const navItems = [
   { to: `${ADMIN_PATH}/dashboard`,    label: 'Dashboard',    icon: LayoutDashboard },
+  { to: `${ADMIN_PATH}/transactions`, label: 'Transactions', icon: ArrowLeftRight },
   { to: `${ADMIN_PATH}/features`,     label: 'Features',     icon: ToggleLeft },
   { to: `${ADMIN_PATH}/coins`,        label: 'Coins',         icon: Coins },
   { to: `${ADMIN_PATH}/chains`,       label: 'Chains',        icon: Link2 },
@@ -27,11 +29,13 @@ const navItems = [
   { to: `${ADMIN_PATH}/notifications`, label: 'Notifications', icon: Bell },
   { to: `${ADMIN_PATH}/news`,         label: 'Updates',        icon: Newspaper },
   { to: `${ADMIN_PATH}/maintenance`,  label: 'Maintenance',   icon: AlertTriangle },
+  { to: `${ADMIN_PATH}/system`,       label: 'System',         icon: Activity },
   { to: `${ADMIN_PATH}/logs`,         label: 'Logs',           icon: ScrollText },
   { to: `${ADMIN_PATH}/stuck-funds`,  label: 'Stuck Funds',    icon: Wrench },
   { to: `${ADMIN_PATH}/merchants`,    label: 'Businesses',      icon: Store },
   { to: `${ADMIN_PATH}/orders`,       label: 'Orders',         icon: ReceiptText },
   { to: `${ADMIN_PATH}/support`,      label: 'Support Tickets', icon: LifeBuoy },
+  { to: `${ADMIN_PATH}/admins`,       label: 'Admins',        icon: Users, ownerOnly: true },
   { to: `${ADMIN_PATH}/settings`,     label: 'Settings',      icon: Settings },
 ]
 
@@ -44,6 +48,8 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
   // Phone / browser Back closes the drawer (it's always shown on desktop).
   const desktop = useMediaQuery(DESKTOP_QUERY)
   useBackLayer(open && !desktop, onClose)
+  const role = useAdminStore(s => s.adminRole)
+  const items = navItems.filter(i => !('ownerOnly' in i && i.ownerOnly) || role === 'owner')
   return (
     <>
       {/* Overlay - mobile only. The sheet dim and its fade, in and out. */}
@@ -99,7 +105,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
         </div>
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto', overflowX: 'hidden' }}>
-          {navItems.map((item) => (
+          {items.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

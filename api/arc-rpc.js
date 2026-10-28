@@ -29,6 +29,9 @@
 // VITE_-prefixed - this must stay server-side only).
 const DRPC_KEY = process.env.DRPC_KEY ?? ''
 
+// Call counters for the admin System page (public.rpc_usage).
+const usage = require('./_lib/rpcUsage')
+
 // Optional explicit authenticated RPC URL override - set ARC_RPC_URL (NOT
 // VITE_ARC_RPC_URL) in Vercel if you want to point at a specific
 // authenticated gateway instead of/in addition to DRPC_KEY. This must never
@@ -320,6 +323,8 @@ async function raceOnce(body) {
     if (i > 0) await sleep(i * STAGGER_MS)
     if (settled.signal.aborted) throw Object.assign(new Error('race settled'), { cancelled: true })
     const startedAt = Date.now()
+    const methods = usage.methodsOf(body)
+    const count = (outcome, ms) => methods.forEach((m) => usage.note('upstream', label(url), m, outcome, ms))
     try {
       const r = await fetch(url, {
         method: 'POST',
@@ -327,9 +332,12 @@ async function raceOnce(body) {
         body: JSON.stringify(body),
         signal: AbortSignal.any([settled.signal, AbortSignal.timeout(RPC_TIMEOUT_MS)]),
       })
-      if (!r.ok) throw new Error(`HTTP ${r.status} from ${label(url)}`)
+      if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status} from ${label(url)}`), { httpStatus: r.status })
       const json = await r.json()
       const latencyMs = Date.now() - startedAt
+      // The provider answered (an on-chain revert, a node a block behind and
+      // "no receipt yet" are all answers): one served call.
+      count('ok', latencyMs)
       // A JSON-RPC-shaped error is USUALLY treated the same as a transport
       // failure for a single request - another endpoint may still answer
       // correctly (a mis-shaped body, a rate-limit response dressed up as
@@ -350,7 +358,7 @@ async function raceOnce(body) {
           console.log(`[arc-rpc] ${label(url)} is a block behind the head (-32014, ${latencyMs}ms) - not quarantining`)
           throw Object.assign(new Error(json.error.message || 'block not yet imported'), { headLag: true })
         }
-        throw new Error(json.error.message || 'RPC error')
+        throw Object.assign(new Error(json.error.message || 'RPC error'), { counted: true })
       }
       recordSuccess(url, latencyMs)
       // "No receipt yet" from a node that's a beat behind shouldn't win the
@@ -364,7 +372,12 @@ async function raceOnce(body) {
       return json
     } catch (e) {
       if (e?.headLag || e?.nullResult) throw e
-      if (settled.signal.aborted) throw Object.assign(new Error('race settled'), { cancelled: true })
+      if (settled.signal.aborted) {
+        // Sent, then dropped because another endpoint won: still a request the provider saw.
+        if (!e?.counted) count('cancelled', 0)
+        throw Object.assign(new Error('race settled'), { cancelled: true })
+      }
+      if (!e?.counted) count(e?.httpStatus === 429 ? 'rate_limited' : 'error', 0)
       recordFailure(url)
       console.error(`[arc-rpc] ${label(url)} failed: ${e?.message ?? e} (quarantined ${Math.round((getStats(url).quarantinedUntil - Date.now()) / 1000)}s)`)
       throw e
@@ -465,11 +478,18 @@ async function broadcastToAll(raw) {
     }
     if (pending === 0) return finish({ accepted: false, maybeSent: false, rejection: null, anyAnswer: false })
     for (const url of ARC_RPCS) {
+      const startedAt = Date.now()
       fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body), signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
       })
-        .then(r => r.json().catch(() => null))
+        .then(r => {
+          usage.note('upstream', label(url), 'eth_sendRawTransaction', r.status === 429 ? 'rate_limited' : r.ok ? 'ok' : 'error', Date.now() - startedAt)
+          return r.json().catch(() => null)
+        }, (e) => {
+          usage.note('upstream', label(url), 'eth_sendRawTransaction', 'error', 0)
+          throw e
+        })
         .then(j => {
           if (j) anyAnswer = true
           if (j && j.result) return finish({ accepted: true, maybeSent: true, rejection: null, anyAnswer: true })
@@ -531,10 +551,20 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
 
+  const startedAt = Date.now()
+  const countClient = async (outcome) => {
+    for (const m of usage.methodsOf(req.body)) usage.note('client', 'arc-proxy', m, outcome, Date.now() - startedAt)
+    await usage.flushIfDue()
+  }
+
   if (req.body && !Array.isArray(req.body) && req.body.method === SEND_METHOD) {
-    try { return res.status(200).json(await sendAndWait(req.body.id ?? 1, req.body.params)) }
-    catch (e) {
+    try {
+      const out = await sendAndWait(req.body.id ?? 1, req.body.params)
+      await countClient(out?.error ? 'error' : 'ok')
+      return res.status(200).json(out)
+    } catch (e) {
       console.error('[arc-rpc] send failed:', e?.message)
+      await countClient('error')
       return res.status(502).json({ error: 'Arc RPC upstream unavailable' })
     }
   }
@@ -544,9 +574,12 @@ module.exports = async function handler(req, res) {
 
   try {
     const result = await forward(req.body)
+    // An on-chain revert is a correct answer, not a proxy failure.
+    await countClient('ok')
     return res.status(200).json(result)
   } catch (e) {
     console.error('[arc-rpc] failed:', e?.message)
+    await countClient('error')
     // Generic message only - upstream details stay in the server log.
     return res.status(502).json({ error: 'Arc RPC upstream unavailable' })
   }

@@ -134,6 +134,9 @@ const AdminMerchantsPage       = lazyRetry(() => import('./features/admin/Mercha
 const AdminOrdersPage          = lazyRetry(() => import('./features/admin/OrdersPage').then(m => ({ default: m.OrdersPage })), 'AdminOrdersPage')
 const MerchantPayPage         = lazyRetry(() => import('./features/merchant/MerchantPayPage').then(m => ({ default: m.MerchantPayPage })), 'MerchantPayPage')
 const MerchantApplyPage         = lazyRetry(() => import('./features/merchant/MerchantApplyPage').then(m => ({ default: m.MerchantApplyPage })), 'MerchantApplyPage')
+const AdminTransactionsPage    = lazyRetry(() => import('./features/admin/TransactionsPage').then(m => ({ default: m.TransactionsPage })), 'AdminTransactionsPage')
+const AdminSystemPage          = lazyRetry(() => import('./features/admin/SystemPage').then(m => ({ default: m.SystemPage })), 'AdminSystemPage')
+const AdminAdminsPage          = lazyRetry(() => import('./features/admin/AdminsPage').then(m => ({ default: m.AdminsPage })), 'AdminAdminsPage')
 const AdminStuckFundsPage      = lazyRetry(() => import('./features/admin/StuckFundsPage').then(m => ({ default: m.StuckFundsPage })), 'AdminStuckFundsPage')
 import { syncBroadcastNotifications } from './lib/broadcastSync'
 import { LoadingDots } from './components/ui/LoadingDots'
@@ -407,6 +410,9 @@ const router = createBrowserRouter([
     element: <AdminGuard><AdminLayout /></AdminGuard>,
     children: [
       { path: 'dashboard',   element: <AdminDashboardPage /> },
+      { path: 'transactions', element: <AdminTransactionsPage /> },
+      { path: 'system',      element: <AdminSystemPage /> },
+      { path: 'admins',      element: <AdminAdminsPage /> },
       { path: 'features',    element: <AdminFeaturesPage /> },
       { path: 'coins',       element: <AdminCoinsPage /> },
       { path: 'chains',      element: <AdminChainsPage /> },

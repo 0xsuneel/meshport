@@ -75,6 +75,14 @@ export async function isAdminUser(userId: string): Promise<boolean> {
   return !!data
 }
 
+/** The admin's role; 'owner' while the role column doesn't exist yet. */
+export async function fetchAdminRole(userId: string): Promise<'owner' | 'operations' | 'support' | 'viewer'> {
+  const { data, error } = await supabase.from('admin_users').select('role').eq('id', userId).maybeSingle()
+  if (error || !data) return 'owner'
+  const r = String((data as { role?: string }).role ?? 'owner')
+  return (['owner', 'operations', 'support', 'viewer'] as const).find(x => x === r) ?? 'viewer'
+}
+
 export async function adminSignIn(email: string, password: string): Promise<{ error: string | null }> {
   const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
   if (error) return { error: error.message }

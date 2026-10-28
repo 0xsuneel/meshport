@@ -9,6 +9,9 @@ import { adminSignOut } from '@/lib/adminSupabase'
 
 const titles: Record<string, string> = {
   [`${ADMIN_PATH}/dashboard`]:   'Dashboard',
+  [`${ADMIN_PATH}/transactions`]: 'Transactions',
+  [`${ADMIN_PATH}/system`]:      'System',
+  [`${ADMIN_PATH}/admins`]:      'Admins',
   [`${ADMIN_PATH}/features`]:    'Features',
   [`${ADMIN_PATH}/coins`]:       'Coins',
   [`${ADMIN_PATH}/chains`]:      'Chains',

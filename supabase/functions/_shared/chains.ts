@@ -79,6 +79,17 @@ export const ARC_RPCS = [
   ...(DRPC_KEY ? [`https://lb.drpc.live/arc-testnet/${DRPC_KEY}`] : []), // dRPC authenticated (higher limits)
 ]
 
+// Circle's official keyless Arc Testnet endpoints (docs.arc.io, "RPC
+// endpoints") - the same ones /api/arc-rpc falls back to for the app. Not
+// used for claim verification (see ARC_RPCS above); the admin RPC health
+// page checks them so their state is visible next to the paid ones.
+export const ARC_PUBLIC_RPCS = [
+  'https://rpc.testnet.arc.io',
+  'https://rpc.blockdaemon.testnet.arc.io',
+  'https://rpc.drpc.testnet.arc.io',
+  'https://rpc.quicknode.testnet.arc.io',
+]
+
 export const CIRCLE_IRIS_API = 'https://iris-api-sandbox.circle.com'
 
 // Arc testnet MessageTransmitter contract address. This is the CCTP contract
