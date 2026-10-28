@@ -192,6 +192,29 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Payments sent but queued on Arc behind a missing nonce (they wait there
+  // until that nonce is used, then all run): the caller's own, read-only.
+  // The app replaces them with self-transfers to cancel them (stuckPayments.ts).
+  if (b.action === 'stuckPayments') {
+    try {
+      const chainNonce = Number(BigInt(await rpcCall('eth_getTransactionCount', [myWallet, 'latest']) as string))
+      const { data, error } = await supabase
+        .from('transaction_attempts')
+        .select('nonce, tx_hash')
+        .eq('chain_id', 'arc')
+        .eq('wallet_address', myWallet)
+        .eq('status', 'SUBMITTED')
+        .not('tx_hash', 'is', null)
+        .gt('nonce', chainNonce)
+        .order('nonce')
+      if (error) throw error
+      return json({ success: true, chainNonce, stuck: (data ?? []).map(r => ({ nonce: r.nonce as number, txHash: r.tx_hash as string })) })
+    } catch (e) {
+      console.error('[pay-intent] stuckPayments failed:', e instanceof Error ? e.message : e)
+      return json({ success: false, error: 'internal error' }, 500)
+    }
+  }
+
   if (typeof b.walletAddress !== 'string' || b.walletAddress.toLowerCase() !== myWallet) {
     return json({ success: false, error: 'You can only create transactions for your own wallet' }, 403)
   }
