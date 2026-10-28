@@ -10,6 +10,7 @@
 import { getBase58Decoder, getTransactionDecoder, getTransactionEncoder, type Address, type SignatureBytes, type Transaction } from '@solana/kit'
 import { useAuthStore } from '@/store'
 import { callWallet } from './frameClient'
+import { withApproval } from './account'
 import { ensurePrivySolanaWallet, privySignSolana, privySolanaAddress } from './privy'
 
 const hex = (b: Uint8Array) => '0x' + Array.from(b, x => x.toString(16).padStart(2, '0')).join('')
@@ -65,7 +66,7 @@ export async function signSolanaTransaction(wire: Uint8Array): Promise<Uint8Arra
   if (k === 'frame' && evm) {
     const tx = getTransactionDecoder().decode(wire) as Transaction
     if (!(me in tx.signatures)) throw new Error('This Solana wallet is not a signer of the transaction')
-    const { signature } = await callWallet('solana:sign', { address: evm, message: hex(new Uint8Array(tx.messageBytes)) as `0x${string}` })
+    const { signature } = await withApproval(() => callWallet('solana:sign', { address: evm, message: hex(new Uint8Array(tx.messageBytes)) as `0x${string}` }))
     const signed: Transaction = { ...tx, signatures: { ...tx.signatures, [me as Address]: unhex(signature) as SignatureBytes } }
     return new Uint8Array(getTransactionEncoder().encode(signed))
   }

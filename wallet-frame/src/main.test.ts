@@ -9,6 +9,17 @@ import { WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION } from '@/wallet/protocol'
 const listeners: Array<(e: any) => unknown> = []
 const parent = { postMessage: vi.fn() }
 vi.stubGlobal('window', { addEventListener: (_t: string, f: any) => listeners.push(f), parent })
+// Frame-origin storage (node has none): passcode copies need somewhere to live.
+class MemStorage {
+  private m = new Map<string, string>()
+  get length() { return this.m.size }
+  key(i: number) { return [...this.m.keys()][i] ?? null }
+  getItem(k: string) { return this.m.get(k) ?? null }
+  setItem(k: string, v: string) { this.m.set(k, String(v)) }
+  removeItem(k: string) { this.m.delete(k) }
+}
+vi.stubGlobal('localStorage', new MemStorage())
+vi.stubGlobal('sessionStorage', new MemStorage())
 
 await import('./main')
 const onMessage = listeners[0]
@@ -110,5 +121,73 @@ describe('passkey ceremonies (passkey.html ↔ frame)', () => {
 
     expect((await ask('passkey:result', { ticket }))!.msg.result).toEqual({ status: 'signed', signature: '0x1234' })
     expect((await ask('passkey:result', { ticket }))!.msg.result.status).toBe('error') // single use
+  })
+})
+
+describe('approval: value-moving signatures need the passcode, checked by the frame', () => {
+  const other = '0x2222222222222222222222222222222222222222'
+  const tx = (to: string, value: bigint, data?: string) => ({ type: 'eip1559', chainId: 5042002, nonce: 0, to, value, data, gas: 21000n, maxFeePerGas: 2n, maxPriorityFeePerGas: 1n })
+  async function walletWithPasscode() {
+    const pk = generatePrivateKey()
+    const { address } = privateKeyToAccount(pk)
+    await ask('import', { kind: 'import-privkey', secret: pk, passcode: '123456' })
+    return address
+  }
+
+  it('an app from before approvals keeps working until it sends one; then a payment needs the passcode', async () => {
+    const address = await walletWithPasscode()
+    // Nothing has sent an approval on this device yet (older app): signs as before.
+    expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.result.serialized).toMatch(/^0x/)
+    expect((await ask('approve', { address, passcode: '000000' }))!.msg.error.code).toBe('bad-passcode')
+    // From the first approval on, for good:
+    expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.error.code).toBe('approval-required')
+    expect((await ask('approve', { address, passcode: '123456' }))!.msg.result).toEqual({ approved: true, required: true, validForMs: 120_000 })
+    expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.result.serialized).toMatch(/^0x/)
+  })
+
+  it('typed data (permits) and Solana need it too; messages, name registration and a 0-value self-transfer do not', async () => {
+    const address = await walletWithPasscode()
+    const permit = { domain: { name: 'USDC', version: '2', chainId: 5042002, verifyingContract: other }, types: { Permit: [{ name: 'value', type: 'uint256' }] }, primaryType: 'Permit', message: { value: 1n } }
+    expect((await ask('sign:typed-data', { address, typedData: permit }))!.msg.error.code).toBe('approval-required')
+    expect((await ask('solana:sign', { address, message: '0x010203' }))!.msg.error.code).toBe('approval-required')
+    const name = { domain: { name: 'MeshPortNames', version: '1', chainId: 5042002, verifyingContract: other }, types: { Register: [{ name: 'name', type: 'string' }] }, primaryType: 'Register', message: { name: 'alice' } }
+    expect((await ask('sign:typed-data', { address, typedData: name }))!.msg.result.signature).toMatch(/^0x/)
+    expect((await ask('sign:message', { address, message: 'hello' }))!.msg.result.signature).toMatch(/^0x/)
+    expect((await ask('sign:transaction', { address, transaction: tx(address, 0n) }))!.msg.result.serialized).toMatch(/^0x/)
+    // A self-transfer that carries value or calls something is not a cancel.
+    expect((await ask('sign:transaction', { address, transaction: tx(address, 1n) }))!.msg.error.code).toBe('approval-required')
+    expect((await ask('sign:transaction', { address, transaction: tx(address, 0n, '0xa9059cbb') }))!.msg.error.code).toBe('approval-required')
+  })
+
+  it('the approval lasts 2 minutes, and lock ends it', async () => {
+    const address = await walletWithPasscode()
+    await ask('approve', { address, passcode: '123456' })
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(Date.now() + 121_000)
+      expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.error.code).toBe('approval-required')
+    } finally { vi.useRealTimers() }
+    await ask('approve', { address, passcode: '123456' })
+    await ask('lock', { address })
+    await ask('unlock', { address, passcode: '123456' })
+    expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.error.code).toBe('approval-required')
+  })
+
+  it('changing the passcode needs the current one (except right after import)', async () => {
+    const address = await walletWithPasscode()
+    expect((await ask('set-passcode', { address, passcode: '111111' }))!.msg.result).toEqual({ ok: true })
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(Date.now() + 16 * 60_000)
+      expect((await ask('set-passcode', { address, passcode: '222222' }))!.msg.error.code).toBe('bad-passcode')
+      expect((await ask('set-passcode', { address, passcode: '222222', oldPasscode: '111111' }))!.msg.result).toEqual({ ok: true })
+    } finally { vi.useRealTimers() }
+  })
+
+  it('a wallet without a passcode here has nothing to approve', async () => {
+    const created = await ask('create', { kind: 'social-auto' })
+    const address = created!.msg.result.address
+    expect((await ask('approve', { address, passcode: 'x' }))!.msg.result.required).toBe(false)
+    expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.result.serialized).toMatch(/^0x/)
   })
 })

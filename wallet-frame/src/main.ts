@@ -43,6 +43,38 @@ function fromKey(secret: string) {
 
 const signer = (address: string) => privateKeyToAccount(vault.keyFor(address) as Hex)
 
+// ── Approval: the passcode, checked here, before anything that moves value ──
+// The app's own passcode sheet is not enough on its own: anything running in
+// the app's page could post a signing request. So the frame signs
+// transactions, typed data (permits, transfer authorizations) and Solana
+// transactions only within APPROVAL_MS of the person's passcode - checked by
+// the frame itself (`approve`; every passcode / fingerprint entry in the app
+// sends it). Like Privy's MFA window: one entry covers a multi-step action
+// (approve + swap, a bridge). Left free: plain messages (sign-in binding,
+// chat key, P2P "marked paid" - they move nothing), MeshPort name
+// registration, and a 0-value transfer to the wallet itself (cancelling a
+// stuck payment). A wallet without a passcode here (Google / email device
+// wallets) has nothing to check.
+const APPROVAL_MS = 2 * 60_000
+const approvedUntil = new Map<string, number>()
+// Required once this device's app has sent an approval (an app version from
+// before approvals never does - it keeps working until it updates); from then
+// on for good, kept in this frame's storage where the app can't undo it.
+function requireApproval(address: string) {
+  if (!vault.approvalsUsed() || !vault.hasPasscode(address)) return
+  if ((approvedUntil.get(address.toLowerCase()) ?? 0) > Date.now()) return
+  throw new RpcError('approval-required', 'Enter your passcode to approve this')
+}
+function isSelfCancel(address: string, tx: Record<string, unknown>): boolean {
+  const value = tx.value == null ? 0n : BigInt(tx.value as bigint | string | number)
+  const data = tx.data as string | undefined
+  return typeof tx.to === 'string' && tx.to.toLowerCase() === address.toLowerCase() && value === 0n && (!data || data === '0x')
+}
+function isNameRegistration(typedData: Record<string, unknown>): boolean {
+  const domain = typedData.domain as { name?: unknown } | undefined
+  return domain?.name === 'MeshPortNames' && typedData.primaryType === 'Register'
+}
+
 // ── One-time reveal tickets (reveal.html) ───────────────────────────────────
 // The app asks for a ticket; reveal.html (same origin as this frame, shown
 // inside the app as a visible iframe) redeems it over a BroadcastChannel,
@@ -145,6 +177,10 @@ const handlers: Handlers = {
   },
 
   async 'set-passcode'({ address, passcode, oldPasscode }) {
+    // Changing it needs the current one - else a script in the app could set
+    // its own and approve itself. Not right after create / import on this
+    // device (the wallet's first passcode, or a re-import).
+    if (vault.hasPasscode(address) && !vault.storedRecently(address)) await vault.checkPasscode(address, oldPasscode ?? '')
     await vault.setPasscode(address, passcode, oldPasscode)
     return { ok: true as const }
   },
@@ -167,15 +203,25 @@ const handlers: Handlers = {
     return { ticket: newTicket(phrase, what) }
   },
 
+  async approve({ address, passcode }) {
+    vault.noteApprovalsUsed()
+    if (!vault.hasPasscode(address)) return { approved: true as const, required: false, validForMs: 0 }
+    await vault.checkPasscode(address, passcode)
+    approvedUntil.set(address.toLowerCase(), Date.now() + APPROVAL_MS)
+    return { approved: true as const, required: true, validForMs: APPROVAL_MS }
+  },
+
   async 'sign:message'({ address, message }) {
     return { signature: await signer(address).signMessage({ message }) }
   },
 
   async 'sign:typed-data'({ address, typedData }) {
+    if (!isNameRegistration(typedData)) requireApproval(address)
     return { signature: await signer(address).signTypedData(typedData as any) }
   },
 
   async 'sign:transaction'({ address, transaction }) {
+    if (!isSelfCancel(address, transaction)) requireApproval(address)
     return { serialized: await signer(address).signTransaction(transaction as any) }
   },
 
@@ -189,6 +235,7 @@ const handlers: Handlers = {
   },
 
   async 'solana:sign'({ address, message }) {
+    requireApproval(address)
     let bytes: Uint8Array
     try { bytes = solanaHexToBytes(String(message)) } catch { throw new RpcError('invalid', 'Solana message must be hex') }
     // A Solana transaction message fits in one packet (1232 bytes).
@@ -196,7 +243,11 @@ const handlers: Handlers = {
     return { signature: bytesToHex(solanaSign(vault.keyFor(address), bytes)) }
   },
 
-  async lock({ address }) { vault.lock(address); return { ok: true as const } },
+  async lock({ address }) {
+    if (address) approvedUntil.delete(address.toLowerCase()); else approvedUntil.clear()
+    vault.lock(address)
+    return { ok: true as const }
+  },
 
   async forget({ address, everything }) { vault.forget(address, everything); return { ok: true as const } },
 
