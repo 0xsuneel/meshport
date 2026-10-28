@@ -18,8 +18,12 @@
 
 -- ── 1. Admin roles ─────────────────────────────────────────────────────────
 alter table public.admin_users add column if not exists role text not null default 'owner';
--- 'owner' above only fills in today's admins; anyone added from now on
--- starts read-only until an owner raises their role.
+-- The live table already had a `role` column (default 'admin', every admin
+-- 'admin'; nothing reads the value - policies only check membership). Those
+-- admins had full access, so they become 'owner'.
+update public.admin_users set role = 'owner'
+  where role is null or role not in ('owner', 'operations', 'support', 'viewer');
+-- Anyone added from now on starts read-only until an owner raises their role.
 alter table public.admin_users alter column role set default 'viewer';
 
 do $$
