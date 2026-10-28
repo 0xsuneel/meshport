@@ -583,7 +583,7 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; 
   // Two groups of pastel tiles, three across (Move money, then More). Pay,
   // Receive and Swap's own pills sit on the balance card; Swap is here too.
   // Long names shortened to fit a tile; the line under says the rest.
-  const SHORT_TILE_LABEL: Record<string, string> = { 'Multichain Hub': 'Multichain', 'Cross-chain Transfer': 'Cross-chain', 'Business Insights': 'Insights' }
+  const SHORT_TILE_LABEL: Record<string, string> = { 'Cross-chain Transfer': 'Cross-chain', 'Business Insights': 'Insights' }
   type Tone = 'peach' | 'mint' | 'butter'
   const tile = (name: Parameters<typeof ActionIcon>[0]['name'], tone: Tone) =>
     ({ tone, icon: <ActionIcon name={name} size={18} color={`var(--tile-${tone}-ink)`} /> })
@@ -624,8 +624,8 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; 
               <button key={a.label} type="button"
                 onClick={() => { if (a.path === '/scanner') prewarmCamera(); onClose(); navigate(a.path) }}
                 className="mp-press"
-                style={{ position: 'relative', height: 92, borderRadius: 16, border: 'none', cursor: 'pointer', font: 'inherit', textAlign: 'left',
-                  background: `var(--tile-${a.tone})`, padding: 10, display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+                style={{ position: 'relative', height: 92, borderRadius: 16, border: 'none', cursor: 'pointer', font: 'inherit', textAlign: 'center',
+                  background: `var(--tile-${a.tone})`, padding: '10px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
                   opacity: locked && isLockedPath(a.path) ? 0.45 : 1 }}>
                 <span style={{ position: 'relative', width: 32, height: 32, borderRadius: 10, background: 'color-mix(in srgb, var(--surface) 70%, transparent)', display: 'grid', placeItems: 'center' }}>
                   {a.icon}
@@ -633,7 +633,7 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; 
                     <span style={{ position: 'absolute', top: -3, right: -3, width: 10, height: 10, borderRadius: '50%', background: 'var(--danger)', border: '2px solid var(--bg)' }} />
                   )}
                 </span>
-                <span style={{ minWidth: 0 }}>
+                <span style={{ minWidth: 0, maxWidth: '100%' }}>
                   <span style={{ display: 'block', fontSize: 13, fontWeight: 650, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{SHORT_TILE_LABEL[hub(a.label)] ?? hub(a.label)}</span>
                   <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.sub}</span>
                 </span>
@@ -4201,18 +4201,19 @@ export function HomePage() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
               {[
-                { label: 'Bulk Pay', sub: 'Pay a team', path: '/bulk-payout', icon: <ActionIcon name="bulk" size={18} color="var(--tile-peach-ink)" />, bg: 'var(--tile-peach)' },
-                { label: 'Multichain', sub: 'All your chains', path: '/multichain', icon: <ActionIcon name="hub" size={18} color="var(--tile-mint-ink)" />, bg: 'var(--tile-mint)' },
+                { label: 'P2P', sub: 'Buy & sell USDC', path: '/p2p', icon: <ActionIcon name="p2p" size={18} color="var(--tile-peach-ink)" />, bg: 'var(--tile-peach)' },
+                // A business sees Cross-chain here, as everywhere (hubLabel).
+                { label: businessAccount ? 'Cross-chain' : 'Multichain Hub', sub: 'All your chains', path: '/multichain', icon: <ActionIcon name="hub" size={18} color="var(--tile-mint-ink)" />, bg: 'var(--tile-mint)' },
                 businessAccount
                   ? { label: 'Insights', sub: 'Your reports', path: '/business?screen=reports', icon: <ActionIcon name="insights" size={18} color="var(--tile-butter-ink)" />, bg: 'var(--tile-butter)' }
-                  : { label: 'Rewards', sub: 'Earn points', path: '/rewards', icon: <ActionIcon name="rewards" size={18} color="var(--tile-butter-ink)" />, bg: 'var(--tile-butter)' },
+                  : { label: 'Insights', sub: 'Where it went', path: '/insights', icon: <ActionIcon name="insights" size={18} color="var(--tile-butter-ink)" />, bg: 'var(--tile-butter)' },
               ].map(t => (
                 <button key={t.label} type="button" onClick={() => navigate(t.path)} className="mp-press"
-                  style={{ position: 'relative', height: 98, borderRadius: 16, border: 'none', cursor: 'pointer', font: 'inherit', textAlign: 'left',
-                    background: t.bg, padding: '10px 10px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+                  style={{ position: 'relative', height: 98, borderRadius: 16, border: 'none', cursor: 'pointer', font: 'inherit', textAlign: 'center',
+                    background: t.bg, padding: '10px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
                     opacity: accountLock.locked ? 0.45 : 1 }}>
                   <span style={{ width: 32, height: 32, borderRadius: 10, background: 'color-mix(in srgb, var(--surface) 70%, transparent)', display: 'grid', placeItems: 'center' }}>{t.icon}</span>
-                  <span style={{ minWidth: 0 }}>
+                  <span style={{ minWidth: 0, maxWidth: '100%' }}>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 650, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.label}</span>
                     <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.sub}</span>
                   </span>
