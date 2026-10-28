@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useRouteError } from 'react-router-dom'
-import { isChunkLoadError, recoverFromStaleBuild } from '@/lib/lazyRetry'
+import { buildVerdict, isChunkLoadError, recoverFromStaleBuild } from '@/lib/lazyRetry'
 import { useOnline, useOnReconnect } from '@/lib/connectivity'
 import { reportClientError } from '@/lib/errorReport'
 
@@ -13,6 +13,11 @@ export function RouteErrorPage() {
   const online = useOnline()
   const stale = isChunkLoadError(error)
   const [reloading, setReloading] = useState(stale && online)
+  // A file that didn't load: a new version only if the server says so -
+  // otherwise the connection dropped it (weak signal), and "MeshPort was
+  // updated" was the wrong thing to say.
+  const [updated, setUpdated] = useState(false)
+  useEffect(() => { if (stale) void buildVerdict().then(v => setUpdated(v === 'stale')) }, [stale])
 
   useEffect(() => {
     // Offline: a failed load isn't an update - wait for the connection (below).
@@ -45,17 +50,19 @@ export function RouteErrorPage() {
         </>
       ) : (
         <>
-          <p style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>{stale ? 'MeshPort was updated' : 'Something went wrong'}</p>
+          <p style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>{!stale ? 'Something went wrong' : updated ? 'MeshPort was updated' : "This screen didn't load"}</p>
           <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #9a9aa5)', maxWidth: 320 }}>
-            {stale
-              ? 'Reload to get the latest version. Your wallet and funds are not affected.'
-              : 'Reload the app to continue. Your wallet and funds are not affected.'}
+            {!stale
+              ? 'Reload the app to continue. Your wallet and funds are not affected.'
+              : updated
+                ? 'Reload to get the latest version. Your wallet and funds are not affected.'
+                : 'The connection dropped while it was loading. Try again - your wallet and funds are not affected.'}
           </p>
           {!stale && <ErrorDetails error={error} />}
           <button
             onClick={() => { setReloading(true); recoverFromStaleBuild(true) }}
             style={{ marginTop: 6, padding: '11px 26px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700, color: '#fff', background: 'var(--brand, #6d5dfc)' }}>
-            Reload
+            {stale && !updated ? 'Try again' : 'Reload'}
           </button>
         </>
       )}
