@@ -1,4 +1,5 @@
 import { useState, useEffect, Suspense } from 'react'
+import { useIsStandalone } from './hooks/useIsStandalone'
 import { createBrowserRouter, RouterProvider, Navigate, useLocation } from 'react-router-dom'
 import { useBusinessTab } from './lib/merchant'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -239,7 +240,11 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 function RootGate() {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const location = useLocation()
-  if (!isAuthenticated && location.pathname === '/') return <LandingPage />
+  // The installed app (home-screen PWA) is the product, not the website: a
+  // signed-out user there goes straight to sign-in (AuthGuard → /auth). The
+  // marketing landing page is for browser visitors only.
+  const installed = useIsStandalone()
+  if (!isAuthenticated && location.pathname === '/' && !installed) return <LandingPage />
   return <AuthGuard><AppLayout /></AuthGuard>
 }
 
