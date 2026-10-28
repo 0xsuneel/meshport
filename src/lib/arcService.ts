@@ -136,7 +136,10 @@ async function runPreflight(token: PayToken, sender: `0x${string}`, destination:
   const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }) })
   const { createPayIntent } = await import('./payIntentService')
   const [balance, intent, gas] = await Promise.all([
-    token === 'USDC' ? getUSDCBalance(sender) : Promise.resolve(undefined),
+    // A failed read is "unknown", never 0: on a weak connection a timed-out
+    // balance read used to stop the payment as "Not enough balance" with
+    // plenty in the wallet. The chain still refuses a real shortfall.
+    token === 'USDC' ? readUSDCBalanceOrThrow(sender).catch(() => undefined) : Promise.resolve(undefined),
     createPayIntent({
       walletAddress: sender,
       idempotencyKey,
@@ -395,8 +398,8 @@ export async function sendUSDC(params: {
   // concurrently cuts that pre-broadcast leg from ~3 round trips to ~1.
   //
   // Safe to create the pay intent before the balance check resolves:
-  // getUSDCBalance() never throws (catches internally, returns 0 on
-  // failure - see its own definition), and an intent that turns out to
+  // the balance read never throws (a failed read is undefined - see
+  // runPreflight), and an intent that turns out to
   // belong to a too-small balance is exactly the same "created but never
   // broadcast" shape payNonceRecovery.ts/payReconcile.ts already handle for
   // any other pre-broadcast failure (e.g. estimateGas throwing) in the
@@ -404,12 +407,10 @@ export async function sendUSDC(params: {
   // Usually already resolved: started at PIN entry via preparePayment().
   const { intent: intentResult, gas: gasEstimate, balance } = await getPreflight(
     'USDC', senderAddress, destination, params.amount, params.idempotencyKey ?? crypto.randomUUID(), params.recipientUsername, params.memo)
-  const balanceUsdc = balance ?? 0
-
-  // Step 2: Check balance
-  if (balanceUsdc < params.amount) {
+  // Step 2: Check balance - only when it was actually read (see runPreflight).
+  if (balance !== undefined && balance < params.amount) {
     throw new Error(
-      `Insufficient USDC. Have ${balanceUsdc.toFixed(4)} USDC, need ${params.amount} USDC. ` +
+      `Insufficient USDC. Have ${balance.toFixed(4)} USDC, need ${params.amount} USDC. ` +
       `Get testnet USDC at faucet.circle.com`
     )
   }
