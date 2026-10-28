@@ -76,6 +76,7 @@ try {
 } catch { /* ignore */ }
 import './store/themeStore'
 import { useAuthStore } from './store'
+import { startWalletReadiness } from './lib/walletReadiness'
 
 // Clear all legacy mock/fake data from localStorage on startup
 clearLegacyData()
@@ -100,6 +101,15 @@ clearLegacyData()
   } catch { /* private mode */ }
   const auth = useAuthStore.getState()
   if ((!hadSession || awayTooLong) && auth.isAuthenticated && auth.passcodeLockEnabled && !auth.isLocked) auth.lock()
+  // Wallet readiness (lib/walletReadiness): tracking starts before the first
+  // render, so the first Arc answer and the first open are both seen.
+  startWalletReadiness()
+  // A Google / email (Privy) wallet: fetch Privy's code now, before React has
+  // even mounted - it used to start only once PrivyGate rendered and read the
+  // session (field timings: Privy's code ran at p50 1.8 s / p95 6 s after
+  // page load). Loading code only - Privy itself still starts in PrivyGate,
+  // for a signed-in session.
+  if (auth.isAuthenticated && auth.walletSource === 'privy') import('./wallet/PrivyRoot').catch(() => {})
   // Start fetching the lock screen now, so the splash goes straight to it.
   if (useAuthStore.getState().isLocked) {
     import('./features/auth/PasscodeSetup').catch(() => {})

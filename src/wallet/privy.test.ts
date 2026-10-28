@@ -187,3 +187,20 @@ describe("Privy giving up on its own request", () => {
       .rejects.toThrow(privy.PRIVY_NO_ANSWER)
   })
 })
+
+describe('Arc readiness does not wait for Solana', () => {
+  it('the Arc wallet opens and can sign while Privy has not loaded Solana yet', async () => {
+    const b = fakeBridge({ solanaReady: false, solanaWallets: [] })
+    setPrivyBridge(b)
+    expect(privy.privySignerConnected(ADDR)).toBe(true)
+    const account = await restorePrivyAccount(ADDR, 1_000, 500)
+    expect(account).not.toBeNull()
+    await account!.signMessage({ message: 'hi' })
+    expect(b.calls.some(c => c[0] === 'msg')).toBe(true)
+  })
+
+  it('listed on the account but its iframe not connected: not a connected signer yet', () => {
+    setPrivyBridge(fakeBridge({ wallets: [], linked: [ADDR] }))
+    expect(privy.privySignerConnected(ADDR)).toBe(false)
+  })
+})

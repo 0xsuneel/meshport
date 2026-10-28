@@ -30,6 +30,15 @@ export function arcTransport(opts?: Parameters<typeof http>[1]) {
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
+// Wallet readiness / startup timing: the first time Arc answered (one event,
+// no import of the readiness store from this low-level module).
+let rpcAnswered = false
+function noteRpcAnswered() {
+  if (rpcAnswered) return
+  rpcAnswered = true
+  try { window.dispatchEvent(new Event('meshport:arc-rpc-ok')) } catch { /* no window (tests, server) */ }
+}
+
 // ─── Raw JSON-RPC POST with fallback across ARC_RPCS ───────────────────────
 // Drop-in replacement for `fetch(ARC_TESTNET.rpcUrl, {...}).then(r => r.json())`
 // for call sites that don't go through viem (eth_call / eth_getBalance reads).
@@ -65,6 +74,7 @@ export async function arcRpcJson(body: unknown, timeoutMs = 10000): Promise<any>
         if (!res.ok) { lastErr = new Error(`Arc RPC ${res.status} from ${url}`); break }
         const json = await res.json()
         if (json?.error) { lastErr = json.error; break }
+        noteRpcAnswered()
         return json
       } catch (e) {
         lastErr = e

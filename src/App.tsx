@@ -545,6 +545,8 @@ function SplashRemover() {
     const shownUntil = freshOpen ? MIN_OPEN_SPLASH_MS : 0
     let hidden = false
     const hide = () => {
+      // The first screen is on: the app shell is interactive (lib/perfTrace).
+      void import('./lib/perfTrace').then(m => m.markStartup('shell')).catch(() => {})
       if (hidden) return
       obs.disconnect()
       const wait = shownUntil - performance.now()
