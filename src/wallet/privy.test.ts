@@ -12,9 +12,10 @@ const { setPrivyBridge, privyAccount, ensurePrivyWallet, restorePrivyAccount, js
 const ADDR = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 type Bridge = Parameters<typeof setPrivyBridge>[0] & object
 
-function fakeBridge(over: Partial<Bridge> = {}): Bridge & { calls: unknown[][] } {
+function fakeBridge(over: Partial<Bridge> = {}): Bridge & { calls: unknown[][]; warms: unknown[][] } {
   const calls: unknown[][] = []
-  return {
+  const warms: unknown[][] = []
+  const b: Bridge & { calls: unknown[][] } = {
     calls, ready: true, authenticated: true, wallets: [ADDR], linked: [],
     createWallet: async () => { calls.push(['create']); return '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
     signTransaction: async (tx, a) => { calls.push(['tx', tx, a]); return '0x02signed' },
@@ -26,7 +27,16 @@ function fakeBridge(over: Partial<Bridge> = {}): Bridge & { calls: unknown[][] }
     signSolanaTransaction: async (t, a) => { calls.push(['sol-tx', t, a]); return t },
     ...over,
   }
+  // The warm-up signature (privy.ts warmPrivySigner) is kept apart from the
+  // app's own signatures, so the tests below see only those.
+  const sign = b.signMessage
+  b.signMessage = async (m, a) => {
+    if (m === privy.PRIVY_WARM_MESSAGE) { warms.push(['warm', m, a]); if (over.signMessage && warmFails) return sign(m, a); return '0xsig' }
+    return sign(m, a)
+  }
+  return Object.assign(b, { warms })
 }
+let warmFails = false
 
 beforeEach(() => setPrivyBridge(null))
 afterEach(() => vi.useRealTimers())
@@ -192,6 +202,7 @@ describe('Arc readiness does not wait for Solana', () => {
   it('the Arc wallet opens and can sign while Privy has not loaded Solana yet', async () => {
     const b = fakeBridge({ solanaReady: false, solanaWallets: [] })
     setPrivyBridge(b)
+    await new Promise(r => setTimeout(r, 0)) // the warm-up signature
     expect(privy.privySignerConnected(ADDR)).toBe(true)
     const account = await restorePrivyAccount(ADDR, 1_000, 500)
     expect(account).not.toBeNull()
@@ -202,5 +213,45 @@ describe('Arc readiness does not wait for Solana', () => {
   it('listed on the account but its iframe not connected: not a connected signer yet', () => {
     setPrivyBridge(fakeBridge({ wallets: [], linked: [ADDR] }))
     expect(privy.privySignerConnected(ADDR)).toBe(false)
+  })
+})
+
+describe('warm-up: the wallet is authenticated before the first payment', () => {
+  const flush = () => new Promise(r => setTimeout(r, 0))
+
+  it('signs one fixed message as soon as Privy connects the wallet - then it is ready to sign', async () => {
+    const b = fakeBridge()
+    setPrivyBridge(b)
+    expect(privy.privySignerConnected(ADDR)).toBe(false) // connected, not authenticated yet
+    await flush()
+    const warm = b.warms
+    expect(warm).toEqual([['warm', privy.PRIVY_WARM_MESSAGE, ADDR]])
+    expect(privy.privySignerConnected(ADDR)).toBe(true)
+    // Privy's state changing again doesn't sign again.
+    setPrivyBridge({ ...b }); await flush()
+    expect(b.warms.length).toBe(1)
+  })
+
+  it('a rebuilt Privy (new iframe) is warmed up again', async () => {
+    const b1 = fakeBridge(); setPrivyBridge(b1); await flush()
+    setPrivyBridge(null) // PrivyRoot rebuilds
+    expect(privy.privySignerConnected(ADDR)).toBe(false)
+    const b2 = fakeBridge(); setPrivyBridge(b2); await flush()
+    expect(b2.warms.length).toBe(1)
+    expect(privy.privySignerConnected(ADDR)).toBe(true)
+  })
+
+  it('a failed warm-up leaves it "not ready" (payments still sign, just without the head start)', async () => {
+    warmFails = true
+    try {
+      const b = fakeBridge({ signMessage: async () => { throw new Error('signal is aborted without reason') } })
+      setPrivyBridge(b); await flush(); await flush()
+      expect(privy.privySignerConnected(ADDR)).toBe(false)
+    } finally { warmFails = false }
+  })
+
+  it('the warm-up is a plain message - never a transaction', async () => {
+    const b = fakeBridge(); setPrivyBridge(b); await flush()
+    expect(b.calls.some(c => c[0] === 'tx' || c[0] === 'typed')).toBe(false)
   })
 })

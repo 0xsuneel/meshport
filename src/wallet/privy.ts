@@ -50,18 +50,58 @@ const listeners = new Set<() => void>()
 
 export function setPrivyBridge(b: PrivyBridge | null): void {
   bridge = b
+  // A new Privy (PrivyRoot rebuilt it - a new iframe) has to authenticate
+  // its wallets again: their warm-up starts over.
+  if (!b) { warmed.clear(); warming.clear() }
   // Privy's SDK is running (PrivyRoot) - not merely this module loaded.
   if (b) void import('@/lib/perfTrace').then(m => m.markStartup('provider')).catch(() => {})
   for (const w of [...waiters]) w()
   for (const l of [...listeners]) l()
   // Wallet readiness (lib/walletReadiness): "Privy lists it" vs "it can sign".
   void import('@/lib/walletReadiness').then(m => m.recompute()).catch(() => {})
+  if (b?.ready && b.authenticated) for (const w of b.wallets) void warmPrivySigner(w)
 }
 
-/** True once Privy's wallet iframe has connected this wallet - signing works without waiting. */
+// ── Warm-up: authenticate the wallet with Privy before the first payment ───
+// Privy authenticates an embedded wallet's session on its FIRST signature
+// (inside its iframe, /api/v1/wallets/authenticate) - and that call is slow,
+// often 20-45 s. Whatever signs first pays for it. Until 28 Oct the chat-key
+// signatures at start happened to be first; once those stopped, the person's
+// own payment / swap was - the "36 s" payment and the "47 s" swap. So as soon
+// as Privy has connected the wallet (start, unlock, a rebuilt Privy) it signs
+// one fixed MeshPort statement - a plain message, never a transaction, it
+// can't move anything - and only then is the wallet "ready to sign"
+// (privySignerConnected → walletReadiness signer_ready; the lock screen waits
+// for it). The payment that follows signs at once.
+export const PRIVY_WARM_MESSAGE = 'MeshPort: unlocking this wallet on this device. This signature only checks the wallet is ready - it does not approve any payment.'
+const warmed = new Set<string>()
+const warming = new Map<string, Promise<boolean>>()
+export function warmPrivySigner(address: string): Promise<boolean> {
+  const a = address.toLowerCase()
+  if (warmed.has(a)) return Promise.resolve(true)
+  const running = warming.get(a)
+  if (running) return running
+  const b = bridge
+  if (!b || !b.ready || !b.authenticated || !b.wallets.some(w => w.toLowerCase() === a)) return Promise.resolve(false)
+  const p = timed('warm-up', async () => b, x => x.signMessage(PRIVY_WARM_MESSAGE, address))
+    .then(() => {
+      // Only if it's still the same Privy (not rebuilt meanwhile).
+      if (bridge === b || (bridge && bridge.wallets.some(w => w.toLowerCase() === a))) warmed.add(a)
+      return true
+    })
+    .catch(() => false)
+    .finally(() => {
+      warming.delete(a)
+      void import('@/lib/walletReadiness').then(m => m.recompute()).catch(() => {})
+    })
+  warming.set(a, p)
+  return p
+}
+
+/** True once Privy's wallet iframe has connected this wallet AND authenticated it (warm-up signed) - a payment signs without waiting. */
 export function privySignerConnected(address: string): boolean {
   const a = address.toLowerCase()
-  return !!bridge?.ready && !!bridge.authenticated && bridge.wallets.some(w => w.toLowerCase() === a)
+  return !!bridge?.ready && !!bridge.authenticated && bridge.wallets.some(w => w.toLowerCase() === a) && warmed.has(a)
 }
 void import('@/lib/walletReadiness').then(m => m.setPrivyConnectedProbe(privySignerConnected)).catch(() => {})
 
