@@ -16,6 +16,7 @@ import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { chainName, short, ago, Pill, CopyText, Field, Chips, Notice, mono } from '@/components/admin/AdminUi'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { ADMIN_PATH } from '@/lib/adminPath'
+import { arcHandle } from '@/lib/userSearch'
 import {
   adminTxList, adminTxStats, adminTxDetail,
   type ActivityRow, type TxKind, type TxStatusFilter, type TxStats, type TxDetail, type WalletName,
@@ -49,7 +50,7 @@ const failureText = (r: ActivityRow) => r.metadata?.failure_reason || r.error ||
 const who = (names: Record<string, WalletName>, w?: string | null) => {
   if (!w) return '-'
   const n = names[w.toLowerCase()]
-  return n?.username ? `@${n.username}` : short(w)
+  return n?.username ? arcHandle(n.username) : short(w)
 }
 
 // ── Stats header ─────────────────────────────────────────────────────────────
