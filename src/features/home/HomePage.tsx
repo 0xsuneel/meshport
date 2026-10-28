@@ -545,12 +545,103 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
 }
 
 
-// ── More Actions Sheet ────────────────────────────────────────────────────────
-function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; onClose: () => void; navigate: (p: string) => void; hasOngoingP2P?: boolean }) {
-  const isDesktop = useMediaQuery('(min-width: 980px)')
+// ── Quick action tiles (Home's row + the See all sheet) ──────────────────────
+// One list for both. Home shows three of them - the person picks which in
+// the sheet (Edit Home), kept on this device; the sheet shows them all.
+type TileTone = 'peach' | 'mint' | 'butter'
+type TileDef = { id: string; label: string; sub: string; path: string; icon: Parameters<typeof ActionIcon>[0]['name']; tone: TileTone }
+const TILE_DEFS: Record<string, TileDef> = {
+  bulk:     { id: 'bulk',     label: 'Bulk Pay',       sub: 'Pay a team',      path: '/bulk-payout',       icon: 'bulk',     tone: 'peach' },
+  hub:      { id: 'hub',      label: 'Multichain Hub', sub: 'All your chains', path: '/multichain',        icon: 'hub',      tone: 'mint' },
+  p2p:      { id: 'p2p',      label: 'P2P',            sub: 'Buy & sell USDC', path: '/p2p',               icon: 'p2p',      tone: 'butter' },
+  request:  { id: 'request',  label: 'Request',        sub: 'Ask for money',   path: '/receive?request=1', icon: 'receive',  tone: 'mint' },
+  scan:     { id: 'scan',     label: 'Scan QR',        sub: 'Pay a code',      path: '/scanner',           icon: 'qr',       tone: 'butter' },
+  swap:     { id: 'swap',     label: 'Swap',           sub: 'USDC ⇄ EURC',     path: '/swap',              icon: 'swap',     tone: 'peach' },
+  rewards:  { id: 'rewards',  label: 'Rewards',        sub: 'Earn points',     path: '/rewards',           icon: 'rewards',  tone: 'butter' },
+  insights: { id: 'insights', label: 'Insights',       sub: 'Where it went',   path: '/insights',          icon: 'insights', tone: 'peach' },
+  staff:    { id: 'staff',    label: 'Staff mode',     sub: 'Your shop',       path: '/business',          icon: 'clock',    tone: 'mint' },
+  help:     { id: 'help',     label: 'Help',           sub: 'Get support',     path: '/help-support',      icon: 'chat',     tone: 'mint' },
+}
+const TILE_GROUPS: { title: string; ids: string[] }[] = [
+  { title: 'Move money', ids: ['bulk', 'hub', 'p2p', 'request', 'scan', 'swap'] },
+  { title: 'More', ids: ['rewards', 'insights', 'staff', 'help'] },
+]
+const HOME_TILE_COUNT = 3
+const DEFAULT_HOME_TILES = ['p2p', 'hub', 'insights']
+const HOME_TILE_TONES: TileTone[] = ['peach', 'mint', 'butter'] // Home's row: by position
+const HOME_TILES_KEY = 'mp_home_tiles'
+// Staff mode comes and goes with an invite - never one of Home's three.
+const homeTileAllowed = (id: string, business: boolean) => id in TILE_DEFS && id !== 'staff' && !(business && id === 'rewards')
+
+function loadHomeTiles(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(HOME_TILES_KEY) || 'null')
+    if (Array.isArray(v) && v.length === HOME_TILE_COUNT && new Set(v).size === HOME_TILE_COUNT && v.every(id => typeof id === 'string' && id in TILE_DEFS)) return v
+  } catch { /* none saved */ }
+  return DEFAULT_HOME_TILES
+}
+function saveHomeTiles(ids: string[]) {
+  try { localStorage.setItem(HOME_TILES_KEY, JSON.stringify(ids)) } catch { /* private mode: this visit only */ }
+}
+/** Home's three: the saved ones this account can use, topped up from the defaults. */
+function homeTilesFor(saved: string[], business: boolean): string[] {
+  const out = saved.filter(id => homeTileAllowed(id, business))
+  for (const id of [...DEFAULT_HOME_TILES, ...Object.keys(TILE_DEFS)]) {
+    if (out.length >= HOME_TILE_COUNT) break
+    if (!out.includes(id) && homeTileAllowed(id, business)) out.push(id)
+  }
+  return out.slice(0, HOME_TILE_COUNT)
+}
+
+/** A tile as this account sees it: the Hub's name for a business, a business's own Insights. */
+function useTileView(): (id: string) => TileDef {
   const hub = useHubLabel()
-  // Merchants: Rewards is replaced by the Business tab.
   const { isMerchant } = useMerchant()
+  const business = useBusinessTab()
+  const SHORT: Record<string, string> = { 'Cross-chain Transfer': 'Cross-chain', 'Business Insights': 'Insights' }
+  return id => {
+    const d = TILE_DEFS[id]
+    if (id === 'insights' && (isMerchant || business)) return { ...d, sub: 'Sales & customers', path: '/business?screen=reports' }
+    const label = hub(d.label)
+    return { ...d, label: SHORT[label] ?? label }
+  }
+}
+
+function QuickTile({ def, tone, height, onClick, dim, dot, locked, badge, disabled, ariaLabel }: {
+  def: TileDef; tone: TileTone; height: number; onClick?: () => void; dim?: boolean; dot?: boolean; locked?: boolean
+  badge?: 'add' | 'remove' | 'on'; disabled?: boolean; ariaLabel?: string
+}) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} aria-label={ariaLabel} className="mp-press"
+      style={{ position: 'relative', height, borderRadius: 16, border: 'none', cursor: disabled ? 'default' : 'pointer', font: 'inherit', textAlign: 'center',
+        background: `var(--tile-${tone})`, padding: '10px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
+        opacity: dim ? 0.45 : 1 }}>
+      <span style={{ position: 'relative', width: 32, height: 32, borderRadius: 10, background: 'color-mix(in srgb, var(--surface) 70%, transparent)', display: 'grid', placeItems: 'center' }}>
+        <ActionIcon name={def.icon} size={18} color={`var(--tile-${tone}-ink)`} />
+        {dot && <span aria-label="Open P2P trade" style={{ position: 'absolute', top: -3, right: -3, width: 10, height: 10, borderRadius: '50%', background: 'var(--danger)', border: '2px solid var(--bg)' }} />}
+      </span>
+      <span style={{ minWidth: 0, maxWidth: '100%' }}>
+        <span style={{ display: 'block', fontSize: 13, fontWeight: 650, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{def.label}</span>
+        <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{def.sub}</span>
+      </span>
+      {badge && (
+        <span aria-hidden style={{ position: 'absolute', top: 6, right: 6, width: 20, height: 20, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: badge === 'on' ? 11 : 14, fontWeight: 700, lineHeight: 1,
+          background: badge === 'add' ? 'var(--brand)' : badge === 'remove' ? 'var(--danger)' : 'var(--surface)',
+          color: badge === 'on' ? 'var(--brand-text)' : '#fff', border: badge === 'on' ? '1.5px solid var(--brand-text)' : 'none' }}>
+          {badge === 'add' ? '+' : badge === 'remove' ? '−' : '✓'}
+        </span>
+      )}
+      {locked && <LockBadge />}
+    </button>
+  )
+}
+
+// ── More Actions Sheet ────────────────────────────────────────────────────────
+function MoreSheet({ open, onClose, navigate, hasOngoingP2P, homeTiles, onSaveHomeTiles }: {
+  open: boolean; onClose: () => void; navigate: (p: string) => void; hasOngoingP2P?: boolean
+  homeTiles: string[]; onSaveHomeTiles: (ids: string[]) => void
+}) {
+  const isDesktop = useMediaQuery('(min-width: 980px)')
   // Staff of a business (invited by its owner) get "Staff mode" here.
   const business = useBusinessTab()
   // Known before the sheet ever opens: looked up as Home loads and remembered
@@ -582,67 +673,96 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; 
   }, [business, wallet, staffKey, open])
   // Two groups of pastel tiles, three across (Move money, then More). Pay,
   // Receive and Swap's own pills sit on the balance card; Swap is here too.
-  // Long names shortened to fit a tile; the line under says the rest.
-  const SHORT_TILE_LABEL: Record<string, string> = { 'Cross-chain Transfer': 'Cross-chain', 'Business Insights': 'Insights' }
-  type Tone = 'peach' | 'mint' | 'butter'
-  const tile = (name: Parameters<typeof ActionIcon>[0]['name'], tone: Tone) =>
-    ({ tone, icon: <ActionIcon name={name} size={18} color={`var(--tile-${tone}-ink)`} /> })
-  const groups: { title: string; actions: { label: string; sub: string; path: string; tone: Tone; icon: React.ReactNode }[] }[] = [
-    { title: 'Move money', actions: [
-      { label: 'Bulk Pay',       sub: 'Pay a team',         path: '/bulk-payout',       ...tile('bulk', 'peach') },
-      { label: 'Multichain Hub', sub: 'All your chains',    path: '/multichain',        ...tile('hub', 'mint') },
-      { label: 'P2P',            sub: 'Buy & sell USDC',    path: '/p2p',               ...tile('p2p', 'butter') },
-      { label: 'Request',        sub: 'Ask for money',      path: '/receive?request=1', ...tile('receive', 'mint') },
-      { label: 'Scan QR',        sub: 'Pay a code',         path: '/scanner',           ...tile('qr', 'butter') },
-      { label: 'Swap',           sub: 'USDC ⇄ EURC',        path: '/swap',              ...tile('swap', 'peach') },
-    ] },
-    { title: 'More', actions: [
-      ...(business ? [] : [{ label: 'Rewards', sub: 'Earn points', path: '/rewards', ...tile('rewards', 'butter') }]),
-      // A business sees its own sales and customers (Business → Reports).
-      isMerchant
-        ? { label: 'Business Insights', sub: 'Sales & customers', path: '/business?screen=reports', ...tile('insights', 'peach') }
-        : { label: 'Insights',          sub: 'Where it went',     path: '/insights',                ...tile('insights', 'peach') },
-      ...(staffOf && !locked ? [{ label: 'Staff mode', sub: 'Your shop', path: '/business', ...tile('clock', 'mint') }] : []),
-      { label: 'Help', sub: 'Get support', path: '/help-support', ...tile('chat', 'mint') },
-    ] },
-  ]
+  const view = useTileView()
+  const shown = (id: string) => id === 'staff' ? staffOf && !locked : !(business && id === 'rewards')
+  // Edit Home: pick Home's three. Order is the order they're added.
+  const [draft, setDraft] = useState<string[] | null>(null)
+  const [draftNote, setDraftNote] = useState('')
+  useEffect(() => { if (!open) { setDraft(null); setDraftNote('') } }, [open])
+  const editing = draft !== null
+  const addToHome = (id: string) => {
+    if (!draft) return
+    if (draft.length >= HOME_TILE_COUNT) { setDraftNote('Home has 3 already. Tap one above to take it off first.'); return }
+    setDraft([...draft, id]); setDraftNote('')
+  }
+  const sectionTitle = (t: string) => (
+    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '0 2px 8px' }}>{t}</div>
+  )
+  const grid = (children: React.ReactNode) => <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>{children}</div>
+  const pill = (label: string, onClick: () => void, color = 'var(--brand-text)') => (
+    <button type="button" onClick={onClick} className="mp-press"
+      style={{ height: 34, padding: '0 14px', borderRadius: 17, border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 13, fontWeight: 600,
+        background: 'var(--surface)', boxShadow: 'var(--card-soft)', color }}>{label}</button>
+  )
   const content = (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>Quick actions</span>
-        <button type="button" onClick={onClose} aria-label="Close" className="mp-press"
-          style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'var(--surface)', boxShadow: 'var(--card-soft)',
-            display: 'grid', placeItems: 'center', color: 'var(--text-secondary)' }}>
-          <X size={16} />
-        </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+        <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>{editing ? 'Edit Home' : 'Quick actions'}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {editing
+            ? pill('Reset', () => { setDraft(homeTilesFor(DEFAULT_HOME_TILES, business)); setDraftNote('') })
+            // Home's three tiles are the phone layout; desktop has its own Quick Actions card.
+            : !isDesktop && pill('Edit Home', () => { setDraft(homeTiles); setDraftNote('') })}
+          {!editing && (
+            <button type="button" onClick={onClose} aria-label="Close" className="mp-press"
+              style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'var(--surface)', boxShadow: 'var(--card-soft)',
+                display: 'grid', placeItems: 'center', color: 'var(--text-secondary)' }}>
+              <X size={16} />
+            </button>
+          )}
+        </span>
       </div>
-      {groups.map(g => (
-        <div key={g.title} style={{ marginTop: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '0 2px 8px' }}>{g.title}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
-            {g.actions.map(a => (
-              <button key={a.label} type="button"
-                onClick={() => { if (a.path === '/scanner') prewarmCamera(); onClose(); navigate(a.path) }}
-                className="mp-press"
-                style={{ position: 'relative', height: 92, borderRadius: 16, border: 'none', cursor: 'pointer', font: 'inherit', textAlign: 'center',
-                  background: `var(--tile-${a.tone})`, padding: '10px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
-                  opacity: locked && isLockedPath(a.path) ? 0.45 : 1 }}>
-                <span style={{ position: 'relative', width: 32, height: 32, borderRadius: 10, background: 'color-mix(in srgb, var(--surface) 70%, transparent)', display: 'grid', placeItems: 'center' }}>
-                  {a.icon}
-                  {a.label === 'P2P' && hasOngoingP2P && (
-                    <span style={{ position: 'absolute', top: -3, right: -3, width: 10, height: 10, borderRadius: '50%', background: 'var(--danger)', border: '2px solid var(--bg)' }} />
-                  )}
-                </span>
-                <span style={{ minWidth: 0, maxWidth: '100%' }}>
-                  <span style={{ display: 'block', fontSize: 13, fontWeight: 650, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{SHORT_TILE_LABEL[hub(a.label)] ?? hub(a.label)}</span>
-                  <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.sub}</span>
-                </span>
-                {locked && isLockedPath(a.path) && <LockBadge />}
-              </button>
-            ))}
-          </div>
+      {editing && (
+        <div style={{ marginTop: 14 }}>
+          {sectionTitle('On Home')}
+          {grid(Array.from({ length: HOME_TILE_COUNT }, (_, i) => {
+            const id = draft[i]
+            if (!id) return (
+              <div key={`free-${i}`} style={{ height: 92, borderRadius: 16, border: '1.5px dashed var(--border)', display: 'grid', placeItems: 'center', fontSize: 12, color: 'var(--text-secondary)' }}>Free spot</div>
+            )
+            const def = view(id)
+            return <QuickTile key={id} def={def} tone={HOME_TILE_TONES[i]} height={92} badge="remove" ariaLabel={`Take ${def.label} off Home`}
+              onClick={() => { setDraft(draft.filter(x => x !== id)); setDraftNote('') }} />
+          }))}
+          <p style={{ margin: '8px 2px 0', minHeight: 18, fontSize: 12.5, fontWeight: draftNote ? 600 : 400, color: draftNote ? 'var(--danger)' : 'var(--text-secondary)' }}>
+            {draftNote || (draft.length < HOME_TILE_COUNT ? `Pick ${HOME_TILE_COUNT - draft.length} more to fill Home.` : 'Tap a tile above to swap it out.')}
+          </p>
         </div>
-      ))}
+      )}
+      {TILE_GROUPS.map(g => {
+        const ids = g.ids.filter(id => shown(id) && (!editing || homeTileAllowed(id, business)))
+        if (!ids.length) return null
+        return (
+          <div key={g.title} style={{ marginTop: 14 }}>
+            {sectionTitle(g.title)}
+            {grid(ids.map(id => {
+              const def = view(id)
+              if (editing) {
+                const on = draft.includes(id)
+                return <QuickTile key={id} def={def} tone={def.tone} height={92} dim={on} disabled={on} badge={on ? 'on' : 'add'}
+                  ariaLabel={on ? `${def.label} is on Home` : `Add ${def.label} to Home`} onClick={() => addToHome(id)} />
+              }
+              const lockedTile = locked && isLockedPath(def.path)
+              return <QuickTile key={id} def={def} tone={def.tone} height={92} dim={lockedTile} locked={lockedTile} dot={id === 'p2p' && hasOngoingP2P}
+                onClick={() => { if (def.path === '/scanner') prewarmCamera(); onClose(); navigate(def.path) }} />
+            }))}
+          </div>
+        )
+      })}
+      {editing && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 8, marginTop: 18 }}>
+          <button type="button" onClick={() => { setDraft(null); setDraftNote('') }} className="mp-press"
+            style={{ height: 48, borderRadius: 14, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-primary)', font: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button type="button" disabled={draft.length < HOME_TILE_COUNT} className="mp-press"
+            onClick={() => { onSaveHomeTiles(draft); setDraft(null); onClose() }}
+            style={{ height: 48, borderRadius: 14, border: 'none', background: 'var(--brand)', color: '#fff', font: 'inherit', fontSize: 15, fontWeight: 600,
+              cursor: draft.length < HOME_TILE_COUNT ? 'default' : 'pointer', opacity: draft.length < HOME_TILE_COUNT ? 0.45 : 1 }}>
+            Save
+          </button>
+        </div>
+      )}
     </>
   )
 
@@ -2803,6 +2923,11 @@ export function HomePage() {
 
   // CHANGE 1: More sheet state
   const [showMore, setShowMore] = useState(false)
+  // Home's three quick action tiles - the person's pick (Edit Home), kept on this device.
+  const [savedHomeTiles, setSavedHomeTiles] = useState(loadHomeTiles)
+  const homeTileIds = homeTilesFor(savedHomeTiles, useBusinessTab())
+  const tileView = useTileView()
+  const saveHomeTileIds = useCallback((ids: string[]) => { setSavedHomeTiles(ids); saveHomeTiles(ids) }, [])
   // Which hero card is showing: the pills under it follow (Pay / Receive /
   // Swap on the balance, Transfer / Bring / Activity on the Multichain Hub).
   const [heroSide, setHeroSide] = useState<0 | 1>(0)
@@ -4214,39 +4339,20 @@ export function HomePage() {
               <button type="button" onClick={() => setShowMore(true)}
                 style={{ position: 'relative', background: 'none', border: 'none', padding: '4px 0', margin: '-4px 0', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
                 See all
-                {ongoingTradesCount > 0 && (
-                  // An open P2P trade: the same red dot "More" used to carry.
+                {ongoingTradesCount > 0 && !homeTileIds.includes('p2p') && (
+                  // An open P2P trade, when P2P isn't one of Home's tiles.
                   <span aria-label="Open P2P trade" style={{ position: 'absolute', top: 1, right: -9, width: 7, height: 7, borderRadius: '50%', background: 'var(--danger)' }} />
                 )}
               </button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
-              {[
-                { label: 'P2P', sub: 'Buy & sell USDC', path: '/p2p', icon: <ActionIcon name="p2p" size={18} color="var(--tile-peach-ink)" />, bg: 'var(--tile-peach)' },
-                // A business sees Cross-chain here, as everywhere (hubLabel).
-                { label: businessAccount ? 'Cross-chain' : 'Multichain Hub', sub: 'All your chains', path: '/multichain', icon: <ActionIcon name="hub" size={18} color="var(--tile-mint-ink)" />, bg: 'var(--tile-mint)' },
-                businessAccount
-                  ? { label: 'Insights', sub: 'Your reports', path: '/business?screen=reports', icon: <ActionIcon name="insights" size={18} color="var(--tile-butter-ink)" />, bg: 'var(--tile-butter)' }
-                  : { label: 'Insights', sub: 'Where it went', path: '/insights', icon: <ActionIcon name="insights" size={18} color="var(--tile-butter-ink)" />, bg: 'var(--tile-butter)' },
-              ].map(t => (
-                <button key={t.label} type="button" onClick={() => navigate(t.path)} className="mp-press"
-                  style={{ position: 'relative', height: 98, borderRadius: 16, border: 'none', cursor: 'pointer', font: 'inherit', textAlign: 'center',
-                    background: t.bg, padding: '10px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
-                    opacity: accountLock.locked ? 0.45 : 1 }}>
-                  <span style={{ position: 'relative', width: 32, height: 32, borderRadius: 10, background: 'color-mix(in srgb, var(--surface) 70%, transparent)', display: 'grid', placeItems: 'center' }}>
-                    {t.icon}
-                    {/* An open P2P trade: the same dot as on the sheet's P2P tile. */}
-                    {t.path === '/p2p' && ongoingTradesCount > 0 && (
-                      <span aria-label="Open P2P trade" style={{ position: 'absolute', top: -3, right: -3, width: 10, height: 10, borderRadius: '50%', background: 'var(--danger)', border: '2px solid var(--bg)' }} />
-                    )}
-                  </span>
-                  <span style={{ minWidth: 0, maxWidth: '100%' }}>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 650, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.label}</span>
-                    <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.sub}</span>
-                  </span>
-                  {accountLock.locked && <LockBadge />}
-                </button>
-              ))}
+              {/* The person's three (Edit Home in See all), colours by position. */}
+              {homeTileIds.map((id, i) => {
+                const def = tileView(id)
+                return <QuickTile key={id} def={def} tone={HOME_TILE_TONES[i]} height={98} dim={accountLock.locked} locked={accountLock.locked}
+                  dot={id === 'p2p' && ongoingTradesCount > 0}
+                  onClick={() => { if (def.path === '/scanner') prewarmCamera(); navigate(def.path) }} />
+              })}
             </div>
           </div>
         )}
@@ -4475,7 +4581,8 @@ export function HomePage() {
       </div>
 
       {/* ── MORE ACTIONS SHEET ───────────────────────────────────────────────── */}
-      <MoreSheet open={showMore} onClose={() => setShowMore(false)} navigate={navigate} hasOngoingP2P={ongoingTradesCount > 0} />
+      <MoreSheet open={showMore} onClose={() => setShowMore(false)} navigate={navigate} hasOngoingP2P={ongoingTradesCount > 0}
+        homeTiles={homeTileIds} onSaveHomeTiles={saveHomeTileIds} />
 
       {/* ── CUSTOMIZE QUICK ACTIONS SHEET ────────────────────────────────────── */}
       <AnimatePresence>
