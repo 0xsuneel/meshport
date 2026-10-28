@@ -34,7 +34,7 @@ import { filterServices } from '@/lib/searchServices'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 import { LockBadge } from '@/components/LockedFeature'
 import { RecentNewsRow } from './RecentNewsRow'
-import { BALANCES_STALE_EVENT, msSinceLastTx } from '@/lib/balanceRefresh'
+import { BALANCES_STALE_EVENT, msSinceLastTx, pendingTxBalance, isLaggingRead } from '@/lib/balanceRefresh'
 import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { useSettingsStore } from '@/store/settingsStore'
 import { activityLabel, activitySign, type ActivityRecord } from '@/lib/ActivityService'
@@ -2466,10 +2466,12 @@ export function HomePage() {
   // fresh read lands.
   const [eurcBalance,    setEurcBalanceState]    = useState(() => loadAssetSlot(walletAddress).eurc)
   const [cirBtcBalance,  setCirBtcBalanceState]  = useState(() => loadAssetSlot(walletAddress).cirbtc)
-  const setEurcBalance = useCallback((v: number) => { setEurcBalanceState(v); saveAssetSlot(walletAddress, { eurc: v }) }, [walletAddress])
+  // A read still showing the amount from before a swap (a node a block
+  // behind) never replaces the swap's new amount (lib/balanceRefresh).
+  const setEurcBalance = useCallback((v: number) => { if (isLaggingRead(walletAddress, 'EURC', v)) return; setEurcBalanceState(v); saveAssetSlot(walletAddress, { eurc: v }) }, [walletAddress])
   const eurcBalanceRef = useRef(eurcBalance); eurcBalanceRef.current = eurcBalance
   const cirBtcBalanceRef = useRef(cirBtcBalance); cirBtcBalanceRef.current = cirBtcBalance
-  const setCirBtcBalance = useCallback((v: number) => { setCirBtcBalanceState(v); saveAssetSlot(walletAddress, { cirbtc: v }) }, [walletAddress])
+  const setCirBtcBalance = useCallback((v: number) => { if (isLaggingRead(walletAddress, 'CIRBTC', v)) return; setCirBtcBalanceState(v); saveAssetSlot(walletAddress, { cirbtc: v }) }, [walletAddress])
   useEffect(() => {
     const slot = loadAssetSlot(walletAddress)
     setEurcBalanceState(slot.eurc); setCirBtcBalanceState(slot.cirbtc)
@@ -2538,7 +2540,7 @@ export function HomePage() {
         if (tok === 'EURC')   { readArcBalanceOrThrow(walletAddress, 'EURC').then(setEurcBalance).catch(() => {}); continue }
         if (tok === 'CIRBTC') { readArcBalanceOrThrow(walletAddress, 'CIRBTC').then(setCirBtcBalance).catch(() => {}); continue }
         // A failed read keeps the shown balance (never saves $0).
-        readArcBalanceOrThrow(walletAddress, 'USDC').then(setBalance).catch(() => {})
+        readArcBalanceOrThrow(walletAddress, 'USDC').then(v => { if (!isLaggingRead(walletAddress, 'USDC', v)) setBalance(v) }).catch(() => {})
       }
     }, BALANCE_REFRESH_DEBOUNCE_MS)
   }
@@ -2555,7 +2557,12 @@ export function HomePage() {
     let stopped = false
     const timers: ReturnType<typeof setTimeout>[] = []
     const settle = () => {
-      const start = { EURC: eurcBalanceRef.current, CIRBTC: cirBtcBalanceRef.current }
+      // A swap: show its new amounts at once; "changed" means moved from the
+      // amount BEFORE it.
+      const pe = pendingTxBalance(walletAddress, 'EURC'), pc = pendingTxBalance(walletAddress, 'CIRBTC')
+      if (pe) setEurcBalanceState(pe.after)
+      if (pc) setCirBtcBalanceState(pc.after)
+      const start = { EURC: pe?.before ?? eurcBalanceRef.current, CIRBTC: pc?.before ?? cirBtcBalanceRef.current }
       const done = { EURC: false, CIRBTC: false }
       const read = (tok: 'EURC' | 'CIRBTC') => readArcBalanceOrThrow(walletAddress, tok, { ttlMs: 0 }).then(v => {
         if (stopped) return
@@ -3417,7 +3424,8 @@ export function HomePage() {
           if (typeof previousBalance === 'number' && bal > previousBalance) {
             window.dispatchEvent(new CustomEvent('meshport:onchain-activity'))
           }
-          setBalance(bal); retryCount = 0
+          if (!isLaggingRead(address, 'USDC', bal)) setBalance(bal)
+          retryCount = 0
         }
       } catch {
         noteRequestTime(Date.now() - started)

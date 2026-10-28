@@ -32,7 +32,8 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopHistoryPanel, DesktopHistoryEmpty } from '@/components/ui/DesktopHistoryPanel'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { ARC_EXPLORER } from '@/lib/chainExplorers'
-import { refreshBalancesAfterTx, BALANCES_STALE_EVENT } from '@/lib/balanceRefresh'
+import { refreshBalancesAfterTx, BALANCES_STALE_EVENT, pendingTxBalance, isLaggingRead, type TxBalances, type TxToken } from '@/lib/balanceRefresh'
+import { loadAssetSlot, saveAssetSlot } from '@/lib/assetSlot'
 import { readArcBalanceOrThrow } from '@/blockchain/BlockchainManager'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { pressable } from '@/lib/pressable'
@@ -466,7 +467,12 @@ export function SwapPage() {
   const [showSettings, setShowSettings] = useState(false)
   const [pickerFor,    setPickerFor]    = useState<'in'|'out'|null>(null)
   // Token balances (fetched from RPC)
-  const [tokenBals,    setTokenBals]    = useState<Record<string, number>>({ USDC: balance, EURC: 0, cirBTC: 0 })
+  // EURC / cirBTC open with the last amounts read (Home saves them too), not
+  // 0 until this page's own read lands.
+  const [tokenBals,    setTokenBals]    = useState<Record<string, number>>(() => {
+    const slot = loadAssetSlot(walletAddress)
+    return { USDC: balance, EURC: slot.eurc, cirBTC: slot.cirbtc }
+  })
   // Swap history
   const [history,      setHistory]      = useState<SwapRecord[]>(() => loadHistory(walletAddress))
   // Until the swap history has loaded, an empty list means "not known yet"
@@ -686,16 +692,24 @@ export function SwapPage() {
   tokenBalsRef.current = tokenBals
   const refreshOtherTokens = useCallback((untilChanged = false) => {
     if (!walletAddress) return
-    const before = { EURC: tokenBalsRef.current.EURC, cirBTC: tokenBalsRef.current.cirBTC }
+    // After a swap: "changed" means moved from the amount before it.
+    const before = {
+      EURC: pendingTxBalance(walletAddress, 'EURC')?.before ?? tokenBalsRef.current.EURC,
+      cirBTC: pendingTxBalance(walletAddress, 'CIRBTC')?.before ?? tokenBalsRef.current.cirBTC,
+    }
     const gaps = untilChanged ? [0, 1500, 2500, 3500, 5000] : [0]
     let i = 0
     const read = async () => {
       const opts = { ttlMs: 0, staleMs: 0 }
-      const [eurc, cirbtc] = await Promise.all([
+      const [eurcRead, cirbtcRead] = await Promise.all([
         readArcBalanceOrThrow(walletAddress, 'EURC', opts).catch(() => null),
         CIRBTC_CONTRACT ? readArcBalanceOrThrow(walletAddress, 'CIRBTC', opts).catch(() => null) : Promise.resolve(null),
       ])
+      // A node still a block behind the swap doesn't replace its new amounts.
+      const eurc = eurcRead != null && !isLaggingRead(walletAddress, 'EURC', eurcRead) ? eurcRead : null
+      const cirbtc = cirbtcRead != null && !isLaggingRead(walletAddress, 'CIRBTC', cirbtcRead) ? cirbtcRead : null
       setTokenBals(b => ({ ...b, ...(eurc != null ? { EURC: eurc } : {}), ...(cirbtc != null ? { cirBTC: cirbtc } : {}) }))
+      if (eurc != null || cirbtc != null) saveAssetSlot(walletAddress, { ...(eurc != null ? { eurc } : {}), ...(cirbtc != null ? { cirbtc } : {}) })
       const changed = (eurc != null && Math.abs(eurc - before.EURC) > 1e-12) || (cirbtc != null && Math.abs(cirbtc - before.cirBTC) > 1e-12)
       if (!changed && ++i < gaps.length) setTimeout(read, gaps[i])
     }
@@ -1258,9 +1272,19 @@ export function SwapPage() {
           // Throwing read (a failed one used to save $0), then the shared
           // after-transaction refresh: retried while the chain still shows the
           // old value, and Home re-reads EURC / cirBTC.
-          refreshBalancesAfterTx(walletAddress)
+          // Like a payment: the new amounts show at once (we know what went
+          // in and what came out), then the chain's own figures replace them.
+          const key = (id: string): TxToken => id === 'cirBTC' ? 'CIRBTC' : id as TxToken
+          const was = tokenBalsRef.current
+          const inAmt = parseFloat(amountIn) || 0, outAmt = parseFloat(aOut) || 0
+          const balances: TxBalances = {
+            [key(tokenIn.id)]: { before: was[tokenIn.id] ?? 0, after: Math.max(0, (was[tokenIn.id] ?? 0) - inAmt) },
+            [key(tokenOut.id)]: { before: was[tokenOut.id] ?? 0, after: (was[tokenOut.id] ?? 0) + outAmt },
+          }
+          setTokenBals(b => ({ ...b, [tokenIn.id]: balances[key(tokenIn.id)]!.after, [tokenOut.id]: balances[key(tokenOut.id)]!.after }))
+          refreshBalancesAfterTx(walletAddress, { balances })
           const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
-          readUSDCBalanceOrThrow(walletAddress ?? '').then(newUSDC => setTokenBals(b => ({ ...b, USDC: newUSDC }))).catch(() => {})
+          readUSDCBalanceOrThrow(walletAddress ?? '').then(newUSDC => { if (!isLaggingRead(walletAddress, 'USDC', newUSDC)) setTokenBals(b => ({ ...b, USDC: newUSDC })) }).catch(() => {})
           // EURC + cirBTC: re-read until the swap shows (BALANCES_STALE_EVENT from
           // refreshBalancesAfterTx above triggers refreshOtherTokens(true)).
         } catch {}
