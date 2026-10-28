@@ -3479,14 +3479,18 @@ export function HomePage() {
       // could; price/24h-change are strictly best-effort enrichment that
       // arrives whenever it arrives, never gating the balance display.
       // A failed read (offline) keeps the last shown amount rather than 0.
-      const balancesPromise = Promise.all([
+      // A failed read is tried again soon (as USDC's is above) - otherwise a
+      // dropped request left EURC / cirBTC stale until the 2-minute tick.
+      const readTokens = (tries: number): Promise<void> => Promise.all([
         readArcBalanceOrThrow(address, 'EURC').catch(() => null),
         readArcBalanceOrThrow(address, 'CIRBTC').catch(() => null),
       ]).then(([eurc, cirbtc]) => {
         if (cancelled) return
         if (eurc !== null) setEurcBalance(eurc)
         if (cirbtc !== null) setCirBtcBalance(cirbtc)
+        if ((eurc === null || cirbtc === null) && tries < 3) setTimeout(() => { if (!cancelled) void readTokens(tries + 1) }, 3000 * (tries + 1))
       })
+      const balancesPromise = readTokens(0)
 
       // Slow network: prices are extra requests to other sites (each a new
       // connection) - use the last price instead and leave the pipe to balances.
