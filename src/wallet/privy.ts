@@ -25,8 +25,12 @@ export const privyConfigured = (): boolean => !!APP_ID
 export interface PrivyBridge {
   ready: boolean
   authenticated: boolean
-  /** Addresses of this user's Privy embedded Ethereum wallets. */
+  /** Addresses of this user's Privy embedded Ethereum wallets, once Privy's
+   *  wallet iframe has connected them (can take seconds after sign-in). */
   wallets: string[]
+  /** The same wallets from the account's own record - known as soon as Privy
+   *  has signed in, before the wallet iframe connects them. */
+  linked: string[]
   createWallet(): Promise<string>
   signTransaction(tx: Record<string, unknown>, address: string): Promise<Hex>
   signMessage(message: string | { raw: Hex }, address: string): Promise<Hex>
@@ -98,20 +102,24 @@ export async function ensurePrivySolanaWallet(timeoutMs = 30_000): Promise<strin
 export function privyState(address?: string): string {
   if (!bridge) return 'privy not loaded'
   const mine = !!address && bridge.wallets.some(w => w.toLowerCase() === address.toLowerCase())
-  return `ready=${bridge.ready} authenticated=${bridge.authenticated} wallets=${bridge.wallets.length} listed=${mine}`
+  const linked = !!address && bridge.linked.some(w => w.toLowerCase() === address.toLowerCase())
+  return `ready=${bridge.ready} authenticated=${bridge.authenticated} wallets=${bridge.wallets.length} listed=${mine} linked=${linked}`
 }
 
 /**
- * Open `address` as a Privy wallet. `listWaitMs`: how long to wait for it in
- * Privy's wallet list once signed in. Short (1.5 s) when we're only finding
- * out whether an account is a Privy one at all (sign-in); long for an
- * account already known to be Privy - after the app resumes, Privy's list
- * fills in a few seconds after it signs in, and giving up early showed
- * "Couldn't access your wallet" while the wallet was on its way.
+ * Open `address` as a Privy wallet: as soon as Privy has signed in and the
+ * account's record lists it - not when the wallet iframe has connected it,
+ * which can take many seconds more (or need a rebuild, PrivyRoot). Signing
+ * waits for the iframe by itself (privyAccount). Waiting for the iframe here
+ * made a slow start look like a missing wallet: a real Privy wallet was
+ * taken for an old device-only one at sign-in, and the first payment after
+ * a resume failed with "Couldn't access your wallet".
+ * `listWaitMs`: how long to wait, once signed in, for the address to show.
  */
 export async function restorePrivyAccount(address: string, timeoutMs = 15_000, listWaitMs = 1_500): Promise<WalletAccount | null> {
   if (!privyConfigured()) return null
-  const mine = (b: PrivyBridge) => b.wallets.some(w => w.toLowerCase() === address.toLowerCase())
+  const a = address.toLowerCase()
+  const mine = (b: PrivyBridge) => b.linked.some(w => w.toLowerCase() === a) || b.wallets.some(w => w.toLowerCase() === a)
   try { await whenBridge(() => true, timeoutMs) } catch { return null }
   try { await whenBridge(mine, listWaitMs) } catch { return null }
   return privyAccount(address)
@@ -198,7 +206,9 @@ export function privyAccount(address: string): WalletAccount {
   const key = address.toLowerCase()
   const hit = accounts.get(key)
   if (hit) return hit
-  const open = () => whenBridge(b => b.wallets.some(w => w.toLowerCase() === key), 15_000)
+  // Signing needs the wallet iframe connected: wait for it (a stuck one is
+  // rebuilt after 8 s - PrivyRoot), up to PRIVY_STILL_WAITING_MS and more.
+  const open = () => whenBridge(b => b.wallets.some(w => w.toLowerCase() === key), 45_000)
   const base = toAccount({
     address: address as Hex,
     async signMessage({ message }) {

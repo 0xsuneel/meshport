@@ -662,53 +662,9 @@ export default function App() {
     return unsub
   }, [])
 
-  // ── Auto-lock when actually offline, revisit through the normal unlock ────
-  // screen ─────────────────────────────────────────────────────────────────
-  // Previously this only cleared the import-privkey session cache (see
-  // lib/security.ts) and left the app sitting wherever it was - coming back
-  // online then quietly failed to auto-restore in the background and only
-  // surfaced WalletRecoveryBanner's own separate little passcode prompt,
-  // which is a second, different-looking "enter your passcode" UI from the
-  // one everyone already knows (PasscodeLockPage).
-  //
-  // Now: going offline locks the whole app instantly, the same isLocked
-  // flag (persisted - see lock() in store/index.ts) used everywhere else
-  // the app locks. Revisiting after that lands on /auth/lock like any
-  // other lock, and PasscodeLockPage's existing handleUnlock() already does
-  // exactly what was asked for: the instant the entered passcode verifies,
-  // it calls both unlock() AND restorePrivateKey(val) with that SAME
-  // passcode (see its last two lines) - one entry, one screen, both the
-  // app-unlock and the wallet restore. No separate banner/prompt needed.
-  //
-  // Only after a REAL time offline (OFFLINE_LOCK_AFTER_MS). Phones drop the
-  // signal for a second or two all the time (lifts, 4G/5G hand-over), and the
-  // browser fires 'offline' for each blip: wiping the wallet key on every one
-  // left the app without its key mid-use - a Bring claim failed, and the
-  // session link to the account (signed with that key) couldn't be renewed,
-  // so screens came up empty.
-  useEffect(() => {
-    const OFFLINE_LOCK_AFTER_MS = 60_000
-    let timer: ReturnType<typeof setTimeout> | null = null
-    const lockNow = () => {
-      timer = null
-      if (navigator.onLine) return
-      const { walletAddress, isAuthenticated, passcodeLockEnabled, lock } = useAuthStore.getState()
-      // Every wallet type caches its key for this tab - drop it for all of them.
-      import('@/lib/security').then(({ clearSessionPrivateKey }) => clearSessionPrivateKey(walletAddress)).catch(() => {})
-      if (isAuthenticated && passcodeLockEnabled) {
-        lock()
-      }
-    }
-    const onOffline = () => { if (!timer) timer = setTimeout(lockNow, OFFLINE_LOCK_AFTER_MS) }
-    const onOnline = () => { if (timer) { clearTimeout(timer); timer = null } }
-    window.addEventListener('offline', onOffline)
-    window.addEventListener('online', onOnline)
-    return () => {
-      if (timer) clearTimeout(timer)
-      window.removeEventListener('offline', onOffline)
-      window.removeEventListener('online', onOnline)
-    }
-  }, [])
+  // No lock for being offline: losing signal (lifts, metro, 4G/5G hand-over)
+  // isn't a reason to throw the open wallet away - MetaMask and Phantom don't.
+  // The app still locks on a fresh launch and after 15 min in the background.
 
 
   // ── Auto-lock instantly when the browser was actually closed ─────────────
@@ -742,11 +698,10 @@ export default function App() {
   // app could react to. The result: coming back to the app after a while
   // away can leave it looking "stuck" - no new messages/balance updates
   // arrive, because the app has no idea its realtime connection is dead.
-  // If we've been hidden for a while, the safest fix is just a fresh reload
-  // (a full page load re-establishes every connection cleanly) rather than
-  // trying to detect and selectively repair whichever specific subscription
-  // silently died. Short backgrounds (switching apps briefly) don't trigger
-  // this - only genuinely long ones, where staleness is likely.
+  // After a while away: reconnect realtime if it's down and reload the data
+  // in place (useOnReconnect). This used to reload the whole page, which
+  // also threw away the open wallet - wallet apps keep it open until their
+  // own auto-lock. Short backgrounds (switching apps briefly) do nothing.
   useEffect(() => {
     let hiddenAt: number | null = null
     const STALE_AFTER_MS = 2 * 60 * 1000 // 2 minutes
@@ -778,9 +733,16 @@ export default function App() {
             lock()
           }
         }
+        // Back after a while: reload the data in place (chats, balance,
+        // activity - everything that reloads on reconnect). Never the page:
+        // a page reload threw the open wallet away, so it was cold - or
+        // 'Couldn't access your wallet' - right when the person came back.
+        // A new app version waits for the next launch.
         if (awayMs > STALE_AFTER_MS) {
-          // Reloading anyway: take a waiting new version with it.
-          void import('./lib/swUpdate').then(m => m.applyWaitingUpdate({ checkMs: 2500 })).then(done => { if (!done) window.location.reload() })
+          // A socket the phone killed silently is also caught by realtime's
+          // own heartbeat; this just doesn't wait for it.
+          void import('./lib/supabase').then(({ supabase }) => { if (!supabase.realtime.isConnected()) supabase.realtime.connect() }).catch(() => {})
+          void import('./lib/connectivity').then(m => m.refreshAfterResume())
         }
       }
     }

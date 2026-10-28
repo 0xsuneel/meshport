@@ -190,6 +190,20 @@ if (typeof window !== 'undefined') {
 export function isOnline(): boolean { return online }
 
 /**
+ * Back after a long time in the background: everything that loads again on
+ * reconnect (useOnReconnect) loads again now - in place, like a reconnect.
+ * This used to be a full page reload, which threw away the open wallet: a
+ * Privy wallet then had to start up from cold, and the first payment after
+ * coming back failed with "Couldn't access your wallet".
+ */
+export function refreshAfterResume(): void {
+  if (!online) { void check(); return } // reconnecting reloads by itself
+  if (waveTimer) clearTimeout(waveTimer)
+  emit(0)
+  waveTimer = setTimeout(() => { waveTimer = null; emit(1) }, SECOND_WAVE_MS)
+}
+
+/**
  * Runs `fn` each time the connection comes back: wave 0 at once, wave 1 a few
  * seconds later. Returns an unsubscribe.
  */

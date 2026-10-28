@@ -410,8 +410,10 @@ export function GoogleAuthPage() {
       }
       const existing = resolved.kind === 'existing' ? resolved.user : null
       // An account whose wallet is its Privy wallet opens with the Privy signer.
+      // Up to 30 s for Privy to sign in on a slow phone; then the account's
+      // record answers at once (privy.ts restorePrivyAccount).
       const privySigner = existing?.wallet_address
-        ? await import('@/wallet/privy').then(p => p.restorePrivyAccount(existing.wallet_address!, 10_000)).catch(() => null)
+        ? await import('@/wallet/privy').then(p => p.restorePrivyAccount(existing.wallet_address!, 30_000)).catch(() => null)
         : null
       // An account whose wallet is its Circle wallet opens with the Circle signer.
       const circleSigner = existing?.wallet_address
@@ -569,8 +571,10 @@ export function EmailOTPPage() {
     }
     const existing = resolved.kind === 'existing' ? resolved.user : null
     // An account whose wallet is its Privy wallet opens with the Privy signer.
+    // Up to 30 s for Privy to sign in on a slow phone; then the account's
+    // record answers at once (privy.ts restorePrivyAccount).
     const privySigner = existing?.wallet_address
-      ? await import('@/wallet/privy').then(p => p.restorePrivyAccount(existing.wallet_address!, 10_000)).catch(() => null)
+      ? await import('@/wallet/privy').then(p => p.restorePrivyAccount(existing.wallet_address!, 30_000)).catch(() => null)
       : null
     // An account whose wallet is its Circle wallet opens with the Circle signer.
     const circleSigner = existing?.wallet_address

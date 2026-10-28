@@ -15,7 +15,7 @@ type Bridge = Parameters<typeof setPrivyBridge>[0] & object
 function fakeBridge(over: Partial<Bridge> = {}): Bridge & { calls: unknown[][] } {
   const calls: unknown[][] = []
   return {
-    calls, ready: true, authenticated: true, wallets: [ADDR],
+    calls, ready: true, authenticated: true, wallets: [ADDR], linked: [],
     createWallet: async () => { calls.push(['create']); return '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
     signTransaction: async (tx, a) => { calls.push(['tx', tx, a]); return '0x02signed' },
     signMessage: async (m, a) => { calls.push(['msg', m, a]); return '0xsig' },
@@ -96,6 +96,11 @@ describe('wallet set-up and reopening', () => {
 
   it('reopens a Privy wallet once Privy lists it', async () => {
     setPrivyBridge(fakeBridge())
+    expect((await restorePrivyAccount(ADDR))?.address).toBe(ADDR)
+  })
+
+  it("opens from the account's record before the wallet iframe has connected it", async () => {
+    setPrivyBridge(fakeBridge({ wallets: [], linked: [ADDR] }))
     expect((await restorePrivyAccount(ADDR))?.address).toBe(ADDR)
   })
 })
