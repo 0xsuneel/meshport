@@ -85,8 +85,10 @@
       html.mp-opening #splash .txt { display: none; }
       html.mp-lift-pending #splash .tile { visibility: hidden; }
       /* "Updating MeshPort…" under the logo while a new version takes over (lib/swUpdate.ts). */
-      #splash .upd { position: absolute; left: 0; right: 0; top: calc(50% + 60px + 24px); text-align: center; font-size: 13px; font-weight: 600; color: #A9D9CF; animation: mpUpdIn .2s ease both; }
-      html.mp-refresh #splash .upd { color: inherit; }
+      /* Drawn by CSS from the first frame - a script adding it waited for the
+         new version's download (DOMContentLoaded), the very time it's on screen. */
+      html.mp-updating #splash::after { content: 'Updating MeshPort\2026'; position: absolute; left: 0; right: 0; top: calc(50% + 60px + 24px); text-align: center; font-size: 13px; font-weight: 600; color: #A9D9CF; animation: mpUpdIn .2s ease both; }
+      html.mp-refresh.mp-updating #splash::after { color: inherit; animation: none; }
       @keyframes mpUpdIn { from { opacity: 0; } to { opacity: 1; } }
 
       /* ── Opening splash ──────────────────────────────────────────────
@@ -146,6 +148,8 @@
       html.mp-refresh #splash .tile { width: 56px; height: 56px; background: transparent; border-radius: 0; opacity: 0; animation: mpSplashIn .3s ease .5s forwards; }
       html.mp-refresh #splash .mark { width: 56px; height: 56px; }
       html.mp-refresh #splash .mark g { stroke: currentColor; }
+      /* Updating: the logo is already on screen from before the reload (lib/swUpdate.ts) - keep it, no fade-in gap. */
+      html.mp-refresh.mp-updating #splash .tile { opacity: 1; animation: none; }
       @keyframes mpSplashIn { to { opacity: 1; } }
     </style>
   </head>

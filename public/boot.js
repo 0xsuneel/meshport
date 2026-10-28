@@ -76,14 +76,9 @@
       try {
         if (sessionStorage.getItem('mp_updating')) {
           sessionStorage.removeItem('mp_updating');
-          document.documentElement.classList.add('mp-updating'); // logo pulses (index.html)
-          document.addEventListener('DOMContentLoaded', function () {
-            var sp = document.getElementById('splash');
-            if (!sp || sp.querySelector('.upd')) return;
-            var u = document.createElement('div');
-            u.className = 'upd'; u.textContent = 'Updating MeshPort\u2026';
-            sp.appendChild(u);
-          });
+          // The logo pulses and "Updating MeshPort..." shows under it - both from
+          // this class, in CSS (index.html), so they're there from the first frame.
+          document.documentElement.classList.add('mp-updating');
         }
       } catch (e) {}
 
