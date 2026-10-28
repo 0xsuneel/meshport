@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from 'react'
 import { opensKeyboard } from '@/hooks/useKeyboardOpen'
-import { keyboardInset, virtualKeyboard } from '@/lib/keyboardOverlay'
+import { keyboardInset, virtualKeyboard, holdKeyboardOverlay } from '@/lib/keyboardOverlay'
 
 // The real, currently-visible viewport height in pixels - NOT the CSS
 // `100vh`/`100dvh` layout viewport. On iOS (Safari and Chrome, both
@@ -178,11 +178,14 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     vv?.addEventListener('scroll', schedule)
     window.addEventListener('resize', schedule)
     window.addEventListener('scroll', schedule)
-    // Android keyboard drawn over the app: no viewport event fires, this does.
+    // Android keyboard drawn over the app (only while this frame is up):
+    // no viewport event fires, this does.
+    const releaseOverlay = holdKeyboardOverlay()
     const vk = virtualKeyboard()
     vk?.addEventListener('geometrychange', schedule)
     return () => {
       vk?.removeEventListener('geometrychange', schedule)
+      releaseOverlay()
       cancelAnimationFrame(raf)
       cancelAnimationFrame(recheckRaf); clearTimeout(recheckTimer)
       document.removeEventListener('focusout', onFocusOut)
