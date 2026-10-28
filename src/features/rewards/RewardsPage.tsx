@@ -291,6 +291,13 @@ export function RewardsPage() {
   const [historyTab, setHistoryTab]         = useState<'earned' | 'claimed'>('earned')
 
   const userId = rewardsUserId(user?.id, walletAddress)
+  // Which card this person had last time (first-claim progress or the Claim
+  // card), so the page opens on the right one. Before, it always opened on
+  // the Claim card while loading and then switched to the first-claim card.
+  const firstClaimKey = userId ? `mp-rewards-first-claim:${userId}` : ''
+  const [rememberedNewUser] = useState<boolean | null>(() => {
+    try { const v = firstClaimKey ? localStorage.getItem(firstClaimKey) : null; return v === null ? null : v === '1' } catch { return null }
+  })
 
   const load = useCallback(async () => {
     if (!userId) { setLoading(false); return }
@@ -411,7 +418,13 @@ export function RewardsPage() {
   const doneToday = new Set(pointHistory.filter(p => p.points > 0 && p.created_at.slice(0, 10) === todayUtc).map(p => p.reason))
   const earnedToday = TASKS.filter(t => doneToday.has(`tx_reward:${t.type}`)).length * POINTS_PER_TX
   const earnedRows = pointHistory.filter(p => p.points > 0)
-  const newUser = !loading && totalPoints < MIN_CLAIM_POINTS && claimsHistory.length === 0
+  const loadedNewUser = totalPoints < MIN_CLAIM_POINTS && claimsHistory.length === 0
+  // While loading: the remembered card, else the first-claim one (most people).
+  const newUser = loading ? rememberedNewUser ?? true : loadedNewUser
+  useEffect(() => {
+    if (loading || !firstClaimKey) return
+    try { localStorage.setItem(firstClaimKey, loadedNewUser ? '1' : '0') } catch { /* storage full / blocked */ }
+  }, [loading, firstClaimKey, loadedNewUser])
 
   // ── Pieces ─────────────────────────────────────────────────────────────
   const hero = newUser ? (
@@ -422,15 +435,15 @@ export function RewardsPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
           <div>
             <div style={{ fontSize: 12.5, opacity: 0.75 }}>Your points</div>
-            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{totalPoints}<span style={{ fontSize: 13, fontWeight: 600, opacity: 0.7 }}> / {MIN_CLAIM_POINTS}</span></div>
+            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{loading ? <Skeleton className="inline-block align-middle w-10 h-7 rounded-lg bg-white/20" /> : totalPoints}<span style={{ fontSize: 13, fontWeight: 600, opacity: 0.7 }}> / {MIN_CLAIM_POINTS}</span></div>
           </div>
           <div style={{ borderLeft: '1px solid rgba(255,255,255,0.16)', paddingLeft: 14 }}>
             <div style={{ fontSize: 12.5, opacity: 0.75 }}>To first claim</div>
-            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{MIN_CLAIM_POINTS - totalPoints}<span style={{ fontSize: 13, fontWeight: 600, opacity: 0.7 }}> pts</span></div>
+            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{loading ? <Skeleton className="inline-block align-middle w-12 h-7 rounded-lg bg-white/20" /> : MIN_CLAIM_POINTS - totalPoints}<span style={{ fontSize: 13, fontWeight: 600, opacity: 0.7 }}> pts</span></div>
           </div>
         </div>
         <div style={{ height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.16)', marginTop: 14, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${Math.min(100, (totalPoints / MIN_CLAIM_POINTS) * 100)}%`, background: '#fff', borderRadius: 3, transition: 'width .4s' }} />
+          <div style={{ height: '100%', width: `${loading ? 0 : Math.min(100, (totalPoints / MIN_CLAIM_POINTS) * 100)}%`, background: '#fff', borderRadius: 3, transition: 'width .4s' }} />
         </div>
       </div>
       <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '10px 4px 0' }}>
