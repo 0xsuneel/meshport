@@ -76,7 +76,7 @@ export function RefundSheet({
   const over = max != null && typed > max + 1e-9
   return (
     <Sheet open={open} onClose={onClose}>
-      <div className="flex flex-col px-5 pb-8 pt-2 overflow-y-auto max-h-[88dvh] gap-5">
+      <div className="flex flex-col px-5 pb-8 pt-2 overflow-y-auto max-h-[calc(var(--frame-h,100dvh)*0.88)] gap-5">
 
         {/* Header */}
         <div className="flex items-center justify-between">

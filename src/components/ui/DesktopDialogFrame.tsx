@@ -48,7 +48,9 @@ export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex =
       style={{
         position: 'fixed', inset: 0, zIndex,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 'max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom))',
+        // keyboard-inset-height: Android draws the keyboard over the app
+        // (lib/keyboardOverlay) - the card stays centred above it. 0px elsewhere.
+        padding: 'max(16px, env(safe-area-inset-top)) 16px calc(max(16px, env(safe-area-inset-bottom)) + env(keyboard-inset-height, 0px))',
       }}
     >
       {/* Only the dim fades; the card is solid from its first frame (PopupDim). */}

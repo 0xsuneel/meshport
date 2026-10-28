@@ -59,7 +59,7 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
       <AnimatePresence>
         {open && (
           <DesktopDialogFrame key={sid} onClose={onClose} maxWidth={desktopMaxWidth} backClose={backClose}>
-            <div className="flex flex-col" style={{ maxHeight: 'min(86dvh, 760px)', minHeight: height === 'full' ? 'min(80dvh, 720px)' : undefined }}>{children}</div>
+            <div className="flex flex-col" style={{ maxHeight: 'min(calc(var(--frame-h, 100dvh) * 0.86), 760px)', minHeight: height === 'full' ? 'min(calc(var(--frame-h, 100dvh) * 0.8), 720px)' : undefined }}>{children}</div>
           </DesktopDialogFrame>
         )}
       </AnimatePresence>
@@ -78,7 +78,7 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
             className={`${pos} inset-0`} style={{ background: SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40, willChange: 'opacity' }} onClick={onClose} />,
           <motion.div key={sid} {...sheetDrag(sid, onClose)} {...SHEET_PANEL} variants={{ leave: leaveVariant(() => sheetExit(sid, SHEET_PANEL.exit)) }} exit="leave"
             role="dialog" aria-modal="true"
-            className={`${pos} bottom-0 left-0 right-0 bg-surface border-t border-border rounded-t-3xl flex flex-col${fixed ? ' mx-auto max-w-md' : ''}${height === 'full' ? ' h-[92dvh]' : ''}`}
+            className={`${pos} bottom-0 left-0 right-0 bg-surface border-t border-border rounded-t-3xl flex flex-col${fixed ? ' mx-auto max-w-md' : ''}${height === 'full' ? ' h-[calc(var(--frame-h,100dvh)*0.92)]' : ''}`}
             style={{ maxHeight: 'calc(100% - 40px)', zIndex: z, boxShadow: '0 80px 0 var(--surface)' }}>
             <div data-sheet-handle className="flex justify-center pt-2.5 pb-1 flex-shrink-0">
               <div style={{ width: 38, height: 5, borderRadius: 3, background: 'var(--border)' }} />

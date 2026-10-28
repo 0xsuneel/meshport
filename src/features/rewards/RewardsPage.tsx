@@ -661,7 +661,7 @@ export function RewardsPage() {
   }
 
   return (
-    <div className="flex flex-col bg-bg overflow-hidden h-dvh">
+    <div className="flex flex-col bg-bg overflow-hidden h-full flex-1 min-h-0">
       {overlays}
       {header}
       <div className="flex-1 overflow-y-auto">
