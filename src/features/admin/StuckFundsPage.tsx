@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import { AdminCard } from '@/components/admin/AdminCard'
+import { arcHandle } from '@/lib/userSearch'
 import { chainName, short, usd, ago, Pill, CopyText, Field, ActionButton, chip } from '@/components/admin/AdminUi'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -99,7 +100,7 @@ function Detail({ item, onClose, onChanged }: {
   const cctpKind = item.kind === 'claim' || item.kind === 'transfer' ? item.kind : null
   const state = diag?.state
   const link = txUrl(item)
-  const who = item.username ? `@${item.username}` : 'Unknown user'
+  const who = item.username ? arcHandle(item.username) : 'Unknown user'
 
   return (
     <AdminCard padding={18} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -280,7 +281,7 @@ export function StuckFundsPage() {
                   <span>{chainName(item.from)}</span><ArrowRight size={13} color="var(--text-secondary)" /><span>{chainName(item.to)}</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {item.username ? `@${item.username}` : short(item.wallet)} · {meta.short} · {ago(item.createdAt)}
+                  {item.username ? arcHandle(item.username) : short(item.wallet)} · {meta.short} · {ago(item.createdAt)}
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>

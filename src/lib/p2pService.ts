@@ -1338,8 +1338,16 @@ export interface CounterpartyProfile { userId: string; username?: string; displa
  * mutating the trades themselves, since a trade has two possible
  * counterparties (buyer or seller) depending on which one `myUserId` is.
  */
-export async function fetchCounterpartyProfiles(trades: P2PTrade[], myUserId: string): Promise<Map<string, CounterpartyProfile>> {
-  const ids = [...new Set(trades.map(t => (t.buyerId === myUserId ? t.sellerId : t.buyerId)).filter(Boolean))]
+export function fetchCounterpartyProfiles(trades: P2PTrade[], myUserId: string): Promise<Map<string, CounterpartyProfile>> {
+  return fetchUserProfiles(trades.map(t => (t.buyerId === myUserId ? t.sellerId : t.buyerId)))
+}
+
+/**
+ * Username / display name / wallet for these user ids, in one request.
+ * Ids it can't resolve are simply missing - callers fall back to the wallet.
+ */
+export async function fetchUserProfiles(userIds: string[]): Promise<Map<string, CounterpartyProfile>> {
+  const ids = [...new Set(userIds.filter(Boolean))]
   const map = new Map<string, CounterpartyProfile>()
   if (ids.length === 0) return map
   try {
@@ -1349,7 +1357,7 @@ export async function fetchCounterpartyProfiles(trades: P2PTrade[], myUserId: st
     for (const r of rows) {
       map.set(r.id, { userId: r.id, username: r.username, displayName: r.display_name, walletAddress: r.wallet_address })
     }
-  } catch { /* non-fatal - History page falls back to showing the raw wallet address */ }
+  } catch { /* non-fatal - callers fall back to showing the raw wallet address */ }
   return map
 }
 
@@ -2801,12 +2809,9 @@ export async function adminFetchEscrowPaused(): Promise<boolean> {
 }
 
 /**
- * Surfaces the contract's actual authorized admin wallet so P2PAdminPage.tsx
- * can warn directly if the currently logged-in admin's own wallet doesn't
- * match it - release()/pause()/unpause() all require msg.sender===admin
- * on-chain, so a mismatch here means those actions will never work no
- * matter how many times they're retried, regardless of whether this
- * device's wallet is unlocked.
+ * The contract's ADMIN wallet - the only one that can run adminResolve()
+ * (carry out an investigated dispute). pause()/unpause() and every freeze
+ * are PAUSER actions (contracts/P2PMeshportEscrowV3.sol), not admin ones.
  */
 export async function adminFetchEscrowAdminAddress(): Promise<string | null> {
   try {

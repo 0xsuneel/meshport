@@ -27,10 +27,12 @@ import {
   fetchTradeMessages, currencySymbol, type P2PTrade, type P2PMessage,
   fetchAllOffersAdmin, subscribeToAllOffers, adminCancelOffer, type P2POffer,
   fetchOfferConsumedAmounts, offerRemainingAmount, adminFreezeOfferViaWallet, adminFetchOfferFrozen,
+  fetchUserProfiles, type CounterpartyProfile,
 } from '@/lib/p2pService'
+import { arcHandle } from '@/lib/userSearch'
 import {
   connectInjectedWallet, disconnectInjectedWallet, getConnectedInjectedWalletAddress, hasInjectedWallet,
-  getTradeOnChain, checkIsPauser, checkIsInvestigator, getEscrowAdminAddress,
+  getTradeOnChain, checkIsPauser, checkIsInvestigator, getEscrowAdminAddress, P2P_ESCROW_CONTRACT_ADDRESS,
   type OnChainTrade,
 } from '@/lib/p2pEscrowContract'
 
@@ -52,6 +54,73 @@ function SectionHeader({ icon, title, live }: { icon: ReactNode; title: string; 
       <h2 style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, margin: 0 }}>{title}</h2>
       {live && <span style={{ width: 6, height: 6, borderRadius: 3, background: COLORS.success, marginLeft: 2 }} title="Live" />}
     </div>
+  )
+}
+
+// A trade's state in plain words.
+const TRADE_STATUS: Record<string, string> = {
+  awaiting_seller_confirmation: 'Waiting for the seller to accept',
+  waiting_for_buyer: 'Waiting for the buyer to pay',
+  payment_sent: 'Buyer says they paid - waiting for the seller to release',
+  released: 'Released to the buyer',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  expired: 'Expired',
+}
+const DISPUTE_STATUS: Record<string, string> = {
+  open: 'Dispute open', resolved_buyer: 'Dispute: resolved for buyer', resolved_seller: 'Dispute: resolved for seller',
+}
+// contracts/P2PMeshportEscrowV3.sol SELLER_RELEASE_TIMEOUT
+const SELLER_RELEASE_TIMEOUT_MS = 24 * 3600_000
+function since(iso?: string): string {
+  if (!iso) return ''
+  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+  return m < 60 ? `${m}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`
+}
+
+/** Small tag saying which wallet / login an action needs. */
+function NeedsTag({ children }: { children: ReactNode }) {
+  return <span style={{ fontSize: 10, fontWeight: 700, color: COLORS.muted, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: '1px 5px', marginLeft: 2 }}>{children}</span>
+}
+
+// Who can do what - mirrors the contract's modifiers (onlyPauser /
+// onlyInvestigator / onlyAdmin / role-manager multisig) and the app-level
+// actions that only need this admin login.
+const ROLE_GUIDE: Array<{ who: string; how: string; can: string[]; money: string }> = [
+  { who: 'Your admin login', how: 'No wallet needed', money: 'Never moves USDC on-chain',
+    can: ['Turn the P2P marketplace on or off', 'Cancel a trade before the buyer pays (after that: freeze or dispute first)', 'Cancel an offer with no escrow left', 'Ban a user from P2P', 'Message both sides during a dispute'] },
+  { who: 'Pauser wallet', how: 'Connect below', money: 'Never moves USDC',
+    can: ['Emergency pause / resume the whole escrow', 'Freeze / unfreeze a trade (unfreeze only before it\u2019s investigated)', 'Freeze / unfreeze a sell offer', 'Force-freeze a paid trade the seller left for 24h+'] },
+  { who: 'Investigator wallet', how: 'A different wallet from whoever froze the trade', money: 'Never moves USDC',
+    can: ['Decide a frozen trade: release to the buyer, or refund the seller'] },
+  { who: 'Admin wallet', how: 'Different from the freezer and the investigator', money: 'Moves the USDC',
+    can: ['Carry out the investigator\u2019s decision'] },
+  { who: 'Role managers', how: '3 fixed signers - 2 must agree, then a 2-hour wait', money: 'Never moves USDC',
+    can: ['Add or remove Pausers and Investigators', 'Hand over the Admin role (see Role Managers below)'] },
+]
+
+function RoleGuide() {
+  return (
+    <details open style={{ margin: '0 16px 10px', borderRadius: 12, background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
+      <summary style={{ padding: '12px 14px', fontSize: 13, fontWeight: 700, color: COLORS.text, cursor: 'pointer' }}>Who can do what</summary>
+      <div style={{ padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {ROLE_GUIDE.map(r => (
+          <div key={r.who} style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{r.who}</span>
+              <span style={{ fontSize: 11, color: COLORS.muted }}>{r.how}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, marginLeft: 'auto', color: r.money === 'Moves the USDC' ? COLORS.warning : COLORS.muted }}>{r.money}</span>
+            </div>
+            <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 12, color: COLORS.muted, lineHeight: 1.6 }}>
+              {r.can.map(c => <li key={c}>{c}</li>)}
+            </ul>
+          </div>
+        ))}
+        <p style={{ fontSize: 11, color: COLORS.muted, margin: 0, lineHeight: 1.5 }}>
+          Every on-chain step is signed by a browser wallet (MetaMask etc.) that holds the role - never by this admin login. Pauser and Investigator can never be the same wallet.
+        </p>
+      </div>
+    </details>
   )
 }
 
@@ -95,6 +164,10 @@ export function P2PAdminPage() {
   const [freezingOfferIds, setFreezingOfferIds] = useState<Set<string>>(new Set())
 
   useEffect(() => { adminFetchEscrowPaused().then(setEscrowPaused) }, [])
+  // .arc name (and wallet) for every buyer / seller / ban target shown.
+  const [profiles, setProfiles] = useState<Map<string, CounterpartyProfile>>(new Map())
+  const [escrowAdmin, setEscrowAdmin] = useState<string | null>(null)
+  useEffect(() => { getEscrowAdminAddress().then(setEscrowAdmin).catch(() => setEscrowAdmin(null)) }, [])
   useEffect(() => { loadSettings() }, [loadSettings])
 
   // Defaults to enabled if the row hasn't loaded yet or doesn't exist -
@@ -139,7 +212,21 @@ export function P2PAdminPage() {
       .finally(() => setDisputeMessagesLoading(false))
   }, [disputeTarget])
 
-  const load = async () => { setLoading(true); setTrades(await adminFetchAllActiveTrades()); setLoading(false) }
+  const load = async () => {
+    setLoading(true)
+    const rows = await adminFetchAllActiveTrades()
+    setTrades(rows)
+    setLoading(false)
+    fetchUserProfiles(rows.flatMap(t => [t.buyerId, t.sellerId])).then(m => setProfiles(prev => new Map([...prev, ...m])))
+  }
+  /** name.arc (or wallet) for a user id. */
+  const nameOf = (userId: string, wallet?: string) => {
+    const p = profiles.get(userId)
+    return p?.username ? arcHandle(p.username) : p?.displayName || (wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : `${userId.slice(0, 8)}…`)
+  }
+  useEffect(() => {
+    if (banTarget && !profiles.has(banTarget)) fetchUserProfiles([banTarget]).then(m => setProfiles(prev => new Map([...prev, ...m])))
+  }, [banTarget, profiles])
   useEffect(() => { load() }, [])
 
   // Live updates - mirrors the Offers panel's own subscribeToAllOffers just
@@ -396,8 +483,28 @@ export function P2PAdminPage() {
         <h1 style={{ fontSize: 20, fontWeight: 700, color: COLORS.text, margin: 0, letterSpacing: '-0.2px' }}>P2P Admin</h1>
       </div>
 
+      <RoleGuide />
+
       <SectionHeader icon={<Sliders size={16} color={COLORS.text} />} title="Escrow Controls" />
       <div style={{ padding: '0 16px', marginBottom: 10 }}>
+        <div style={{ marginBottom: 10, padding: 12, borderRadius: 12, background: escrowPaused ? 'color-mix(in srgb, var(--danger) 8%, transparent)' : COLORS.surface, border: `1px solid ${escrowPaused ? 'color-mix(in srgb, var(--danger) 35%, transparent)' : COLORS.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>Escrow contract</span>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, color: escrowPaused ? COLORS.error : 'var(--success-text)', background: escrowPaused ? 'color-mix(in srgb, var(--danger) 14%, transparent)' : 'color-mix(in srgb, var(--success) 14%, transparent)' }}>
+              {escrowPaused ? 'PAUSED' : 'RUNNING'}
+            </span>
+            <span style={{ fontSize: 11, color: COLORS.muted }}>Marketplace {p2pEnabled ? 'on' : 'off'}</span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 8, fontSize: 11, color: COLORS.muted }}>
+            {P2P_ESCROW_CONTRACT_ADDRESS && <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>Contract <AddressChip address={P2P_ESCROW_CONTRACT_ADDRESS} size={11} /></span>}
+            {escrowAdmin && <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>Admin wallet <AddressChip address={escrowAdmin} size={11} /></span>}
+          </div>
+          <p style={{ fontSize: 11, color: COLORS.muted, margin: '8px 0 0', lineHeight: 1.5 }}>
+            {escrowPaused
+              ? 'Paused: nobody can deposit, mark paid, release, cancel or withdraw - including trades already running. Freezing, investigating and admin resolution still work.'
+              : 'Running normally. Pauser and Investigator wallets are listed under Role Managers.'}
+          </p>
+        </div>
         {/* ROOT-CAUSE FIX: Emergency Pause, trade Freeze/Unfreeze, and offer
             Freeze/Unfreeze used to sign with this dashboard's own MeshPort
             session key - which is essentially never a Pauser (a genuinely
@@ -455,8 +562,12 @@ export function P2PAdminPage() {
           }}
         >
           {escrowPaused ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
-          {pauseToggling ? 'Updating…' : escrowPaused ? 'Escrow Paused - Tap to Resume' : 'Emergency Pause Escrow'}
+          {pauseToggling ? 'Updating…' : escrowPaused ? 'Resume escrow' : 'Emergency pause escrow'}
+          <NeedsTag>Pauser wallet</NeedsTag>
         </button>
+        <p style={{ fontSize: 11, color: COLORS.muted, margin: '6px 2px 0', lineHeight: 1.5 }}>
+          Hard stop for an incident (e.g. a suspected exploit). Blocks deposits, marking paid, releases, cancels and withdrawals for everyone, trades in progress included. Disputes can still be frozen, investigated and resolved.
+        </p>
         {/*
           Two different controls, two different scopes - worth keeping
           visually distinct so an admin doesn't reach for the wrong one:
@@ -480,8 +591,12 @@ export function P2PAdminPage() {
           }}
         >
           <Power size={16} />
-          {p2pToggling ? 'Updating…' : !settingsLoaded ? 'Loading…' : p2pEnabled ? 'P2P Marketplace Enabled - Tap to Disable' : 'P2P Marketplace Disabled - Tap to Enable'}
+          {p2pToggling ? 'Updating…' : !settingsLoaded ? 'Loading…' : p2pEnabled ? 'Turn marketplace off' : 'Turn marketplace on'}
+          <NeedsTag>Admin login</NeedsTag>
         </button>
+        <p style={{ fontSize: 11, color: COLORS.muted, margin: '6px 2px 0', lineHeight: 1.5 }}>
+          Soft stop for maintenance. Hides P2P from users: no new offers or trades. Trades already running can still finish. Nothing changes on-chain.
+        </p>
       </div>
 
       <div style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: 24 }}>
@@ -491,7 +606,7 @@ export function P2PAdminPage() {
       <div style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: 4 }}>
         <SectionHeader icon={<ListChecks size={16} color={COLORS.text} />} title="Active Trades" live />
         <p style={{ padding: '0 16px', fontSize: 12, color: COLORS.muted, marginBottom: 14, marginTop: -2 }}>
-          {trades.length} active trade{trades.length === 1 ? '' : 's'} (awaiting seller confirmation, buyer, or payment sent)
+          {trades.length} active trade{trades.length === 1 ? '' : 's'} - waiting for the seller, waiting for the buyer to pay, or paid and waiting for release.
         </p>
       </div>
 
@@ -503,20 +618,32 @@ export function P2PAdminPage() {
           </div>
         ) : trades.map(t => (
           <div key={t.id} style={{ background: COLORS.surface, borderRadius: 16, padding: 14, marginBottom: 10, border: `1px solid ${t.adminFrozen ? 'color-mix(in srgb, var(--danger) 40%, transparent)' : COLORS.border}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>{t.amountUsdc} USDC · {currencySymbol(t.currency)}{t.amountFiat}</span>
-              {t.adminFrozen && <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.error, background: 'color-mix(in srgb, var(--danger) 12%, transparent)', padding: '3px 8px', borderRadius: 10 }}>FROZEN</span>}
+              <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', padding: '3px 8px', borderRadius: 10 }}>{t.offerType === 'sell' ? 'Sell offer' : 'Buy offer'}</span>
+                {t.disputeStatus !== 'none' && <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.warning, background: 'color-mix(in srgb, var(--warning) 14%, transparent)', padding: '3px 8px', borderRadius: 10 }}>{DISPUTE_STATUS[t.disputeStatus] ?? t.disputeStatus}</span>}
+                {t.adminFrozen && <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.error, background: 'color-mix(in srgb, var(--danger) 12%, transparent)', padding: '3px 8px', borderRadius: 10 }}>FROZEN</span>}
+              </span>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 11, color: COLORS.muted, marginBottom: 2 }}>
-              <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>Buyer: <AddressChip address={t.buyerId} size={11} mono={false} /></span>
-              <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>Seller: <AddressChip address={t.sellerId} size={11} mono={false} /></span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '3px 10px', fontSize: 12, color: COLORS.muted, marginBottom: 8 }}>
+              <span>Buyer</span><span style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0, color: COLORS.text, fontWeight: 600 }}>{nameOf(t.buyerId, t.buyerWallet)}{t.buyerWallet && <AddressChip address={t.buyerWallet} size={11} color={COLORS.muted} />}</span>
+              <span>Seller</span><span style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0, color: COLORS.text, fontWeight: 600 }}>{nameOf(t.sellerId, t.sellerWallet)}{t.sellerWallet && <AddressChip address={t.sellerWallet} size={11} color={COLORS.muted} />}</span>
+              <span>Status</span><span style={{ color: COLORS.text }}>{TRADE_STATUS[t.status] ?? t.status}</span>
+              <span>Payment</span><span>{t.paymentMethod} · {currencySymbol(t.currency)}{t.pricePerUsdc}/USDC</span>
+              <span>Timeline</span><span>Started {since(t.createdAt)}{t.paymentSentAt ? ` · paid ${since(t.paymentSentAt)}` : ''}{t.status !== 'payment_sent' && t.expiresAt ? ` · expires ${new Date(t.expiresAt).toLocaleString()}` : ''}</span>
+              <span>Trade</span><span style={{ minWidth: 0 }}><AddressChip address={t.id} size={11} color={COLORS.muted} /></span>
             </div>
-            <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 10 }}>Status: {t.status} · Method: {t.paymentMethod}</div>
+            {t.status === 'payment_sent' && t.paymentSentAt && !t.adminFrozen && Date.now() - new Date(t.paymentSentAt).getTime() > SELLER_RELEASE_TIMEOUT_MS && (
+              <p style={{ fontSize: 11, color: COLORS.warning, margin: '0 0 8px', lineHeight: 1.4 }}>
+                Paid over 24h ago and the seller hasn't released - a Pauser can freeze it to start the dispute path.
+              </p>
+            )}
 
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <button onClick={() => toggleFreeze(t)} disabled={!canFreeze} title={!canFreeze ? 'Connect a wallet holding the Pauser role first (see Escrow Controls above).' : undefined}
                 style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.warning, fontSize: 12, fontWeight: 600, opacity: canFreeze ? 1 : 0.5 }}>
-                <Snowflake size={12} /> {t.adminFrozen ? 'Unfreeze' : 'Freeze'}
+                <Snowflake size={12} /> {t.adminFrozen ? 'Unfreeze' : 'Freeze'} <NeedsTag>Pauser</NeedsTag>
               </button>
               <button
                 onClick={() => doCancel(t)}
@@ -524,16 +651,16 @@ export function P2PAdminPage() {
                 title={(t.status === 'payment_sent' || t.offerType === 'buy') && !t.adminFrozen && t.disputeStatus !== 'open' ? 'Freeze or open a dispute first - the counterparty already fulfilled their obligation' : undefined}
                 style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.error, fontSize: 12, fontWeight: 600, opacity: cancellingIds.has(t.id) ? 0.6 : 1 }}
               >
-                <XCircle size={12} /> {cancellingIds.has(t.id) ? 'Cancelling…' : 'Cancel Trade'}
+                <XCircle size={12} /> {cancellingIds.has(t.id) ? 'Cancelling…' : 'Cancel trade'} <NeedsTag>Admin login</NeedsTag>
               </button>
               <button onClick={() => setDisputeTarget(t)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: 'var(--accent-text)', fontSize: 12, fontWeight: 600 }}>
-                <Scale size={12} /> Resolve Dispute
+                <Scale size={12} /> Dispute <NeedsTag>Pauser → Investigator → Admin</NeedsTag>
               </button>
               <button onClick={() => setBanTarget(t.buyerId)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 12, fontWeight: 600 }}>
-                <Ban size={12} /> Ban Buyer
+                <Ban size={12} /> Ban buyer <NeedsTag>Admin login</NeedsTag>
               </button>
               <button onClick={() => setBanTarget(t.sellerId)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 12, fontWeight: 600 }}>
-                <Ban size={12} /> Ban Seller
+                <Ban size={12} /> Ban seller <NeedsTag>Admin login</NeedsTag>
               </button>
             </div>
           </div>
@@ -632,7 +759,7 @@ export function P2PAdminPage() {
               <ShieldAlert size={18} color={COLORS.error} />
               <p style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, margin: 0 }}>Ban User</p>
             </div>
-            <div style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>User: <AddressChip address={banTarget} size={12} mono={false} /></div>
+            <div style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>User: <b style={{ color: COLORS.text }}>{nameOf(banTarget, profiles.get(banTarget)?.walletAddress)}</b>{profiles.get(banTarget)?.walletAddress && <AddressChip address={profiles.get(banTarget)!.walletAddress!} size={11} />}</div>
             <textarea value={banReason} onChange={e => setBanReason(e.target.value)} placeholder="Reason for ban" rows={3}
               style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 10, fontSize: 'max(var(--fs-field, 0px), 13px)', marginBottom: 12, boxSizing: 'border-box', fontFamily: 'inherit' }} />
             <div style={{ display: 'flex', gap: 8 }}>
