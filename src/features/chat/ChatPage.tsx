@@ -7,6 +7,8 @@ import { ActionIcon } from '@/components/ui/ActionIcon'
 import { TokenLogo } from '@/components/ui/TokenLogo'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { PopupOpen } from '@/hooks/usePopupOpen'
+import { visibleFrame } from '@/hooks/useVisibleViewportHeight'
+import { virtualKeyboard } from '@/lib/keyboardOverlay'
 import { SHEET_BACKDROP, SHEET_DIM, LIGHT_DIM, DIALOG_CARD, SNACKBAR_MOTION, DIALOG_BACKDROP, MENU_MOTION, PAGE_TRANSITION, PUSH_BACK_MS, DESKTOP_FADE_TRANSITION } from '@/lib/motion'
 import { _plainByContent, plainTextOf, messagePreview, parseMedia, isDecryptFailure, splitCaption } from './chatMessageText'
 import { ARC_EXPLORER, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
@@ -3312,13 +3314,17 @@ export function ChatConversationPage() {
 
   // Stats card: hide on keyboard open, show on keyboard close
   // Only touches statsCardRef DOM - nothing else
+  // The space above the keyboard, not visualViewport.height: on Android the
+  // keyboard is drawn over the app (lib/keyboardOverlay) and the visual
+  // viewport never shrinks - the keyboard was never seen as open there, so
+  // tapping the messages didn't close it and the card stayed.
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
 
     // Wait for full render before capturing base height
     let baseHeight = 0
-    const init = setTimeout(() => { baseHeight = vv.height }, 800)
+    const init = setTimeout(() => { baseHeight = visibleFrame().height }, 800)
 
     const hide = () => {
       const c = statsCardRef.current
@@ -3347,15 +3353,18 @@ export function ChatConversationPage() {
 
     const onResize = () => {
       if (!baseHeight) return
-      const diff = baseHeight - vv.height
+      const diff = baseHeight - visibleFrame().height
       if (diff > 100) hide()
       else if (diff < 50) show()
     }
 
+    const vk = virtualKeyboard()
     vv.addEventListener('resize', onResize)
+    vk?.addEventListener('geometrychange', onResize)
     return () => {
       clearTimeout(init)
       vv.removeEventListener('resize', onResize)
+      vk?.removeEventListener('geometrychange', onResize)
     }
   }, [])
 
