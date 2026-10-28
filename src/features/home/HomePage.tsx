@@ -4212,7 +4212,13 @@ export function HomePage() {
                   style={{ position: 'relative', height: 98, borderRadius: 16, border: 'none', cursor: 'pointer', font: 'inherit', textAlign: 'center',
                     background: t.bg, padding: '10px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
                     opacity: accountLock.locked ? 0.45 : 1 }}>
-                  <span style={{ width: 32, height: 32, borderRadius: 10, background: 'color-mix(in srgb, var(--surface) 70%, transparent)', display: 'grid', placeItems: 'center' }}>{t.icon}</span>
+                  <span style={{ position: 'relative', width: 32, height: 32, borderRadius: 10, background: 'color-mix(in srgb, var(--surface) 70%, transparent)', display: 'grid', placeItems: 'center' }}>
+                    {t.icon}
+                    {/* An open P2P trade: the same dot as on the sheet's P2P tile. */}
+                    {t.path === '/p2p' && ongoingTradesCount > 0 && (
+                      <span aria-label="Open P2P trade" style={{ position: 'absolute', top: -3, right: -3, width: 10, height: 10, borderRadius: '50%', background: 'var(--danger)', border: '2px solid var(--bg)' }} />
+                    )}
+                  </span>
                   <span style={{ minWidth: 0, maxWidth: '100%' }}>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 650, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.label}</span>
                     <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.sub}</span>
