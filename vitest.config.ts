@@ -8,6 +8,8 @@ import path from 'path'
 // The `@` alias is the single piece of app config the tests actually depend on,
 // so it is the single piece repeated here. Keep it in sync with vite.config.ts.
 export default defineConfig({
+  // The app's build id (vite.config.ts) - a fixed one for tests.
+  define: { __MP_BUILD__: JSON.stringify('test-build') },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

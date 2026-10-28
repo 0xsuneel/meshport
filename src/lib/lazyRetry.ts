@@ -18,6 +18,23 @@ import { isOnline, onReconnect } from './connectivity'
 
 const RELOAD_KEY = 'meshport_stale_build_reload'
 const RETRY_COOLDOWN_MS = 30_000
+const MY_BUILD: string = typeof __MP_BUILD__ === 'string' ? __MP_BUILD__ : ''
+
+/**
+ * Is a newer version live? A file that failed to load is the same error
+ * whether the deploy removed it or a weak connection dropped it - only the
+ * server's /version.json tells them apart. 'unknown' when it can't be asked.
+ */
+export async function buildVerdict(timeoutMs = 8000): Promise<'stale' | 'current' | 'unknown'> {
+  if (!MY_BUILD) return 'unknown'
+  try {
+    const res = await fetch('/version.json', { cache: 'no-store', signal: AbortSignal.timeout(timeoutMs) })
+    if (!res.ok) return 'unknown'
+    const j = await res.json()
+    if (typeof j?.build !== 'string' || !j.build) return 'unknown'
+    return j.build === MY_BUILD ? 'current' : 'stale'
+  } catch { return 'unknown' }
+}
 
 export function isChunkLoadError(err: unknown): boolean {
   const msg = String((err as any)?.message ?? err ?? '')
@@ -51,8 +68,13 @@ export async function recoverFromStaleBuild(force = false): Promise<boolean> {
   const attempt = recent ? state.n + 1 : 1
   if (!force && attempt > 2) return false
   try { sessionStorage.setItem(RELOAD_KEY, JSON.stringify({ at: Date.now(), n: attempt })) } catch { /* ignore */ }
+  // Only a real update drops the offline copy. When this version is still the
+  // live one (or the server can't be asked), the file failed to download on a
+  // weak connection: dropping the copy made every reload download the whole
+  // app again over that same connection, fail again and land on "MeshPort
+  // was updated" - forever. A plain reload keeps the copy, which loads fast.
   // 1st try: drop cached files. 2nd try (or manual): also remove the SW.
-  await clearSwCaches(force || attempt >= 2)
+  if (await buildVerdict() === 'stale') await clearSwCaches(force || attempt >= 2)
   const url = new URL(window.location.href)
   url.searchParams.set('_v', String(Date.now()))
   window.location.replace(url.toString())

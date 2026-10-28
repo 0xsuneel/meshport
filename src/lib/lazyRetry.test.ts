@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { onVitePreloadError, isChunkLoadError } from './lazyRetry'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { onVitePreloadError, isChunkLoadError, buildVerdict } from './lazyRetry'
 
 // Vite 5's preload helper, as it handles a failed import(): it dispatches a
 // cancelable 'vite:preloadError' and only rethrows when nobody cancelled it.
@@ -30,5 +30,25 @@ describe('stale build: a file of an older version fails to load', () => {
     const m = await vitePreload(missingChunk, e => e.preventDefault())
     expect(m).toBeUndefined()
     expect(() => (m as any).PasscodeLockPage).toThrow(/Cannot read properties of undefined/)
+  })
+})
+
+describe('buildVerdict: an update, or a file the connection dropped?', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+  const live = (build: unknown) => vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ build }), { status: 200 })))
+
+  it('the same version live: not an update (keep the offline copy)', async () => {
+    live('test-build')
+    expect(await buildVerdict()).toBe('current')
+  })
+
+  it('a different version live: an update', async () => {
+    live('someothersha')
+    expect(await buildVerdict()).toBe('stale')
+  })
+
+  it("the server can't be asked (weak connection): unknown, not an update", async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
+    expect(await buildVerdict()).toBe('unknown')
   })
 })
