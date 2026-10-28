@@ -68,15 +68,9 @@ export const CHAIN_CLAIM_FEATURE_MAP: Record<string, string> = {
   Injective_Testnet:     'injective_claim_enabled',
 }
 
-// ─── UB (Circle Gateway) vs CCTP mechanism override ───────────────────────────
-// Which bridge mechanism a chain uses is normally a hardcoded constant per
-// chain (`chain.ub` in MultichainTransferPage.tsx's CHAINS list) - these two maps
-// let the Admin Panel override that per chain, WITHOUT changing what happens
-// today: every row is seeded with `<chain>_ub_enabled = true` and
-// `<chain>_cctp_enabled = false`, i.e. exactly what's hardcoded already.
-// Only covers the 11 chains that actually have a working UB path at all
-// (the rest are CCTP-only and have nothing to override) - see
-// supabase-chains-ub-cctp-override.sql.
+// ─── Transfer routes: Unified Balance (Circle Gateway) and CCTP ──────────────
+// Only the chains with a Unified Balance path have route switches; every
+// other Transfer chain is CCTP only, so its chain switch is all there is.
 export const CHAIN_UB_FEATURE_MAP: Record<string, string> = {
   eth:      'ethereum_ub_enabled',
   base:     'base_ub_enabled',
@@ -107,83 +101,130 @@ export const CHAIN_CCTP_OVERRIDE_FEATURE_MAP: Record<string, string> = {
   sol:      'solana_cctp_enabled',
 }
 
-// Chains whose CCTP route is ON until an admin row says otherwise. Solana
-// (added after the seed) starts with both routes, as the live UB chains are
-// set (supabase/migrations/20261025120000_solana_routes_seed.sql).
-const CCTP_DEFAULT_ON = new Set(['sol'])
+// ─── Personal and Business accounts: separate switches ───────────────────────
+// Every chain switch exists twice: once for personal accounts (the original
+// keys above) and once for business accounts (the same key with a `biz_`
+// prefix). Turning a chain or a route off for one kind of account never
+// touches the other.
+//
+//   Transfer  chain  <c>_transfer_enabled      biz_<c>_transfer_enabled
+//             UB     <c>_ub_enabled            biz_<c>_ub_enabled
+//             CCTP   <c>_cctp_enabled          biz_<c>_cctp_enabled
+//   Bring     chain  <c>_claim_enabled         biz_<c>_claim_enabled
+//             UB     <c>_claim_ub_enabled      biz_<c>_claim_ub_enabled
+//             CCTP   <c>_claim_cctp_enabled    biz_<c>_claim_cctp_enabled
+//   Settle    chain  -                         biz_<c>_settle_enabled  (CCTP)
+//
+// No overrides and no fallbacks: a route is offered only when its own switch
+// is on (and the chain can do it), and a chain is offered only when its
+// switch is on and at least one of its routes is. Both routes off = the chain
+// is off. A switch whose row hasn't loaded yet counts as on - except the
+// Transfer CCTP route on Unified Balance chains, which has always started off
+// (Solana: on) - so nothing breaks before the rows exist.
 
-// Resolves the EFFECTIVE mechanism for a chain that statically supports UB
-// (i.e. its CHAINS entry has ub: true). Defaults reproduce today's exact
-// behavior (UB active, nothing changes) until the Admin Panel toggles are
-// used - see supabase-chains-ub-cctp-override.sql's header comment for the
-// full priority order and reasoning:
-//   1. CCTP override toggle ON  → 'cctp' (explicit admin override)
-//   2. UB toggle ON (default)   → 'ub'   (today's behavior, unchanged)
-//   3. both OFF                 → 'cctp' (never leave a chain with no path)
-export function resolveChainMechanism(settings: SettingsMap, chainId: string): 'ub' | 'cctp' {
-  const cctpFeature = CHAIN_CCTP_OVERRIDE_FEATURE_MAP[chainId]
-  if (cctpFeature && settings[cctpFeature]?.enabled) return 'cctp'
-  const ubFeature = CHAIN_UB_FEATURE_MAP[chainId]
-  if (!ubFeature) return 'ub' // not a UB-capable chain's id - shouldn't be called, but stay safe
-  const ubRow = settings[ubFeature]
-  if (!ubRow) return 'ub' // row not loaded/seeded yet - preserve current default
-  return ubRow.enabled ? 'ub' : 'cctp'
+export type AccountKind = 'personal' | 'business'
+export type Route = 'ub' | 'cctp'
+
+const prefix = (kind: AccountKind) => (kind === 'business' ? 'biz_' : '')
+/** `ethereum_transfer_enabled` → `ethereum`. */
+const chainBase = (feature: string | undefined, suffix: string) =>
+  feature && feature.endsWith(suffix) ? feature.slice(0, -suffix.length) : null
+
+const on = (settings: SettingsMap, feature: string | null, dflt = true) => {
+  if (!feature) return dflt
+  const row = settings[feature]
+  return row ? row.enabled : dflt
 }
 
-// Independent-availability version of resolveChainMechanism above, for the
-// Multichain Transfer route picker (below the amount box): instead of always
-// collapsing to a single mechanism, this reports EVERY mechanism the Admin
-// Panel currently has switched on for the chain, so the UI can offer a
-// choice between them when more than one is available.
-//
-//   - Not a UB-capable chain at all (no entry in CHAIN_UB_FEATURE_MAP)
-//     → ['cctp'] only, same as today - nothing to pick between.
-//   - UB toggle ON (default) and CCTP override OFF (default)
-//     → ['ub'] only - reproduces today's exact behavior, no picker shown.
-//   - UB toggle OFF, CCTP override ON (or OFF)
-//     → ['cctp'] only.
-//   - Both toggles ON
-//     → ['ub', 'cctp'] - both shown, user picks which one is actually used.
-//   - Both toggles OFF
-//     → ['cctp'] - never leave a chain with no route at all.
-export function resolveAvailableMechanisms(settings: SettingsMap, chainId: string): Array<'ub' | 'cctp'> {
-  const ubFeature = CHAIN_UB_FEATURE_MAP[chainId]
-  if (!ubFeature) return ['cctp'] // CCTP-only chain - no UB path to offer
+// Chains whose Transfer CCTP route is on until a row says otherwise.
+const CCTP_DEFAULT_ON = new Set(['sol'])
 
-  const ubRow = settings[ubFeature]
-  const ubEnabled = ubRow ? ubRow.enabled : true // default ON, preserves current behavior
+/** The setting keys for one chain, for one kind of account. */
+export function transferKeys(kind: AccountKind, chainId: string) {
+  const c = chainBase(CHAIN_TRANSFER_FEATURE_MAP[chainId], '_transfer_enabled')
+  const ub = chainBase(CHAIN_UB_FEATURE_MAP[chainId], '_ub_enabled')
+  const p = prefix(kind)
+  return {
+    chain: c ? `${p}${c}_transfer_enabled` : null,
+    ub: ub ? `${p}${ub}_ub_enabled` : null,
+    cctp: ub ? `${p}${ub}_cctp_enabled` : null,
+  }
+}
+export function bringKeys(kind: AccountKind, sdkChainId: string) {
+  const c = chainBase(CHAIN_CLAIM_FEATURE_MAP[sdkChainId], '_claim_enabled')
+  const p = prefix(kind)
+  return {
+    chain: c ? `${p}${c}_claim_enabled` : null,
+    ub: c ? `${p}${c}_claim_ub_enabled` : null,
+    cctp: c ? `${p}${c}_claim_cctp_enabled` : null,
+  }
+}
+export function settleKey(sdkChainId: string): string | null {
+  const c = chainBase(CHAIN_CLAIM_FEATURE_MAP[sdkChainId], '_claim_enabled')
+  return c ? `biz_${c}_settle_enabled` : null
+}
 
-  const cctpFeature = CHAIN_CCTP_OVERRIDE_FEATURE_MAP[chainId]
-  const cctpRow = cctpFeature ? settings[cctpFeature] : undefined
-  const cctpEnabled = cctpRow ? cctpRow.enabled : CCTP_DEFAULT_ON.has(chainId) // default OFF (Solana: ON)
+// ─── Transfer ────────────────────────────────────────────────────────────────
+/**
+ * The routes Transfer offers to `chainId` for this kind of account, Unified
+ * Balance first. Empty = the chain is off. A chain without a Unified Balance
+ * path is CCTP only: its chain switch alone decides.
+ */
+export function transferRoutes(settings: SettingsMap, chainId: string, kind: AccountKind = 'personal'): Route[] {
+  const k = transferKeys(kind, chainId)
+  if (!on(settings, k.chain)) return []
+  if (!k.ub) return ['cctp']
+  const routes: Route[] = []
+  if (on(settings, k.ub)) routes.push('ub')
+  if (on(settings, k.cctp, CCTP_DEFAULT_ON.has(chainId))) routes.push('cctp')
+  return routes
+}
 
-  const mechanisms: Array<'ub' | 'cctp'> = []
-  if (ubEnabled) mechanisms.push('ub')
-  if (cctpEnabled) mechanisms.push('cctp')
-  if (mechanisms.length === 0) mechanisms.push('cctp') // never leave a chain with no route
-  return mechanisms
+export function isChainEnabledForTransfer(settings: SettingsMap, chainId: string, kind: AccountKind = 'personal'): boolean {
+  return transferRoutes(settings, chainId, kind).length > 0
+}
+
+// ─── Bring ───────────────────────────────────────────────────────────────────
+/**
+ * The routes Bring offers from `sdkChainId` for this kind of account. `can`
+ * is what the chain itself supports right now (Unified Balance chain, a
+ * gasless CCTP router); without it, only the switches are read.
+ */
+export function bringRoutes(settings: SettingsMap, sdkChainId: string, kind: AccountKind = 'personal',
+  can: { ub: boolean; cctp: boolean } = { ub: true, cctp: true }): Route[] {
+  const k = bringKeys(kind, sdkChainId)
+  if (!on(settings, k.chain)) return []
+  const routes: Route[] = []
+  if (can.ub && on(settings, k.ub)) routes.push('ub')
+  if (can.cctp && on(settings, k.cctp)) routes.push('cctp')
+  return routes
+}
+
+export function isChainEnabledForBring(settings: SettingsMap, sdkChainId: string, kind: AccountKind = 'personal',
+  can?: { ub: boolean; cctp: boolean }): boolean {
+  return bringRoutes(settings, sdkChainId, kind, can).length > 0
+}
+
+// ─── Settle (business) ───────────────────────────────────────────────────────
+/** Business Settle / Claim All from `sdkChainId` (always CCTP). */
+export function isChainEnabledForSettle(settings: SettingsMap, sdkChainId: string): boolean {
+  return on(settings, settleKey(sdkChainId))
+}
+
+/**
+ * Chains whose balance is worth reading at all: what this account can Bring,
+ * and for a business also what it can Settle. Each screen then applies its
+ * own list (Bring, Settle) on top.
+ */
+export function isChainEnabledForClaim(settings: SettingsMap, sdkChainId: string, kind: AccountKind = 'personal'): boolean {
+  return isChainEnabledForBring(settings, sdkChainId, kind)
+    || (kind === 'business' && isChainEnabledForSettle(settings, sdkChainId))
 }
 
 // Defaults to ON if the row hasn't loaded yet / doesn't exist - never breaks
 // the app before the migration has been run.
 export function isCoinEnabled(settings: SettingsMap, coinId: string): boolean {
   const feature = COIN_FEATURE_MAP[coinId]
-  if (!feature) return true
-  const row = settings[feature]
-  if (!row) return true
-  return row.enabled
-}
-
-export function isChainEnabledForTransfer(settings: SettingsMap, chainId: string): boolean {
-  const feature = CHAIN_TRANSFER_FEATURE_MAP[chainId]
-  if (!feature) return true
-  const row = settings[feature]
-  if (!row) return true
-  return row.enabled
-}
-
-export function isChainEnabledForClaim(settings: SettingsMap, chainId: string): boolean {
-  const feature = CHAIN_CLAIM_FEATURE_MAP[chainId]
   if (!feature) return true
   const row = settings[feature]
   if (!row) return true

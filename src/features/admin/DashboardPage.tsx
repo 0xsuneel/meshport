@@ -29,9 +29,11 @@ export function DashboardPage() {
   // supabase-chains-transfer-claim-split.sql). Excluding all three keeps
   // per-chain toggles out of the feature count entirely, matching what
   // FeaturesPage actually treats as a "feature".
-  const NON_FEATURE_CATEGORIES = ['coins', 'chains', 'chains_transfer', 'chains_claim', 'maintenance']
-  const activeFeatures = rows.filter((r) => !NON_FEATURE_CATEGORIES.includes(r.category) && r.enabled).length
-  const totalFeatures = rows.filter((r) => !NON_FEATURE_CATEGORIES.includes(r.category)).length
+  // Every chain switch (personal chains_*, business biz_chains_*) is left out.
+  const NON_FEATURE_CATEGORIES = ['coins', 'maintenance']
+  const isFeature = (c: string) => !NON_FEATURE_CATEGORIES.includes(c) && !c.startsWith('chains') && !c.startsWith('biz_chains')
+  const activeFeatures = rows.filter((r) => isFeature(r.category) && r.enabled).length
+  const totalFeatures = rows.filter((r) => isFeature(r.category)).length
   const coinsOn = rows.filter((r) => r.category === 'coins' && r.enabled).length
   const totalCoins = rows.filter((r) => r.category === 'coins').length
   // "Supported Chains" reflects Multichain Transfer's 21 chains (the

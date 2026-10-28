@@ -27,7 +27,8 @@ import { notifyRewardMultichain } from '@/lib/notifications'
 import { formatAmount, shortenAddress, midShortenAddress, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { useSettingsStore } from '@/store/settingsStore'
-import { isChainEnabledForTransfer, resolveChainMechanism, resolveAvailableMechanisms } from '@/lib/featureFilters'
+import { transferRoutes } from '@/lib/featureFilters'
+import { useAccountKind } from '@/lib/merchant'
 import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ARC_RPCS, ARC_NETWORK } from '@/lib/arc'
 import { isSolanaAddress } from '@/lib/solana'
@@ -1064,30 +1065,21 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // (every chain enabled until its row arrives) could stay permanent rather
   // than momentary if Transfer was the first page opened in the session.
   useEffect(() => { loadSettings() }, [loadSettings])
-  // Applies the Admin Panel's optional per-chain UB/CCTP override (see
-  // featureFilters.ts's resolveChainMechanism + supabase-chains-ub-cctp-
-  // override.sql) at this ONE spot - every `chain.ub` / `ch.ub` read
-  // elsewhere in this file traces back to objects that came from
-  // ENABLED_CHAINS, so overriding it here is enough for the whole flow to
-  // respect it without touching any of those individual call sites. Only
-  // ever recomputes `ub` for chains that statically support it in the first
-  // place (`c.ub === true`) - CCTP-only chains (`c.ub === false`) are left
-  // exactly as-is, since they have no UB path to override. Defaults
-  // reproduce today's exact behavior until the Admin Panel toggles are used.
+  // Admin Panel → Chains, for this kind of account (personal / business):
+  // which chains Transfer offers and, for each, which routes. A chain with no
+  // route switched on isn't offered at all. `ub` on each chain here is its
+  // first route (Unified Balance when on) - what the list shows times for;
+  // the route actually used is `chain` below (the picker).
+  const accountKind = useAccountKind()
+  const routesOf = (id: string) => transferRoutes(settingsMap, id, accountKind)
   const ENABLED_CHAINS = ALL_CHAINS
-    .filter(c => isChainEnabledForTransfer(settingsMap, c.id))
-    .map(c => c.ub ? { ...c, ub: resolveChainMechanism(settingsMap, c.id) === 'ub' } : c)
+    .filter(c => routesOf(c.id).length > 0)
+    .map(c => ({ ...c, ub: routesOf(c.id)[0] === 'ub' }))
   const baseChain = ENABLED_CHAINS.find(c => c.id === selectedChain)
     ?? (() => {
-      // Same resolution as ENABLED_CHAINS above, applied here too - this
-      // fallback only runs if the selected chain isn't in ENABLED_CHAINS
-      // (e.g. it was just disabled for Transfer entirely while already
-      // selected). Without this, `chain.ub` would briefly reflect the raw,
-      // unresolved default instead of the admin's actual UB/CCTP choice for
-      // that chain - a real way the two could end up mixed, even if a rare
-      // one to hit in practice.
+      // The selected chain was just switched off while open: same shape.
       const c = ALL_CHAINS.find(c => c.id === selectedChain)!
-      return c.ub ? { ...c, ub: resolveChainMechanism(settingsMap, c.id) === 'ub' } : c
+      return { ...c, ub: routesOf(c.id)[0] === 'ub' }
     })()
   const popularChains = ENABLED_CHAINS.filter(c => c.popular)
   const moreChains = ENABLED_CHAINS.filter(c => !c.popular)
@@ -1102,12 +1094,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }, [settingsLoaded, settingsMap])
 
   // ── Route picker (UB vs CCTP v2) - shown below the amount box ──────────────
-  // Independent of the single-mechanism resolution above: for chains the
-  // Admin Panel has switched BOTH routes on for, the user gets to pick which
-  // one this transfer actually uses. For every other chain (only one route
-  // on, or the chain has no UB path at all) there's nothing to pick - the
-  // one available route is used automatically and no selector is shown.
-  const availableMechanisms = resolveAvailableMechanisms(settingsMap, baseChain.id)
+  // Both routes on for this chain: the user picks. One route: it's used, no
+  // picker. (A chain with none isn't in ENABLED_CHAINS; if it was selected
+  // when switched off, CCTP keeps the screen consistent until it moves on.)
+  const routesForChain = routesOf(baseChain.id)
+  const availableMechanisms: Array<'ub' | 'cctp'> = routesForChain.length ? routesForChain : ['cctp']
   const [selectedRoute, setSelectedRoute] = useState<'ub' | 'cctp' | null>(null)
   const [showRouteOptions, setShowRouteOptions] = useState(false)
 

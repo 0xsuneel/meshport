@@ -217,6 +217,18 @@ export function getMerchantState(): Readonly<State> { return state }
 /** Subscribe to merchant state changes (non-React code). Starts a load. */
 export function subscribeMerchant(cb: () => void): () => void { return subscribe(cb) }
 
+/** Personal or business, for the Admin Panel's per-account chain switches
+ *  (featureFilters.ts) - the same rule as isBusinessAccountNow. */
+export function currentAccountKind(): 'personal' | 'business' {
+  return isBusinessAccountNow() ? 'business' : 'personal'
+}
+export function useAccountKind(): 'personal' | 'business' {
+  const s = useSyncExternalStore(subscribe, getSnapshot)
+  if (s.loaded) return s.accountType === 'business' || s.status === 'approved' ? 'business' : 'personal'
+  const hint = readMerchantHint()
+  return hint?.business === true || hint?.approved === true ? 'business' : 'personal'
+}
+
 export function useMerchant(): State & { isMerchant: boolean; refresh: () => Promise<void> } {
   const s = useSyncExternalStore(subscribe, getSnapshot)
   return { ...s, isMerchant: s.loaded ? s.status === 'approved' : readHint(), refresh: refreshMerchant }

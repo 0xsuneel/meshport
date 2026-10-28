@@ -33,6 +33,7 @@
 
 import { staggeredMap } from './utils'
 import { isChainEnabledForClaim } from './featureFilters'
+import { currentAccountKind } from './merchant'
 import type { SettingsMap } from './adminSupabase'
 import { EXTERNAL_CHAINS, resolveRpcList } from '@/blockchain/chains'
 
@@ -111,7 +112,8 @@ export async function scanAllChainBalances(
   }
   if (inFlight) return inFlight
 
-  const chainIds = Object.keys(CHAIN_CONFIG).filter(id => isChainEnabledForClaim(settings, id))
+  const kind = currentAccountKind()
+  const chainIds = Object.keys(CHAIN_CONFIG).filter(id => isChainEnabledForClaim(settings, id, kind))
 
   inFlight = staggeredMap(chainIds, async (chainId) => ({
     chainId,
