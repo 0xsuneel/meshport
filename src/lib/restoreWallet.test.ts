@@ -26,6 +26,9 @@ vi.mock('@/wallet', () => ({
   WalletFrameError: class extends Error { code = '' },
 }))
 
+// Privy doesn't list this wallet (an old device-kept Google / email one).
+vi.mock('@/wallet/privy', () => ({ restorePrivyAccount: async () => null, privyState: () => '' }))
+
 import { restorePrivateKey } from './restoreWallet'
 
 const flush = () => new Promise(r => setTimeout(r, 0))
@@ -63,5 +66,27 @@ describe('restorePrivateKey', () => {
     expect(await silent).toBe(false)
     expect(await loud).toBe(false)
     expect(ui.setWalletRecoveryNeeded).toHaveBeenCalledWith(true)
+  })
+  it('a caller with no passcode that joins a wrong-passcode attempt shows no banner', async () => {
+    const typo = restorePrivateKey('000000', { silent: true })
+    const mount = restorePrivateKey()
+    await flush()
+    for (let i = 0; i < 5; i++) { releaseFrame(); await flush() }
+    expect(await typo).toBe(false)
+    expect(await mount).toBe(false)
+    expect(ui.setWalletRecoveryNeeded).not.toHaveBeenCalled()
+  })
+
+  it('a Google / email wallet is not opened twice for a passcode it does not use', async () => {
+    auth.walletSource = 'social-auto'
+    try {
+      const mount = restorePrivateKey(undefined, { silent: true })
+      const unlock = restorePrivateKey('123456')
+      await flush()
+      for (let i = 0; i < 5; i++) { releaseFrame(); await flush() }
+      expect(await mount).toBe(false)
+      expect(await unlock).toBe(false)
+      expect(unlockWallet).toHaveBeenCalledTimes(1)
+    } finally { auth.walletSource = 'create' }
   })
 })

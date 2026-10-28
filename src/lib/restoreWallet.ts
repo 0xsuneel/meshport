@@ -79,10 +79,13 @@ export async function restorePrivateKey(rawPasscode?: string, opts?: { silent?: 
     // failure says nothing about this passcode: a create / import wallet
     // after the lock screen stayed locked for the whole session, and the
     // next payment failed with "Couldn't access your wallet".
-    if (ok || !rawPasscode || running.passcode === rawPasscode) {
-      // The attempt may have been a silent one (the lock screen's): this
-      // caller isn't, so a failure shows the recovery banner as its own would.
-      if (!ok && !opts?.silent) {
+    // Google / email wallets open without a passcode: the result stands.
+    const samePasscode = running.passcode === rawPasscode || !passcodeOpens(useAuthStore.getState().walletSource)
+    if (ok || !rawPasscode || samePasscode) {
+      // A silent attempt sets no banner. This caller isn't silent: show it,
+      // unless that attempt had a passcode this caller doesn't - it may have
+      // been a typo, which isn't a reason for "recover your wallet".
+      if (!ok && !opts?.silent && (samePasscode || running.passcode === null)) {
         const { walletAddress, signer } = useAuthStore.getState()
         useUIStore.getState().setWalletRecoveryNeeded(!!walletAddress && !signer)
       }
@@ -141,6 +144,11 @@ let pendingRawPasscode: string | null = null
 export function stashRawPasscode(pc: string): void { pendingRawPasscode = pc }
 export function getPendingRawPasscode(): string | null { return pendingRawPasscode }
 export function clearRawPasscode(): void { pendingRawPasscode = null }
+
+/** Whether a passcode can open this kind of wallet (the frame's passcode copy: created / imported). */
+function passcodeOpens(walletSource: string | null | undefined): boolean {
+  return walletSource !== 'privy' && walletSource !== 'social-auto' && walletSource !== 'circle'
+}
 
 async function attemptRestore(rawPasscode?: string): Promise<boolean> {
   const { walletAddress, signer, walletSource, setWallet } = useAuthStore.getState()
