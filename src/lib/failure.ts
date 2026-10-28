@@ -97,7 +97,7 @@ export function classifyFailure(err: unknown, opts: { reverted?: boolean } = {})
   if (has(s, 'fetch failed', 'failed to fetch', 'network', 'timeout', 'timed out', '502', '503', '504', 'bad gateway', 'gateway timeout', 'no runners', 'connection'))
     return fail('uncertain', false)
   if (has(s, 'transaction rejected', 'rejected')) return fail('rejected')
-  if (has(s, 'unavailable', 'quota', 'rate limit', '429')) return fail('service_unavailable')
+  if (has(s, 'unavailable', 'quota', 'rate limit', 'request limit', '429')) return fail('service_unavailable')
   const text = cleanErrorText(raw)
   return fail('unknown', true, text ? `${text.replace(/[.\s]+$/, '')} - nothing was sent.` : FAILURE_MESSAGES.unknown)
 }

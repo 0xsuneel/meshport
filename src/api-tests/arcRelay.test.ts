@@ -64,6 +64,28 @@ describe('meshport_sendRawTransactionAndWait', () => {
     expect(r.error.message).toMatch(/insufficient funds/)
   })
 
+  it("a provider's own quota error never stands in for the nodes' answer", async () => {
+    let first = true
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
+      const { method, id } = JSON.parse(init.body)
+      if (method === 'eth_sendRawTransaction' && first) {
+        first = false // answers first: an out-of-credits provider
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32000, message: 'User monthly free request limit has been reached' } }), { status: 402 })
+      }
+      await new Promise(r => setTimeout(r, 20))
+      const out = method === 'eth_sendRawTransaction' ? { error: { code: -32000, message: 'insufficient funds for gas * price + value' } } : { result: null }
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id, ...out }), { status: 200 })
+    }))
+    const r = await relay([RAW, HASH, 300])
+    expect(r.error.code).toBe(-32003)
+    expect(r.error.message).toMatch(/insufficient funds/)
+  })
+
+  it('only quota errors (even with HTTP 200): not a rejection - pending/unknown', async () => {
+    stub(m => m === 'eth_sendRawTransaction' ? { error: { code: -32000, message: 'User monthly free request limit has been reached' } } : { result: null })
+    expect((await relay([RAW, HASH, 300])).result).toMatchObject({ status: 'pending', broadcast: 'unknown' })
+  })
+
   it('no node reachable: pending/unknown (the phone keeps watching), bad input rejected', async () => {
     stub(() => new TypeError('fetch failed'))
     expect((await relay([RAW, HASH, 300])).result).toMatchObject({ status: 'pending', broadcast: 'unknown' })
