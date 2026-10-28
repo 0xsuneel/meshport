@@ -11,7 +11,7 @@ vi.mock('@/store', () => ({ useAuthStore: { getState: () => auth, subscribe: (l:
 const reports: string[] = []
 vi.mock('./errorReport', () => ({ reportPerf: (l: string) => reports.push(l) }))
 
-import { useWalletReadiness, startWalletReadiness, noteRestoring, setPrivyConnectedProbe, walletGeneration, noteNetworkReady, recompute } from './walletReadiness'
+import { useWalletReadiness, startWalletReadiness, noteRestoring, setPrivyConnectedProbe, walletGeneration, noteNetworkReady, recompute, untilSignerReady } from './walletReadiness'
 
 const W = '0x4cb2ff6492d51edfb54f0cff3b517d7f207d80a1'
 const phase = () => useWalletReadiness.getState().phase
@@ -62,5 +62,26 @@ describe('wallet readiness', () => {
     expect(walletGeneration()).toBe(g + 1)
     setAuth({ walletAddress: '0x2222222222222222222222222222222222222222' })
     expect(walletGeneration()).toBe(g + 2)
+  })
+
+  it('after unlock, waits until a Privy wallet can really sign - not just until it is listed', async () => {
+    let connected = false
+    setPrivyConnectedProbe(() => connected)
+    setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'privy', signer: {} })
+    let done: boolean | null = null
+    void untilSignerReady().then(v => { done = v })
+    await Promise.resolve()
+    expect(done).toBeNull() // listed, iframe still connecting
+    connected = true; recompute() // Privy's (fresh) iframe connected
+    await Promise.resolve()
+    expect(done).toBe(true)
+  })
+
+  it('settles false when the wallet ends up locked instead', async () => {
+    setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'create', signer: null })
+    noteRestoring(true)
+    const r = untilSignerReady()
+    noteRestoring(false) // no passcode copy opened it
+    expect(await r).toBe(false)
   })
 })

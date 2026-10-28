@@ -138,6 +138,23 @@ export function startWalletReadiness(): void {
   recompute()
 }
 
+/**
+ * Resolves true once the wallet can sign (signer_ready), false if it settles
+ * without that (locked, error, signed out). Event-driven - no polling.
+ */
+export function untilSignerReady(): Promise<boolean> {
+  const settled = (p: WalletPhase): boolean | null =>
+    p === 'signer_ready' ? true : p === 'error' || p === 'locked' || p === 'idle' ? false : null
+  return new Promise(resolve => {
+    const now = settled(useWalletReadiness.getState().phase)
+    if (now !== null) { resolve(now); return }
+    const unsub = useWalletReadiness.subscribe(s => {
+      const v = settled(s.phase)
+      if (v !== null) { unsub(); resolve(v) }
+    })
+  })
+}
+
 /** Test hook. */
 export function resetWalletReadiness(): void {
   generation = 0; restoring = false; lastError = null; hadSigner = false; privyConnected = null; resumeStartedAt = null
