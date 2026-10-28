@@ -21,8 +21,13 @@ const signer = { address: SENDER, signTransaction: async (args: unknown) => { aw
 
 vi.mock('./arc', async () => {
   const actual = await vi.importActual<typeof import('./arc')>('./arc')
-  return { ...actual, arcRpcJson: async () => ({ result: '0x3635c9adc5dea00000' }) } // 1000e18
+  return { ...actual, arcRpcJson: async (body: { method: string }) => {
+    if (body.method === 'eth_getBalance' && balanceRead === 'fails') throw new Error('timeout')
+    if (body.method === 'eth_getBalance' && balanceRead === 'low') return { result: '0xde0b6b3a7640000' } // 1e18
+    return { result: '0x3635c9adc5dea00000' } // 1000e18
+  } }
 })
+let balanceRead: 'ok' | 'fails' | 'low' = 'ok'
 
 vi.mock('./payIntentService', () => ({
   createPayIntent: (req: { recipientAddress: string; amountAtomic: string; callTarget?: string | null }) => createPayIntent(req),
@@ -119,5 +124,22 @@ describe('order payment memo', () => {
     await sendUSDC({ signer, to: RECIPIENT, amount: 10, idempotencyKey: 'key-n', memo: { code: 'abc', label: 'ORD-1' } })
     expect(createPayIntent).toHaveBeenCalledTimes(2)
     expect(createPayIntent.mock.calls[1][0].callTarget).toBe('0x5294E9927c3306DcBaDb03fe70b92e01cCede505')
+  })
+})
+
+describe('balance check before sending', () => {
+  beforeEach(() => { sendTransaction.mockClear(); balanceRead = 'ok' })
+
+  it('a balance read that fails does not stop the payment as "not enough balance"', async () => {
+    balanceRead = 'fails'
+    const res = await sendUSDC({ signer, to: RECIPIENT, amount: 1, idempotencyKey: 'bal-fails' })
+    expect(sendTransaction).toHaveBeenCalledTimes(1)
+    expect(res.state).toBe('success')
+  })
+
+  it('a balance that really is too small still stops it', async () => {
+    balanceRead = 'low'
+    await expect(sendUSDC({ signer, to: RECIPIENT, amount: 5, idempotencyKey: 'bal-low' })).rejects.toThrow(/Insufficient USDC/)
+    expect(sendTransaction).not.toHaveBeenCalled()
   })
 })
