@@ -463,6 +463,11 @@ const SEND_METHOD = 'meshport_sendRawTransactionAndWait'
 const SEND_WAIT_MAX_MS = 8000
 const RECEIPT_POLL_MS = 200 // Arc blocks are ~0.5s
 const ALREADY_SENT = /already known|known transaction|already imported|nonce too low|replacement transaction underpriced/i
+// A provider refusing the REQUEST (its own plan, quota, key or rate limit -
+// e.g. dRPC's "User monthly free request limit has been reached") says
+// nothing about the transaction: that node simply didn't take part. Only a
+// node that looked at the transaction can reject it.
+const PROVIDER_REFUSAL = /request limit|free tier|quota|rate.?limit|too many requests|api key|apikey|unauthori[sz]ed|forbidden|payment required|upgrade your plan|exceeded (?:the |your )?(?:plan|limit)/i
 
 async function broadcastToAll(raw) {
   const body = { jsonrpc: '2.0', id: 1, method: 'eth_sendRawTransaction', params: [raw] }
@@ -485,12 +490,19 @@ async function broadcastToAll(raw) {
       })
         .then(r => {
           usage.note('upstream', label(url), 'eth_sendRawTransaction', r.status === 429 ? 'rate_limited' : r.ok ? 'ok' : 'error', Date.now() - startedAt)
+          // An HTTP error (402 out of credits, 401 bad key, 429, 5xx) is the
+          // provider failing, not an answer about the transaction.
+          if (!r.ok) throw new Error(`HTTP ${r.status} from ${label(url)}`)
           return r.json().catch(() => null)
         }, (e) => {
           usage.note('upstream', label(url), 'eth_sendRawTransaction', 'error', 0)
           throw e
         })
         .then(j => {
+          if (j && !j.result && j.error && PROVIDER_REFUSAL.test(String(j.error.message || ''))) {
+            console.warn(`[arc-rpc] ${label(url)} refused the request: ${String(j.error.message).slice(0, 120)}`)
+            return
+          }
           if (j) anyAnswer = true
           if (j && j.result) return finish({ accepted: true, maybeSent: true, rejection: null, anyAnswer: true })
           if (j && j.error && ALREADY_SENT.test(String(j.error.message || ''))) {
