@@ -91,7 +91,7 @@ export function PaymentDetailSheet({
   return (
     <Sheet open={!!paymentNow} onClose={onClose}>
       {payment && (
-        <div className="flex flex-col gap-5 px-5 pb-6 pt-2 overflow-y-auto max-h-[88dvh]">
+        <div className="flex flex-col gap-5 px-5 pb-6 pt-2 overflow-y-auto max-h-[calc(var(--frame-h,100dvh)*0.88)]">
 
           {/* Customer */}
           <div className="flex items-center gap-3 rounded-2xl bg-bg border border-border p-3.5">

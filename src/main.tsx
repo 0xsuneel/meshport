@@ -32,6 +32,7 @@ import { MotionConfig } from 'framer-motion'
 import './lib/leaveGuard'
 // No iPhone zoom-in on small text fields (they're raised to 16px on touch).
 import './lib/inputZoomGuard'
+import './lib/keyboardOverlay'
 import App from './App.tsx'
 // Geist, self-hosted (no Google Fonts request on every open).
 import '@fontsource-variable/geist'

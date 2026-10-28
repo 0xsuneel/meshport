@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from 'react'
 import { opensKeyboard } from '@/hooks/useKeyboardOpen'
+import { keyboardInset, virtualKeyboard } from '@/lib/keyboardOverlay'
 
 // The real, currently-visible viewport height in pixels - NOT the CSS
 // `100vh`/`100dvh` layout viewport. On iOS (Safari and Chrome, both
@@ -58,7 +59,19 @@ export function visibleFrame(): { top: number; height: number } {
   // Pinch-zoomed: the visible area is a magnified part of the page - keep
   // the frame on the whole layout viewport instead of chasing the zoom.
   if (Math.abs(vv.scale - 1) > 0.01) return { top: 0, height: window.innerHeight }
-  return { top: Math.max(0, Math.round(vv.offsetTop)), height: Math.round(vv.height) }
+  const top = Math.max(0, Math.round(vv.offsetTop))
+  // Android with the keyboard drawn over the app (lib/keyboardOverlay): no
+  // viewport shrinks, so take the keyboard's own height off.
+  const inset = keyboardInset()
+  if (inset > 0) return { top, height: Math.round(vv.height - inset) }
+  // iOS 26: after the keyboard closes, visualViewport can stay ~24px shorter
+  // than the screen for good (Apple FB19889436 / WebKit 297779) - the frame
+  // then stopped short of the bottom. With no field focused and nothing
+  // panned, a gap that small is that bug, not browser chrome (iOS toolbars
+  // are taller), so the frame takes the whole screen.
+  const gap = window.innerHeight - vv.height
+  if (top === 0 && gap > 1 && gap <= 30 && !opensKeyboard(document.activeElement)) return { top: 0, height: window.innerHeight }
+  return { top, height: Math.round(vv.height) }
 }
 
 /**
@@ -98,7 +111,7 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     // in the same frame as the pan - no one-frame jump. Written only when
     // it changed: these events fire on every scroll, and a height write
     // re-lays-out the whole app.
-    let lastTop = -1, lastHeight = ''
+    let lastTop = -1, lastHeight = '', lastPx = -1
     // Keyboard up = a text field has focus AND the visible area has actually
     // shrunk from its full height (at this width). Marked on the frame as
     // data-kb so CSS hides the bottom nav in the very frame the keyboard
@@ -122,6 +135,10 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
       const h = top === 0 && Math.abs(height - window.innerHeight) <= 1 ? '100%' : `${height}px`
       if (top !== lastTop) { el.style.top = `${top}px`; lastTop = top }
       if (h !== lastHeight) { el.style.height = h; lastHeight = h }
+      // The visible height for sheets inside (ActionSheet etc.): dvh units
+      // don't shrink for a keyboard on iPhone, nor for one drawn over the
+      // app on Android.
+      if (height !== lastPx) { el.style.setProperty('--frame-h', `${height}px`); lastPx = height }
       // The document itself never scrolls in this app: undo a sideways
       // shift, and the scroll iOS can leave behind once the keyboard closes.
       if (window.scrollX) window.scrollTo(0, window.scrollY)
@@ -161,7 +178,11 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     vv?.addEventListener('scroll', schedule)
     window.addEventListener('resize', schedule)
     window.addEventListener('scroll', schedule)
+    // Android keyboard drawn over the app: no viewport event fires, this does.
+    const vk = virtualKeyboard()
+    vk?.addEventListener('geometrychange', schedule)
     return () => {
+      vk?.removeEventListener('geometrychange', schedule)
       cancelAnimationFrame(raf)
       cancelAnimationFrame(recheckRaf); clearTimeout(recheckTimer)
       document.removeEventListener('focusout', onFocusOut)
