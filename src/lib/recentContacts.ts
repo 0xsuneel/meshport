@@ -78,11 +78,14 @@ export async function fetchRecentContacts(
     if (s && r) { sentRows = s; recvRows = r }
   }
   if (!sentRows) {
+    // Failed payments are history only - nothing moved, so they never count
+    // as paid / received here (lib/failure.ts). The startup call filters the
+    // same way (home_bootstrap).
     const { authHeaders } = await import('./chatService')
     const headers = await authHeaders()
     const [sentRes, recvRes] = await Promise.all([
-      fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.send&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at`, { headers }),
-      fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.receive&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at`, { headers }),
+      fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.send&status=neq.failed&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at`, { headers }),
+      fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.receive&status=neq.failed&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at`, { headers }),
     ])
     ;[sentRows, recvRows] = await Promise.all([sentRes.json(), recvRes.json()])
   }
