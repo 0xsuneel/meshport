@@ -173,14 +173,19 @@ export function clearChatSessionSeeds() {
   _keysCache.clear()
 }
 
-/** This wallet's chat seed: from the wallet key when unlocked, else this device's copy. */
+/** This wallet's chat seed: this device's copy (saved from the wallet earlier), else from the wallet key. */
 async function getMySeed(walletAddress: string): Promise<Uint8Array | null> {
+  // The same seed either way (it's derived from the wallet) - the device copy
+  // costs nothing, the wallet costs a signature round (2 Privy signatures for
+  // a Google / email wallet) on every page load.
+  const saved = await loadSeed(walletAddress)
+  if (saved) return saved
   const seed = await seedFromWallet(walletAddress)
   if (seed) {
     saveSeed(walletAddress, seed)
     return seed
   }
-  return loadSeed(walletAddress)
+  return null
 }
 
 // ── Remembered contact identities (per device, per my wallet) ──────────────
@@ -262,13 +267,21 @@ export async function ensureChatKeysReady(walletAddress: string, myUserId: strin
     // with the wallet's signature. Called again when the wallet unlocks.
     const signer = (await import('@/store')).useAuthStore.getState().signer
     if (!signer) return
+    const { supabase } = await import('@/lib/supabase')
+    const { data: current } = await supabase.from('users').select('chat_public_key, chat_key_sig').eq('id', myUserId).maybeSingle()
+    // Already published, from this device's copy of the seed and with a
+    // valid wallet signature: nothing to sign. This runs on every start and
+    // every unlock - for a Google / email (Privy) wallet it used to ask Privy
+    // for 3 signatures each time (2 for the seed, 1 for the key), right when
+    // the first payment wanted Privy too.
+    const deviceSeed = await loadSeed(walletAddress)
+    if (deviceSeed && current?.chat_public_key === toBase64(x25519.getPublicKey(deviceSeed))
+      && await verifyChatKey(walletAddress, current.chat_public_key, current.chat_key_sig)) return
     const seed = await seedFromWallet(walletAddress)
     if (!seed) return
     saveSeed(walletAddress, seed)
     const publicKeyStr = toBase64(x25519.getPublicKey(seed))
     const sig = await signer.signMessage({ message: chatKeyStatement(walletAddress, publicKeyStr) })
-    const { supabase } = await import('@/lib/supabase')
-    const { data: current } = await supabase.from('users').select('chat_public_key, chat_key_sig').eq('id', myUserId).maybeSingle()
     if (current?.chat_public_key === publicKeyStr && current?.chat_key_sig === sig) return
     const { error } = await supabase.from('users').update({ chat_public_key: publicKeyStr, chat_key_sig: sig }).eq('id', myUserId)
     if (error) console.error('[chatCrypto] failed to upload public key:', error.message)

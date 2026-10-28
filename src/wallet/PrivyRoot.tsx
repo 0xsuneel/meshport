@@ -155,14 +155,17 @@ function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => vo
     if (addresses) markPrivy('walletListed')
   }, [ready, authenticated, addresses])
   // Privy's wallet iframe stuck: signed in, the account has a wallet, but it
-  // isn't connected 8 s later (seen: "ready=true authenticated=true
+  // isn't connected 5 s later (seen: "ready=true authenticated=true
   // wallets=0" for 23 s, and signing aborted after 21 s). Privy never
   // rebuilds a dead iframe by itself; PrivyRoot rebuilds Privy (a new iframe).
   const stuckRef = useRef(onWalletStuck)
   stuckRef.current = onWalletStuck
   useEffect(() => {
     if (!ready || !authenticated || !hasLinkedWallet || addresses) return
-    const t = setTimeout(() => stuckRef.current('wallet not connected 8 s after sign-in'), 8_000)
+    // 5 s: field timings (328 starts) - the iframe connects within 4.1 s of
+    // sign-in at p95; past 5 s it was nearly always stuck (9 of 13 cases),
+    // and each stuck one used to wait 8 s before the rebuild even began.
+    const t = setTimeout(() => stuckRef.current('wallet not connected 5 s after sign-in'), 5_000)
     return () => clearTimeout(t)
   }, [ready, authenticated, hasLinkedWallet, addresses])
   useEffect(() => () => setPrivyBridge(null), [])

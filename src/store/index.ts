@@ -327,9 +327,13 @@ export const useAuthStore = create<AuthStore>()(
       // PasscodeLockPage), so a locked app holds nothing usable.
       lock:   () => {
         const addr = get().walletAddress
+        const source = get().walletSource
         set({ isLocked: true, signer: null })
         import('@/lib/security').then(({ clearSessionPrivateKey, forgetVerifiedPasscodes }) => { clearSessionPrivateKey(addr); forgetVerifiedPasscodes() }).catch(() => {})
-        import('@/wallet').then(({ lockWallet }) => lockWallet(addr ?? undefined)).catch(() => {})
+        // Only wallets whose key is in the wallet frame have anything there to
+        // lock. For Google / email (Privy) and Circle ones this loaded and
+        // started the whole frame on every fresh open, beside Privy loading.
+        if (source !== 'privy' && source !== 'circle') import('@/wallet').then(({ lockWallet }) => lockWallet(addr ?? undefined)).catch(() => {})
       },
       unlock: () => {
         set({ isLocked: false, lastActivityAt: Date.now() })
