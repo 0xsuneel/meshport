@@ -217,29 +217,33 @@ export function showUpdating(): void {
     const text = 'Updating MeshPort…'
     // The animated logo: on the opening screen its logo starts pulsing (index.html).
     document.documentElement.classList.add('mp-updating')
+    // On the opening screen the class is enough: the logo pulses and the line
+    // shows under it (index.html, #splash::after) - the same as after the reload.
     const splash = document.getElementById('splash')
-    if (splash && !splash.classList.contains('splash-hide')) {
-      if (splash.querySelector('.upd')) return
-      const el = document.createElement('div')
-      el.className = 'upd'
-      el.textContent = text
-      splash.appendChild(el)
-      return
-    }
+    if (splash && !splash.classList.contains('splash-hide')) return
     if (document.getElementById('mp-updating')) return
+    // Exactly the screen the reload opens on (index.html: the quiet "refresh"
+    // splash - page colour, 56 px logo dead centre, the line 84 px below
+    // centre), so the update reads as ONE screen. It used to be a different
+    // layout (64 px logo with the text under it, other colours), and after
+    // the reload the logo vanished and the text jumped: two screens.
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark'
+    const ink = dark ? '#12665F' : '#0F5C57'
     const el = document.createElement('div')
     el.id = 'mp-updating'
     el.setAttribute('role', 'status')
     Object.assign(el.style, {
-      position: 'fixed', inset: '0', zIndex: '10001', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '18px',
-      background: 'var(--bg, #000000)', color: 'var(--text-secondary, #B4B4B4)', font: '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      position: 'fixed', inset: '0', zIndex: '10001', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: dark ? '#000000' : '#F5F4F0', color: ink, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     })
     const logo = document.createElement('div')
+    Object.assign(logo.style, { width: '56px', height: '56px' })
     const label = document.createElement('div')
     label.textContent = text
+    Object.assign(label.style, { position: 'absolute', left: '0', right: '0', top: 'calc(50% + 60px + 24px)', textAlign: 'center', fontSize: '13px', fontWeight: '600' })
     el.append(logo, label)
     document.body.appendChild(el)
-    // Same animated MeshPort logo as the app's loaders (MeshLoader).
-    logo.innerHTML = meshLoaderSvgMarkup(64, 'var(--mesh-loader, #5CD6CB)')
+    // Same animated MeshPort logo as the opening screen and the app's loaders.
+    logo.innerHTML = meshLoaderSvgMarkup(56, ink)
   } catch { /* cosmetic only */ }
 }
