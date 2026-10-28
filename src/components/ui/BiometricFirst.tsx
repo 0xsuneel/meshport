@@ -8,7 +8,7 @@ import { biometricAction, biometricWaiting, type BiometricVerb } from '@/lib/bio
 // or "Use passcode". Used by PinKeypad (every approval) and the lock screen.
 // `height` matches the number pad it stands in for, so switching to the pad
 // never resizes the sheet.
-export function BiometricFirst({ Icon, label, verb, trying, onTry, onUsePasscode, height }: {
+export function BiometricFirst({ Icon, label, verb, trying, onTry, onUsePasscode, height, status }: {
   Icon: ComponentType<{ className?: string }>
   label: string
   verb: BiometricVerb
@@ -16,6 +16,8 @@ export function BiometricFirst({ Icon, label, verb, trying, onTry, onUsePasscode
   onTry: () => void
   onUsePasscode: () => void
   height: number
+  /** Shown instead of "Waiting for Face ID…" while busy after it (the lock screen opening the wallet). */
+  status?: string
 }) {
   const action = biometricAction(verb, label)
   return (
@@ -33,7 +35,7 @@ export function BiometricFirst({ Icon, label, verb, trying, onTry, onUsePasscode
       </button>
       <button onClick={onTry} disabled={trying}
         style={{ marginTop: 22, padding: '4px 10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
-        {trying ? biometricWaiting(label) : action}
+        {status ?? (trying ? biometricWaiting(label) : action)}
       </button>
       <button onClick={onUsePasscode} className="active:scale-[0.98] transition-transform"
         style={{ marginTop: 26, width: '100%', maxWidth: 320, height: 50, borderRadius: 14, cursor: 'pointer', background: 'var(--surface)', border: '1px solid var(--border)', fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>

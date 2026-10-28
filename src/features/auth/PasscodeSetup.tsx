@@ -304,18 +304,8 @@ export function PasscodeLockPage() {
   const [autoPending, setAutoPending] = useState(() => biometricReady && typeof document !== 'undefined' && document.visibilityState === 'visible')
   useEffect(() => { if (liveSupported === false) { setMode('pin'); setAutoPending(false) } }, [liveSupported])
 
-  const handleUnlock = async (val: string, fromBiometric = false) => {
+  const handleUnlock = async (val: string) => {
     setChecking(true)
-    // Open the wallet alongside the passcode check, not after it - both are
-    // deliberately slow (PBKDF2), so this halves the wait. Only for a
-    // passcode likely to be right (the first try here, or one Face ID /
-    // fingerprint handed back): a wrong one also counts against the wallet
-    // frame's own attempt limit, which a later fingerprint unlock doesn't
-    // clear.
-    const opened = useAuthStore.getState().signer ? Promise.resolve(true)
-      : (fromBiometric || attempts === 0)
-        ? import('@/lib/restoreWallet').then(m => m.restorePrivateKey(val, { silent: true })).catch(() => false)
-        : null
     let correct = false
     if (passcode) {
       // No `val === passcode` fallback here on purpose: verifyPasscode()
@@ -323,25 +313,34 @@ export function PasscodeLockPage() {
       // stored passcodes, and - unlike this call site - it's gated by the
       // brute-force lockout (see security.ts). A duplicate check here would
       // bypass that lockout entirely for legacy plaintext-format accounts.
+      // The wallet is opened only after this says yes: a passcode sent to the
+      // wallet frame before it would get past this lockout, and a typo would
+      // count against the frame's own attempt limit.
       try { correct = await verifyPasscode(val, passcode) } catch {}
     }
     if (correct) {
       // Open the app with the wallet open, like MetaMask / Phantom: Send,
       // Swap and the rest work on the first tap, and the passcode asked
       // there only confirms the payment. The frame was loaded while this
-      // screen was up and the decrypt ran beside the passcode check, so
+      // screen was up (Google / email wallets started opening then), so
       // this is usually short. Capped: a slow Privy or a stuck frame
-      // doesn't hold the lock screen - the open finishes in the background
-      // (restorePrivateKey below) and the payment screens wait for it.
+      // doesn't hold the lock screen - the same attempt carries on in the
+      // background and sets the recovery banner itself if it fails.
+      // Never started twice: a second run would only repeat the same wait.
+      const open = import('@/lib/restoreWallet').then(m => m.restorePrivateKey(val)).catch(() => false)
+      let failed = false
       if (!useAuthStore.getState().signer) {
         setOpening(true)
-        const open = opened ?? import('@/lib/restoreWallet').then(m => m.restorePrivateKey(val, { silent: true })).catch(() => false)
-        await Promise.race([open, new Promise(r => setTimeout(r, OPEN_WAIT_MS))])
+        let timer: ReturnType<typeof setTimeout> | undefined
+        const ok = await Promise.race([open, new Promise<null>(r => { timer = setTimeout(() => r(null), OPEN_WAIT_MS) })])
+        clearTimeout(timer)
+        failed = ok === false
         setOpening(false)
       }
       setChecking(false)
       unlock()
-      useUIStore.getState().setWalletRecoveryNeeded(false)
+      // A banner from before the lock is stale - unless the open just failed.
+      if (!failed) useUIStore.getState().setWalletRecoveryNeeded(false)
       // Offer biometric setup whenever it isn't already enrolled for this
       // wallet and hasn't been declined recently - see
       // wasBiometricOfferSkippedRecently below for the 24h cooldown after
@@ -371,10 +370,9 @@ export function PasscodeLockPage() {
       } else {
         navigate(returnTo, { replace: true })
       }
-      import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(val)).catch(() => {})
-        // Then move any older, weaker (100k-iteration) encryption to the
-        // current scheme - runs after the restore so unlocking stays instant.
-        .then(() => import('@/lib/security'))
+      // Then move any older, weaker (100k-iteration) encryption to the
+      // current scheme - runs after the restore so unlocking stays instant.
+      open.then(() => import('@/lib/security'))
         .then(async ({ upgradeLegacyEncryption }) => {
           const newHash = await upgradeLegacyEncryption(walletAddress, val, passcode)
           if (newHash) useAuthStore.getState().setPasscode(newHash)
@@ -411,7 +409,7 @@ export function PasscodeLockPage() {
       // locked out from a few mistyped passcodes would find biometric
       // unlock "broken" too, even though they just authenticated for real.
       clearPasscodeLockout()
-      handleUnlock(pc, true)
+      handleUnlock(pc)
     }
   }
 
@@ -488,6 +486,7 @@ export function PasscodeLockPage() {
             {/* Same space as dots + status line + number pad, so "Use
                 passcode" swaps in place without the logo moving. */}
             <BiometricFirst Icon={BiometricIcon} label={label} verb="Unlock" trying={biometricTrying || autoPending} onTry={tryBiometric}
+              status={opening ? 'Opening wallet…' : undefined}
               onUsePasscode={() => { setAutoPending(false); setMode("pin") }} height={short ? 302 : 352} />
             <button onClick={handleSignOut} className="mt-6 text-text-muted text-sm hover:text-text-secondary transition-colors">
               Sign out
