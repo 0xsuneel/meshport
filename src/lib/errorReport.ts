@@ -38,7 +38,7 @@ export function reportClientError(kind: Kind, error: unknown): void {
 
 // Timings (lib/perfTrace.ts): their own small budget, so they never use up
 // the one real errors get. Same table, a "[perf …]" message.
-const MAX_PERF_PER_SESSION = 4
+const MAX_PERF_PER_SESSION = 12 // a startup line + payments; a long-open page made more than 4
 let perfSent = 0
 export function reportPerf(line: string): void {
   try {

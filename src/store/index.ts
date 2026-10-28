@@ -329,6 +329,8 @@ export const useAuthStore = create<AuthStore>()(
         const addr = get().walletAddress
         const source = get().walletSource
         set({ isLocked: true, signer: null })
+        // Wallet providers get ready for the unlock (PrivyRoot opens a fresh Privy).
+        try { window.dispatchEvent(new Event('meshport:wallet-locked')) } catch { /* no window */ }
         import('@/lib/security').then(({ clearSessionPrivateKey, forgetVerifiedPasscodes }) => { clearSessionPrivateKey(addr); forgetVerifiedPasscodes() }).catch(() => {})
         // Only wallets whose key is in the wallet frame have anything there to
         // lock. For Google / email (Privy) and Circle ones this loaded and

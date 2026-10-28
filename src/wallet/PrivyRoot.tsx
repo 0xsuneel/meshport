@@ -200,6 +200,9 @@ function markPrivy(name: 'ready' | 'signedIn' | 'walletListed') {
   ))).catch(() => {})
 }
 
+// Away this long and Privy's iframe connection is likely stale (see PrivyRoot).
+const LONG_BACKGROUND_MS = 3 * 60_000
+
 // Rebuilds of Privy this page load (a stuck wallet iframe) - at most 2.
 const MAX_PRIVY_REBUILDS = 2
 let privyRebuilds = 0
@@ -216,6 +219,30 @@ export default function PrivyRoot() {
     privyRebuilds++
     setGeneration(g => g + 1)
   }
+  // A fresh Privy for the next signature, ready before it's needed. After the
+  // app sat in the background (Android freezes the page), Privy still lists
+  // the wallet but its iframe's connection is stale: the first signature
+  // then re-authenticates the wallet with Privy (/api/v1/wallets/authenticate)
+  // and hung - 20-44 s ("signal is aborted", "<no response> TimeoutError"),
+  // the "36 s" payment right after unlocking. A new iframe connects and
+  // authenticates while the lock screen is up, so the payment signs at once.
+  // Once per return from the background: when the app locks (it was away
+  // 15+ min) or comes back after a long background.
+  useEffect(() => {
+    let refreshedFor = -1
+    const refresh = () => {
+      if (refreshedFor === lastHiddenAt) return
+      refreshedFor = lastHiddenAt
+      setGeneration(g => g + 1)
+    }
+    const onLocked = () => { if (lastHiddenAt) refresh() }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && lastHiddenAt && performance.now() - lastHiddenAt >= LONG_BACKGROUND_MS) refresh()
+    }
+    window.addEventListener('meshport:wallet-locked', onLocked)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { window.removeEventListener('meshport:wallet-locked', onLocked); document.removeEventListener('visibilitychange', onVisible) }
+  }, [])
   return (
     <PrivyProvider
       key={generation}

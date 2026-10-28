@@ -327,7 +327,13 @@ export function PasscodeLockPage() {
       // doesn't hold the lock screen - the same attempt carries on in the
       // background and sets the recovery banner itself if it fails.
       // Never started twice: a second run would only repeat the same wait.
-      const open = import('@/lib/restoreWallet').then(m => m.restorePrivateKey(val)).catch(() => false)
+      // "Open" means it can sign: a Google / email (Privy) wallet that's
+      // listed but whose iframe is still connecting (a fresh one after the
+      // background - PrivyRoot) isn't ready yet, and a payment right after
+      // unlocking would wait on it. Wait for real readiness here instead.
+      const open = import('@/lib/restoreWallet').then(m => m.restorePrivateKey(val))
+        .then(async ok => ok && (await import('@/lib/walletReadiness')).untilSignerReady())
+        .catch(() => false)
       let failed = false
       if (!useAuthStore.getState().signer) {
         setOpening(true)
