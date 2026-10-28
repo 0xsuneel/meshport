@@ -33,6 +33,7 @@
  * TESTNET ONLY.
  */
 import { isChainEnabledForClaim } from '@/lib/featureFilters'
+import { currentAccountKind } from '@/lib/merchant'
 import type { SettingsMap } from '@/lib/adminSupabase'
 import { EXTERNAL_CHAINS, resolveRpcList } from './chains'
 import { SOLANA_CHAIN, getSolanaUsdcBalance } from '@/lib/solana'
@@ -101,10 +102,11 @@ const lastKnown = new Map<string, number>()
  */
 function settingsSignature(settings: SettingsMap, settingsLoaded: boolean): string {
   if (!settingsLoaded) return 'unloaded'
+  const kind = currentAccountKind()
   const enabled = [...Object.keys(EXTERNAL_CHAINS), SOLANA_CHAIN]
-    .filter(id => isChainEnabledForClaim(settings, id))
+    .filter(id => isChainEnabledForClaim(settings, id, kind))
     .sort()
-  return enabled.join(',')
+  return `${kind}:${enabled.join(',')}`
 }
 
 /**
@@ -279,7 +281,8 @@ export function externalBalanceReader(
   }
 
   return dedupe(key, async () => {
-    const chainIds = [...Object.keys(EXTERNAL_CHAINS), SOLANA_CHAIN].filter(id => isChainEnabledForClaim(settings, id))
+    const kind = currentAccountKind()
+    const chainIds = [...Object.keys(EXTERNAL_CHAINS), SOLANA_CHAIN].filter(id => isChainEnabledForClaim(settings, id, kind))
 
     const wallet = addr.toLowerCase()
     // One request for every chain (the server reads them - /api/portfolio).

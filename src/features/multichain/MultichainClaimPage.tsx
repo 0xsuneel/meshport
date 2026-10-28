@@ -54,7 +54,8 @@ import { isSolanaChain } from '@/lib/solana'
 
 import { relayedProviderFor } from '@/lib/relayedProvider'
 import { useSettingsStore } from '@/store/settingsStore'
-import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFilters'
+import { isChainEnabledForBring, bringRoutes, bringKeys } from '@/lib/featureFilters'
+import { useAccountKind } from '@/lib/merchant'
 import { readExternalBalances, refreshScope, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
 import { fetchCctpProgress, useCctpProgress } from '@/lib/cctpTracker'
 import { ARC_RPCS } from '@/lib/arc'
@@ -360,6 +361,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // every admin-disabled chain's balance was scanned and counted into
   // claimableTotal indefinitely instead of just for one brief render.
   useEffect(() => { loadSettings() }, [loadSettings])
+  // Admin Panel → Chains → Bring, for this kind of account (personal /
+  // business), and what each chain itself supports: Unified Balance (never
+  // for merchants) and the gasless CCTP router.
+  const accountKind = useAccountKind()
+  const canOf = useCallback((id: string) => ({
+    ub: !merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(id)),
+    cctp: canBringOverCctp(id),
+  }), [merchantMode])
 
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -1061,12 +1070,12 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       // Quiet refresh: keep the balance the form already shows.
       if (!quiet) setChains(
         Object.keys(CHAIN_META)
-          .filter(id => isChainEnabledForClaim(settingsMap, id))
+          .filter(id => isChainEnabledForBring(settingsMap, id, accountKind, canOf(id)))
           .map(id => ({ chainId: id, claimable: 0, pending: 0 }))
       )
     }
     if (!quiet) setStep('select')
-  }, [getKey, trackClaimIdFromHub, settingsMap, settingsLoaded])
+  }, [getKey, trackClaimIdFromHub, settingsMap, settingsLoaded, accountKind, canOf])
 
   const handleManualRefresh = useCallback(() => {
     if (Date.now() < refreshCooldownUntil) return
@@ -1471,10 +1480,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const estimateReady = showClaimEstimateRow && claimEstimateIsLive && !feeEstimate.loading && !feeEstimate.error
   // Route (CCTP vs Unified Balance) - UB only for chains Gateway supports.
   const selectedSdkId = selected ? toSdkChainId(selected) : ''
-  // Merchants never get the Unified Balance route - CCTP only.
-  const ubAvailable = !merchantMode && UB_CLAIM_CHAINS.has(selectedSdkId)
-  // CCTP here is the gasless router; a chain without one is Unified Balance only.
-  const cctpAvailable = !!selected && canBringOverCctp(selected)
+  // What the chain supports (merchants: never Unified Balance; CCTP is the
+  // gasless router) and what the Admin Panel has on for this account.
+  const selectedRoutes = selected ? bringRoutes(settingsMap, selected, accountKind, canOf(selected)) : []
+  const ubAvailable = selectedRoutes.includes('ub')
+  const cctpAvailable = selectedRoutes.includes('cctp')
   const effectiveRoute: 'cctp' | 'ub' = !ubAvailable ? 'cctp' : !cctpAvailable ? 'ub' : claimRoute
   const reviewEnabled = claimAmt >= MIN_CLAIM_AMOUNT && claimAmt <= (selectedChain?.claimable ?? 0) && (effectiveRoute === 'ub' || estimateReady)
   // Unified Balance route: Circle Gateway's fee quote for this exact claim
@@ -1627,15 +1637,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
   const chainsWithFunds  = chains
     .filter(c => c.claimable > 0 || c.pending > 0)
-    // Only chains Bring Funds can actually move: a gasless router, or Unified
-    // Balance. Merchants: gasless router (CCTP) chains only.
-    .filter(c => canBringOverCctp(c.chainId) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(c.chainId))))
-    // `chains` only ever contains enabled chains to begin with - scan()
-    // above reads via readExternalBalances, which is already settings-aware
-    // and never even fetches a disabled chain's balance. This filter is now
-    // just a safety net; disabledClaimChains below is what actually
-    // surfaces disabled chains in the list.
-    .filter(c => isChainEnabledForClaim(settingsMap, c.chainId))
+    // Only chains Bring can move from, for this kind of account: its chain
+    // switch on and at least one route the chain supports and the Admin
+    // Panel has on (Unified Balance - never for merchants - and the gasless
+    // CCTP router).
+    .filter(c => isChainEnabledForBring(settingsMap, c.chainId, accountKind, canOf(c.chainId)))
     // Highest balance first - makes the biggest claimable amounts the most
     // prominent/easiest to act on instead of showing in arbitrary chain
     // config order.
@@ -1650,15 +1656,15 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // reads their balance in the first place, so there's nothing of theirs
   // to (mis)count here.
   const disabledClaimChains = Object.keys(CHAIN_META)
-    .filter(id => !isChainEnabledForClaim(settingsMap, id))
-    .filter(id => canBringOverCctp(id) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(id))))
+    .filter(id => canOf(id).ub || canOf(id).cctp)
+    .filter(id => !isChainEnabledForBring(settingsMap, id, accountKind, canOf(id)))
     .map(id => ({
       chainId: id,
       // Lets an admin set a specific reason per chain by putting text in
       // that chain's chains_claim toggle row (the `value` column - same
       // free-text field maintenance_mode already uses for its message).
       // Falls back to a generic reason when nothing's been set.
-      reason: settingsMap[CHAIN_CLAIM_FEATURE_MAP[id]]?.value || 'Upgrading - coming soon',
+      reason: settingsMap[bringKeys(accountKind, id).chain ?? '']?.value || 'Upgrading - coming soon',
     }))
 
   // ─── Render ──────────────────────────────────────────────────────────────────
@@ -1732,7 +1738,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           ) : (
           <div style={{ width: '100%', maxWidth: 360, padding: `0 ${SPACING.md}px`, boxSizing: 'border-box' }}>
             <ChainScanner
-              logos={Object.keys(CHAIN_META).filter(id => isChainEnabledForClaim(settingsMap, id)).map(id => ({ src: getMeta(id).logo, alt: getMeta(id).label }))}
+              logos={Object.keys(CHAIN_META).filter(id => isChainEnabledForBring(settingsMap, id, accountKind, canOf(id))).map(id => ({ src: getMeta(id).logo, alt: getMeta(id).label }))}
               subtitle="Finding your available funds…" />
           </div>
           )}

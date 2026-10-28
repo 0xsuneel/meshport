@@ -29,7 +29,8 @@ function InlineSpinner() {
 }
 import { UB_CLAIM_CHAINS } from '@/lib/ubClaim'
 import { canBringOverCctp } from '@/lib/gaslessBridge'
-import { useMerchant, useBusinessTab, isMerchantClaim } from '@/lib/merchant'
+import { useMerchant, useBusinessTab, isMerchantClaim, useAccountKind } from '@/lib/merchant'
+import { isChainEnabledForBring, isChainEnabledForSettle } from '@/lib/featureFilters'
 import { BusinessMoney } from '@/features/merchant/BusinessMoney'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
@@ -355,6 +356,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   const narrow      = useMediaQuery('(max-width: 399px)')
   // Approved merchants get Manage money (CCTP chains, Claim All) instead of Bring Funds.
   const isMerchant  = useMerchant().isMerchant
+  const accountKind = useAccountKind()
   // A business account on /multichain sees cross-chain transfer only: no
   // Bring Funds and no other-chain balance (that is settled in Business).
   const merchantTransfer = useBusinessTab() && !chainsOnly
@@ -909,9 +911,12 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   // Only chains Bring Funds can actually move: the gasless router (CCTP) or
   // Unified Balance. Merchants: CCTP chains only - MeshPort's relayer pays
   // the gas, same as anyone's CCTP claim.
-  const bringRows = isMerchant
-    ? allChainRows.filter(c => canBringOverCctp(c.id))
-    : allChainRows.filter(c => canBringOverCctp(c.id) || isUbChain(c.id))
+  // Admin Panel → Chains → Bring for this kind of account: the chain on and
+  // at least one route it supports on (merchants: CCTP only).
+  const bringRows = allChainRows.filter(c => isChainEnabledForBring(settingsMap, c.id, accountKind,
+    { ub: !isMerchant && isUbChain(c.id), cctp: canBringOverCctp(c.id) }))
+  // Claim All is a settlement: Admin Panel → Chains → Business → Settle.
+  const settleRows = allChainRows.filter(c => canBringOverCctp(c.id) && isChainEnabledForSettle(settingsMap, c.id))
 
   // Desktop has no Activity tab (the list is always on the right), so a
   // link that opens the Hub on Activity lands on Transfer Funds instead.
@@ -1318,7 +1323,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                 // Same real on-chain balance as the "On Other Chains" card above.
                 chainsBalance={scanning ? undefined : bringRows.reduce((sum, c) => sum + (c.balance >= DUST_USDC ? c.balance : 0), 0)}
                 fundedChainCount={bringRows.filter(c => c.balance >= DUST_USDC).length}
-                claimChains={scanning ? undefined : bringRows.filter(c => c.balance >= DUST_USDC).map(c => ({ chainId: c.id, label: c.label, balance: c.balance }))}
+                claimChains={scanning ? undefined : settleRows.filter(c => c.balance >= DUST_USDC).map(c => ({ chainId: c.id, label: c.label, balance: c.balance }))}
                 // After Claim All: rescan so the chain list shows what moved.
                 onClaimed={() => { setScanning(true); setScanNonce(n => n + 1) }}>{chainCard}</BusinessMoney>
             : chainCard

@@ -17,6 +17,7 @@ import type { WalletAccount } from '@/wallet'
 import { useSettingsStore } from '@/store/settingsStore'
 import { readExternalBalances, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
 import { canBringOverCctp } from '@/lib/gaslessBridge'
+import { isChainEnabledForSettle } from '@/lib/featureFilters'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { subscribeToClaim, subscribeToWalletClaims, type Claim, type ClaimStatus } from '@/lib/claimService'
 import { lastClaimAllAt, CLAIM_ALL_COOLDOWN_MS, CLAIM_ALL_MIN_CHAIN } from '@/lib/ubClaim'
@@ -72,11 +73,12 @@ function useChainFunds() {
     return () => { live = false; window.removeEventListener(EXTERNAL_BALANCE_EVENT, onBalance); stop(); clearInterval(every) }
   }, [wallet, flags, flagsLoaded, tick])
 
-  // Every CCTP chain that was checked, $0 ones included (shown dimmed).
+  // Every CCTP chain that was checked and Admin Panel → Chains → Business →
+  // Settle has on, $0 ones included (shown dimmed).
   const allChains = useMemo<ChainFunds[] | undefined>(() => balances === null ? undefined
-    : Object.entries(balances).filter(([id]) => canBringOverCctp(id))
+    : Object.entries(balances).filter(([id]) => canBringOverCctp(id) && isChainEnabledForSettle(flags, id))
       .map(([id, balance]) => ({ id, label: chainLabel(id), logo: chainLogoSrc(id), balance }))
-      .sort((a, b) => b.balance - a.balance || a.label.localeCompare(b.label)), [balances])
+      .sort((a, b) => b.balance - a.balance || a.label.localeCompare(b.label)), [balances, flags])
   const chains = useMemo(() => allChains?.filter(c => c.balance > 0), [allChains])
 
   return { chains, allChains, rescan: useCallback(() => setTick(t => t + 1), []) }
