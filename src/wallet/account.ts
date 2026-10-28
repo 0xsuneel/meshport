@@ -13,7 +13,7 @@
 
 import { toAccount } from 'viem/accounts'
 import { bytesToHex, type LocalAccount, type SignableMessage, type TransactionSerializable, type TypedDataDefinition } from 'viem'
-import { callWallet } from './frameClient'
+import { callWallet, WalletFrameError } from './frameClient'
 import type { FrameTransaction, Hex } from './protocol'
 
 export type WalletAccount = LocalAccount<'custom'> & { readonly meshportWallet: true }
@@ -41,6 +41,19 @@ function plainMessage(message: SignableMessage): string | { raw: Hex } {
   return { raw: typeof raw === 'string' ? raw : bytesToHex(raw) }
 }
 
+/**
+ * A frame request that may be refused for want of the passcode
+ * ("approval-required", lib/walletApproval): ask for it once, then retry.
+ */
+export async function withApproval<T>(request: () => Promise<T>): Promise<T> {
+  try { return await request() } catch (e) {
+    if (!(e instanceof WalletFrameError) || e.code !== 'approval-required') throw e
+    const { requestWalletApproval } = await import('@/lib/walletApproval')
+    if (!(await requestWalletApproval())) throw e
+    return request()
+  }
+}
+
 /** The wallet at `address`, signing through the frame. */
 export function walletAccount(address: string): WalletAccount {
   const key = address.toLowerCase()
@@ -52,11 +65,11 @@ export function walletAccount(address: string): WalletAccount {
       return (await callWallet('sign:message', { address, message: plainMessage(message) })).signature
     },
     async signTransaction(transaction) {
-      return (await callWallet('sign:transaction', { address, transaction: plainTransaction(transaction) })).serialized
+      return (await withApproval(() => callWallet('sign:transaction', { address, transaction: plainTransaction(transaction) }))).serialized
     },
     async signTypedData(typedData) {
       const { domain, types, primaryType, message } = typedData as TypedDataDefinition
-      return (await callWallet('sign:typed-data', { address, typedData: { domain, types, primaryType, message } as Record<string, unknown> })).signature
+      return (await withApproval(() => callWallet('sign:typed-data', { address, typedData: { domain, types, primaryType, message } as Record<string, unknown> }))).signature
     },
   })
   const account = Object.assign(base, { meshportWallet: true as const }) as WalletAccount

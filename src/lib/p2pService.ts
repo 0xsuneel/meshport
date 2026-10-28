@@ -1933,6 +1933,14 @@ async function releaseAbandonedSellReservation(trade: P2PTrade): Promise<boolean
 }
 
 export async function autoCancelExpiredTrades(userId: string): Promise<void> {
+  // Signs on its own (no PIN step): only right after the person's passcode
+  // (lib/walletApproval) - a refused signature mid-sweep would send the
+  // trade to the dispute queue instead. Otherwise the next page open does it.
+  const { approvalFresh, inBackground } = await import('./walletApproval')
+  if (!approvalFresh()) return
+  return inBackground(() => sweepExpiredTrades(userId))
+}
+async function sweepExpiredTrades(userId: string): Promise<void> {
   const trades = await fetchMyTrades(userId)
   const expired = trades.filter(t => isTradeExpired(t))
   for (const t of expired) {

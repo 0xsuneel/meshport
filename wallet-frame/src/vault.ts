@@ -30,6 +30,7 @@ const PHRASE = P + 'pm_'
 const WORDS = P + 'wc_'
 const KIND = P + 'kind_'
 const LOCKOUT = P + 'lockout_'
+const APPROVALS = P + 'approvals'    // this device's app sends passcode approvals (main.ts)
 
 const LOCKOUT_FREE_TRIES = 5
 const LOCKOUT_BASE_MS = 30_000
@@ -43,6 +44,10 @@ export class VaultError extends Error {
 
 const norm = (address: string) => address.toLowerCase()
 const open = new Map<string, string>()          // address → private key (hex)
+// Stored by create / import / adopt in this frame load: its passcode may be set
+// without the old one for a while (re-importing a wallet this device knew).
+const storedAt = new Map<string, number>()
+const FRESH_MS = 15 * 60_000
 const openPhrase = new Map<string, string>()    // address → phrase, only right after create/import
 
 function ls(): Storage | null { try { return localStorage } catch { return null } }
@@ -88,6 +93,7 @@ export interface StoreOptions {
 export async function store(address: string, privateKey: string, opts: StoreOptions): Promise<void> {
   assertKeyFor(privateKey, address)
   const a = norm(address)
+  storedAt.set(a, Date.now())
   put(ls(), KIND + a, opts.kind)
   if (opts.kind === 'social-auto') {
     const sealed = await sealForDevice(privateKey)
@@ -142,6 +148,56 @@ function noteFailure(a: string): number {
 }
 function noteSuccess(a: string) { del(ls(), LOCKOUT + a) }
 
+// ── The passcode, checked here (approving a signature - main.ts) ────────────
+// The full check decrypts the passcode copy (PBKDF2 600k, ~1 s on a phone).
+// After one success this frame load remembers an HMAC of the passcode under a
+// key that exists only in this frame's memory: later checks take microseconds
+// and nothing reusable is kept. Wrong tries count against the same lockout.
+const verified = new Map<string, string>()   // address → HMAC tag of its passcode
+let tagKey: Promise<CryptoKey> | null = null
+async function passcodeTag(passcode: string): Promise<string> {
+  tagKey ??= crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', await tagKey, new TextEncoder().encode(passcode)))
+  return Array.from(mac, b => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** The app on this device sends passcode approvals - from then on, always required (main.ts). */
+export function noteApprovalsUsed(): void { put(ls(), APPROVALS, '1') }
+export function approvalsUsed(): boolean { return get(ls(), APPROVALS) === '1' }
+
+/** Whether this wallet has a passcode on this device (Google / email device wallets don't). */
+export function hasPasscode(address: string): boolean { return !!get(ls(), PASSCODE + norm(address)) }
+
+/** Stored here in the last FRESH_MS (create / import / adopt). */
+export function storedRecently(address: string): boolean {
+  const at = storedAt.get(norm(address))
+  return at != null && Date.now() - at < FRESH_MS
+}
+
+/** Throws unless `passcode` is this wallet's passcode. Opens the key too when the full check ran. */
+export async function checkPasscode(address: string, passcode: string): Promise<void> {
+  const a = norm(address)
+  const wait = lockedForMs(a)
+  if (wait > 0) throw new VaultError('rate-limited', 'Too many wrong passcodes - try again shortly', wait)
+  const tag = await passcodeTag(passcode)
+  const known = verified.get(a)
+  if (known) {
+    if (known === tag) { noteSuccess(a); return }
+    const next = noteFailure(a)
+    throw new VaultError(next ? 'rate-limited' : 'bad-passcode', 'Wrong passcode', next)
+  }
+  const enc = get(ls(), PASSCODE + a)
+  if (!enc) throw new VaultError('not-found', 'This wallet has no passcode on this device')
+  const k = await decryptPrivateKey(enc, passcode)
+  if (!k || !/^0x[0-9a-fA-F]{64}$/.test(k) || norm(addressOf(k)) !== a) {
+    const next = noteFailure(a)
+    throw new VaultError(next ? 'rate-limited' : 'bad-passcode', 'Wrong passcode', next)
+  }
+  noteSuccess(a)
+  verified.set(a, tag)
+  if (!open.has(a)) await keepOpen(address, k)
+}
+
 /**
  * Open the key: already open → session copy → device copy → passcode copy.
  * Returns false when nothing here opens it without more input.
@@ -165,6 +221,7 @@ export async function unlock(address: string, passcode?: string): Promise<boolea
     throw new VaultError(next ? 'rate-limited' : 'bad-passcode', 'Wrong passcode', next)
   }
   noteSuccess(a)
+  verified.set(a, await passcodeTag(passcode))
   await keepOpen(address, k)
   return true
 }
@@ -187,6 +244,7 @@ export async function setPasscode(address: string, passcode: string, oldPasscode
   const k = keyFor(address)
   const phrase = openPhrase.get(a) ?? await readPhrase(address, oldPasscode ?? passcode).catch(() => null)
   put(ls(), PASSCODE + a, await sealed(k, passcode))
+  verified.set(a, await passcodeTag(passcode))
   if (phrase) {
     put(ls(), PHRASE + a, await sealed(phrase, passcode))
     put(ls(), WORDS + a, String(phrase.split(/\s+/).length))
@@ -215,10 +273,11 @@ export async function readPhrase(address: string, passcode?: string): Promise<st
 export function lock(address?: string) {
   const targets = address ? [norm(address)] : [...open.keys()]
   for (const a of targets) {
-    open.delete(a); openPhrase.delete(a)
+    open.delete(a); openPhrase.delete(a); verified.delete(a)
     del(ss(), SESSION + a)
   }
   if (!address) {
+    verified.clear()
     const s = ss()
     try { for (let i = (s?.length ?? 0) - 1; i >= 0; i--) { const k = s!.key(i); if (k?.startsWith(SESSION)) s!.removeItem(k) } } catch { /* */ }
   }

@@ -67,6 +67,12 @@ export interface WalletRpc {
    * The recovery phrase needs the passcode (it's kept passcode-encrypted).
    */
   'reveal:grant': [{ address: string; what: 'mnemonic' | 'privateKey'; passcode?: string }, { ticket: string }]
+  /**
+   * The person just entered the passcode (or a fingerprint released it): the
+   * frame checks it itself and then signs value-moving requests for
+   * APPROVAL_MS. `required: false` - this wallet has no passcode here.
+   */
+  approve: [{ address: string; passcode: string }, { approved: true; required: boolean; validForMs: number }]
   'sign:message': [{ address: string; message: string | { raw: Hex } }, { signature: Hex }]
   'sign:typed-data': [{ address: string; typedData: Record<string, unknown> }, { signature: Hex }]
   'sign:transaction': [{ address: string; transaction: FrameTransaction }, { serialized: Hex }]
@@ -125,6 +131,7 @@ export type WalletErrorCode =
   | 'decrypt'       // wrong recovery password or tampered QR
   | 'unsupported'
   | 'failed'
+  | 'approval-required' // a value-moving signature without a recent passcode
 
 export interface WalletResponse {
   tag: typeof WALLET_MESSAGE_TAG

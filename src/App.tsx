@@ -91,6 +91,7 @@ import { useSettingsStore } from './store/settingsStore'
 import { FeatureGate } from './components/admin/FeatureGate'
 import { RequireUnlockedAccount as Unlocked } from './components/LockedFeature'
 import { PrivyGate } from './wallet/PrivyGate'
+import { WalletApprovalPrompt } from './components/WalletApprovalPrompt'
 
 function LegacyMultichainRedirect({ tab }: { tab: 'transfer' | 'bring' }) {
   const location = useLocation()
@@ -845,6 +846,8 @@ export default function App() {
         <OfflineBanner />
         {/* Privy wallets for Google / email accounts (src/wallet/privy.ts) */}
         <PrivyGate />
+        {/* Passcode for an action the wallet frame refused without one (lib/walletApproval) */}
+        <WalletApprovalPrompt />
       </Suspense>
     </QueryClientProvider>
   )

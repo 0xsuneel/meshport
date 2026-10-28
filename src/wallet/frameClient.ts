@@ -23,7 +23,7 @@ export class WalletFrameError extends Error {
 const READY_TIMEOUT_MS = 15_000
 const DEFAULT_TIMEOUT_MS = 30_000
 // PBKDF2(600k) runs in the frame; give those calls room on slow phones.
-const SLOW_METHODS = new Set<WalletMethod>(['create', 'import', 'adopt', 'unlock', 'set-passcode', 'reveal:grant', 'passkey:begin'])
+const SLOW_METHODS = new Set<WalletMethod>(['create', 'import', 'adopt', 'unlock', 'set-passcode', 'approve', 'reveal:grant', 'passkey:begin'])
 
 let frame: HTMLIFrameElement | null = null
 let readyPromise: Promise<void> | null = null

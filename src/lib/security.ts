@@ -160,6 +160,18 @@ export function forgetVerifiedPasscodes(): void {
   verifiedThisSession.clear()
 }
 
+// ─── After a passcode passes ─────────────────────────────────────────────────
+// lib/walletApproval.ts hands it to the wallet frame, which checks it itself
+// before it signs anything that moves value. Awaited: the caller signs next.
+const passcodeVerifiedHooks = new Set<(passcode: string) => Promise<void>>()
+export function onPasscodeVerified(hook: (passcode: string) => Promise<void>): () => void {
+  passcodeVerifiedHooks.add(hook)
+  return () => { passcodeVerifiedHooks.delete(hook) }
+}
+async function passcodeVerified(passcode: string): Promise<void> {
+  await Promise.allSettled([...passcodeVerifiedHooks].map(h => h(passcode)))
+}
+
 // ─── Verify passcode against stored hash ─────────────────────────────────────
 export async function verifyPasscode(passcode: string, storedHash: string): Promise<boolean> {
   const lockout = readLockoutState()
@@ -167,6 +179,7 @@ export async function verifyPasscode(passcode: string, storedHash: string): Prom
 
   if (await isPasscodeVerifiedThisSession(passcode, storedHash)) {
     if (lockout.failCount) writeLockoutState({ failCount: 0, lockedUntil: 0 })
+    await passcodeVerified(passcode)
     return true
   }
 
@@ -175,6 +188,7 @@ export async function verifyPasscode(passcode: string, storedHash: string): Prom
 
   if (result) {
     writeLockoutState({ failCount: 0, lockedUntil: 0 })
+    await passcodeVerified(passcode)
   } else {
     const failCount = lockout.failCount + 1
     let lockedUntil = 0
