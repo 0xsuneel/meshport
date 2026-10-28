@@ -699,6 +699,7 @@ export function SwapPage() {
     }
     const gaps = untilChanged ? [0, 1500, 2500, 3500, 5000] : [0]
     let i = 0
+    let fails = 0
     const read = async () => {
       const opts = { ttlMs: 0, staleMs: 0 }
       const [eurcRead, cirbtcRead] = await Promise.all([
@@ -710,6 +711,13 @@ export function SwapPage() {
       const cirbtc = cirbtcRead != null && !isLaggingRead(walletAddress, 'CIRBTC', cirbtcRead) ? cirbtcRead : null
       setTokenBals(b => ({ ...b, ...(eurc != null ? { EURC: eurc } : {}), ...(cirbtc != null ? { cirBTC: cirbtc } : {}) }))
       if (eurc != null || cirbtc != null) saveAssetSlot(walletAddress, { ...(eurc != null ? { eurc } : {}), ...(cirbtc != null ? { cirbtc } : {}) })
+      // A read that failed (weak connection) is tried again soon - it used to
+      // be the only read, so a dropped request left the old figure up until
+      // something else happened to refresh it.
+      if ((eurcRead == null || (CIRBTC_CONTRACT && cirbtcRead == null)) && fails < 4) {
+        setTimeout(read, 1500 * 2 ** fails++) // 1.5s, 3s, 6s, 12s
+        return
+      }
       const changed = (eurc != null && Math.abs(eurc - before.EURC) > 1e-12) || (cirbtc != null && Math.abs(cirbtc - before.cirBTC) > 1e-12)
       if (!changed && ++i < gaps.length) setTimeout(read, gaps[i])
     }
