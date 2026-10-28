@@ -35,12 +35,14 @@
  * ImportWalletPage to re-enter their recovery phrase manually.
  */
 import { useAuthStore, useUIStore } from '@/store'
+import type { WalletAccount } from '@/wallet'
+import { walletGeneration, noteRestoring, startWalletReadiness } from './walletReadiness'
 
 // ── Single-flight guard ─────────────────────────────────────────────────────
 // There are 13+ call sites of restorePrivateKey() across the app, several
 // firing automatically on mount. Sharing one in-flight attempt avoids
 // redundant concurrent network calls when multiple components ask at once.
-let inFlightRestore: { promise: Promise<boolean>; passcode: string | null } | null = null
+let inFlightRestore: { promise: Promise<boolean>; passcode: string | null; generation: number } | null = null
 
 // PERF FIX (transaction-speed audit, 2026-09-17): `silent`, used by
 // PaySendPage/ChatPage/SwapPage/MultichainTransferPage/MultichainClaimPage
@@ -71,7 +73,14 @@ export function walletUnavailableMessage(): string {
 }
 
 export async function restorePrivateKey(rawPasscode?: string, opts?: { silent?: boolean }): Promise<boolean> {
+  startWalletReadiness()
   const running = inFlightRestore
+  // An attempt for an account that has since logged out / switched is not
+  // this caller's: start a fresh one (its own result is dropped - commit()).
+  if (running && running.generation !== walletGeneration()) {
+    inFlightRestore = null
+    return restorePrivateKey(rawPasscode, opts)
+  }
   if (running) {
     const ok = await running.promise
     // The attempt we joined may have started without this caller's passcode
@@ -95,15 +104,24 @@ export async function restorePrivateKey(rawPasscode?: string, opts?: { silent?: 
     return restorePrivateKey(rawPasscode, opts)
   }
 
+  const generation = walletGeneration()
   const promise = (async () => {
-    const restored = await attemptRestore(rawPasscode)
+    noteRestoring(true)
+    let outcome: Outcome = { ok: false, error: 'failed' }
+    try {
+      outcome = await attemptRestore(generation, rawPasscode)
+    } finally {
+      noteRestoring(false, outcome.ok === false ? outcome.error : null)
+    }
+    // Logged out / switched meanwhile: nothing to say about the new account.
+    if (generation !== walletGeneration()) return false
     if (!opts?.silent) {
       const hasWallet = !!useAuthStore.getState().walletAddress
-      useUIStore.getState().setWalletRecoveryNeeded(hasWallet && !restored)
+      useUIStore.getState().setWalletRecoveryNeeded(hasWallet && !outcome.ok)
     }
-    return restored
+    return outcome.ok
   })()
-  const entry = { promise, passcode: rawPasscode ?? null }
+  const entry = { promise, passcode: rawPasscode ?? null, generation }
   inFlightRestore = entry
 
   try {
@@ -150,11 +168,31 @@ function passcodeOpens(walletSource: string | null | undefined): boolean {
   return walletSource !== 'privy' && walletSource !== 'social-auto' && walletSource !== 'circle'
 }
 
-async function attemptRestore(rawPasscode?: string): Promise<boolean> {
-  const { walletAddress, signer, walletSource, setWallet } = useAuthStore.getState()
+/** ok, or why not: null = it needs the passcode / an unlock (not an error). */
+type Outcome = { ok: true } | { ok: false; error: string | null }
+const OK: Outcome = { ok: true }
+const fail = (error: string | null): Outcome => ({ ok: false, error })
 
-  if (signer) return true
-  if (!walletAddress) return false
+/**
+ * Put the opened wallet in the store - only if it still belongs to the
+ * account this attempt started for. A restore can wait tens of seconds
+ * (Privy signing in, the wallet frame on a weak connection); setWallet with
+ * the address captured at the start used to bring a logged-out wallet back.
+ */
+function commit(generation: number, address: string, account: WalletAccount, source?: Parameters<ReturnType<typeof useAuthStore.getState>['setWallet']>[2]): boolean {
+  const cur = useAuthStore.getState()
+  if (generation !== walletGeneration() || cur.walletAddress?.toLowerCase() !== address.toLowerCase()) return false
+  cur.setWallet(address, account, source)
+  return true
+}
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+async function attemptRestore(generation: number, rawPasscode?: string): Promise<Outcome> {
+  const { walletAddress, signer, walletSource } = useAuthStore.getState()
+
+  if (signer) return OK
+  if (!walletAddress) return fail(null)
 
   // ── 1. a Privy wallet: Privy keeps the key in its secure hardware and opens
   // it for this signed-in account (src/wallet/privy.ts).
@@ -163,13 +201,13 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
     const started = Date.now()
     // A known Privy account: wait for Privy to sign in and list the wallet.
     const account = await restorePrivyAccount(walletAddress, 30_000, 20_000)
-    if (account) setWallet(walletAddress, account, 'privy')
+    if (account) return commit(generation, walletAddress, account, 'privy') ? OK : fail('account changed')
     else {
       // Why it didn't open (client_errors): loaded? signed in? listed?
       void import('@/lib/errorReport').then(r => r.reportClientError('rejection',
         new Error(`[privy restore] no wallet after ${((Date.now() - started) / 1000).toFixed(1)} s: ${privyState(walletAddress)} online=${typeof navigator === 'undefined' || navigator.onLine}`))).catch(() => {})
     }
-    return !!account
+    return fail(`privy: ${privyState(walletAddress)}`)
   }
 
   // ── 1a. 'social-auto' (an old Google/email account kept on this device):
@@ -178,7 +216,7 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
   if (walletSource === 'social-auto') {
     const { restorePrivyAccount } = await import('@/wallet/privy')
     const account = await restorePrivyAccount(walletAddress, 20_000).catch(() => null)
-    if (account) { setWallet(walletAddress, account, 'privy'); return true }
+    if (account) return commit(generation, walletAddress, account, 'privy') ? OK : fail('account changed')
   }
 
   // ── 1b. a Circle wallet (switched off): Circle keeps the key; this browser keeps the
@@ -186,43 +224,50 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
   if (walletSource === 'circle') {
     const { restoreCircleAccount } = await import('@/wallet/circle')
     const account = await restoreCircleAccount(walletAddress).catch(() => null)
-    if (account) setWallet(walletAddress, account, 'circle')
-    return !!account
+    if (account) return commit(generation, walletAddress, account, 'circle') ? OK : fail('account changed')
+    return fail('circle session not found')
   }
 
   const wallet = await import('@/wallet')
   const passcodes = (walletSource === 'social-auto' ? [] : [rawPasscode, pendingRawPasscode]).filter(Boolean) as string[]
 
   // ── 2. the frame's session / device copy - no prompt ──────────────────────
-  try {
-    const open = await wallet.unlockWallet(walletAddress)
-    if (open) {
-      setWallet(walletAddress, open, walletSource || undefined)
-      // Finish moving an old app-side passcode copy once a passcode is known.
-      if (passcodes.length) void wallet.migrateLegacyKey(walletAddress, walletSource, passcodes).catch(() => {})
-      return true
+  // A frame that timed out or didn't load (weak connection, a slow phone)
+  // gets two more tries (1 s, 3 s) - it used to leave the wallet closed until
+  // the person did something. A real answer ("locked") isn't retried.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const open = await wallet.unlockWallet(walletAddress)
+      if (open) {
+        if (!commit(generation, walletAddress, open, walletSource || undefined)) return fail('account changed')
+        // Finish moving an old app-side passcode copy once a passcode is known.
+        if (passcodes.length) void wallet.migrateLegacyKey(walletAddress, walletSource, passcodes).catch(() => {})
+        return OK
+      }
+      break
+    } catch (e) {
+      const transient = e instanceof wallet.WalletFrameError && (e.code === 'timeout' || e.code === 'unavailable')
+      if (!transient || attempt >= 2 || generation !== walletGeneration()) {
+        // Frame unreachable (blocked, offline first load): nothing else can
+        // open the key either - the app no longer holds one.
+        console.warn('[Restore] wallet frame unavailable:', e)
+        return fail('wallet frame unavailable')
+      }
+      await sleep(attempt === 0 ? 1000 : 3000)
     }
-  } catch (e) {
-    // Frame unreachable (blocked, offline first load): nothing else can open
-    // the key either - the app no longer holds one.
-    console.warn('[Restore] wallet frame unavailable:', e)
-    return false
   }
 
   // ── 3. keys the app held before the frame existed ─────────────────────────
   try {
     const moved = await wallet.migrateLegacyKey(walletAddress, walletSource, passcodes)
-    if (moved) {
-      setWallet(walletAddress, moved, walletSource || undefined)
-      return true
-    }
+    if (moved) return commit(generation, walletAddress, moved, walletSource || undefined) ? OK : fail('account changed')
   } catch (e) { console.warn('[Restore] moving the old key into the wallet frame failed:', e) }
 
   // ── 4. create / import-*: the frame's passcode copy ───────────────────────
   for (const code of passcodes) {
     try {
       const open = await wallet.unlockWallet(walletAddress, code)
-      if (open) { setWallet(walletAddress, open, walletSource || undefined); return true }
+      if (open) return commit(generation, walletAddress, open, walletSource || undefined) ? OK : fail('account changed')
     } catch (e) {
       // Wrong passcode: try the next one. Locked out: stop - every further
       // try only extends the wait.
@@ -230,6 +275,8 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
     }
   }
 
+  // No passcode given: it simply needs one (the lock screen / payment asks) - not an error.
+  if (!passcodes.length && passcodeOpens(walletSource)) return fail(null)
   console.warn('[Restore] No recovery path available - walletSource:', walletSource, '- user needs to re-enter their recovery phrase or private key.')
-  return false
+  return fail(passcodes.length ? 'passcode did not open the wallet' : 'no copy of the wallet on this device')
 }

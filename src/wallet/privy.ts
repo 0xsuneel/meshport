@@ -50,9 +50,20 @@ const listeners = new Set<() => void>()
 
 export function setPrivyBridge(b: PrivyBridge | null): void {
   bridge = b
+  // Privy's SDK is running (PrivyRoot) - not merely this module loaded.
+  if (b) void import('@/lib/perfTrace').then(m => m.markStartup('provider')).catch(() => {})
   for (const w of [...waiters]) w()
   for (const l of [...listeners]) l()
+  // Wallet readiness (lib/walletReadiness): "Privy lists it" vs "it can sign".
+  void import('@/lib/walletReadiness').then(m => m.recompute()).catch(() => {})
 }
+
+/** True once Privy's wallet iframe has connected this wallet - signing works without waiting. */
+export function privySignerConnected(address: string): boolean {
+  const a = address.toLowerCase()
+  return !!bridge?.ready && !!bridge.authenticated && bridge.wallets.some(w => w.toLowerCase() === a)
+}
+void import('@/lib/walletReadiness').then(m => m.setPrivyConnectedProbe(privySignerConnected)).catch(() => {})
 
 /** Call `listener` whenever Privy's state changes (screens following the Solana address). */
 export function onPrivyChange(listener: () => void): () => void {

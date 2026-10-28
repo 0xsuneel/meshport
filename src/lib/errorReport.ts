@@ -35,3 +35,22 @@ export function reportClientError(kind: Kind, error: unknown): void {
     }).then(() => {}, () => {})
   } catch { /* reporting must never break the app */ }
 }
+
+// Timings (lib/perfTrace.ts): their own small budget, so they never use up
+// the one real errors get. Same table, a "[perf …]" message.
+const MAX_PERF_PER_SESSION = 4
+let perfSent = 0
+export function reportPerf(line: string): void {
+  try {
+    if (perfSent >= MAX_PERF_PER_SESSION || (typeof navigator !== 'undefined' && navigator.onLine === false)) return
+    perfSent++
+    void supabase.from('client_errors').insert({
+      kind: 'rejection',
+      path: window.location.pathname.slice(0, 300),
+      message: line.slice(0, 1000),
+      stack: '',
+      user_agent: navigator.userAgent.slice(0, 400),
+      build: build(),
+    }).then(() => {}, () => {})
+  } catch { /* reporting must never break the app */ }
+}

@@ -2,6 +2,7 @@
  * Arc Blockchain Service
  * Implemented exactly per Arc docs: https://docs.arc.io/integrate/exchanges/withdrawals
  */
+import { span, reportPayment } from './perfTrace'
 import { createPublicClient, parseUnits, encodeFunctionData, parseGwei, getAddress, isAddress, keccak256 } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { arcTransport, arcRpcJson } from './arc'
@@ -97,6 +98,37 @@ export interface SendResult {
 // opens - so an abandoned preflight is rare, and even then harmless: a wrong
 // PIN retries the SAME payment with the SAME idempotency key, which
 // pay-intent answers with the same reservation (idempotent_replay).
+// ── Shared Arc clients ───────────────────────────────────────────────────────
+// One client per configuration, reused - each call used to build a new viem
+// client (and transport) for every preflight, fee estimate and confirmation.
+const arcClients = new Map<string, ReturnType<typeof createPublicClient>>()
+function arcClient(retryCount: number, timeout: number, pollingInterval?: number) {
+  const key = `${retryCount}|${timeout}|${pollingInterval ?? ''}`
+  let c = arcClients.get(key)
+  if (!c) {
+    c = createPublicClient({ transport: arcTransport({ retryCount, timeout }), ...(pollingInterval ? { pollingInterval } : {}) })
+    arcClients.set(key, c)
+  }
+  return c
+}
+
+// Gas price for FEE ESTIMATES only (Pay / Swap / Transfer screens show it on
+// open): one read per 15 s shared by every screen. Transactions themselves
+// never use it - they set their own fee caps (relaySend).
+const GAS_PRICE_TTL_MS = 15_000
+let gasPriceCache: { at: number; price: Promise<bigint> } | null = null
+function estimateGasPrice(): Promise<bigint> {
+  if (gasPriceCache && Date.now() - gasPriceCache.at < GAS_PRICE_TTL_MS) return gasPriceCache.price
+  const price = arcClient(0, 10000).getGasPrice()
+  const entry = { at: Date.now(), price }
+  gasPriceCache = entry
+  price.catch(() => { if (gasPriceCache === entry) gasPriceCache = null }) // a failure is never cached
+  return price
+}
+
+// Payment stage timings (lib/perfTrace), filled in as one send goes along.
+let payStages: { prepare?: number; sign?: number; broadcast?: number; confirm?: number } = {}
+
 type PayToken = 'USDC' | 'EURC' | 'cirBTC'
 type Preflight = { intent: import('./payIntentService').CreatePayIntentResult; gas: bigint; balance?: number }
 
@@ -133,7 +165,7 @@ const preflightSig = (token: PayToken, sender: string, destination: string, amou
 
 async function runPreflight(token: PayToken, sender: `0x${string}`, destination: `0x${string}`, amount: number, idempotencyKey: string, recipientUsername?: string | null, memo?: OrderMemo | null): Promise<Preflight> {
   const tx = payTx(token, destination, amount, memo)
-  const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }) })
+  const publicClient = arcClient(3, 30000)
   const { createPayIntent } = await import('./payIntentService')
   const [balance, intent, gas] = await Promise.all([
     // A failed read is "unknown", never 0: on a weak connection a timed-out
@@ -191,6 +223,15 @@ export function preparePayment(params: { token: PayToken; from: string; to: stri
 
 /** The send's preflight: the early one if it matches exactly, else a fresh one. */
 async function getPreflight(token: PayToken, sender: `0x${string}`, destination: `0x${string}`, amount: number, idempotencyKey: string, recipientUsername?: string | null, memo?: OrderMemo | null): Promise<Preflight> {
+  // How long the send itself waits on preparation (an early preflight
+  // started at PIN entry has usually finished by now).
+  const done = span('pay:prepare')
+  payStages = {}
+  try {
+    return await getPreflightInner(token, sender, destination, amount, idempotencyKey, recipientUsername, memo)
+  } finally { payStages.prepare = done() }
+}
+async function getPreflightInner(token: PayToken, sender: `0x${string}`, destination: `0x${string}`, amount: number, idempotencyKey: string, recipientUsername?: string | null, memo?: OrderMemo | null): Promise<Preflight> {
   const early = preflights.get(idempotencyKey)
   preflights.delete(idempotencyKey)
   const sig = preflightSig(token, sender, destination, payTx(token, destination, amount).amountAtomic, memo)
@@ -224,7 +265,7 @@ export const CONFIRM_TIMEOUT_MS = 10_000
 const RECEIPT_POLL_MS = 200
 
 export async function waitForConfirmation(txHash: string, timeoutMs = CONFIRM_TIMEOUT_MS): Promise<{ state: SendResult['state']; blockNumber?: string }> {
-  const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 1, timeout: 4000 }) })
+  const publicClient = arcClient(1, 4000)
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
@@ -264,7 +305,7 @@ export function confirmTransactionInBackground(
   // ready well before the SECOND poll tick, but nothing checks again until
   // then). 250ms lets this notice the receipt within a fraction of a
   // second of it actually landing.
-  const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 250 })
+  const publicClient = arcClient(3, 30000, 250)
   publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 60000 })
     .then(receipt => {
       onSettled({ success: receipt.status !== 'reverted', blockNumber: receipt.blockNumber?.toString() })
@@ -299,6 +340,24 @@ export async function relaySend(
   tx: { to: `0x${string}`; value?: bigint; data?: `0x${string}`; gas: bigint; nonce: number },
   onSent: (hash: `0x${string}`) => void,
 ): Promise<{ txHash: `0x${string}`; state: SendResult['state']; blockNumber?: string }> {
+  const stages = payStages
+  payStages = {}
+  try {
+    const result = await relaySendTimed(account, tx, onSent, stages)
+    reportPayment(stages, result.state)
+    return result
+  } catch (e) {
+    reportPayment(stages, 'rejected')
+    throw e
+  }
+}
+async function relaySendTimed(
+  account: WalletAccount,
+  tx: { to: `0x${string}`; value?: bigint; data?: `0x${string}`; gas: bigint; nonce: number },
+  onSent: (hash: `0x${string}`) => void,
+  stages: typeof payStages,
+): Promise<{ txHash: `0x${string}`; state: SendResult['state']; blockNumber?: string }> {
+  const signed = span('pay:sign')
   const raw = await account.signTransaction({
     type: 'eip1559',
     chainId: ARC_CHAIN_INLINE.id,
@@ -310,8 +369,11 @@ export async function relaySend(
     maxFeePerGas: parseGwei('25'),
     maxPriorityFeePerGas: parseGwei('1'),
   })
+  stages.sign = signed()
   const txHash = keccak256(raw)
 
+  // Broadcast → hash and (usually) the receipt: the relay waits for it server-side.
+  const broadcast = span('pay:broadcast')
   let relayed: { hash?: string; status?: string; blockNumber?: string; broadcast?: string } | null = null
   try {
     const json = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: RELAY_METHOD, params: [raw, txHash, 8000] }, isSlowNetwork() ? 40_000 : 20_000)
@@ -320,14 +382,15 @@ export async function relaySend(
     // Every node that answered refused it: nothing was sent.
     if (e && typeof e === 'object' && e.code === RELAY_REJECTED) throw new Error(e.message || 'Transaction rejected')
     // Otherwise unknown (lost answer / older server): handled below.
-  }
+  } finally { stages.broadcast = broadcast() }
   if (relayed?.hash && relayed.broadcast !== 'unknown') {
     onSent(txHash)
     if (relayed.status === 'success' || relayed.status === 'failed') {
       return { txHash, state: relayed.status, blockNumber: relayed.blockNumber ? BigInt(relayed.blockNumber).toString() : undefined }
     }
     // Sent, no receipt within the server's wait: one short look, then pending.
-    return { txHash, ...(await waitForConfirmation(txHash, 3_000)) }
+    const confirm = span('pay:confirm')
+    try { return { txHash, ...(await waitForConfirmation(txHash, 3_000)) } } finally { stages.confirm = confirm() }
   }
 
   // Fallback: send it directly through the proxy, as before. Re-sending the
@@ -343,7 +406,8 @@ export async function relaySend(
     // A network failure: it may or may not be out - keep watching it.
     else return { txHash, state: 'pending' }
   }
-  return { txHash, ...(await waitForConfirmation(txHash)) }
+  const confirm = span('pay:confirm')
+  try { return { txHash, ...(await waitForConfirmation(txHash)) } } finally { stages.confirm = confirm() }
 }
 
 // ─── Send USDC - exact Arc docs pattern ──────────────────────────────────────
@@ -510,10 +574,7 @@ export function isValidAddress(address: string): boolean {
 // call site's behavior for USDC exactly unchanged.
 export async function estimateTransferFee(_amount = 0, isErc20 = false): Promise<number> {
   try {
-    const publicClient = createPublicClient({
-      transport: arcTransport({ timeout: 10000 }),
-    })
-    const gasPrice = await publicClient.getGasPrice()
+    const gasPrice = await estimateGasPrice()
     const gasUnits = isErc20 ? 65000n : 21000n // Arc docs: native send vs ERC-20 transfer()
     return Number(gasUnits * gasPrice) / 1e18
   } catch {
@@ -530,10 +591,7 @@ export async function estimateTransferFee(_amount = 0, isErc20 = false): Promise
 const UB_DEPOSIT_GAS_UNITS = 200_000n
 export async function estimateUbDepositGas(): Promise<number> {
   try {
-    const publicClient = createPublicClient({
-      transport: arcTransport({ timeout: 10000 }),
-    })
-    const gasPrice = await publicClient.getGasPrice()
+    const gasPrice = await estimateGasPrice()
     return Number(UB_DEPOSIT_GAS_UNITS * gasPrice * 2n) / 1e18
   } catch {
     return 0.05 // gas price unreadable: the old fixed reserve
