@@ -1609,7 +1609,7 @@ function MultichainHubCard({
   // heroCardHeight, unchanged) - only what's INSIDE it got smaller, so
   // it fits within the same fixed height without clipping the actions row.
   return (
-    <BowedShapeCard background="var(--brand)" fill flat>
+    <BowedShapeCard background="var(--hero-card)" fill flat>
       {/* Header - label + eye toggle on the left, circular accent badge
           on the right (replaces the old centered title + translucent
           globe badge, per the approved reference layout). */}
@@ -1746,7 +1746,7 @@ function AvailableBalanceCard({
   const eyeStroke = 'rgba(255,255,255,.8)'
   const fade = useFirstShowFade()
   return (
-    <BowedShapeCard background="var(--brand)" cardRef={cardRef} flat>
+    <BowedShapeCard background="var(--hero-card)" cardRef={cardRef} flat>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>
           Total balance
@@ -4121,7 +4121,7 @@ export function HomePage() {
           // Mobile hero: ONE teal card in the page's 20px margins - the
           // balance (swipe for the Multichain Hub card), then Pay / Receive /
           // Swap as pills along its bottom.
-          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: '16px 0 16px', background: 'var(--glass-sheen), var(--brand)', borderRadius: 22, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)', overflow: 'hidden' }}>
+          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: '16px 0 16px', background: 'var(--glass-sheen), var(--hero-card)', borderRadius: 22, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)', overflow: 'hidden' }}>
           <div style={{ position: 'relative' }}>
             {businessAccount ? (
               // Business accounts: the balance card only - no Cross-chain card

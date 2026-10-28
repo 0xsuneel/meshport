@@ -464,6 +464,9 @@
    page, so headers start closer to it, like native apps. The browser keeps
    the roomier spacing. --home-header-gap is Home's own top padding. */
 :root { --header-gap: 22px; --home-header-gap: 14px; }
+/* Home hero (balance / Multichain Hub cards and their panel): the brand teal,
+   a little darker. Brand teal itself is unchanged everywhere else. */
+:root { --hero-card: color-mix(in srgb, var(--brand) 82%, #000); }
 @media (display-mode: standalone) {
   :root { --header-gap: 12px; --home-header-gap: 4px; }
 }
