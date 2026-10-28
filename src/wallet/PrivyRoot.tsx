@@ -23,10 +23,11 @@ import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 import { useAuthStore } from '@/store'
 import { privyAccount, privyAppId, setPrivyBridge } from './privy'
 import { useSupabaseSession } from './PrivyGate'
-import { useWalletReadiness } from '@/lib/walletReadiness'
+import { whenPrivyQuiet } from './privyActivity'
 
-// How long Privy gets to load before a stalled start is begun again (see PrivyBridgeSync).
-const PRIVY_LOAD_MS = 8_000
+// Privy silent this long, with the app's own requests answered meanwhile:
+// its load is stuck, not slow (see PrivyBridgeSync).
+const PRIVY_QUIET_MS = 8_000
 
 // Privy signs only on chains it is told about: Arc plus every other chain in
 // MeshPort's registry with a verified chain id (Multichain transfers and
@@ -159,38 +160,36 @@ function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => vo
     if (addresses) markPrivy('walletListed')
   }, [ready, authenticated, addresses])
   // Privy's wallet iframe stuck: signed in, the account has a wallet, but it
-  // isn't connected 5 s later (seen: "ready=true authenticated=true
-  // wallets=0" for 23 s, and signing aborted after 21 s). Privy never
-  // rebuilds a dead iframe by itself; PrivyRoot rebuilds Privy (a new iframe).
+  // isn't connected (seen: "ready=true authenticated=true wallets=0" for
+  // 23 s, and signing aborted after 21 s). Privy never rebuilds a dead iframe
+  // by itself; PrivyRoot rebuilds Privy (a new iframe).
+  // Slow is not stuck: a rebuild throws away everything Privy has done so far
+  // (field, 28 Oct: on a slow connection two rebuilds 20 s and 39 s in, the
+  // wallet listed only at 53 s and the payment waited on it). So it waits for
+  // Privy to go quiet - nothing from Privy (its requests, its iframe) while
+  // the app's own requests still get answers - and for at least as long as
+  // Privy took to load on this connection.
   const stuckRef = useRef(onWalletStuck)
   stuckRef.current = onWalletStuck
+  const mountedAt = useRef(performance.now()).current
+  const readyAt = useRef(0)
+  if (ready && !readyAt.current) readyAt.current = performance.now()
   useEffect(() => {
     if (!ready || !authenticated || !hasLinkedWallet || addresses) return
     // 5 s: field timings (328 starts) - the iframe connects within 4.1 s of
-    // sign-in at p95; past 5 s it was nearly always stuck (9 of 13 cases),
-    // and each stuck one used to wait 8 s before the rebuild even began.
-    const t = setTimeout(() => stuckRef.current('wallet not connected 5 s after sign-in'), 5_000)
-    return () => clearTimeout(t)
-  }, [ready, authenticated, hasLinkedWallet, addresses])
+    // sign-in at p95; past 5 s it was nearly always stuck (9 of 13 cases).
+    const quietMs = Math.max(5_000, readyAt.current - mountedAt)
+    return whenPrivyQuiet(performance.now(), quietMs, () => stuckRef.current('wallet not connected, Privy quiet'))
+  }, [ready, authenticated, hasLinkedWallet, addresses, mountedAt])
   // Privy itself never loaded: started while the phone had no connection,
   // its first request hangs and Privy never retries it - field: "ready=false"
   // for the whole 30 s while the app's own requests got through again from
-  // 10 s on, then "Your wallet didn't open". Once the network is shown
-  // working (Arc answered) and Privy has had its normal time (ready by 6 s
-  // at worst in the field), start it again on a fresh connection.
+  // 10 s on, then "Your wallet didn't open". Start it again on a fresh
+  // connection - only once Privy has gone quiet with the network working.
   useEffect(() => {
     if (ready) return
-    let due = false
-    let fired = false
-    const check = () => {
-      if (fired || !due || !useWalletReadiness.getState().networkReady) return
-      fired = true
-      stuckRef.current('Privy not loaded with the network working')
-    }
-    const t = setTimeout(() => { due = true; check() }, PRIVY_LOAD_MS)
-    const unsub = useWalletReadiness.subscribe(check)
-    return () => { clearTimeout(t); unsub() }
-  }, [ready])
+    return whenPrivyQuiet(mountedAt, PRIVY_QUIET_MS, () => stuckRef.current('Privy not loaded, Privy quiet'))
+  }, [ready, mountedAt])
   useEffect(() => () => setPrivyBridge(null), [])
   return null
 }
@@ -235,8 +234,9 @@ export default function PrivyRoot() {
   const onWalletStuck = (why: string) => {
     const sinceHidden = lastHiddenAt ? `${((performance.now() - lastHiddenAt) / 1000).toFixed(0)} s after the app was last in the background` : 'no background since page load'
     const willRebuild = privyRebuilds < MAX_PRIVY_REBUILDS
+    const n = privyRebuilds + 1
     void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
-      `[privy iframe] ${why} (${sinceHidden}, page up ${(performance.now() / 1000).toFixed(0)} s) - ${willRebuild ? `rebuilding Privy (#${privyRebuilds + 1})` : 'not rebuilding again'}`,
+      `[privy iframe] ${why} (${sinceHidden}, page up ${(performance.now() / 1000).toFixed(0)} s) - ${willRebuild ? `rebuilding Privy (#${n})` : 'not rebuilding again'}`,
     ))).catch(() => {})
     if (!willRebuild) return
     privyRebuilds++

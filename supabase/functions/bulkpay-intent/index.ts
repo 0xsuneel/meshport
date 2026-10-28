@@ -128,7 +128,11 @@ function makeLiveIntentRepository(supabase: ReturnType<typeof createClient>): In
         .eq('chain_id', chainId)
         .eq('wallet_address', walletAddress)
         .eq('nonce', nonce)
-        .eq('status', 'CREATED')
+        // A never-sent attempt the reaper already closed (DROPPED / FAILED,
+        // no tx_hash) used to keep its nonce: the slot was never freed, the
+        // next payment got nonce+1 and waited on Arc forever behind the gap
+        // (live, 28 Oct: nonce 10 held by a DROPPED row, payments at 11-14).
+        .in('status', ['CREATED', 'DROPPED', 'FAILED'])
         .is('tx_hash', null)
         .lt('updated_at', staleBeforeIso)
         .select('id')

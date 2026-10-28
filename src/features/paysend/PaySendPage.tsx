@@ -50,6 +50,7 @@ import { SearchField } from '@/components/ui/SearchField'
 import { useUserSearch } from '@/hooks/useUserSearch'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { reachCheck, STRANGER_PAY_BLOCKED, BLOCKED_YOU } from '@/lib/privacy'
+import { payStep, payStepStart } from '@/lib/perfTrace'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 
 type Screen = 'search' | 'amount' | 'review'
@@ -835,6 +836,7 @@ export function PaySendPage() {
     if (sendInFlightRef.current) return
     if (recipient?.verified === false) return
     sendInFlightRef.current = true
+    payStepStart()
     try {
       // PERF FIX (transaction-speed audit): kick off private-key restore
       // NOW, concurrently with verifyPasscode below, instead of waiting for
@@ -882,6 +884,7 @@ export function PaySendPage() {
           return
         }
       }
+      payStep('pin')
       setShowPasscodeSheet(false)
       await runProcessing()
     } finally {
@@ -900,6 +903,7 @@ export function PaySendPage() {
     const reach = early ? await early
       : merchantPayCode ? null
       : await recipientAccountId().then(id => (id ? reachCheck(id) : null))
+    payStep('recipient')
     if (reach) {
       if (!reach.canPay) {
         setPayBlocked(true); setBlockedMe(reach.blocked)
@@ -916,6 +920,7 @@ export function PaySendPage() {
       if (restored) activeSigner = useAuthStore.getState().signer
     }
     if (!activeSigner) { const { walletUnavailableMessage } = await import('@/lib/restoreWallet'); setTxError(walletUnavailableMessage()); setProcessStage('failed'); return }
+    payStep('wallet')
 
     const toAddr = recipient.walletAddress
     const senderAddr = senderStoredAddress || user?.walletAddress || ''

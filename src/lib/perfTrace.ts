@@ -79,9 +79,30 @@ export function reportResume(ms: number, outcome: string): void {
   void reportPerf(`[perf resume] wallet ready again after ${s(ms)} s (${outcome})`)
 }
 
-/** A payment's stages, in seconds: prepare (preflight), sign, broadcast → hash, confirmation. */
+// What a payment does between the PIN / fingerprint and the send itself
+// (passcode check, recipient check, opening the wallet) - timed by the screen.
+let payBefore: { at: number; last: number; steps: string[] } | null = null
+/** The PIN / fingerprint was accepted input: a payment's own clock starts. */
+export function payStepStart(): void { payBefore = { at: now(), last: now(), steps: [] } }
+/** One step before the send finished (`name` took the time since the last step). */
+export function payStep(name: string): void {
+  if (!payBefore) return
+  const t = now()
+  payBefore.steps.push(`${name} ${s(t - payBefore.last)}`)
+  payBefore.last = t
+}
+
+/** A payment's stages, in seconds: before the send, prepare (preflight), sign, broadcast → hash, confirmation. */
 export function reportPayment(stages: { prepare?: number; sign?: number; broadcast?: number; confirm?: number }, outcome: string): void {
-  void reportPerf(`[perf pay] prepare ${s(stages.prepare)}, sign ${s(stages.sign)}, broadcast ${s(stages.broadcast)}, confirm ${s(stages.confirm)} (${outcome})`)
+  // Only this payment's own steps (a screen that gave up earlier left old ones).
+  const before = payBefore && now() - payBefore.at < 120_000 && payBefore.steps.length ? `before ${payBefore.steps.join(' ')}, ` : ''
+  payBefore = null
+  void reportPerf(`[perf pay] ${before}prepare ${s(stages.prepare)}, sign ${s(stages.sign)}, broadcast ${s(stages.broadcast)}, confirm ${s(stages.confirm)} (${outcome})`)
+}
+
+/** A swap, in seconds: until the swap transaction went out (quote, approval, signing), then until Arc confirmed it. */
+export function reportSwap(beforeSend: number | undefined, confirm: number | undefined, outcome: string): void {
+  void reportPerf(`[perf swap] before send ${s(beforeSend)}, confirm ${s(confirm)} (${outcome})`)
 }
 
 async function reportPerf(line: string): Promise<void> {
@@ -90,7 +111,7 @@ async function reportPerf(line: string): Promise<void> {
 
 /** Test hook. */
 export function resetPerfTrace(): void {
-  startup.clear(); startupReported = false
+  startup.clear(); startupReported = false; payBefore = null
   if (startupTimer) clearTimeout(startupTimer)
   startupTimer = null
 }

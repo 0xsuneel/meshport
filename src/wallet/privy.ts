@@ -83,7 +83,7 @@ export function warmPrivySigner(address: string): Promise<boolean> {
   if (running) return running
   const b = bridge
   if (!b || !b.ready || !b.authenticated || !b.wallets.some(w => w.toLowerCase() === a)) return Promise.resolve(false)
-  const p = timed('warm-up', async () => b, x => x.signMessage(PRIVY_WARM_MESSAGE, address))
+  const p = timed('warm-up', async () => b, x => x.signMessage(PRIVY_WARM_MESSAGE, address), address)
     .then(() => {
       // Only if it's still the same Privy (not rebuilt meanwhile).
       if (bridge === b || (bridge && bridge.wallets.some(w => w.toLowerCase() === a))) warmed.add(a)
@@ -215,7 +215,7 @@ export const PRIVY_STILL_WAITING_MS = 20_000
 export const PRIVY_GIVE_UP_MS = 90_000
 export const PRIVY_NO_ANSWER = "Your wallet didn't respond - nothing was sent. Try again."
 
-async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b: PrivyBridge) => Promise<T>): Promise<T> {
+async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b: PrivyBridge) => Promise<T>, address?: string): Promise<T> {
   const started = performance.now()
   let opened = 0
   const s = (ms: number) => (ms / 1000).toFixed(1)
@@ -227,7 +227,7 @@ async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b
   let watchdog: ReturnType<typeof setTimeout> | undefined
   let giveUp: ReturnType<typeof setTimeout> | undefined
   try {
-    watchdog = setTimeout(() => report(`still waiting after ${s(PRIVY_STILL_WAITING_MS)} s (${parts()})`), PRIVY_STILL_WAITING_MS)
+    watchdog = setTimeout(() => report(`still waiting after ${s(PRIVY_STILL_WAITING_MS)} s (${parts()}; ${privyState(address)})`), PRIVY_STILL_WAITING_MS)
     const noAnswer = new Promise<never>((_, reject) => {
       giveUp = setTimeout(() => reject(new Error(PRIVY_NO_ANSWER)), PRIVY_GIVE_UP_MS)
     })
@@ -264,14 +264,14 @@ export function privyAccount(address: string): WalletAccount {
     address: address as Hex,
     async signMessage({ message }) {
       const m = typeof message === 'string' ? message : { raw: typeof message.raw === 'string' ? message.raw : bytesToHex(message.raw) }
-      return timed('signMessage', open, b => b.signMessage(m, address))
+      return timed('signMessage', open, b => b.signMessage(m, address), address)
     },
     async signTransaction(transaction) {
-      return timed('signTransaction', open, b => b.signTransaction(privyTransaction(transaction), address))
+      return timed('signTransaction', open, b => b.signTransaction(privyTransaction(transaction), address), address)
     },
     async signTypedData(typedData) {
       const { domain, types, primaryType, message } = typedData as TypedDataDefinition
-      return timed('signTypedData', open, b => b.signTypedData(jsonTypedData({ domain, types, primaryType, message }), address))
+      return timed('signTypedData', open, b => b.signTypedData(jsonTypedData({ domain, types, primaryType, message }), address), address)
     },
   })
   const account = Object.assign(base, { meshportWallet: true as const, privyWallet: true as const }) as WalletAccount
