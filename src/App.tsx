@@ -122,6 +122,7 @@ const AdminDashboardPage       = lazyRetry(() => import('./features/admin/Dashbo
 const AdminFeaturesPage        = lazyRetry(() => import('./features/admin/FeaturesPage').then(m => ({ default: m.FeaturesPage })), 'AdminFeaturesPage')
 const AdminCoinsPage           = lazyRetry(() => import('./features/admin/CoinsPage').then(m => ({ default: m.CoinsPage })), 'AdminCoinsPage')
 const AdminChainsPage          = lazyRetry(() => import('./features/admin/ChainsPage').then(m => ({ default: m.ChainsPage })), 'AdminChainsPage')
+const P2PGuidePage             = lazyRetry(() => import('./features/p2p/P2PGuidePage').then(m => ({ default: m.P2PGuidePage })), 'P2PGuidePage')
 const P2PAdminPage             = lazyRetry(() => import('./features/p2p/P2PAdminPage').then(m => ({ default: m.P2PAdminPage })), 'P2PAdminPage')
 const TreasuryAdminPage        = lazyRetry(() => import('./features/admin/TreasuryAdminPage').then(m => ({ default: m.TreasuryAdminPage })), 'TreasuryAdminPage')
 const AdminAnalyticsPage       = lazyRetry(() => import('./features/admin/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })), 'AdminAnalyticsPage')
@@ -422,6 +423,7 @@ const router = createBrowserRouter([
       { path: 'coins',       element: <AdminCoinsPage /> },
       { path: 'chains',      element: <AdminChainsPage /> },
       { path: 'p2p',         element: <P2PAdminPage /> },
+      { path: 'p2p/guide',   element: <P2PGuidePage /> },
       { path: 'treasury',    element: <TreasuryAdminPage /> },
       { path: 'analytics',   element: <AdminAnalyticsPage /> },
       { path: 'notifications', element: <NotificationBroadcastPage /> },
