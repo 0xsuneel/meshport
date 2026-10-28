@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { isAdminUser } from '@/lib/adminSupabase'
+import { isAdminUser, fetchAdminRole } from '@/lib/adminSupabase'
+import { AdminMfaGate } from '@/components/admin/AdminMfaGate'
 import { useAdminStore } from '@/store/adminStore'
 import { ADMIN_PATH } from '@/lib/adminPath'
 
 export function AdminGuard({ children }: { children: React.ReactNode }) {
-  const { isAdminAuthenticated, setAdminSession, clearAdminSession } = useAdminStore()
+  const { isAdminAuthenticated, setAdminSession, setAdminRole, clearAdminSession } = useAdminStore()
   const [checking, setChecking] = useState(true)
   const [status, setStatus] = useState<'allowed' | 'no-session' | 'not-admin'>(
     isAdminAuthenticated ? 'allowed' : 'no-session',
@@ -25,6 +26,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
       if (cancelled) return
       if (admin) {
         setAdminSession(session.user.email ?? '')
+        setAdminRole(await fetchAdminRole(session.user.id))
         setStatus('allowed')
       } else {
         // A logged-in MeshPort user without admin rights - send them home,
@@ -40,5 +42,5 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
   if (checking) return null
   if (status === 'not-admin') return <Navigate to="/" replace />
   if (status === 'no-session') return <Navigate to={`${ADMIN_PATH}/login`} replace />
-  return <>{children}</>
+  return <AdminMfaGate>{children}</AdminMfaGate>
 }

@@ -8,15 +8,15 @@
 // chain and destination address are display-only, and every action sends a
 // row id only (see lib/adminRecovery.ts). Every action is audit-logged.
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle, ArrowRight, Bell, Check, Copy, ExternalLink, Lock, RefreshCw, Search, ShieldCheck, X, Zap, Clock, RotateCcw,
+  AlertTriangle, ArrowRight, Bell, ExternalLink, Lock, RefreshCw, Search, ShieldCheck, X, Zap, Clock, RotateCcw,
 } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import { AdminCard } from '@/components/admin/AdminCard'
+import { chainName, short, usd, ago, Pill, CopyText, Field, ActionButton, chip } from '@/components/admin/AdminUi'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { copyToClipboard } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
   adminListStuck, adminInspect, adminFinishClaim, adminReattest, adminRelayTransfer, adminRequeueUbClaim,
@@ -57,16 +57,6 @@ const STATE_TEXT: Record<string, string> = {
   notified: 'The user was notified in the app.',
 }
 
-const chainName = (c?: string | null) =>
-  !c ? '-' : c === 'Arc_Testnet' ? 'Arc' : c.replace(/_(Sepolia|Testnet|Fuji|Apothem|Amoy_Testnet)$/, '').replace(/_/g, ' ')
-const short = (a?: string | null, n = 6) => (!a ? '-' : a.length > 2 * n + 2 ? `${a.slice(0, n)}…${a.slice(-4)}` : a)
-const usd = (n: number) => `${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`
-function ago(iso: string) {
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
-  if (s < 3600) return `${Math.round(s / 60)}m ago`
-  if (s < 86400) return `${Math.round(s / 3600)}h ago`
-  return `${Math.round(s / 86400)}d ago`
-}
 function txUrl(item: StuckItem): string | null {
   if (!item.txHash) return null
   // Claims burn/deposit on the source chain; transfers and UB deposits start on Arc.
@@ -79,54 +69,6 @@ function statusTone(item: StuckItem): { text: string; color: string } {
   if (item.kind === 'ub_withdrawal') return { text: 'Withdrawing', color: 'var(--text-secondary)' }
   if (item.status === 'failed' || item.status === 'expired') return { text: item.status === 'expired' ? 'Expired' : 'Failed', color: 'var(--danger-text)' }
   return { text: 'Stuck in progress', color: 'var(--warning-text)' }
-}
-
-// ── Small UI pieces ──────────────────────────────────────────────────────────
-function Pill({ children, color }: { children: ReactNode; color: string }) {
-  return (
-    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap',
-      color, background: `color-mix(in srgb, ${color} 14%, transparent)` }}>{children}</span>
-  )
-}
-
-function CopyText({ value, mono = true }: { value: string; mono?: boolean }) {
-  const [done, setDone] = useState(false)
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-      <span style={{ fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : undefined, wordBreak: 'break-all' }}>{value}</span>
-      <button aria-label="Copy" onClick={e => { e.stopPropagation(); copyToClipboard(value).then(ok => { if (ok) { setDone(true); setTimeout(() => setDone(false), 1200) } }) }}
-        style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', flexShrink: 0 }}>
-        {done ? <Check data-tick size={13} color="var(--success)" /> : <Copy size={13} />}
-      </button>
-    </span>
-  )
-}
-
-function Field({ label, children, locked }: { label: string; children: ReactNode; locked?: boolean }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, padding: '10px 0', borderTop: '1px solid var(--border)', fontSize: 13 }}>
-      <span style={{ color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-        {locked && <Lock size={12} aria-label="Locked" />}{label}
-      </span>
-      <span style={{ color: 'var(--text-primary)', fontWeight: 600, textAlign: 'right', minWidth: 0 }}>{children}</span>
-    </div>
-  )
-}
-
-function ActionButton({ children, onClick, disabled, primary, icon }: {
-  children: ReactNode; onClick: () => void; disabled?: boolean; primary?: boolean; icon?: ReactNode
-}) {
-  return (
-    <button onClick={onClick} disabled={disabled}
-      style={{
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, minHeight: 42, padding: '0 14px',
-        borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
-        background: primary ? 'var(--brand)' : 'transparent', color: primary ? '#fff' : 'var(--text-primary)',
-        border: primary ? 'none' : '1px solid var(--border)', flex: '1 1 auto',
-      }}>
-      {icon}{children}
-    </button>
-  )
 }
 
 // ── Detail panel ─────────────────────────────────────────────────────────────
@@ -351,11 +293,6 @@ export function StuckFundsPage() {
       })}
     </div>
   )
-
-  const chip = (active: boolean): CSSProperties => ({
-    padding: '7px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-    background: active ? 'var(--brand)' : 'var(--surface)', color: active ? '#fff' : 'var(--text-secondary)', border: '1px solid var(--border)',
-  })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
