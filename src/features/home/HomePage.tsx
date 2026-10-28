@@ -56,6 +56,7 @@ import { NavIcon } from '@/components/layout/navIcons'
 import { biometricLabel } from '@/lib/biometric'
 import { ServiceIcon } from '@/components/ui/ServiceIcon'
 import { pressable } from '@/lib/pressable'
+import { StuckPaymentsBanner } from '@/components/StuckPaymentsBanner'
 
 function copyText(text: string) { try { void navigator.clipboard.writeText(text).then(() => { try { navigator.vibrate?.(8) } catch { /* no vibration */ } }) } catch {} }
 
@@ -4359,6 +4360,9 @@ export function HomePage() {
 
         {/* Business accounts not approved yet: the approval notice, under the action panel. */}
         {!isDesktop && businessAccount && <BusinessApprovalBanner />}
+
+        {/* Payments queued on Arc behind a missing nonce: cancel them (lib/stuckPayments). */}
+        <StuckPaymentsBanner />
 
         {/* ── FEATURE BANNERS - promo carousel for what MeshPort can do ─────── */}
         {/* Same width/radius as the old Multichain Hub row, 10% taller. */}
