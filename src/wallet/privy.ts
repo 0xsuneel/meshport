@@ -98,6 +98,20 @@ export function warmPrivySigner(address: string): Promise<boolean> {
   return p
 }
 
+/**
+ * Back from the background / unlocking: prove each wallet still signs on the
+ * SAME Privy (one silent warm-up again) instead of assuming it - or rebuilding
+ * Privy, which threw its session away and made the next signature a cold
+ * start every time. Not ready again until it answers (the lock screen waits).
+ */
+export function recheckPrivySigners(): Promise<boolean>[] {
+  const b = bridge
+  if (!b?.ready || !b.authenticated || !b.wallets.length) return []
+  for (const w of b.wallets) warmed.delete(w.toLowerCase())
+  void import('@/lib/walletReadiness').then(m => m.recompute()).catch(() => {})
+  return b.wallets.map(w => warmPrivySigner(w))
+}
+
 /** True once Privy's wallet iframe has connected this wallet AND authenticated it (warm-up signed) - a payment signs without waiting. */
 export function privySignerConnected(address: string): boolean {
   const a = address.toLowerCase()

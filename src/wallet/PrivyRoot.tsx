@@ -21,7 +21,7 @@ import { supabase } from '@/lib/supabase'
 import { arcTestnet } from '@/lib/chain'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 import { useAuthStore } from '@/store'
-import { privyAccount, privyAppId, setPrivyBridge } from './privy'
+import { privyAccount, privyAppId, recheckPrivySigners, setPrivyBridge } from './privy'
 import { useSupabaseSession } from './PrivyGate'
 import { whenPrivyQuiet } from './privyActivity'
 
@@ -222,8 +222,12 @@ function markPrivy(name: 'ready' | 'signedIn' | 'walletListed') {
   ))).catch(() => {})
 }
 
-// Away this long and Privy's iframe connection is likely stale (see PrivyRoot).
+// Away this long and Privy's iframe connection may be stale (see PrivyRoot).
 const LONG_BACKGROUND_MS = 3 * 60_000
+// The re-check after the background: Privy silent this long (the app's own
+// requests answered meanwhile) means its iframe is dead. A live one signs the
+// warm-up in ~2 s (field: "[privy warm-up] slow: 2.0-2.6 s").
+const STALE_QUIET_MS = 6_000
 
 // Rebuilds of Privy this page load (a stuck wallet iframe) - at most 2.
 const MAX_PRIVY_REBUILDS = 2
@@ -242,29 +246,43 @@ export default function PrivyRoot() {
     privyRebuilds++
     setGeneration(g => g + 1)
   }
-  // A fresh Privy for the next signature, ready before it's needed. After the
-  // app sat in the background (Android freezes the page), Privy still lists
-  // the wallet but its iframe's connection is stale: the first signature
-  // then re-authenticates the wallet with Privy (/api/v1/wallets/authenticate)
-  // and hung - 20-44 s ("signal is aborted", "<no response> TimeoutError"),
-  // the "36 s" payment right after unlocking. A new iframe connects and
-  // authenticates while the lock screen is up, so the payment signs at once.
-  // Once per return from the background: when the app locks (it was away
-  // 15+ min) or comes back after a long background.
+  // Back from the background (Android freezes the page) or unlocked: the
+  // same Privy is checked, not replaced. One silent warm-up signature proves
+  // the wallet still signs - the lock screen waits for it (walletReadiness),
+  // so the payment after unlock signs at once. Rebuilding Privy here (what
+  // this did until 28 Oct) threw its session away on every return: the next
+  // signature was always a cold start. Rebuilt only when the check shows the
+  // iframe is dead after all - Privy quiet while the app's own requests are
+  // answered (field: a stale iframe "hung" 20-44 s, "signal is aborted").
+  // Once per return from the background.
   useEffect(() => {
-    let refreshedFor = -1
-    const refresh = () => {
-      if (refreshedFor === lastHiddenAt) return
-      refreshedFor = lastHiddenAt
-      setGeneration(g => g + 1)
+    let checkedFor = -1
+    let stopWatch: (() => void) | null = null
+    const recheck = () => {
+      if (checkedFor === lastHiddenAt) return
+      checkedFor = lastHiddenAt
+      stopWatch?.()
+      const started = performance.now()
+      const checks = recheckPrivySigners()
+      if (!checks.length) return
+      let answered = false
+      const watch = whenPrivyQuiet(started, STALE_QUIET_MS, () => {
+        if (answered) return
+        void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
+          `[privy iframe] no answer after the background (${((started - lastHiddenAt) / 1000).toFixed(0)} s away) - rebuilding Privy`,
+        ))).catch(() => {})
+        setGeneration(g => g + 1)
+      })
+      stopWatch = watch
+      void Promise.all(checks).then(() => { answered = true; watch() })
     }
-    const onLocked = () => { if (lastHiddenAt) refresh() }
+    const onLocked = () => { if (lastHiddenAt) recheck() }
     const onVisible = () => {
-      if (document.visibilityState === 'visible' && lastHiddenAt && performance.now() - lastHiddenAt >= LONG_BACKGROUND_MS) refresh()
+      if (document.visibilityState === 'visible' && lastHiddenAt && performance.now() - lastHiddenAt >= LONG_BACKGROUND_MS) recheck()
     }
     window.addEventListener('meshport:wallet-locked', onLocked)
     document.addEventListener('visibilitychange', onVisible)
-    return () => { window.removeEventListener('meshport:wallet-locked', onLocked); document.removeEventListener('visibilitychange', onVisible) }
+    return () => { stopWatch?.(); window.removeEventListener('meshport:wallet-locked', onLocked); document.removeEventListener('visibilitychange', onVisible) }
   }, [])
   return (
     <PrivyProvider

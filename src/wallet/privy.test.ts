@@ -250,6 +250,21 @@ describe('warm-up: the wallet is authenticated before the first payment', () => 
     } finally { warmFails = false }
   })
 
+  it('back from the background: the same Privy is checked again (one warm-up), not replaced - ready once it answers', async () => {
+    const b = fakeBridge(); setPrivyBridge(b); await flush()
+    const checks = privy.recheckPrivySigners()
+    expect(checks).toHaveLength(1)
+    expect(privy.privySignerConnected(ADDR)).toBe(false) // not ready until it answers
+    expect(await checks[0]).toBe(true)
+    expect(b.warms.length).toBe(2)
+    expect(privy.privySignerConnected(ADDR)).toBe(true)
+  })
+
+  it('nothing to check before Privy has signed in', () => {
+    setPrivyBridge(fakeBridge({ authenticated: false }))
+    expect(privy.recheckPrivySigners()).toEqual([])
+  })
+
   it('the warm-up is a plain message - never a transaction', async () => {
     const b = fakeBridge(); setPrivyBridge(b); await flush()
     expect(b.calls.some(c => c[0] === 'tx' || c[0] === 'typed')).toBe(false)
