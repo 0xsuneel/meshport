@@ -11,9 +11,8 @@ import { useNavigate } from 'react-router-dom'
 import { ADMIN_PATH } from '@/lib/adminPath'
 import { AnimatePresence } from 'framer-motion'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
-import { ArrowLeft, Snowflake, XCircle, Scale, Ban, ShieldAlert, PauseCircle, PlayCircle, Power, Tag, Lock, Unlock, Sliders, ListChecks } from 'lucide-react'
+import { BookOpen, ChevronRight, Snowflake, XCircle, Scale, Ban, ShieldAlert, PauseCircle, PlayCircle, Power, Tag, Lock, Unlock, Sliders, ListChecks } from 'lucide-react'
 import { useUIStore } from '@/store'
-import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useSettingsStore } from '@/store/settingsStore'
 import { updateSetting } from '@/lib/adminSupabase'
 import { trimTrailingZeros } from '@/lib/utils'
@@ -83,49 +82,7 @@ function NeedsTag({ children }: { children: ReactNode }) {
   return <span style={{ fontSize: 10, fontWeight: 700, color: COLORS.muted, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: '1px 5px', marginLeft: 2 }}>{children}</span>
 }
 
-// Who can do what - mirrors the contract's modifiers (onlyPauser /
-// onlyInvestigator / onlyAdmin / role-manager multisig) and the app-level
-// actions that only need this admin login.
-const ROLE_GUIDE: Array<{ who: string; how: string; can: string[]; money: string }> = [
-  { who: 'Your admin login', how: 'No wallet needed', money: 'Never moves USDC on-chain',
-    can: ['Turn the P2P marketplace on or off', 'Cancel a trade before the buyer pays (after that: freeze or dispute first)', 'Cancel an offer with no escrow left', 'Ban a user from P2P', 'Message both sides during a dispute'] },
-  { who: 'Pauser wallet', how: 'Connect below', money: 'Never moves USDC',
-    can: ['Emergency pause / resume the whole escrow', 'Freeze / unfreeze a trade (unfreeze only before it\u2019s investigated)', 'Freeze / unfreeze a sell offer', 'Force-freeze a paid trade the seller left for 24h+'] },
-  { who: 'Investigator wallet', how: 'A different wallet from whoever froze the trade', money: 'Never moves USDC',
-    can: ['Decide a frozen trade: release to the buyer, or refund the seller'] },
-  { who: 'Admin wallet', how: 'Different from the freezer and the investigator', money: 'Moves the USDC',
-    can: ['Carry out the investigator\u2019s decision'] },
-  { who: 'Role managers', how: '3 fixed signers - 2 must agree, then a 2-hour wait', money: 'Never moves USDC',
-    can: ['Add or remove Pausers and Investigators', 'Hand over the Admin role (see Role Managers below)'] },
-]
-
-function RoleGuide() {
-  return (
-    <details open style={{ margin: '0 16px 10px', borderRadius: 12, background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
-      <summary style={{ padding: '12px 14px', fontSize: 13, fontWeight: 700, color: COLORS.text, cursor: 'pointer' }}>Who can do what</summary>
-      <div style={{ padding: '0 14px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {ROLE_GUIDE.map(r => (
-          <div key={r.who} style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{r.who}</span>
-              <span style={{ fontSize: 11, color: COLORS.muted }}>{r.how}</span>
-              <span style={{ fontSize: 11, fontWeight: 700, marginLeft: 'auto', color: r.money === 'Moves the USDC' ? COLORS.warning : COLORS.muted }}>{r.money}</span>
-            </div>
-            <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 12, color: COLORS.muted, lineHeight: 1.6 }}>
-              {r.can.map(c => <li key={c}>{c}</li>)}
-            </ul>
-          </div>
-        ))}
-        <p style={{ fontSize: 11, color: COLORS.muted, margin: 0, lineHeight: 1.5 }}>
-          Every on-chain step is signed by a browser wallet (MetaMask etc.) that holds the role - never by this admin login. Pauser and Investigator can never be the same wallet.
-        </p>
-      </div>
-    </details>
-  )
-}
-
 export function P2PAdminPage() {
-  const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
   const { showToastMessage } = useUIStore()
   const { flipState, runFlip, dismissFlip } = useProcessingFlip()
@@ -472,18 +429,17 @@ export function P2PAdminPage() {
 
   return (
     <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden', paddingBottom: 40 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 16px 6px' }}>
-        {!isDesktop && (
-          <button onClick={() => ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0 ? navigate(-1) : navigate(`${ADMIN_PATH}/dashboard`, { replace: true })} className="back-btn" aria-label="Back"
-            // This header has 16px side padding (other pages 20px): line the arrow up with them.
-            style={{ marginLeft: -6 }}>
-            <ArrowLeft size={20} color={COLORS.text} />
-          </button>
-        )}
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: COLORS.text, margin: 0, letterSpacing: '-0.2px' }}>P2P Admin</h1>
-      </div>
-
-      <RoleGuide />
+      {/* The admin layout's header already titles this page "P2P Trades"
+          (with the menu button) - no second title / back arrow here. */}
+      <button onClick={() => navigate(`${ADMIN_PATH}/p2p/guide`)}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, width: 'calc(100% - 32px)', margin: '12px 16px 4px', padding: '14px 14px', borderRadius: 14, border: `1px solid ${COLORS.border}`, background: COLORS.surface, cursor: 'pointer', textAlign: 'left' }}>
+        <BookOpen size={20} color={COLORS.primaryText} style={{ flexShrink: 0 }} />
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: COLORS.text }}>Who can do what · P2P instructions</span>
+          <span style={{ display: 'block', fontSize: 12, color: COLORS.muted, marginTop: 2 }}>Roles, disputes, pausing, cancelling, banning and changing roles</span>
+        </span>
+        <ChevronRight size={18} color={COLORS.muted} style={{ flexShrink: 0 }} />
+      </button>
 
       <SectionHeader icon={<Sliders size={16} color={COLORS.text} />} title="Escrow Controls" />
       <div style={{ padding: '0 16px', marginBottom: 10 }}>
