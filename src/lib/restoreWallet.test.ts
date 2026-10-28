@@ -31,7 +31,7 @@ import { restorePrivateKey } from './restoreWallet'
 const flush = () => new Promise(r => setTimeout(r, 0))
 
 describe('restorePrivateKey', () => {
-  beforeEach(() => { auth.signer = null; unlockWallet.mockClear(); auth.setWallet.mockClear() })
+  beforeEach(() => { auth.signer = null; unlockWallet.mockClear(); auth.setWallet.mockClear(); ui.setWalletRecoveryNeeded.mockClear() })
 
   it('a passcode call that joins a passcode-less attempt still opens the wallet', async () => {
     const mountRestore = restorePrivateKey(undefined, { silent: true })
@@ -54,5 +54,14 @@ describe('restorePrivateKey', () => {
     expect(await b).toBe(false)
     // one frame call without a passcode (step 2); nothing tried twice
     expect(unlockWallet).toHaveBeenCalledTimes(1)
+  })
+  it('a caller that joins a silent attempt still shows the banner when it fails', async () => {
+    const silent = restorePrivateKey(undefined, { silent: true })
+    const loud = restorePrivateKey()
+    await flush()
+    for (let i = 0; i < 5; i++) { releaseFrame(); await flush() }
+    expect(await silent).toBe(false)
+    expect(await loud).toBe(false)
+    expect(ui.setWalletRecoveryNeeded).toHaveBeenCalledWith(true)
   })
 })

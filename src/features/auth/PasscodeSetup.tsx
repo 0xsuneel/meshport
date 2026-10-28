@@ -222,6 +222,9 @@ export function PasscodeSetupPage() {
 }
 
 // ─── Lock Screen ──────────────────────────────────────────────────────────────
+/** How long the lock screen waits for the wallet to open before going on without it. */
+const OPEN_WAIT_MS = 8_000
+
 export function PasscodeLockPage() {
   const short = useMediaQuery('(max-height: 700px)')
   const navigate = useNavigate()
@@ -249,6 +252,23 @@ export function PasscodeLockPage() {
   const [lockoutMs, setLockoutMs] = useState(0)
   const [checking,  setChecking]  = useState(false)
   const [biometricTrying, setBiometricTrying] = useState(false)
+  const [opening,   setOpening]   = useState(false)
+
+  // Get the wallet ready while this screen is up, so it's open the moment
+  // the passcode is accepted - not loaded only then. Google / email wallets
+  // (Privy, and the old device-kept ones) need no passcode to open: start
+  // now. Created / imported wallets need it: load the wallet frame now, and
+  // open it with the passcode in handleUnlock.
+  useEffect(() => {
+    const { walletAddress: address, signer, walletSource } = useAuthStore.getState()
+    if (!address || signer) return
+    if (walletSource === 'privy' || walletSource === 'social-auto') {
+      import('@/lib/restoreWallet').then(m => m.restorePrivateKey(undefined, { silent: true })).catch(() => {})
+    } else if (walletSource !== 'circle') {
+      import('@/wallet').then(w => w.walletReady()).catch(() => {})
+      import('@/lib/restoreWallet').catch(() => {})
+    }
+  }, [])
 
   const displayName = user?.displayName || user?.username?.replace('.arc','') || 'Welcome back'
   const greetName = user?.displayName || user?.username?.replace('.arc','') || ''
@@ -284,8 +304,18 @@ export function PasscodeLockPage() {
   const [autoPending, setAutoPending] = useState(() => biometricReady && typeof document !== 'undefined' && document.visibilityState === 'visible')
   useEffect(() => { if (liveSupported === false) { setMode('pin'); setAutoPending(false) } }, [liveSupported])
 
-  const handleUnlock = async (val: string) => {
+  const handleUnlock = async (val: string, fromBiometric = false) => {
     setChecking(true)
+    // Open the wallet alongside the passcode check, not after it - both are
+    // deliberately slow (PBKDF2), so this halves the wait. Only for a
+    // passcode likely to be right (the first try here, or one Face ID /
+    // fingerprint handed back): a wrong one also counts against the wallet
+    // frame's own attempt limit, which a later fingerprint unlock doesn't
+    // clear.
+    const opened = useAuthStore.getState().signer ? Promise.resolve(true)
+      : (fromBiometric || attempts === 0)
+        ? import('@/lib/restoreWallet').then(m => m.restorePrivateKey(val, { silent: true })).catch(() => false)
+        : null
     let correct = false
     if (passcode) {
       // No `val === passcode` fallback here on purpose: verifyPasscode()
@@ -296,16 +326,19 @@ export function PasscodeLockPage() {
       try { correct = await verifyPasscode(val, passcode) } catch {}
     }
     if (correct) {
-      // Unlock and navigate the instant the passcode is confirmed - don't
-      // make the user sit on this screen waiting for the wallet key to
-      // fully restore first. That restore can be a genuine network round
-      // trip (social-auto accounts fetch it from the server), which turned
-      // "enter passcode" into a multi-second "Restoring wallet…" wait
-      // instead of an instant unlock. Kicked off here in the background
-      // instead: the rest of the app already copes with the key not being
-      // immediately available (see getKey() in the Multichain pages, and
-      // the wallet-recovery banner, which now self-clears - see setWallet
-      // in store/index.ts - the moment this actually resolves).
+      // Open the app with the wallet open, like MetaMask / Phantom: Send,
+      // Swap and the rest work on the first tap, and the passcode asked
+      // there only confirms the payment. The frame was loaded while this
+      // screen was up and the decrypt ran beside the passcode check, so
+      // this is usually short. Capped: a slow Privy or a stuck frame
+      // doesn't hold the lock screen - the open finishes in the background
+      // (restorePrivateKey below) and the payment screens wait for it.
+      if (!useAuthStore.getState().signer) {
+        setOpening(true)
+        const open = opened ?? import('@/lib/restoreWallet').then(m => m.restorePrivateKey(val, { silent: true })).catch(() => false)
+        await Promise.race([open, new Promise(r => setTimeout(r, OPEN_WAIT_MS))])
+        setOpening(false)
+      }
       setChecking(false)
       unlock()
       useUIStore.getState().setWalletRecoveryNeeded(false)
@@ -378,7 +411,7 @@ export function PasscodeLockPage() {
       // locked out from a few mistyped passcodes would find biometric
       // unlock "broken" too, even though they just authenticated for real.
       clearPasscodeLockout()
-      handleUnlock(pc)
+      handleUnlock(pc, true)
     }
   }
 
@@ -473,6 +506,9 @@ export function PasscodeLockPage() {
                       ? `Too many attempts - try again in ${Math.ceil(lockoutMs / 1000)}s`
                       : `Incorrect passcode${attempts > 1 ? ` · ${attempts} attempts` : ''}`}
                   </motion.p>
+                ) : opening ? (
+                  <motion.p key="open" {...ERROR_MOTION}
+                    className="text-text-secondary text-sm text-center">Opening wallet…</motion.p>
                 ) : checking ? (
                   <motion.p key="verify" {...ERROR_MOTION}
                     className="text-text-secondary text-sm text-center">Verifying…</motion.p>
