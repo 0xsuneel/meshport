@@ -65,8 +65,10 @@ function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => vo
   // The account HAS a Privy wallet (Privy's record) - whether or not Privy's
   // wallet iframe has connected it yet (until then `wallets` is empty and
   // signing waits until Privy aborts it).
-  const hasLinkedWallet = !!(user?.linkedAccounts as Array<{ type?: string; chainType?: string; walletClientType?: string }> | undefined)
-    ?.some(a => a.type === 'wallet' && a.chainType === 'ethereum' && a.walletClientType === 'privy')
+  const linked = ((user?.linkedAccounts as Array<{ type?: string; chainType?: string; walletClientType?: string; address?: string }> | undefined) ?? [])
+    .filter(a => a.type === 'wallet' && a.chainType === 'ethereum' && a.walletClientType === 'privy' && !!a.address)
+    .map(a => a.address as string).join(',')
+  const hasLinkedWallet = !!linked
   // Solana (docs/SOLANA.md): Privy's own embedded wallets only, not external ones.
   // Privy loads the Solana wallets after the Ethereum ones: until `solanaReady`
   // an empty list doesn't mean "none" (creating one then fails with "User
@@ -84,6 +86,7 @@ function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => vo
     setPrivyBridge({
       ready, authenticated,
       wallets: addresses ? addresses.split(',') : [],
+      linked: linked ? linked.split(',') : [],
       solanaWallets: solanaAddresses ? solanaAddresses.split(',') : [],
       solanaReady: solanaListReady,
       createSolanaWallet: async () => (await createSolanaWallet()).wallet.address,
@@ -104,7 +107,7 @@ function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => vo
       signTypedData: async (typedData, address) => (await signTypedData(typedData as never, { ...quiet, address })).signature as Hex,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, authenticated, addresses, solanaAddresses, solanaListReady])
+  }, [ready, authenticated, addresses, linked, solanaAddresses, solanaListReady])
   // A Privy account gets its Solana wallet once its Arc wallet exists - new
   // and existing accounts alike, once per session at most - and only once
   // Privy has loaded its Solana wallets and the account has none.
@@ -120,14 +123,20 @@ function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => vo
   }, [ready, authenticated, addresses, solanaAddresses, solanaListReady, hasSolanaAccount])
   // Privy can finish signing in after the app has stopped waiting for it
   // (a slow phone, a cold start): attach the wallet whenever it does, so a
-  // Privy account is never left without its wallet for the session.
+  // Privy account is never left without its wallet for the session. The
+  // account's record is enough - signing waits for the wallet iframe itself.
   useEffect(() => {
-    if (!ready || !authenticated || !addresses) return
-    const { walletAddress, walletSource, signer, setWallet } = useAuthStore.getState()
-    if (walletSource !== 'privy' || signer || !walletAddress) return
-    if (!addresses.toLowerCase().split(',').includes(walletAddress.toLowerCase())) return
+    const known = [addresses, linked].filter(Boolean).join(',')
+    if (!ready || !authenticated || !known) return
+    const { walletAddress, walletSource, signer, setWallet, isLocked } = useAuthStore.getState()
+    // Locked: unlocking opens it (restoreWallet). 'social-auto': a sign-in
+    // that gave up on a slow Privy took a Privy wallet for an old device-only
+    // one - Privy's own record listing the address settles it.
+    if (signer || !walletAddress || isLocked) return
+    if (walletSource !== 'privy' && walletSource !== 'social-auto') return
+    if (!known.toLowerCase().split(',').includes(walletAddress.toLowerCase())) return
     setWallet(walletAddress, privyAccount(walletAddress), 'privy')
-  }, [ready, authenticated, addresses])
+  }, [ready, authenticated, addresses, linked])
   // Keep Privy warm: when the app comes back to the foreground (or the
   // wallet is unlocked) refresh Privy's session right away, so the first
   // payment after a resume isn't the one that waits for it.

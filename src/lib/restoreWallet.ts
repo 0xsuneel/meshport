@@ -143,6 +143,15 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
     return !!account
   }
 
+  // ── 1a. 'social-auto' (an old Google/email account kept on this device):
+  // a sign-in that gave up on a slow Privy also lands here with a real Privy
+  // wallet. If Privy's record has the address, it's that - open it there.
+  if (walletSource === 'social-auto') {
+    const { restorePrivyAccount } = await import('@/wallet/privy')
+    const account = await restorePrivyAccount(walletAddress, 20_000).catch(() => null)
+    if (account) { setWallet(walletAddress, account, 'privy'); return true }
+  }
+
   // ── 1b. a Circle wallet (switched off): Circle keeps the key; this browser keeps the
   // Circle session. Without it the user signs in to Circle again.
   if (walletSource === 'circle') {
