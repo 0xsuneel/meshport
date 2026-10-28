@@ -79,6 +79,8 @@
           // The logo pulses and "Updating MeshPort..." shows under it - both from
           // this class, in CSS (index.html), so they're there from the first frame.
           document.documentElement.classList.add('mp-updating');
+          // This page IS the new version: the progress bar shows full (index.html).
+          document.documentElement.classList.add('mp-updated');
         }
       } catch (e) {}
 

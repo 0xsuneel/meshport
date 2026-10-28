@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
-import { precache, addRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching'
+import { precache, addRoute, addPlugins, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching'
+import { cacheNames } from 'workbox-core'
 import { registerRoute, NavigationRoute } from 'workbox-routing'
 import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
@@ -11,7 +12,40 @@ declare let self: ServiceWorkerGlobalScope
 // The files are stored now; their route is added AFTER the page route below.
 // (precacheAndRoute() registered it first, and it answers "/" from the stored
 // index.html - so opening the app always ran the stored old version.)
-precache(self.__WB_MANIFEST)
+const MANIFEST = self.__WB_MANIFEST
+
+// ── Update progress ─────────────────────────────────────────────────────────
+// "Updating MeshPort…" shows how much of the new version is on the device
+// (lib/swUpdate.ts): each file this install saves is reported to the open
+// pages, out of the files it actually has to download - unchanged ones are
+// already in the precache and aren't fetched again.
+let toFetch: Promise<number> = Promise.resolve(MANIFEST.length)
+let saved = 0
+self.addEventListener('install', () => {
+  saved = 0
+  toFetch = (async () => {
+    try {
+      const cache = await caches.open(cacheNames.precache)
+      const have = new Set((await cache.keys()).map(r => r.url))
+      return MANIFEST.filter(e => {
+        const entry = typeof e === 'string' ? { url: e, revision: null } : e
+        const u = new URL(entry.url, self.location.href)
+        if (entry.revision) u.searchParams.set('__WB_REVISION__', entry.revision)
+        return !have.has(u.href)
+      }).length
+    } catch { return MANIFEST.length }
+  })()
+})
+addPlugins([{
+  cacheDidUpdate: async () => {
+    saved++
+    const total = Math.max(await toFetch, saved)
+    const msg = { type: 'MP_UPDATE_PROGRESS', saved, total }
+    for (const c of await self.clients.matchAll({ type: 'window', includeUncontrolled: true })) c.postMessage(msg)
+  },
+}])
+
+precache(MANIFEST)
 cleanupOutdatedCaches()
 
 // ── Pages: the live version first, the installed copy when offline/slow ────
