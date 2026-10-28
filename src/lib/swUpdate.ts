@@ -228,7 +228,7 @@ export function showUpdating(): void {
     // layout (64 px logo with the text under it, other colours), and after
     // the reload the logo vanished and the text jumped: two screens.
     const dark = document.documentElement.getAttribute('data-theme') === 'dark'
-    const ink = dark ? '#12665F' : '#0F5C57'
+    const ink = dark ? '#24A193' : '#0F5C57'
     const el = document.createElement('div')
     el.id = 'mp-updating'
     el.setAttribute('role', 'status')
