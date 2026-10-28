@@ -160,6 +160,21 @@ export function forgetVerifiedPasscodes(): void {
   verifiedThisSession.clear()
 }
 
+// ─── Passcode kept only in the wallet frame ──────────────────────────────────
+// For create / import wallets the app keeps no hash of the passcode: its
+// stored value is this marker, and the wallet frame checks the passcode
+// against its own encrypted copy, with its own lockout (lib/walletApproval).
+// A hash here could be copied out of this page's storage (or read by a
+// script running in it) and a 6-digit passcode found offline in about a
+// minute - then used to approve payments.
+export const FRAME_PASSCODE = 'frame:v1'
+/** Thrown when the wallet frame couldn't be reached to check the passcode. */
+export const WALLET_UNAVAILABLE = 'wallet-unavailable'
+let framePasscodeCheck: ((passcode: string) => Promise<boolean>) | null = null
+export function setFramePasscodeCheck(check: (passcode: string) => Promise<boolean>): void {
+  framePasscodeCheck = check
+}
+
 // ─── After a passcode passes ─────────────────────────────────────────────────
 // lib/walletApproval.ts hands it to the wallet frame, which checks it itself
 // before it signs anything that moves value. Awaited: the caller signs next.
@@ -203,6 +218,10 @@ export async function verifyPasscode(passcode: string, storedHash: string): Prom
 }
 
 async function verifyPasscodeUnthrottled(passcode: string, storedHash: string): Promise<boolean> {
+  if (storedHash === FRAME_PASSCODE) {
+    if (!framePasscodeCheck) throw new Error(WALLET_UNAVAILABLE)
+    return framePasscodeCheck(passcode) // throws WALLET_UNAVAILABLE when the frame can't be reached
+  }
   try {
 
     // v2 format: "v2:<salt>:<hash>" - portable, works across devices
@@ -566,7 +585,7 @@ export async function upgradeLegacyEncryption(walletAddress: string | null, pass
       }
     }
   } catch { /* keep the old copy - it still opens */ }
-  if (storedHash && !storedHash.startsWith('v3:')) {
+  if (storedHash && storedHash !== FRAME_PASSCODE && !storedHash.startsWith('v3:')) {
     try { return await hashPasscode(passcode) } catch { return null }
   }
   return null

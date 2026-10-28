@@ -341,6 +341,7 @@ export function ChangePasscodePage() {
       // both are just re-encrypted copies of this same new value.
       const { walletAddress, signer, walletSource, biometricEnabled } = useAuthStore.getState()
       const { setWalletPasscode, keyInWalletFrame } = await import('@/wallet')
+      let inFrame = false
       if (walletAddress && signer && walletSource !== 'social-auto' && keyInWalletFrame(walletSource)) {
         // create / import-seed / import-privkey wallets only - social-auto
         // wallets are never encrypted with the passcode, and Privy / Circle
@@ -348,13 +349,17 @@ export function ChangePasscodePage() {
         // frame re-encrypts the key AND the recovery phrase (opened with the
         // just-verified old passcode) under the new one.
         await setWalletPasscode(walletAddress, newPass, storedPasscode ? oldPass : newPass)
+        inFrame = true
       }
       if (walletAddress && biometricEnabled) {
         const { updateBiometricPasscode } = await import('@/lib/biometric')
         await updateBiometricPasscode(walletAddress, newPass)
       }
 
-      setPasscode(hashed)
+      // A frame wallet's passcode is checked by the frame - no hash kept here
+      // (security.ts FRAME_PASSCODE).
+      const { FRAME_PASSCODE } = await import('@/lib/security')
+      setPasscode(inFrame ? FRAME_PASSCODE : hashed)
       // Show success immediately - local passcode (and its dependents) are already updated
       showToastMessage('Passcode updated successfully', 'success')
       navigate(-1)

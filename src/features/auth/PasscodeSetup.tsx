@@ -9,7 +9,7 @@ import { ScreenPush } from '@/components/ui/ScreenPush'
 import { ERROR_MOTION } from '@/lib/motion'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore, useUIStore } from '@/store'
-import { hashPasscode, verifyPasscode, getPasscodeLockoutRemainingMs, clearPasscodeLockout } from '@/lib/security'
+import { hashPasscode, verifyPasscode, getPasscodeLockoutRemainingMs, clearPasscodeLockout, WALLET_UNAVAILABLE } from '@/lib/security'
 import { hasBiometricRegistered, verifyBiometricAndGetPasscode, biometricLabel, isBiometricSupported, wasBiometricOfferSkippedRecently } from '@/lib/biometric'
 import { afterSplash } from '@/lib/splash'
 import { greetingTime, greetingText } from '@/lib/greeting'
@@ -316,7 +316,15 @@ export function PasscodeLockPage() {
       // The wallet is opened only after this says yes: a passcode sent to the
       // wallet frame before it would get past this lockout, and a typo would
       // count against the frame's own attempt limit.
-      try { correct = await verifyPasscode(val, passcode) } catch {}
+      try { correct = await verifyPasscode(val, passcode) } catch (e) {
+        // The wallet (which checks this passcode) couldn't be reached - not a
+        // wrong passcode: no try counted, say so.
+        if (e instanceof Error && e.message === WALLET_UNAVAILABLE) {
+          setChecking(false); setBiometricTrying(false); setInput('')
+          useUIStore.getState().showToastMessage("Couldn't reach your wallet - check your connection and try again", 'error')
+          return
+        }
+      }
     }
     if (correct) {
       // Open the app with the wallet open, like MetaMask / Phantom: Send,

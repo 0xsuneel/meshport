@@ -14,7 +14,7 @@
 
 import { create } from 'zustand'
 import { useAuthStore } from '@/store'
-import { onPasscodeVerified } from './security'
+import { FRAME_PASSCODE, WALLET_UNAVAILABLE, onPasscodeVerified, setFramePasscodeCheck } from './security'
 
 const FRAME_SOURCES = new Set(['create', 'import-seed', 'import-privkey', 'social-auto'])
 // A little under the frame's own 2 minutes, so a job that starts never runs out.
@@ -26,23 +26,43 @@ function frameWallet(): string | null {
   return walletAddress && walletSource && FRAME_SOURCES.has(walletSource) ? walletAddress : null
 }
 
-/** Hand the passcode to the frame. `error` is the frame's code when it refused it. */
-export async function approveWallet(passcode: string): Promise<{ ok: boolean; error?: string; lockedForMs?: number }> {
+/**
+ * Hand the passcode to the frame. `required`: the frame really checked it
+ * (this wallet has a passcode there). `error` is the frame's code when it
+ * refused it.
+ */
+export async function approveWallet(passcode: string): Promise<{ ok: boolean; required?: boolean; error?: string; lockedForMs?: number }> {
   const address = frameWallet()
   if (!address || !passcode) return { ok: true }
   try {
     const { approveFrameWallet } = await import('@/wallet')
-    await approveFrameWallet(address, passcode)
+    const { required } = await approveFrameWallet(address, passcode)
     approvedAt = Date.now()
-    return { ok: true }
+    return { ok: true, required }
   } catch (e) {
     const { code, lockedForMs } = e as { code?: string; lockedForMs?: number }
     return { ok: false, error: code ?? 'failed', lockedForMs }
   }
 }
 
+// The passcode check itself, for wallets whose passcode lives only in the
+// frame (security.ts FRAME_PASSCODE). A frame with no passcode for this
+// wallet never counts as a match.
+setFramePasscodeCheck(async passcode => {
+  const r = await approveWallet(passcode)
+  if (r.ok) return r.required === true
+  if (r.error === 'bad-passcode' || r.error === 'rate-limited') return false
+  throw new Error(WALLET_UNAVAILABLE)
+})
+
 onPasscodeVerified(async passcode => {
   const r = await approveWallet(passcode)
+  // The frame checked this passcode itself: the app's own hash is no longer
+  // needed - and is the one thing a copy of this page's storage could be
+  // brute-forced from. Keep only the marker from now on.
+  if (r.ok && r.required && useAuthStore.getState().passcode !== FRAME_PASSCODE) {
+    useAuthStore.getState().setPasscode(FRAME_PASSCODE)
+  }
   // The app accepted this passcode but the frame's copy is sealed with a
   // different one: value-moving signatures from this wallet would be refused.
   if (r.error === 'bad-passcode') {
