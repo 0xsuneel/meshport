@@ -81,13 +81,22 @@ export function fetchArcBalanceRaw(addr: string, asset: ArcAsset): Promise<numbe
  * TTL defaults match the legacy balanceCache coordinator (4s) so migrated
  * pages keep identical liveness - a longer TTL would make balances visibly
  * slower to update, which Phase 2.5 must not do.
+ *
+ * No stale-while-revalidate unless a caller asks for it (staleMs): a stale
+ * answer here was the PREVIOUS read, and nothing shows the background
+ * refresh when it lands - so Home's 90s poll always showed what the poll
+ * before it read (balances a step behind the explorer), and a "fresh" read
+ * after a payment ({ ttlMs: 0 }) still came back with the cached figure.
+ * Past the TTL the caller waits for the chain; screens paint the last known
+ * figure meanwhile (store / peekArcBalance).
  */
 export function getArcBalance(wallet: string, asset: ArcAsset, opts?: CacheOptions): Promise<number> {
   const addr = normalizeAddress(wallet)
   const key = balanceKey(addr, ARC_CHAIN_ID, asset)
+  const ttlMs = opts?.ttlMs ?? 4_000
   return swr(key, () => fetchArcBalanceRaw(addr, asset), {
-    ttlMs:   opts?.ttlMs   ?? 4_000,
-    staleMs: opts?.staleMs ?? 120_000,
+    ttlMs,
+    staleMs: opts?.staleMs ?? ttlMs,
   })
 }
 
