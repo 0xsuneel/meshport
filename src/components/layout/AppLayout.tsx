@@ -283,6 +283,15 @@ export function AppLayout() {
   // re-run for that very common case, even though that's exactly when
   // someone is likely to be "returning" after leaving mid-claim. Cheap
   // no-op when there's nothing to recover either way.
+  // Swap rows that couldn't be written to Activity right after the swap (offline,
+  // session expired, tab closed) are retried on open, on return and on reconnect.
+  useEffect(() => {
+    if (!walletAddress) return
+    let stop = () => {}
+    import('@/lib/swapActivityOutbox').then(m => { stop = m.startSwapActivityOutbox(walletAddress) }).catch(() => {})
+    return () => stop()
+  }, [walletAddress])
+
   useEffect(() => {
     if (!walletAddress) return
 

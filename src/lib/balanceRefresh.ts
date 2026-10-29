@@ -85,3 +85,60 @@ export function refreshBalancesAfterTx(address: string | null | undefined, opts:
   }
   void read()
 }
+
+// ── Balances after a swap: the chain's own figures, never arithmetic ───────
+// A swap's real effect is not "amount in" and "quoted amount out": Arc pays gas
+// in USDC, the output is whatever the pool really paid, and EURC / cirBTC may
+// not have been read yet. So nothing is calculated. Each balance is read AT
+// the block the swap landed in (the exact post-swap state, the same figure the
+// explorer shows for that block) and at the block before it (the exact
+// pre-swap state, which is what tells a node a block behind from a fresh one).
+export type SwapBalances = Record<TxToken, { before: number; after: number }>
+
+const hexBlock = (b: string | number): string => typeof b === 'number' ? '0x' + b.toString(16) : b
+const prevBlock = (b: string): string => '0x' + (BigInt(b) - 1n).toString(16)
+const SETTLE_GAPS_MS = [0, 800, 1500, 2500, 4000, 6000]
+
+/**
+ * Reads USDC / EURC / cirBTC at the swap's block (and the one before), shows
+ * them, and keeps them as the pending figures Home and Swap guard against a
+ * lagging node with. Resolves with the exact figures, or null when the node
+ * never served that block (then the normal latest-block refresh runs instead).
+ */
+export async function settleBalancesAfterSwap(address: string, blockNumber: string | number | undefined): Promise<SwapBalances | null> {
+  if (!address) return null
+  lastTxAt = Date.now()
+  lastTxBalances = null
+  if (blockNumber == null || blockNumber === '') { refreshBalancesAfterTx(address); return null }
+  const after = hexBlock(blockNumber)
+  let before: string
+  try { before = prevBlock(after) } catch { refreshBalancesAfterTx(address); return null }
+
+  const svc = await import('@/lib/arcService')
+  const readAll = (tag: string) => Promise.all([
+    svc.readUSDCBalanceOrThrow(address, tag),
+    svc.readEURCBalanceOrThrow(address, tag),
+    svc.readCirBtcBalanceOrThrow(address, tag),
+  ])
+  for (const gap of SETTLE_GAPS_MS) {
+    if (gap) await new Promise(r => setTimeout(r, gap))
+    try {
+      const [a, b] = await Promise.all([readAll(after), readAll(before)])
+      if (!sameWallet(address)) return null
+      const out: SwapBalances = {
+        USDC: { before: b[0], after: a[0] },
+        EURC: { before: b[1], after: a[1] },
+        CIRBTC: { before: b[2], after: a[2] },
+      }
+      lastTxAt = Date.now()
+      lastTxBalances = { address, balances: out }
+      useWalletStore.getState().setBalance(out.USDC.after)
+      saveAssetSlot(address, { eurc: out.EURC.after, cirbtc: out.CIRBTC.after })
+      try { refreshScope({ kind: 'arc', wallet: address }) } catch { /* cache only */ }
+      try { window.dispatchEvent(new CustomEvent(BALANCES_STALE_EVENT, { detail: { address } })) } catch { /* no window */ }
+      return out
+    } catch { /* the node may not have that block yet - try again */ }
+  }
+  refreshBalancesAfterTx(address)
+  return null
+}

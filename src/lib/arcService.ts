@@ -53,11 +53,11 @@ export function toPlainDecimalString(amount: number, decimals: number): string {
 
 // ─── Get USDC balance - Arc docs: use eth_getBalance (18-decimal native wei) ──
 /** Like getUSDCBalance, but a failed read throws instead of looking like 0 (offline must never show $0). */
-export async function readUSDCBalanceOrThrow(address: string): Promise<number> {
+export async function readUSDCBalanceOrThrow(address: string, blockTag: string = 'latest'): Promise<number> {
   const json = await arcRpcJson({
     jsonrpc: '2.0', id: 1,
     method: 'eth_getBalance',    // Arc docs recommended method
-    params: [address, 'latest'],
+    params: [address, blockTag],
   }, isSlowNetwork() ? 30000 : 15000) // a very weak link needs longer to answer
   if (json?.error) throw new Error(json.error.message || 'eth_getBalance failed')
   const raw = json?.result
@@ -689,12 +689,12 @@ export async function sendEURC(params: {
 }
 
 // ─── Get EURC balance (ERC-20 balanceOf) ─────────────────────────────────────
-async function readTokenBalanceOrThrow(address: string, contract: string, decimals: number): Promise<number> {
+async function readTokenBalanceOrThrow(address: string, contract: string, decimals: number, blockTag: string = 'latest'): Promise<number> {
   const padded = address.toLowerCase().replace('0x','').padStart(64,'0')
   const json = await arcRpcJson({
     jsonrpc: '2.0', id: 1,
     method: 'eth_call',
-    params: [{ to: contract, data: '0x70a08231' + padded }, 'latest'],
+    params: [{ to: contract, data: '0x70a08231' + padded }, blockTag],
   }, 10000)
   if (json?.error) throw new Error(json.error.message || 'balanceOf failed')
   const hex = json?.result
@@ -703,8 +703,8 @@ async function readTokenBalanceOrThrow(address: string, contract: string, decima
 }
 
 /** Throwing variants: a failed read is an error, not a 0 balance. */
-export const readEURCBalanceOrThrow = (address: string) => readTokenBalanceOrThrow(address, EURC_CONTRACT, 6)     // EURC = 6 decimals
-export const readCirBtcBalanceOrThrow = (address: string) => readTokenBalanceOrThrow(address, CIRBTC_CONTRACT, 8) // cirBTC = 8 decimals
+export const readEURCBalanceOrThrow = (address: string, blockTag?: string) => readTokenBalanceOrThrow(address, EURC_CONTRACT, 6, blockTag)     // EURC = 6 decimals
+export const readCirBtcBalanceOrThrow = (address: string, blockTag?: string) => readTokenBalanceOrThrow(address, CIRBTC_CONTRACT, 8, blockTag) // cirBTC = 8 decimals
 
 export async function getEURCBalance(address: string): Promise<number> {
   try { return await readEURCBalanceOrThrow(address) } catch { return 0 }
