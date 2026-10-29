@@ -6,7 +6,8 @@ import { useAuthStore, useWalletStore } from '@/store'
 import { formatAmount, trimTrailingZeros } from '@/lib/utils'
 import { type ActivityRecord } from '@/lib/ActivityService'
 import { ActivityRow, DetailSheet, recordMovesToken } from '@/features/activity/ActivityPage'
-import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
+import { type ActionIconName } from '@/components/ui/ActionIcon'
+import { QuickIcon } from '@/components/ui/QuickIcon'
 import { loadAssetSlot } from '@/lib/assetSlot'
 import { fetchBtcPriceUsd, lastKnownBtcPrice } from '@/lib/btcPrice'
 import { fetchEurcPriceUsd, lastKnownEurcPrice } from '@/lib/eurcPrice'
@@ -22,22 +23,23 @@ const TOKENS: Record<AssetToken, { name: string; logo: string; fallbackChar: str
   EURC:   { name: 'Euro Coin',     logo: '/logos/tokens/eurc.png', fallbackChar: '€', fallbackColor: 'var(--usdc-icon)' },
   cirBTC: { name: 'Circle Bitcoin', logo: '/logos/tokens/cirbtc.png',       fallbackChar: '₿', fallbackColor: '#F7931A' },
 }
-const ACTIONS: Record<AssetToken, { label: string; icon: ActionIconName; path: string }[]> = {
+const PAY = 'var(--brand-text)', RECEIVE = 'var(--tile-mint-ink)', SWAP = 'var(--tile-peach-ink)', TRANSFER = 'var(--brand-text)'
+const ACTIONS: Record<AssetToken, { label: string; icon: ActionIconName; path: string; color: string }[]> = {
   USDC: [
-    { label: 'Pay',      icon: 'pay',     path: '/pay?token=USDC' },
-    { label: 'Receive',  icon: 'receive', path: '/receive?token=USDC' },
-    { label: 'Swap',     icon: 'swap',    path: '/swap?from=USDC' },
-    { label: 'Transfer', icon: 'hub',     path: '/multichain?tab=transfer' },
+    { label: 'Pay',      icon: 'pay',     path: '/pay?token=USDC', color: PAY },
+    { label: 'Receive',  icon: 'receive', path: '/receive?token=USDC', color: RECEIVE },
+    { label: 'Swap',     icon: 'swap',    path: '/swap?from=USDC', color: SWAP },
+    { label: 'Transfer', icon: 'hub',     path: '/multichain?tab=transfer', color: TRANSFER },
   ],
   EURC: [
-    { label: 'Pay',     icon: 'pay',     path: '/pay?token=EURC' },
-    { label: 'Receive', icon: 'receive', path: '/receive?token=EURC' },
-    { label: 'Swap',    icon: 'swap',    path: '/swap?from=EURC' },
+    { label: 'Pay',     icon: 'pay',     path: '/pay?token=EURC', color: PAY },
+    { label: 'Receive', icon: 'receive', path: '/receive?token=EURC', color: RECEIVE },
+    { label: 'Swap',    icon: 'swap',    path: '/swap?from=EURC', color: SWAP },
   ],
   cirBTC: [
-    { label: 'Pay',     icon: 'pay',     path: '/pay?token=cirBTC' },
-    { label: 'Receive', icon: 'receive', path: '/receive?token=cirBTC' },
-    { label: 'Swap',    icon: 'swap',    path: '/swap?from=cirBTC' },
+    { label: 'Pay',     icon: 'pay',     path: '/pay?token=cirBTC', color: PAY },
+    { label: 'Receive', icon: 'receive', path: '/receive?token=cirBTC', color: RECEIVE },
+    { label: 'Swap',    icon: 'swap',    path: '/swap?from=cirBTC', color: SWAP },
   ],
 }
 
@@ -127,34 +129,22 @@ export function AssetPage() {
       </div>
 
       <div style={{ maxWidth: isDesktop ? 560 : undefined, margin: '0 auto' }}>
-        {/* Balance and actions: one teal card, the same as Home's balance
-            card - the token, its value, then the actions as pills (Pay in
-            Home's balance card). */}
-        <div style={{ margin: '4px 20px 24px', padding: '16px 16px', borderRadius: 22, color: '#fff',
-          background: 'var(--glass-sheen), var(--brand)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <TokenLogo token={token} />
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>{TOKENS[token].name}</span>
-          </div>
-          <div style={{ marginTop: 12, fontSize: 34, fontWeight: 650, letterSpacing: '-0.03em', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
+        {/* The token and its balance, centred on the page; under it the
+            actions four across, like Home's Quick Actions. */}
+        <div style={{ margin: '4px 20px 26px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+          <TokenLogo token={token} size={56} />
+          <span style={{ marginTop: 10, fontSize: 13.5, color: 'var(--text-secondary)' }}>{TOKENS[token].name}</span>
+          <div style={{ marginTop: 6, fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.1, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
             {hidden ? '••••' : usdStr}
           </div>
-          <div style={{ marginTop: 4, fontSize: 14, color: 'rgba(255,255,255,0.75)', fontVariantNumeric: 'tabular-nums' }}>
+          <div style={{ marginTop: 4, fontSize: 14, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
             {hidden ? '••••' : `${fmtTokenAmount(amount, token)} ${token}`}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${actions.length}, minmax(0, 1fr))`, gap: 6, marginTop: 16 }}>
-            {actions.map(a => {
-              return (
-                <button key={a.label} onClick={() => navigate(a.path)} className="mp-press"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 40, borderRadius: 20, border: 'none',
-                    cursor: 'pointer', font: 'inherit', fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', minWidth: 0,
-                    background: 'rgba(255,255,255,0.12)', color: '#fff',
-                    boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.16)' }}>
-                  <ActionIcon name={a.icon} size={15} color="currentColor" />
-                  {a.label}
-                </button>
-              )
-            })}
+          {/* Four slots wide always (same size as Home's); three are centred. */}
+          <div style={{ alignSelf: 'stretch', display: 'grid', gridTemplateColumns: `repeat(${actions.length}, calc((100% - 18px) / 4))`, justifyContent: 'center', gap: 6, marginTop: 24 }}>
+            {actions.map(a => (
+              <QuickIcon key={a.label} icon={a.icon} label={a.label} color={a.color} onClick={() => navigate(a.path)} />
+            ))}
           </div>
         </div>
 
@@ -194,14 +184,14 @@ export function AssetPage() {
   )
 }
 
-function TokenLogo({ token }: { token: AssetToken }) {
+function TokenLogo({ token, size = 36 }: { token: AssetToken; size?: number }) {
   const info = TOKENS[token]
   const [imgOk, setImgOk] = useState(true)
   return (
-    <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', background: info.fallbackColor, flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 16, fontWeight: 800 }}>
+    <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', background: info.fallbackColor, flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: size * 0.44, fontWeight: 800 }}>
       {imgOk
-        ? <img decoding="async" src={info.logo} alt={token} style={{ width: 36, height: 36, objectFit: 'cover' }} onError={() => setImgOk(false)} />
+        ? <img decoding="async" src={info.logo} alt={token} style={{ width: size, height: size, objectFit: 'cover' }} onError={() => setImgOk(false)} />
         : info.fallbackChar}
     </div>
   )
