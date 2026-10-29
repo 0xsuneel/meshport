@@ -66,13 +66,17 @@ async function verifyOwnsAddress(req, walletAddress) {
 async function recordSwapActivity(walletAddress, txHash, amountIn, amountOut, tokenIn, tokenOut, intentId) {
   if (!SUPABASE_SERVICE_KEY || !walletAddress || !txHash) return
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/activity?on_conflict=tx_hash,wallet_address`, {
+    // A row that already exists is kept - except that a real output amount
+    // replaces a placeholder 0 written earlier (a swap recorded before its
+    // receipt was read).
+    const knownAmount = Number(amountOut) > 0
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/activity?on_conflict=tx_hash,wallet_address`, {
       method: 'POST',
       headers: {
         'apikey':        SUPABASE_SERVICE_KEY,
         'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
         'Content-Type':  'application/json',
-        'Prefer':        'return=minimal,resolution=ignore-duplicates',
+        'Prefer':        `return=minimal,resolution=${knownAmount ? 'merge-duplicates' : 'ignore-duplicates'}`,
       },
       body: JSON.stringify({
         wallet_address: walletAddress.toLowerCase(),
@@ -90,6 +94,7 @@ async function recordSwapActivity(walletAddress, txHash, amountIn, amountOut, to
         ...(intentId ? { transaction_intent_id: intentId } : {}),
       }),
     })
+    if (!r.ok) console.warn('[swap-proxy] recordSwapActivity non-200:', r.status, await r.text().catch(() => ''))
   } catch (e) {
     console.warn('[swap-proxy] recordSwapActivity failed (non-fatal):', e?.message)
   }

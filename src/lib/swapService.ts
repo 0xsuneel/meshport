@@ -368,15 +368,21 @@ async function recordCompletion(params: {
   walletAddress: string; txHash: string; amountIn: number; amountOut: number
   tokenIn: string; tokenOut: string; intentId?: string | null; attemptId?: string | null
 }): Promise<void> {
-  try {
-    const { authApiHeaders } = await import('./supabase')
-    await fetch('/api/swap-proxy', {
-      method: 'POST',
-      headers: await authApiHeaders(),
-      body: JSON.stringify({ action: 'recordCompletion', ...params }),
-    })
-  } catch (e: any) {
-    console.warn('[Swap] recordCompletion failed (non-fatal):', e?.message)
+  // Retried on a network error or a 5xx; a 4xx (no session) won't improve by
+  // repeating - the queued Activity row covers that case.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { authApiHeaders } = await import('./supabase')
+      const res = await fetch('/api/swap-proxy', {
+        method: 'POST',
+        headers: await authApiHeaders(),
+        body: JSON.stringify({ action: 'recordCompletion', ...params }),
+      })
+      if (res.ok || (res.status >= 400 && res.status < 500)) return
+    } catch (e: any) {
+      console.warn('[Swap] recordCompletion failed (non-fatal):', e?.message)
+    }
+    await new Promise(r => setTimeout(r, 500 * 2 ** attempt))
   }
 }
 
@@ -438,7 +444,23 @@ type ExecuteSwapParams = {
   onProgress?: (p: SwapProgress) => void
 }
 
-export async function executeSwapLocal(params: ExecuteSwapParams): Promise<{ txHash: string; amountOut: string; explorerUrl: string }> {
+/** What a confirmed swap returns. `blockNumber` (0x hex) is the block the swap landed in - balances are read AT it. */
+export type SwapOutcome = { txHash: string; amountOut: string; explorerUrl: string; blockNumber?: string }
+
+/** Block (0x hex) the swap transaction was mined in, from its receipt (fetched when not already seen). */
+async function swapBlockNumber(hash: string, receipt?: any): Promise<string | undefined> {
+  if (receipt?.blockNumber && String(receipt.transactionHash).toLowerCase() === hash.toLowerCase()) return String(receipt.blockNumber)
+  for (let i = 0; i < 4; i++) {
+    try {
+      const j = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionReceipt', params: [hash] })
+      if (j?.result?.blockNumber) return String(j.result.blockNumber)
+    } catch { /* retry */ }
+    await new Promise(r => setTimeout(r, 700))
+  }
+  return undefined
+}
+
+export async function executeSwapLocal(params: ExecuteSwapParams): Promise<SwapOutcome> {
   assertAccountUnlocked() // business not approved yet: nothing moves
   _onSwapProgress = params.onProgress ?? null
   _confirmedHashes = new Set()
@@ -461,7 +483,7 @@ export async function executeSwapLocal(params: ExecuteSwapParams): Promise<{ txH
   }
 }
 
-async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amountOut: string; explorerUrl: string }> {
+async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
   const sdkMods = await getSdkModules()
   const kit = getKit(sdkMods.AppKit)
   const adapter = await getAdapter(params.signer)
@@ -482,19 +504,33 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
     config:   { slippageBps: slip },
   }
 
-  const finish = (txHash: string, amountOut: number) => void recordCompletion({
-    walletAddress: params.walletAddress, txHash, amountIn: parsedAmt, amountOut,
-    tokenIn: params.tokenIn, tokenOut: params.tokenOut,
-    intentId: params.intentId, attemptId: params.attemptId,
-  })
+  // The swap is on Arc: its Activity row is queued on this device first, so a
+  // dropped connection or a closed tab can't lose it, then written.
+  const finish = (txHash: string, amountOut: number) => {
+    void import('./swapActivityOutbox').then(({ enqueueSwapActivity, flushSwapActivityOutbox }) => {
+      enqueueSwapActivity({
+        walletAddress: params.walletAddress, txHash, amountIn: parsedAmt, amountOut,
+        tokenIn: params.tokenIn, tokenOut: params.tokenOut,
+      })
+      return flushSwapActivityOutbox(params.walletAddress)
+    }).catch(() => {})
+    void recordCompletion({
+      walletAddress: params.walletAddress, txHash, amountIn: parsedAmt, amountOut,
+      tokenIn: params.tokenIn, tokenOut: params.tokenOut,
+      intentId: params.intentId, attemptId: params.attemptId,
+    })
+  }
 
   try {
     const result: any = await kit.swap(baseParams)
     // amountOut from the confirmed swap's own Transfer log to this wallet (the
     // service's status poll is skipped - see routeSwapServiceThroughServer).
-    const amountOut = result?.amountOut || amountOutFromReceipt(_swapReceipt, params.tokenOut, params.walletAddress) || ''
+    // The receipt's own Transfer is what actually landed in the wallet; the SDK's
+    // figure can be the quote, so it is only the fallback.
+    const amountOut = amountOutFromReceipt(_swapReceipt, params.tokenOut, params.walletAddress) || result?.amountOut || ''
     if (result?.txHash) finish(result.txHash, parseFloat(amountOut || '0') || 0)
-    return { txHash: result?.txHash || '', amountOut, explorerUrl: result?.explorerUrl || '' }
+    const blockNumber = result?.txHash ? await swapBlockNumber(result.txHash, _swapReceipt) : undefined
+    return { txHash: result?.txHash || '', amountOut, explorerUrl: result?.explorerUrl || '', blockNumber }
   } catch (e1: any) {
     const { raw: raw1, userMessage: msg1, isLiquidity, isUncertain } = extractError(e1, sdkMods)
     console.warn('[Swap] attempt 1 failed:', msg1)
@@ -507,7 +543,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
       const amountOut = amountOutFromReceipt(settled.receipt, params.tokenOut, params.walletAddress)
       console.warn('[Swap] kit.swap threw but the swap confirmed on Arc:', settled.hash)
       finish(settled.hash, parseFloat(amountOut || '0') || 0)
-      return { txHash: settled.hash, amountOut, explorerUrl: `${ARC_EXPLORER}/tx/${settled.hash}` }
+      return { txHash: settled.hash, amountOut, explorerUrl: `${ARC_EXPLORER}/tx/${settled.hash}`, blockNumber: await swapBlockNumber(settled.hash, settled.receipt) }
     }
     if (settled.kind === 'reverted') {
       throw Object.assign(new Error('The swap was rejected on Arc (the price or liquidity moved) - nothing was swapped. Please try again.'),
@@ -527,7 +563,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
       if (landed) {
         console.warn('[Swap] verified swap landed on-chain despite the throw:', landed)
         finish(landed.txHash, landed.amount)
-        return { txHash: landed.txHash, amountOut: String(landed.amount), explorerUrl: `${ARC_EXPLORER}/tx/${landed.txHash}` }
+        return { txHash: landed.txHash, amountOut: String(landed.amount), explorerUrl: `${ARC_EXPLORER}/tx/${landed.txHash}`, blockNumber: await swapBlockNumber(landed.txHash) }
       }
     }
 

@@ -32,7 +32,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopHistoryPanel, DesktopHistoryEmpty } from '@/components/ui/DesktopHistoryPanel'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { ARC_EXPLORER } from '@/lib/chainExplorers'
-import { refreshBalancesAfterTx, BALANCES_STALE_EVENT, pendingTxBalance, isLaggingRead, type TxBalances, type TxToken } from '@/lib/balanceRefresh'
+import { settleBalancesAfterSwap, BALANCES_STALE_EVENT, pendingTxBalance, isLaggingRead, type TxToken } from '@/lib/balanceRefresh'
 import { loadAssetSlot, saveAssetSlot } from '@/lib/assetSlot'
 import { readArcBalanceOrThrow } from '@/blockchain/BlockchainManager'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -1127,7 +1127,7 @@ export function SwapPage() {
         intentId = intentResult.intentId ?? null
       }
       const hash   = result?.txHash ?? ''
-      const aOut   = result?.amountOut ?? estimate?.estimatedOutput?.amount ?? '0'
+      const aOut   = result?.amountOut || estimate?.estimatedOutput?.amount || '0'
       setTxHash(hash); setAmountOut(aOut)
 
       // Persist enough to resume this exact screen if the page gets
@@ -1277,24 +1277,19 @@ export function SwapPage() {
       // background refresh, not a precondition for "done".
       (async () => {
         try {
-          // Throwing read (a failed one used to save $0), then the shared
-          // after-transaction refresh: retried while the chain still shows the
-          // old value, and Home re-reads EURC / cirBTC.
-          // Like a payment: the new amounts show at once (we know what went
-          // in and what came out), then the chain's own figures replace them.
-          const key = (id: string): TxToken => id === 'cirBTC' ? 'CIRBTC' : id as TxToken
-          const was = tokenBalsRef.current
-          const inAmt = parseFloat(amountIn) || 0, outAmt = parseFloat(aOut) || 0
-          const balances: TxBalances = {
-            [key(tokenIn.id)]: { before: was[tokenIn.id] ?? 0, after: Math.max(0, (was[tokenIn.id] ?? 0) - inAmt) },
-            [key(tokenOut.id)]: { before: was[tokenOut.id] ?? 0, after: (was[tokenOut.id] ?? 0) + outAmt },
+          // No arithmetic: the balances are read from the chain at the block the
+          // swap landed in (USDC pays the gas, the output is what the pool really
+          // paid), so what shows here is what the explorer and the wallet show.
+          const settled = await settleBalancesAfterSwap(walletAddress ?? '', result?.blockNumber)
+          if (settled) {
+            setTokenBals(b => ({ ...b, USDC: settled.USDC.after, EURC: settled.EURC.after, cirBTC: settled.CIRBTC.after }))
+            // No amount from the receipt: show what actually arrived.
+            if (!result?.amountOut && tokenOut.id !== 'USDC') {
+              const k = tokenOut.id === 'cirBTC' ? 'CIRBTC' : tokenOut.id as TxToken
+              const got = settled[k].after - settled[k].before
+              if (got > 0) setAmountOut(String(got))
+            }
           }
-          setTokenBals(b => ({ ...b, [tokenIn.id]: balances[key(tokenIn.id)]!.after, [tokenOut.id]: balances[key(tokenOut.id)]!.after }))
-          refreshBalancesAfterTx(walletAddress, { balances })
-          const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
-          readUSDCBalanceOrThrow(walletAddress ?? '').then(newUSDC => { if (!isLaggingRead(walletAddress, 'USDC', newUSDC)) setTokenBals(b => ({ ...b, USDC: newUSDC })) }).catch(() => {})
-          // EURC + cirBTC: re-read until the swap shows (BALANCES_STALE_EVENT from
-          // refreshBalancesAfterTx above triggers refreshOtherTokens(true)).
         } catch {}
       })()
       const elapsedMs = swapStartRef.current ? Date.now() - swapStartRef.current : 0
