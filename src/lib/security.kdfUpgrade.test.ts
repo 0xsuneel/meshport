@@ -49,10 +49,10 @@ describe('passcode KDF upgrade', () => {
     expect(await decryptPrivateKey(e, '000000')).toBeNull()
   })
 
-  it('still opens legacy v2 records and upgrades them on unlock', async () => {
+  it('legacy v2 keys still open and upgrade; a legacy v2 passcode hash no longer unlocks (sign in again)', async () => {
     const addr = '0x' + '1'.repeat(40)
     const h = await legacyHash('123456')
-    expect(await verifyPasscode('123456', h)).toBe(true)
+    expect(await verifyPasscode('123456', h)).toBe(false)
     storeEncryptedKey(addr, await legacyEnc('0xkey', '123456'))
     expect(await decryptPrivateKey(getEncryptedKey(addr)!, '123456')).toBe('0xkey')
 
