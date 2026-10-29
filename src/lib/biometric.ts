@@ -147,6 +147,26 @@ async function writeV3(walletAddress: string, passcode: string, salt: string, pr
   localStorage.setItem(SECRET_KEY(walletAddress), JSON.stringify(rec))
   await idbDelete(walletAddress.toLowerCase())
 }
+/**
+ * The oldest records (v1) keep their AES key right next to the sealed
+ * passcode - anyone who can read this page's storage reads the passcode.
+ * Move them to v2 at once (no fingerprint needed: their own key opens them);
+ * the next fingerprint unlock takes them on to v3 where the device allows.
+ */
+export async function upgradeLegacyBiometricRecord(walletAddress: string): Promise<void> {
+  try {
+    const raw = localStorage.getItem(SECRET_KEY(walletAddress))
+    if (!raw) return
+    const rec = JSON.parse(raw) as SecretRecord
+    if (rec.v !== undefined) return
+    const old = rec as { key: string; iv: string; ciphertext: string }
+    const legacy = await crypto.subtle.importKey('raw', fromB64(old.key), { name: 'AES-GCM' }, false, ['decrypt'])
+    const passcode = await open(legacy, old.iv, old.ciphertext)
+    await writeV2(walletAddress, passcode)
+    if (rec.forHash) setRecordForHash(walletAddress, rec.forHash)
+  } catch (e) { console.warn('[biometric] legacy record upgrade skipped:', e instanceof Error ? e.message : e) }
+}
+
 const prfFirst = (cred: PublicKeyCredential | null): ArrayBuffer | null => {
   try { return ((cred as any)?.getClientExtensionResults?.()?.prf?.results?.first as ArrayBuffer) ?? null } catch { return null }
 }

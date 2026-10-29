@@ -5,6 +5,12 @@ const auth = {
   passcode: '' as string, setPasscode: (p: string) => { auth.passcode = p },
 }
 vi.mock('@/store', () => ({ useAuthStore: { getState: () => auth } }))
+// Page storage (node has none): lockout state and the oldest passcode formats read it.
+const mem = new Map<string, string>()
+vi.stubGlobal('localStorage', {
+  getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => { mem.set(k, String(v)) },
+  removeItem: (k: string) => { mem.delete(k) }, clear: () => mem.clear(),
+})
 let frameHasPasscode = true
 let frameDown = false
 const approveFrameWallet = vi.fn(async (_a: string, pin: string) => {
@@ -83,6 +89,18 @@ describe('wallet approval', () => {
     frameDown = true
     await expect(security.verifyPasscode('123456', security.FRAME_PASSCODE)).rejects.toThrow(security.WALLET_UNAVAILABLE)
     expect(security.getPasscodeLockoutRemainingMs()).toBe(0)
+  })
+
+  it('a very old stored passcode (the digits themselves) passes once, then becomes a real hash', async () => {
+    auth.walletSource = 'privy'
+    auth.passcode = '123456'
+    expect(await security.verifyPasscode('123456', auth.passcode)).toBe(true)
+    expect(auth.passcode.startsWith('v3:')).toBe(true)
+  })
+
+  it('a stored value that is not a passcode is never matched as plain text', async () => {
+    auth.walletSource = 'privy'
+    expect(await security.verifyPasscode('not-a-pin', 'not-a-pin')).toBe(false)
   })
 
   it('Google / email (Privy) wallets have nothing to approve here', async () => {
