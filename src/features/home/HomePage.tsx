@@ -57,6 +57,7 @@ import { biometricLabel } from '@/lib/biometric'
 import { ServiceIcon } from '@/components/ui/ServiceIcon'
 import { pressable } from '@/lib/pressable'
 import { StuckPaymentsBanner } from '@/components/StuckPaymentsBanner'
+import { QuickIcon } from '@/components/ui/QuickIcon'
 
 function copyText(text: string) { try { void navigator.clipboard.writeText(text).then(() => { try { navigator.vibrate?.(8) } catch { /* no vibration */ } }) } catch {} }
 
@@ -633,26 +634,6 @@ function QuickTile({ def, tone, height, onClick, dim, dot, locked, badge, disabl
         </span>
       )}
       {locked && <LockBadge />}
-    </button>
-  )
-}
-
-// Home's row, four across like a payments app's quick actions: the icon on
-// the page in its tile colour, one short name under it - no card, no subtitle.
-function QuickIcon({ icon, label, color, onClick, dot, dim, locked, ariaLabel }: {
-  icon: TileDef['icon']; label: string; color: string; onClick: () => void
-  dot?: boolean; dim?: boolean; locked?: boolean; ariaLabel?: string
-}) {
-  return (
-    <button type="button" onClick={onClick} aria-label={ariaLabel} className="mp-press"
-      style={{ minWidth: 0, background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer', font: 'inherit',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, opacity: dim ? 0.45 : 1 }}>
-      <span style={{ position: 'relative', height: 40, display: 'grid', placeItems: 'center' }}>
-        <ActionIcon name={icon} size={36} color={color} />
-        {dot && <span aria-label="Open P2P trade" style={{ position: 'absolute', top: -2, right: -4, width: 11, height: 11, borderRadius: '50%', background: 'var(--danger)', border: '2px solid var(--bg)' }} />}
-        {locked && <LockBadge />}
-      </span>
-      <span style={{ maxWidth: '100%', fontSize: 12.5, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
     </button>
   )
 }
