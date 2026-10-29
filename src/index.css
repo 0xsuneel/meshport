@@ -931,10 +931,14 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
   backdrop-filter: blur(40px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
 }
+/* The header's top edge fades into the plain page colour: the phone's status
+   bar above it is that colour (theme-color) and a website can't draw behind
+   it, so a frosted top edge met it as a hard line. */
 #root .mp-frost-top::before {
   top: 0; bottom: -80px;
   -webkit-mask-image: linear-gradient(#000 calc(100% - 80px), transparent calc(100% - 80px));
   mask-image: linear-gradient(#000 calc(100% - 80px), transparent calc(100% - 80px));
+  background: linear-gradient(var(--frost-tint, var(--bg)), transparent 28px), color-mix(in srgb, var(--frost-tint, var(--bg)) 75%, transparent);
 }
 #root .mp-frost-bottom::before {
   top: -80px; bottom: 0;
