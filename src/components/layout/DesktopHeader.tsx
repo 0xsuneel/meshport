@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Bell, HelpCircle, Loader2, Sun, Moon } from 'lucide-react'
 import { useAuthStore, useNotificationStore, useUIStore } from '@/store'
 import { useThemeStore, resolveTheme } from '@/store/themeStore'
+import { switchTheme } from '@/lib/themeTransition'
 import { Avatar } from '@/components/ui/Avatar'
 import { searchUsersDb, getOrCreateConversation, fetchContactsDb, type DbUser } from '@/lib/supabase'
 import { getRemovedContacts } from '@/lib/removedContacts'
@@ -65,7 +66,6 @@ export function DesktopHeader() {
   // directly (bypassing "system"), matching LandingNav's toggle exactly.
   // Appearance settings remains the only place to pick "System".
   const mode = useThemeStore(s => s.mode)
-  const setMode = useThemeStore(s => s.setMode)
   const isDark = resolveTheme(mode) === 'dark'
 
   // Same faucet logic as HomePage's Assets-card Faucet button: opens
@@ -322,7 +322,7 @@ export function DesktopHeader() {
       <div style={{ flex: 1 }} />
 
       <motion.button
-        onClick={() => setMode(isDark ? 'light' : 'dark')}
+        onClick={() => switchTheme(isDark ? 'light' : 'dark')}
         aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
         whileHover={{ scale: 1.06, boxShadow: 'var(--shadow-2)' }}
         whileTap={{ scale: 0.92 }}
