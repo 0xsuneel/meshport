@@ -23,7 +23,7 @@ import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { useWalletStore, useAuthStore, useUIStore } from '@/store'
 import { formatAmount, shortenAddress, midShortenAddress, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
-import { sendUSDC, sendEURC, estimateTransferFee, isValidAddress, confirmTransactionInBackground } from '@/lib/arcService'
+import { sendUSDC, sendEURC, estimateTransferFee, isValidAddress, trackPendingSend } from '@/lib/arcService'
 import { classifyFailure, recordFailure, FAILURE_MESSAGES } from '@/lib/failure'
 import { arcRpcJson } from '@/lib/arc'
 import { notifyRewardSend } from '@/lib/notifications'
@@ -998,7 +998,7 @@ export function PaySendPage() {
 
       if (result.txHash) {
         const { Activity, updateActivityStatus } = await import('@/lib/ActivityService')
-        Activity.send({ walletAddress: result.senderAddress, txHash: result.txHash, amount: numAmount, tokenSymbol: token, toAddress: result.recipientAddress, fee: estimatedFee, toUsername: recipient?.isUsername ? recipient.display : undefined, note: note.trim() || undefined }).catch(() => {})
+        Activity.send({ walletAddress: result.senderAddress, txHash: result.txHash, status: result.state === 'pending' ? 'pending' : 'completed', amount: numAmount, tokenSymbol: token, toAddress: result.recipientAddress, fee: estimatedFee, toUsername: recipient?.isUsername ? recipient.display : undefined, note: note.trim() || undefined }).catch(() => {})
 
         // Write the RECEIVE-side row directly, right here, in the same
         // processing event as the confirmed on-chain transfer - instead of
@@ -1028,6 +1028,7 @@ export function PaySendPage() {
           fromUsername:  user?.username || undefined,
           note:          note.trim() || undefined,
           receiveKind:   'p2p_payment',
+          status:        result.state === 'pending' ? 'pending' : 'completed',
         }).catch(() => {})
 
         // A payment is exactly the kind of change the short-lived Recent
@@ -1036,15 +1037,25 @@ export function PaySendPage() {
         // right away rather than waiting out the cache window.
         import('@/lib/recentContacts').then(({ invalidateRecentContactsCache }) => invalidateRecentContactsCache())
 
-        // Only still-unconfirmed ("pending") payments need watching: keep
-        // following the receipt, flip the screen to confirmed when it lands,
-        // or correct the Activity rows if it ends up reverting.
-        if (result.state === 'pending') confirmTransactionInBackground(result.txHash as `0x${string}`, ({ success }) => {
-          if (success) { setPayPending(false); return }
-          updateActivityStatus(`send_${result.txHash.toLowerCase()}`, result.senderAddress, 'failed', FAILURE_MESSAGES.reverted)
-          updateActivityStatus(`recv_${result.txHash.toLowerCase()}`, result.recipientAddress, 'failed', FAILURE_MESSAGES.reverted)
-          showToastMessage('Payment failed to confirm on-chain - please check Activity', 'error')
-        })
+        // A payment that isn't confirmed yet is saved as Processing, never as
+        // completed. Follow it until it settles: confirmed flips both rows to
+        // Completed; reverted, or pushed out of the wallet's queue by another
+        // transaction (nonce), flips them to Failed with the reason.
+        if (result.state === 'pending') {
+          const sendKey = `send_${result.txHash.toLowerCase()}`, recvKey = `recv_${result.txHash.toLowerCase()}`
+          trackPendingSend(result.txHash, { sender: result.senderAddress, nonce: result.nonce }, outcome => {
+            if (outcome === 'success') {
+              setPayPending(false)
+              updateActivityStatus(sendKey, result.senderAddress, 'completed')
+              updateActivityStatus(recvKey, result.recipientAddress, 'completed')
+              return
+            }
+            const why = outcome === 'replaced' ? FAILURE_MESSAGES.nonce : FAILURE_MESSAGES.reverted
+            updateActivityStatus(sendKey, result.senderAddress, 'failed', why)
+            updateActivityStatus(recvKey, result.recipientAddress, 'failed', why)
+            showToastMessage(outcome === 'replaced' ? 'Payment was not sent - another transaction took its place. Please try again.' : 'Payment failed to confirm on-chain - please check Activity', 'error')
+          })
+        }
       }
 
       // PERF FIX: fire-and-forget - rewards points are a nice-to-have on top

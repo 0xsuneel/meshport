@@ -4129,6 +4129,7 @@ export function ChatConversationPage() {
             tokenSymbol:     payToken || 'USDC',
             toAddress:       result.recipientAddress,
             note:            'Contact Payment',
+            status:          result.state === 'pending' ? 'pending' : 'completed',
           }).catch(() => {})
         }).catch(() => {})
 
@@ -4137,15 +4138,14 @@ export function ChatConversationPage() {
         // act in the rare case the transaction actually reverted,
         // correcting the row just written optimistically above.
         // Only a still-unconfirmed payment needs watching (see above).
-        if (result.state === 'pending') import('@/lib/arcService').then(({ confirmTransactionInBackground }) => {
-          confirmTransactionInBackground(result.txHash as `0x${string}`, ({ success }) => {
-            if (success) { setPayPending(false); return }
-            Promise.all([import('@/lib/ActivityService'), import('@/lib/failure')]).then(([{ updateActivityStatus }, { FAILURE_MESSAGES }]) => {
-              updateActivityStatus(`send_${result.txHash.toLowerCase()}`, result.senderAddress, 'failed', FAILURE_MESSAGES.reverted)
-            })
-            showToastMessage('Payment failed to confirm on-chain - please check Activity', 'error')
+        if (result.state === 'pending') Promise.all([import('@/lib/arcService'), import('@/lib/ActivityService'), import('@/lib/failure')]).then(([{ trackPendingSend }, { updateActivityStatus }, { FAILURE_MESSAGES }]) => {
+          const sendKey = `send_${result.txHash.toLowerCase()}`
+          trackPendingSend(result.txHash, { sender: result.senderAddress, nonce: result.nonce }, outcome => {
+            if (outcome === 'success') { setPayPending(false); updateActivityStatus(sendKey, result.senderAddress, 'completed'); return }
+            updateActivityStatus(sendKey, result.senderAddress, 'failed', outcome === 'replaced' ? FAILURE_MESSAGES.nonce : FAILURE_MESSAGES.reverted)
+            showToastMessage(outcome === 'replaced' ? 'Payment was not sent - another transaction took its place. Please try again.' : 'Payment failed to confirm on-chain - please check Activity', 'error')
           })
-        })
+        }).catch(() => {})
       }
 
       // Transaction on-chain - ArcScan is source of truth
