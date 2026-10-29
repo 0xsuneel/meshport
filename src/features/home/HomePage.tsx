@@ -2923,6 +2923,21 @@ export function HomePage() {
   // The Assets card: the QR grows into the space that opens up under it.
   const assetsCardRef = useRef<HTMLDivElement>(null)
   const stickyHeaderRef = useRef<HTMLDivElement>(null)
+  // The header frosts only once something has scrolled under it: its blur
+  // reaches past its bottom edge (index.css, "Frosted bars"), so at the top
+  // of the page it picked up the balance card's teal. Written straight to the
+  // element - no re-render on scroll.
+  useEffect(() => {
+    const box = scrollContainerRef.current
+    if (!box) return
+    const mark = () => {
+      const header = stickyHeaderRef.current
+      if (header) header.toggleAttribute('data-scrolled', box.scrollTop > 0)
+    }
+    mark()
+    box.addEventListener('scroll', mark, { passive: true })
+    return () => box.removeEventListener('scroll', mark)
+  }, [isDesktop, searchOpen]) // the header mounts with these
 
   // CHANGE 1: More sheet state
   const [showMore, setShowMore] = useState(false)
