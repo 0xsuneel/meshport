@@ -312,11 +312,14 @@ export const Activity = {
   send: (p: {
     walletAddress: string; userId?: string; txHash: string
     amount: number; toAddress: string; tokenSymbol?: string; note?: string; fee?: number; toUsername?: string
+    /** 'pending' while the payment is sent but not yet confirmed (shows as Processing). Default 'completed'. */
+    status?: ActivityStatus
   }) => saveActivity({
     walletAddress:       p.walletAddress,
     userId:              p.userId,
     txHash:              `send_${(p.txHash || '').toLowerCase()}`,
     activityType:        'send',
+    status:              p.status,
     amount:              p.amount,
     tokenSymbol:         p.tokenSymbol ?? 'USDC',
     counterpartyAddress: p.toAddress?.toLowerCase(),
@@ -352,11 +355,14 @@ export const Activity = {
     walletAddress: string; userId?: string; txHash: string
     amount: number; fromAddress: string; tokenSymbol?: string; note?: string; fromUsername?: string
     receiveKind?: 'external_deposit' | 'p2p_payment' | 'reward_claim'
+    /** 'pending' while the payment is sent but not yet confirmed. Default 'completed'. */
+    status?: ActivityStatus
   }) => saveActivity({
     walletAddress:       p.walletAddress,
     userId:              p.userId,
     txHash:              `recv_${(p.txHash || '').toLowerCase()}`,
     activityType:        'receive',
+    status:              p.status,
     amount:              p.amount,
     tokenSymbol:         p.tokenSymbol ?? 'USDC',
     counterpartyAddress: p.fromAddress?.toLowerCase(),

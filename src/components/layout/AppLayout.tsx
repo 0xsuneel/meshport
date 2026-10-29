@@ -289,6 +289,7 @@ export function AppLayout() {
     if (!walletAddress) return
     let stop = () => {}
     import('@/lib/swapActivityOutbox').then(m => { stop = m.startSwapActivityOutbox(walletAddress) }).catch(() => {})
+    import('@/lib/pendingSendSweep').then(m => m.sweepPendingSends(walletAddress)).catch(() => {})
     return () => stop()
   }, [walletAddress])
 

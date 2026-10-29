@@ -80,6 +80,8 @@ export interface SendResult {
   explorerUrl: string
   state: 'success' | 'pending' | 'failed'
   blockNumber?: string
+  /** The nonce this payment was signed with - lets a stuck payment be told apart from a slow one. */
+  nonce?: number
   senderAddress: string
   recipientAddress: string
 }
@@ -322,6 +324,59 @@ export function confirmTransactionInBackground(
 }
 
 
+// ─── A payment that is sent but not confirmed ───────────────────────────────
+// 'pending' means a receipt hasn't been seen yet - the payment may still land,
+// so it is shown as Processing (never as completed, never as failed). This
+// follows it until it settles:
+//   receipt ok        → 'success'
+//   receipt reverted  → 'reverted'
+//   no receipt, the transaction is gone from the network, and the wallet's
+//   nonce has moved past it → 'replaced': another transaction took its place
+//   in the wallet's queue, so this payment was never (and can't be) mined.
+// While the transaction is still known to the network but the wallet's nonce
+// hasn't reached it (an earlier transaction is stuck), it keeps waiting.
+export type PendingOutcome = 'success' | 'reverted' | 'replaced'
+const PENDING_POLL_MS = 2_000
+const PENDING_REPLACED_CHECK_AFTER_MS = 20_000
+const PENDING_GIVE_UP_MS = 10 * 60_000
+
+export function trackPendingSend(
+  txHash: string,
+  opts: { sender?: string; nonce?: number; maxMs?: number },
+  onOutcome: (outcome: PendingOutcome) => void,
+): () => void {
+  let stopped = false
+  const started = Date.now()
+  const receiptOutcome = async (): Promise<PendingOutcome | null> => {
+    const j = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionReceipt', params: [txHash] })
+    const r = j?.result
+    return r ? (r.status === '0x1' ? 'success' : 'reverted') : null
+  }
+  const tick = async () => {
+    if (stopped) return
+    try {
+      const done = await receiptOutcome()
+      if (done) { onOutcome(done); return }
+      if (opts.sender && typeof opts.nonce === 'number' && Date.now() - started >= PENDING_REPLACED_CHECK_AFTER_MS) {
+        const tx = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionByHash', params: [txHash] })
+        if (!tx?.result) {
+          const cnt = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionCount', params: [opts.sender, 'latest'] })
+          const next = cnt?.result ? Number(BigInt(cnt.result)) : -1
+          if (next > opts.nonce) {
+            // Last look at the receipt before calling it replaced.
+            const again = await receiptOutcome()
+            onOutcome(again ?? 'replaced')
+            return
+          }
+        }
+      }
+    } catch { /* RPC hiccup - keep following it */ }
+    if (Date.now() - started < (opts.maxMs ?? PENDING_GIVE_UP_MS)) setTimeout(tick, PENDING_POLL_MS)
+  }
+  setTimeout(tick, PENDING_POLL_MS)
+  return () => { stopped = true }
+}
+
 // ─── Send through the server (OKX-style) ────────────────────────────────────
 // The phone signs the payment itself (the key never leaves it) and already
 // knows the transaction hash before anything is sent. One request then hands
@@ -339,13 +394,13 @@ export async function relaySend(
   account: WalletAccount,
   tx: { to: `0x${string}`; value?: bigint; data?: `0x${string}`; gas: bigint; nonce: number },
   onSent: (hash: `0x${string}`) => void,
-): Promise<{ txHash: `0x${string}`; state: SendResult['state']; blockNumber?: string }> {
+): Promise<{ txHash: `0x${string}`; state: SendResult['state']; blockNumber?: string; nonce: number }> {
   const stages = payStages
   payStages = {}
   try {
     const result = await relaySendTimed(account, tx, onSent, stages)
     reportPayment(stages, result.state)
-    return result
+    return { ...result, nonce: tx.nonce }
   } catch (e) {
     reportPayment(stages, 'rejected')
     throw e
@@ -551,6 +606,7 @@ export async function sendUSDC(params: {
     explorerUrl: `${ARC_TESTNET.explorerUrl}/tx/${txHash}`,
     state: sent.state,
     blockNumber: sent.blockNumber,
+    nonce: sent.nonce,
     senderAddress,
     recipientAddress: destination,
   }
@@ -683,6 +739,7 @@ export async function sendEURC(params: {
     // Real receipt, already waited for by relaySend.
     state: sent.state,
     blockNumber: sent.blockNumber,
+    nonce: sent.nonce,
     senderAddress,
     recipientAddress: destination,
   }
@@ -800,6 +857,7 @@ export async function sendCirBTC(params: {
     // Real receipt, already waited for by relaySend.
     state: sent.state,
     blockNumber: sent.blockNumber,
+    nonce: sent.nonce,
     senderAddress,
     recipientAddress: destination,
   }
