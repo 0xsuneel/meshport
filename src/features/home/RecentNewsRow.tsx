@@ -319,8 +319,14 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
           )
         })}
         {n > 1 && (
+          // A soft dark band along the cover's foot, so the dots read on a
+          // cover with its own text printed on it (Arc's).
+          <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, top: NEWS_PIC_H - 20, height: 20, borderRadius: '0 0 10px 10px', pointerEvents: 'none',
+            background: 'linear-gradient(transparent, rgba(0,0,0,0.5))' }} />
+        )}
+        {n > 1 && (
           // Bottom-right of the cover, clear of the source label and of a drawn cover's text.
-          <div aria-hidden style={{ position: 'absolute', top: NEWS_PIC_H - 13, right: 5, display: 'flex', gap: 3, padding: '2px 3px', borderRadius: 4, background: 'rgba(0,0,0,0.28)' }}>
+          <div aria-hidden style={{ position: 'absolute', top: NEWS_PIC_H - 11, right: 6, display: 'flex', gap: 3 }}>
             {items.map((it, k) => (
               <i key={it.id} style={{ display: 'block', height: 4, width: k === cur ? 10 : 4, borderRadius: 2,
                 background: k === cur ? '#fff' : 'rgba(255,255,255,0.5)', transition: 'width .35s ease, background .35s' }} />
@@ -343,8 +349,8 @@ export function RecentNewsRow({ navigate, footer }: { navigate: NavigateFunction
   if (footer) {
     return (
       // A real border (the light theme's glass edge is transparent): a white
-      // card on the warm page lost its sides.
-      <div style={{ background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: 'var(--glass-card)', overflow: 'hidden' }}>
+      // card on the warm page lost its sides. Corners as the balance card's.
+      <div style={{ background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: 22, boxShadow: 'var(--glass-card)', overflow: 'hidden' }}>
         {ring}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 1px minmax(0, 1fr)' }}>
           <RecentBox navigate={navigate} flat />

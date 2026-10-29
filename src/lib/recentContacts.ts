@@ -107,6 +107,9 @@ export async function fetchRecentContacts(
     // lets callers label this entry "You" instead of resolving it as if it
     // were an ordinary contact.
     if (!addr) continue
+    // ...but not a 0 USDC one to yourself: that's a stuck payment being
+    // cancelled (lib/stuckPayments.ts), not a payment.
+    if (addr === myAddr && !(parseFloat(r.amount || 0) > 0)) continue
     if (!stats.has(addr)) stats.set(addr, { amounts: [], dates: [] })
     stats.get(addr)!.amounts.push(parseFloat(r.amount || 0))
     stats.get(addr)!.dates.push(r.created_at)
