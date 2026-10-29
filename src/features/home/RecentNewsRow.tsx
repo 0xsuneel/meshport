@@ -342,7 +342,9 @@ export function RecentNewsRow({ navigate, footer }: { navigate: NavigateFunction
   const ring = <style>{'@keyframes mpRingFill { to { stroke-dashoffset: 0 } }'}</style>
   if (footer) {
     return (
-      <div style={{ background: 'var(--glass-fill)', border: '1px solid var(--glass-edge)', borderRadius: 16, boxShadow: 'var(--glass-card)', overflow: 'hidden' }}>
+      // A real border (the light theme's glass edge is transparent): a white
+      // card on the warm page lost its sides.
+      <div style={{ background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: 'var(--glass-card)', overflow: 'hidden' }}>
         {ring}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 1px minmax(0, 1fr)' }}>
           <RecentBox navigate={navigate} flat />
