@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X, Sun, Moon } from 'lucide-react'
 import { useThemeStore, resolveTheme } from '@/store/themeStore'
+import { switchTheme } from '@/lib/themeTransition'
 
 const LINKS = [
   { label: 'Features', href: '#features' },
@@ -17,7 +18,6 @@ export function LandingNav() {
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const mode = useThemeStore(s => s.mode)
-  const setMode = useThemeStore(s => s.setMode)
   const isDark = resolveTheme(mode) === 'dark'
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export function LandingNav() {
 
         <div className="flex flex-shrink-0 items-center gap-1.5 min-[375px]:gap-2 sm:gap-3">
           <button
-            onClick={() => setMode(isDark ? 'light' : 'dark')}
+            onClick={() => switchTheme(isDark ? 'light' : 'dark')}
             aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-border bg-surface text-text-secondary transition-colors hover:text-text-primary sm:h-11 sm:w-11"
           >

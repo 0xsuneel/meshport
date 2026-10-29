@@ -7,6 +7,7 @@ import {
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuthStore, useUIStore } from '@/store'
 import { useThemeStore, resolveTheme } from '@/store/themeStore'
+import { switchTheme } from '@/lib/themeTransition'
 import { Avatar } from '@/components/ui/Avatar'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { copyToClipboard } from '@/lib/utils'
@@ -28,7 +29,6 @@ export function ProfilePage() {
   // already use - this button flips light/dark directly, "System" stays
   // only pickable from Appearance.
   const mode = useThemeStore(s => s.mode)
-  const setMode = useThemeStore(s => s.setMode)
   const isDark = resolveTheme(mode) === 'dark'
   const [copied, setCopied] = useState(false)
   const [usernameCopied, setUsernameCopied] = useState(false)
@@ -265,7 +265,7 @@ export function ProfilePage() {
             has the same toggle in DesktopHeader, so it isn't repeated here. */}
         {!isDesktop && (
           <button
-            onClick={() => setMode(isDark ? 'light' : 'dark')}
+            onClick={() => switchTheme(isDark ? 'light' : 'dark')}
             aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             className="mp-hit w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-surface border border-border text-text-secondary active:scale-90 transition-transform"
           >
