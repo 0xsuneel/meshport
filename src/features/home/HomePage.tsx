@@ -415,7 +415,8 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
           payment apps'. Request opens Receive's request form (an order-
           numbered request; its QR / link carry the order and the payer can't
           edit the amount). */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', width: '100%', maxWidth: 340, gap: 8 }}>
+      {/* Full column width, like the Assets card above (this card is 95%). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', width: 'calc(100% / 0.95)', gap: 8 }}>
         {([
           { label: 'Download', icon: <Download size={18} />, onClick: handleDownload, off: !qrReady },
           { label: 'Request', icon: <DollarSign size={18} />, onClick: () => navigate('/receive?request=1'), off: false },
@@ -500,7 +501,7 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 9.5, width: isDesktop ? '100%' : '95%',
+      display: 'flex', alignItems: 'center', gap: 9.5, width: '100%',
       // Mobile: pull up into the column's 18px gap so it sits 10px under
       // the QR's Download · Request · Share row.
       margin: isDesktop ? '10px auto 0' : '-8px auto 0', boxSizing: 'border-box',
