@@ -443,6 +443,12 @@ export function AppLayout() {
   // signer, not just walletAddress - removeFund() is a signed
   // transaction from the original depositing wallet, so this can only run
   // while the wallet is actually unlocked in this session.
+  // The oldest fingerprint-unlock records keep their key beside the sealed
+  // passcode: move them to the safer format once (lib/biometric.ts).
+  useEffect(() => {
+    if (walletAddress) void import('@/lib/biometric').then(m => m.upgradeLegacyBiometricRecord(walletAddress)).catch(() => {})
+  }, [walletAddress])
+
   const signer = useAuthStore(s => s.signer)
   useEffect(() => {
     if (!walletAddress || !signer) return

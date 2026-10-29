@@ -255,8 +255,9 @@ async function verifyPasscodeUnthrottled(passcode: string, storedHash: string): 
       }
     }
 
-    // Last resort: plain text comparison (very old stored passcodes)
-    return passcode === storedHash
+    // Last resort: a very old account that stored the passcode itself (digits
+    // only). Replaced with a real hash the moment it passes (walletApproval).
+    return /^\d{4,8}$/.test(storedHash) && passcode === storedHash
 
   } catch (e) {
     console.error('[Security] verifyPasscode error:', e)

@@ -14,7 +14,7 @@
 
 import { create } from 'zustand'
 import { useAuthStore } from '@/store'
-import { FRAME_PASSCODE, WALLET_UNAVAILABLE, onPasscodeVerified, setFramePasscodeCheck } from './security'
+import { FRAME_PASSCODE, WALLET_UNAVAILABLE, hashPasscode, onPasscodeVerified, setFramePasscodeCheck } from './security'
 
 const FRAME_SOURCES = new Set(['create', 'import-seed', 'import-privkey', 'social-auto'])
 // A little under the frame's own 2 minutes, so a job that starts never runs out.
@@ -60,8 +60,13 @@ onPasscodeVerified(async passcode => {
   // The frame checked this passcode itself: the app's own hash is no longer
   // needed - and is the one thing a copy of this page's storage could be
   // brute-forced from. Keep only the marker from now on.
-  if (r.ok && r.required && useAuthStore.getState().passcode !== FRAME_PASSCODE) {
+  const stored = useAuthStore.getState().passcode
+  if (r.ok && r.required && stored !== FRAME_PASSCODE) {
     useAuthStore.getState().setPasscode(FRAME_PASSCODE)
+  } else if (stored && stored !== FRAME_PASSCODE && !stored.startsWith('v3:')) {
+    // An older format (the passcode itself, a 100k-round or localStorage-salt
+    // hash): the current 600k-round hash instead, now that it has passed.
+    useAuthStore.getState().setPasscode(await hashPasscode(passcode))
   }
   // The app accepted this passcode but the frame's copy is sealed with a
   // different one: value-moving signatures from this wallet would be refused.
