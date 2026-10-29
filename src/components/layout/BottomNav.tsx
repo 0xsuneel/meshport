@@ -170,12 +170,10 @@ export function BottomNav() {
       boxSizing: 'border-box',
     }}>
       {/* Standard bottom nav bar - flush to the screen edges/bottom */}
-      <div data-frost="surface" style={{
-        // Frosted: mostly the surface colour, with what scrolls behind it
-        // showing through softly blurred (Home's content runs under the bar).
-        background: 'color-mix(in srgb, var(--surface) 96%, transparent)',
-        backdropFilter: 'blur(28px)',
-        WebkitBackdropFilter: 'blur(28px)',
+      <div data-frost="surface" className="mp-frost mp-frost-bottom" style={{
+        // Frosted (index.css, "Frosted bars"): what scrolls behind it turns
+        // into a soft blur of colour (Home's content runs under the bar).
+        ['--frost-tint' as string]: 'var(--surface)',
         borderTop: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-around',
         height: 65,
