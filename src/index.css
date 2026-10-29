@@ -944,3 +944,11 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   #root .mp-frost::before { background: var(--frost-tint, var(--bg)); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 }
+/* Home's header frosts only while something is under it (HomePage sets
+   data-scrolled): at the top of the page it's the plain page colour. The
+   blur layer only fades - switching backdrop blur on and off made Android
+   flash (above). */
+.mp-frost-top { background: var(--frost-tint, var(--bg)); transition: background-color .2s ease; }
+.mp-frost-top[data-scrolled] { background: transparent; }
+#root .mp-frost-top::before { opacity: 0; transition: opacity .2s ease; }
+#root .mp-frost-top[data-scrolled]::before { opacity: 1; }
