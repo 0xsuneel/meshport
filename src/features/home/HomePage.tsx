@@ -637,6 +637,26 @@ function QuickTile({ def, tone, height, onClick, dim, dot, locked, badge, disabl
   )
 }
 
+// Home's row, four across like a payments app's quick actions: the icon on
+// the page in its tile colour, one short name under it - no card, no subtitle.
+function QuickIcon({ icon, label, color, onClick, dot, dim, locked, ariaLabel }: {
+  icon: TileDef['icon']; label: string; color: string; onClick: () => void
+  dot?: boolean; dim?: boolean; locked?: boolean; ariaLabel?: string
+}) {
+  return (
+    <button type="button" onClick={onClick} aria-label={ariaLabel} className="mp-press"
+      style={{ minWidth: 0, background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer', font: 'inherit',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, opacity: dim ? 0.45 : 1 }}>
+      <span style={{ position: 'relative', height: 40, display: 'grid', placeItems: 'center' }}>
+        <ActionIcon name={icon} size={36} color={color} />
+        {dot && <span aria-label="Open P2P trade" style={{ position: 'absolute', top: -2, right: -4, width: 11, height: 11, borderRadius: '50%', background: 'var(--danger)', border: '2px solid var(--bg)' }} />}
+        {locked && <LockBadge />}
+      </span>
+      <span style={{ maxWidth: '100%', fontSize: 12.5, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+    </button>
+  )
+}
+
 // ── More Actions Sheet ────────────────────────────────────────────────────────
 function MoreSheet({ open, onClose, navigate, hasOngoingP2P, homeTiles, onSaveHomeTiles }: {
   open: boolean; onClose: () => void; navigate: (p: string) => void; hasOngoingP2P?: boolean
@@ -4332,28 +4352,22 @@ export function HomePage() {
           </div>
         )}
 
-        {/* ── QUICK ACTIONS - three tiles; See all opens the full sheet ──── */}
+        {/* ── QUICK ACTIONS - four across: the person's three + More ───────── */}
         {!isDesktop && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '0 2px 10px' }}>
-              <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.2px' }}>Quick actions</span>
-              <button type="button" onClick={() => setShowMore(true)}
-                style={{ position: 'relative', background: 'none', border: 'none', padding: '4px 0', margin: '-4px 0', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
-                See all
-                {ongoingTradesCount > 0 && !homeTileIds.includes('p2p') && (
-                  // An open P2P trade, when P2P isn't one of Home's tiles.
-                  <span aria-label="Open P2P trade" style={{ position: 'absolute', top: 1, right: -9, width: 7, height: 7, borderRadius: '50%', background: 'var(--danger)' }} />
-                )}
-              </button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+            <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.3px', margin: '0 2px 12px' }}>Quick Actions</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
               {/* The person's three (Edit Home in See all), colours by position. */}
               {homeTileIds.map((id, i) => {
                 const def = tileView(id)
-                return <QuickTile key={id} def={def} tone={HOME_TILE_TONES[i]} height={98} dim={accountLock.locked} locked={accountLock.locked}
+                return <QuickIcon key={id} icon={def.icon} label={def.label.replace(/ Hub$/, '')} ariaLabel={def.label}
+                  color={`var(--tile-${HOME_TILE_TONES[i]}-ink)`} dim={accountLock.locked} locked={accountLock.locked}
                   dot={id === 'p2p' && ongoingTradesCount > 0}
                   onClick={() => { if (def.path === '/scanner') prewarmCamera(); navigate(def.path) }} />
               })}
+              {/* An open P2P trade, when P2P isn't one of Home's three: on More. */}
+              <QuickIcon icon="more" label="More" color="var(--brand-text)" onClick={() => setShowMore(true)}
+                dot={ongoingTradesCount > 0 && !homeTileIds.includes('p2p')} />
             </div>
           </div>
         )}
