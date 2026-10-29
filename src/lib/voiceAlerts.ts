@@ -5,10 +5,11 @@
 // like a shop soundbox. English only. Settings are per device.
 //
 // The voice is our own recording (public/voice/emma/, Kokoro TTS, Apache 2.0):
-// each alert joins two or three whole phrases ("Received twenty four dollars"
-// + "and fifty cents, on Mesport."), so it sounds the same on every phone and
-// flows like a person talking. Only the phrases a payment needs are fetched,
-// while the chime plays; the service worker keeps them after the first time.
+// each alert joins short recorded words ("Received" + "twenty four" +
+// "dollars and" + "fifty" + "cents, on Mesport."), so it sounds the same on
+// every phone - 108 small clips instead of one per amount. Only the words a
+// payment needs are fetched, while the chime plays; the service worker keeps
+// them after the first time.
 // Amounts the clips don't cover ($100,000+), or a phone where they can't
 // load, fall back to the device's own speech.
 //
@@ -48,21 +49,28 @@ export const voiceSupported = () => typeof window !== 'undefined' && 'speechSynt
 const VOICE_DIR = '/voice/emma/'
 
 /**
- * The recorded phrases that say an amount, in order, or null when the clips
- * don't cover it. Clip names: r<n> "Received n dollars", rk<k> "Received k
- * thousand", d<n> "n dollars" (d0 "dollars"), t<c> "and c cents, on Mesport."
- * (t0 "on Mesport."), rc<c> "Received c cents, on Mesport.".
+ * The recorded words that say an amount, in order, or null when the clips
+ * don't cover it. Clip names: received, n1-n99 ("one" … "ninety nine"),
+ * hundred, thousand, dollar(s)_and / dollar(s)_on ("dollars and" / "dollars,
+ * on Mesport."), cent(s)_on ("cents, on Mesport.").
+ * $1,250.50 → received, n1, thousand, n2, hundred, n50, dollars_and, n50, cents_on
  */
 export function phrasesFor(amount: number): string[] | null {
   const cents = Math.round(amount * 100)
   if (!Number.isFinite(cents) || cents <= 0) return null
   const dollars = Math.floor(cents / 100)
   const c = cents % 100
-  if (dollars === 0) return [`rc${c}`]
   if (dollars >= 100_000) return null
-  const k = Math.floor(dollars / 1000)
-  const head = k ? [`rk${k}`, `d${dollars % 1000}`] : [`r${dollars}`]
-  return [...head, `t${c}`]
+  const out = ['received']
+  if (dollars > 0) {
+    const k = Math.floor(dollars / 1000), h = Math.floor((dollars % 1000) / 100), t = dollars % 100
+    if (k) out.push(`n${k}`, 'thousand')
+    if (h) out.push(`n${h}`, 'hundred')
+    if (t) out.push(`n${t}`)
+    out.push(dollars === 1 ? (c ? 'dollar_and' : 'dollar_on') : (c ? 'dollars_and' : 'dollars_on'))
+  }
+  if (c) out.push(`n${c}`, c === 1 ? 'cent_on' : 'cents_on')
+  return out
 }
 
 /** What the device's own speech says when the clips can't play. */
@@ -92,7 +100,7 @@ function unlock() {
   if (unlocked) return
   unlocked = true
   // Ready the chime and the most common ending before the first payment.
-  if (settings.enabled) { void clip('chime'); void clip('t0') }
+  if (settings.enabled) { void clip('chime'); void clip('received'); void clip('dollars_on') }
   if (voiceSupported()) {
     try {
       // A silent utterance started by this tap lets later ones play.
