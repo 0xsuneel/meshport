@@ -3999,14 +3999,12 @@ export function HomePage() {
           app-wide, so this block only mounts there while actively searching
           (opened via DesktopHeader's search box, see isDesktop above). */}
       {(!isDesktop || searchOpen) && (
-      <div ref={stickyHeaderRef} data-frost="bg" style={{
+      <div ref={stickyHeaderRef} data-frost="bg" className="mp-frost mp-frost-top" style={{
         // Above the page's cards while search is open (its results float over them).
         position: 'sticky', top: 0, zIndex: searchOpen ? 40 : 20,
-        // Frosted like the bottom nav: mostly the page colour, the cards that
-        // scroll under it showing through softly blurred.
-        background: 'color-mix(in srgb, var(--bg) 96%, transparent)',
-        backdropFilter: 'blur(28px)',
-        WebkitBackdropFilter: 'blur(28px)',
+        // Frosted like the bottom nav (index.css, "Frosted bars"): the cards
+        // that scroll under it turn into a soft blur of colour.
+        ['--frost-tint' as string]: 'var(--bg)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))',
         paddingBottom: 4, paddingLeft: 20, paddingRight: 20,
         boxSizing: 'border-box',
