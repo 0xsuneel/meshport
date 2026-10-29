@@ -23,7 +23,7 @@ import {
   Bell, BellOff, CheckCircle, Mail, Plus, Trash2,
   Copy, Eye, EyeOff, Upload, Key, FileText,
   ShoppingCart, Tag, Wallet, Ban, Clock as ClockIcon, Scale, RefreshCw,
-  Check, Sun, Moon, Monitor, X,
+  Check, Sun, Moon, Monitor, X, Palette,
   Store,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -32,6 +32,7 @@ import { Card } from '@/components/ui/Card'
 import { useAuthStore, useNotificationStore, useUIStore, type AppNotification } from '@/store'
 import { useFeatureEnabled } from '@/store/settingsStore'
 import { useThemeStore, resolveTheme, type ThemeMode } from '@/store/themeStore'
+import { switchTheme } from '@/lib/themeTransition'
 import { Avatar } from '@/components/ui/Avatar'
 import { copySensitiveToClipboard, timeAgo } from '@/lib/utils'
 import { biometricLabel, removeBiometric } from '@/lib/biometric'
@@ -243,20 +244,64 @@ function AppearancePreview({ mode }: { mode: ThemeMode }) {
   )
 }
 
+// Top of Appearance: what the page does, with two little phones (light and
+// dark) and a quick light/dark switch.
+function AppearanceBanner({ dark, onToggle }: { dark: boolean; onToggle: () => void }) {
+  const phone = (bg: string, line: string, style: React.CSSProperties) => (
+    <div aria-hidden style={{ position: 'absolute', width: 48, height: 86, borderRadius: 11, background: bg, border: '2px solid rgba(255,255,255,0.55)',
+      boxShadow: '0 8px 18px rgba(0,0,0,0.25)', padding: 6, boxSizing: 'border-box', ...style }}>
+      <div style={{ height: 18, borderRadius: 5, background: 'var(--brand)' }} />
+      <div style={{ height: 4, borderRadius: 2, background: line, marginTop: 6 }} />
+      <div style={{ height: 4, borderRadius: 2, background: line, marginTop: 4, width: '70%' }} />
+      <div style={{ height: 12, borderRadius: 4, background: line, marginTop: 6 }} />
+    </div>
+  )
+  return (
+    <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 20, padding: 16, minHeight: 128, color: '#fff',
+      background: 'color-mix(in srgb, var(--brand) 78%, #000)' }}>
+      <div aria-hidden style={{ position: 'absolute', right: -50, top: -30, width: 180, height: 180, borderRadius: '50%', background: 'rgba(143,233,203,0.08)' }} />
+      <div style={{ position: 'relative', maxWidth: '58%' }}>
+        <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(140,225,205,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Palette className="w-5 h-5" />
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.2px', marginTop: 10 }}>Make MeshPort yours</div>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.82)', marginTop: 2, lineHeight: 1.35 }}>Light, dark, or match your phone.</div>
+      </div>
+      {phone('#F5F4F0', 'rgba(0,0,0,0.12)', { right: 74, top: 14, transform: 'rotate(-8deg)' })}
+      {phone('#0B0B0B', 'rgba(255,255,255,0.2)', { right: 30, top: 18, transform: 'rotate(8deg)' })}
+      <button type="button" role="switch" aria-checked={dark} aria-label="Dark theme" onClick={onToggle}
+        style={{ position: 'absolute', right: 14, bottom: 14, width: 60, height: 32, borderRadius: 16, padding: 0, cursor: 'pointer',
+          background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.25)' }}>
+        <span style={{ position: 'absolute', top: 3, left: 3, width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: dark ? '#0D1F1D' : '#fff', transform: dark ? 'translateX(28px)' : 'none', transition: 'transform .35s cubic-bezier(.3,1.4,.5,1), background-color .35s' }}>
+          {dark ? <Moon className="w-3.5 h-3.5" style={{ color: '#8FE9CB' }} /> : <Sun className="w-3.5 h-3.5" style={{ color: 'var(--brand)' }} />}
+        </span>
+      </button>
+    </div>
+  )
+}
+
 export function AppearancePage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
   const mode = useThemeStore(s => s.mode)
-  const setMode = useThemeStore(s => s.setMode)
+  const dark = resolveTheme(mode) === 'dark'
+  // The tick and icon animate on the option just chosen here - not when the
+  // page opens, and not on the old choice (it's in the curtain's snapshot).
+  const [chosen, setChosen] = useState<ThemeMode | null>(null)
+  const choose = (m: ThemeMode) => { setChosen(m); switchTheme(m) }
 
+  const banner = <AppearanceBanner dark={dark} onToggle={() => choose(dark ? 'light' : 'dark')} />
   const optionsCard = (
     <Card className="divide-y divide-border">
       {APPEARANCE_OPTIONS.map(opt => {
         const selected = mode === opt.mode
+        const animate = selected && chosen === opt.mode
         return (
-          <button key={opt.mode} onClick={() => setMode(opt.mode)}
+          <button key={opt.mode} onClick={() => choose(opt.mode)}
             className="flex items-center gap-3 px-4 py-4 w-full text-left first:rounded-t-3xl last:rounded-b-3xl">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${selected ? 'bg-brand/15 text-brand-text' : 'bg-surface text-text-secondary'}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${selected ? 'bg-brand/15 text-brand-text' : 'bg-surface text-text-secondary'} ${animate ? 'mp-icon-spin' : ''}`}
+              key={selected ? 'on' : 'off'}>
               {opt.icon}
             </div>
             <div className="flex-1 min-w-0">
@@ -264,7 +309,7 @@ export function AppearancePage() {
               <p className="text-xs text-text-secondary">{opt.description}</p>
             </div>
             {selected && (
-              <div className="w-6 h-6 rounded-full bg-brand flex items-center justify-center flex-shrink-0">
+              <div className={`w-6 h-6 rounded-full bg-brand flex items-center justify-center flex-shrink-0 ${animate ? 'mp-tick-pop' : ''}`}>
                 <Check className="w-3.5 h-3.5 text-white" />
               </div>
             )}
@@ -287,6 +332,7 @@ export function AppearancePage() {
       {isDesktop ? (
         <div className="px-4 grid grid-cols-2 gap-4 items-start">
           <div className="space-y-3">
+            {banner}
             <p className="text-xs text-text-secondary px-1">Choose how MeshPort looks on this device.</p>
             {optionsCard}
           </div>
@@ -294,6 +340,7 @@ export function AppearancePage() {
         </div>
       ) : (
         <div className="px-4 space-y-3">
+          {banner}
           <p className="text-xs text-text-secondary px-1">Choose how MeshPort looks on this device.</p>
           {optionsCard}
         </div>
