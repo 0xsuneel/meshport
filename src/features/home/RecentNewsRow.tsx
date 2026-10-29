@@ -10,6 +10,7 @@ import { useReconnectCount } from '@/lib/connectivity'
 import { fetchHomeNews, readCachedHomeNews, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT, type NewsItem } from '@/lib/news'
 
 // ── Home: Recent + News, side by side ───────────────────────────────────────
+// (On the phone they share one card with the promo banner along its foot.)
 // Two equal boxes under the feature banner (Home, desktop and mobile), each with a 64px
 // content row.
 //
@@ -31,11 +32,11 @@ const AVATAR = 44
 const QUEUE_STEP_MS = 2600
 const NEWS_STEP_MS = 5000
 
-function Box({ title, onViewAll, children }: { title: string; onViewAll?: () => void; children: ReactNode }) {
+function Box({ title, onViewAll, flat, children }: { title: string; onViewAll?: () => void; flat?: boolean; children: ReactNode }) {
   // Desktop: the same drop shadow as Home's other desktop cards.
   const isDesktop = useMediaQuery('(min-width: 980px)')
   return (
-    <div style={{ background: 'var(--glass-fill)', border: isDesktop ? '1px solid var(--border)' : '1px solid var(--glass-edge)', borderRadius: 16, padding: 10, minWidth: 0, boxShadow: isDesktop ? 'var(--shadow-1)' : 'var(--glass-card)' }}>
+    <div style={flat ? { padding: 12, minWidth: 0 } : { background: 'var(--glass-fill)', border: isDesktop ? '1px solid var(--border)' : '1px solid var(--glass-edge)', borderRadius: 16, padding: 10, minWidth: 0, boxShadow: isDesktop ? 'var(--shadow-1)' : 'var(--glass-card)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4, marginBottom: 4 }}>
         <span style={{ fontSize: 'min(15px, 4.2vw)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}>{title}</span>
         {onViewAll && (
@@ -91,7 +92,7 @@ function queueLeftEdge(n: number, right: number) {
   return back.x + (AVATAR * (1 - back.scale)) / 2
 }
 
-function RecentBox({ navigate }: { navigate: NavigateFunction }) {
+function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolean }) {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const reduce = useReducedMotion()
   // Same cache key as the Home Recent row used, so the list is there instantly.
@@ -234,10 +235,10 @@ function RecentBox({ navigate }: { navigate: NavigateFunction }) {
     )
   }
 
-  return <Box title="Recent" onViewAll={n > 0 ? () => navigate('/recent-paid', { state: { from: '/' } }) : undefined}>{content}</Box>
+  return <Box title="Recent" flat={flat} onViewAll={n > 0 ? () => navigate('/recent-paid', { state: { from: '/' } }) : undefined}>{content}</Box>
 }
 
-function NewsBox({ navigate }: { navigate: NavigateFunction }) {
+function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolean }) {
   const reduce = useReducedMotion()
   const [items, setItems] = useState<NewsItem[]>(() => readCachedHomeNews())
   const [loaded, setLoaded] = useState(() => items.length > 0)
@@ -330,13 +331,31 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
     )
   }
 
-  return <Box title="Updates" onViewAll={() => navigate('/news')}>{content}</Box>
+  return <Box title="Updates" flat={flat} onViewAll={() => navigate('/news')}>{content}</Box>
 }
 
-export function RecentNewsRow({ navigate }: { navigate: NavigateFunction }) {
+/**
+ * `footer`: the two share one card, split by a thin line, with the footer
+ * (Home's promo banner, on the phone) along its bottom edge.
+ */
+export function RecentNewsRow({ navigate, footer }: { navigate: NavigateFunction; footer?: ReactNode }) {
+  const ring = <style>{'@keyframes mpRingFill { to { stroke-dashoffset: 0 } }'}</style>
+  if (footer) {
+    return (
+      <div style={{ background: 'var(--glass-fill)', border: '1px solid var(--glass-edge)', borderRadius: 16, boxShadow: 'var(--glass-card)', overflow: 'hidden' }}>
+        {ring}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 1px minmax(0, 1fr)' }}>
+          <RecentBox navigate={navigate} flat />
+          <div aria-hidden style={{ background: 'var(--border)', margin: '12px 0' }} />
+          <NewsBox navigate={navigate} flat />
+        </div>
+        {footer}
+      </div>
+    )
+  }
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-      <style>{'@keyframes mpRingFill { to { stroke-dashoffset: 0 } }'}</style>
+      {ring}
       <RecentBox navigate={navigate} />
       <NewsBox navigate={navigate} />
     </div>
