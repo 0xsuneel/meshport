@@ -353,7 +353,12 @@ export function ChangePasscodePage() {
       }
       if (walletAddress && biometricEnabled) {
         const { updateBiometricPasscode } = await import('@/lib/biometric')
-        await updateBiometricPasscode(walletAddress, newPass)
+        // One fingerprint scan re-seals it for the new passcode; without it,
+        // fingerprint unlock is turned off (never kept in a weaker form).
+        if (!(await updateBiometricPasscode(walletAddress, newPass))) {
+          useAuthStore.getState().setBiometricEnabled(false)
+          showToastMessage('Fingerprint / Face unlock was turned off - turn it on again in Settings', 'info')
+        }
       }
 
       // A frame wallet's passcode is checked by the frame - no hash kept here

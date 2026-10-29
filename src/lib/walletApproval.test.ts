@@ -91,11 +91,10 @@ describe('wallet approval', () => {
     expect(security.getPasscodeLockoutRemainingMs()).toBe(0)
   })
 
-  it('a very old stored passcode (the digits themselves) passes once, then becomes a real hash', async () => {
+  it('older passcode formats are refused (sign in again to set a new one)', async () => {
     auth.walletSource = 'privy'
-    auth.passcode = '123456'
-    expect(await security.verifyPasscode('123456', auth.passcode)).toBe(true)
-    expect(auth.passcode.startsWith('v3:')).toBe(true)
+    expect(await security.verifyPasscode('123456', '123456')).toBe(false)
+    expect(await security.verifyPasscode('123456', 'v2:AAAA:BBBB')).toBe(false)
   })
 
   it('a stored value that is not a passcode is never matched as plain text', async () => {

@@ -222,43 +222,18 @@ async function verifyPasscodeUnthrottled(passcode: string, storedHash: string): 
     if (!framePasscodeCheck) throw new Error(WALLET_UNAVAILABLE)
     return framePasscodeCheck(passcode) // throws WALLET_UNAVAILABLE when the frame can't be reached
   }
+  // Only the current format (v3, 600k rounds) - older ones (the passcode
+  // itself, 100k rounds, a page-storage salt) are refused: those accounts set
+  // a new passcode by signing in again.
+  if (!storedHash.startsWith('v3:')) return false
   try {
-
-    // v2 format: "v2:<salt>:<hash>" - portable, works across devices
-    if (storedHash.startsWith('v2:') || storedHash.startsWith('v3:')) {
-      const parts = storedHash.split(':')
-      if (parts.length !== 3) return false
-      const salt = fromBase64(parts[1])
-      const key = await deriveKey(passcode, salt, ['encrypt'], parts[0] === 'v3' ? PBKDF2_ITERATIONS_V3 : PBKDF2_ITERATIONS)
-      const iv = new Uint8Array(12)
-      const enc = new TextEncoder()
-      const expected = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(VERIFY_PLAINTEXT))
-      const expectedB64 = toBase64(new Uint8Array(expected))
-      const correct = expectedB64 === parts[2]
-      return correct
-    }
-
-    // Legacy v1 format (old hashes that used localStorage salt)
-    // Try with localStorage salt as fallback
-    const legacySalt = localStorage.getItem('meshport_passcode_salt')
-    if (legacySalt) {
-      const salt = new Uint8Array(JSON.parse(legacySalt))
-      const key = await deriveKey(passcode, salt, ['encrypt'])
-      const iv = new Uint8Array(12)
-      const enc = new TextEncoder()
-      // Try both old and new plaintext
-      for (const pt of ['meshport-passcode-verify', VERIFY_PLAINTEXT]) {
-        const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(pt))
-        if (toBase64(new Uint8Array(ciphertext)) === storedHash) {
-          return true
-        }
-      }
-    }
-
-    // Last resort: a very old account that stored the passcode itself (digits
-    // only). Replaced with a real hash the moment it passes (walletApproval).
-    return /^\d{4,8}$/.test(storedHash) && passcode === storedHash
-
+    const parts = storedHash.split(':')
+    if (parts.length !== 3) return false
+    const salt = fromBase64(parts[1])
+    const key = await deriveKey(passcode, salt, ['encrypt'], PBKDF2_ITERATIONS_V3)
+    const iv = new Uint8Array(12)
+    const expected = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(VERIFY_PLAINTEXT))
+    return toBase64(new Uint8Array(expected)) === parts[2]
   } catch (e) {
     console.error('[Security] verifyPasscode error:', e)
     return false

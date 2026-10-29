@@ -56,7 +56,8 @@ export function EnableBiometricPage() {
   const handleEnable = async () => {
     if (!walletAddress || !rawPasscode) { navigate(nextPath, { replace: true }); return }
     setWorking(true)
-    const ok = await registerBiometric(walletAddress, rawPasscode, user?.displayName || user?.username || 'MeshPort user')
+    const result = await registerBiometric(walletAddress, rawPasscode, user?.displayName || user?.username || 'MeshPort user')
+    const ok = result === 'ok'
     // If the user already tapped Skip while this was still in flight (a
     // real possibility - this call can hang for the full WebAuthn timeout,
     // or longer if something OS/browser-level goes wrong, e.g. a browser's
@@ -77,7 +78,11 @@ export function EnableBiometricPage() {
       // as an explicit Skip for the 24h unlock-offer cooldown below - a
       // cancelled OS prompt is a "not now" just as much as tapping Skip.
       if (walletAddress) recordBiometricOfferSkip(walletAddress)
-      showToastMessage(`${label} not enabled - you can turn it on later in Settings`, 'info')
+      // No fingerprint-tied secret on this phone: unlock with the passcode
+      // (a weaker fingerprint copy could be read without a fingerprint).
+      showToastMessage(result === 'unsupported'
+        ? `This phone can't keep ${label} unlock secure - use your passcode`
+        : `${label} not enabled - you can turn it on later in Settings`, 'info')
     }
     navigate(nextPath, { replace: true })
   }

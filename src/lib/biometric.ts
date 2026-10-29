@@ -70,23 +70,6 @@ function idb(): Promise<IDBDatabase> {
     req.onerror = () => reject(req.error)
   })
 }
-async function idbPut(id: string, key: CryptoKey): Promise<void> {
-  const db = await idb()
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).put(key, id)
-    tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error)
-  })
-  db.close()
-}
-async function idbGet(id: string): Promise<CryptoKey | null> {
-  const db = await idb()
-  const out = await new Promise<CryptoKey | null>((resolve, reject) => {
-    const req = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(id)
-    req.onsuccess = () => resolve((req.result as CryptoKey) ?? null); req.onerror = () => reject(req.error)
-  })
-  db.close()
-  return out
-}
 async function idbDelete(id: string): Promise<void> {
   try {
     const db = await idb()
@@ -98,11 +81,8 @@ async function idbDelete(id: string): Promise<void> {
   } catch { /* best-effort */ }
 }
 
-type SecretRecord = (
-  | { v?: undefined; key: string; iv: string; ciphertext: string }          // v1 legacy
-  | { v: 2; iv: string; ciphertext: string; salt?: string }                 // v2 (salt kept for a later PRF upgrade)
-  | { v: 3; salt: string; iv: string; ciphertext: string }                  // v3
-) & {
+// v3 only (older v1 / v2 records are removed - dropWeakBiometricRecord).
+type SecretRecord = { v: 3; salt: string; iv: string; ciphertext: string } & {
   // The stored passcode HASH (public, already in localStorage) that this
   // record's passcode was confirmed to match. When it still equals the
   // current hash, a successful fingerprint unlock counts as verified at once
@@ -134,13 +114,6 @@ async function open(key: CryptoKey, iv: string, ciphertext: string): Promise<str
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(iv) }, key, fromB64(ciphertext))
   return new TextDecoder().decode(pt)
 }
-/** v2: fresh non-extractable key in IndexedDB, passcode sealed with it. */
-async function writeV2(walletAddress: string, passcode: string, salt?: string): Promise<void> {
-  const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
-  await idbPut(walletAddress.toLowerCase(), key)
-  const rec: SecretRecord = { v: 2, ...(await seal(key, passcode)), ...(salt ? { salt } : {}) }
-  localStorage.setItem(SECRET_KEY(walletAddress), JSON.stringify(rec))
-}
 /** v3: sealed with the fingerprint-derived key; nothing key-like stored. */
 async function writeV3(walletAddress: string, passcode: string, salt: string, prfOutput: BufferSource): Promise<void> {
   const rec: SecretRecord = { v: 3, salt, ...(await seal(await prfKey(prfOutput), passcode)) }
@@ -148,23 +121,20 @@ async function writeV3(walletAddress: string, passcode: string, salt: string, pr
   await idbDelete(walletAddress.toLowerCase())
 }
 /**
- * The oldest records (v1) keep their AES key right next to the sealed
- * passcode - anyone who can read this page's storage reads the passcode.
- * Move them to v2 at once (no fingerprint needed: their own key opens them);
- * the next fingerprint unlock takes them on to v3 where the device allows.
+ * Only v3 records are kept: v1 kept its AES key right beside the sealed
+ * passcode, and v2's device key can be used by any script running in this
+ * page - either way the passcode (which approves payments) could be read
+ * without a fingerprint. Older records are removed; the person turns
+ * fingerprint unlock on again (v3 where the phone supports it).
  */
-export async function upgradeLegacyBiometricRecord(walletAddress: string): Promise<void> {
+export function dropWeakBiometricRecord(walletAddress: string): boolean {
   try {
     const raw = localStorage.getItem(SECRET_KEY(walletAddress))
-    if (!raw) return
-    const rec = JSON.parse(raw) as SecretRecord
-    if (rec.v !== undefined) return
-    const old = rec as { key: string; iv: string; ciphertext: string }
-    const legacy = await crypto.subtle.importKey('raw', fromB64(old.key), { name: 'AES-GCM' }, false, ['decrypt'])
-    const passcode = await open(legacy, old.iv, old.ciphertext)
-    await writeV2(walletAddress, passcode)
-    if (rec.forHash) setRecordForHash(walletAddress, rec.forHash)
-  } catch (e) { console.warn('[biometric] legacy record upgrade skipped:', e instanceof Error ? e.message : e) }
+    if (!raw) return false
+    if ((JSON.parse(raw) as { v?: number }).v === 3) return false
+  } catch { /* unreadable: drop it */ }
+  removeBiometric(walletAddress)
+  return true
 }
 
 const prfFirst = (cred: PublicKeyCredential | null): ArrayBuffer | null => {
@@ -295,8 +265,9 @@ export function wasBiometricOfferSkippedRecently(walletAddress: string): boolean
  * OS prompt - cancelling is an expected, normal outcome here, not an error
  * condition the caller needs to handle specially.
  */
-export async function registerBiometric(walletAddress: string, rawPasscode: string, userLabel: string): Promise<boolean> {
-  if (!(await isBiometricSupported())) return false
+/** 'unsupported': the phone gives no fingerprint-tied secret (PRF) - nothing is kept; use the passcode. */
+export async function registerBiometric(walletAddress: string, rawPasscode: string, userLabel: string): Promise<'ok' | 'cancelled' | 'unsupported'> {
+  if (!(await isBiometricSupported())) return 'unsupported'
   try {
     const challenge = crypto.getRandomValues(new Uint8Array(32))
     const userId = crypto.getRandomValues(new Uint8Array(16))
@@ -331,18 +302,20 @@ export async function registerBiometric(walletAddress: string, rawPasscode: stri
         extensions: { prf: { eval: { first: prfSalt } } } as any,
       },
     }) as PublicKeyCredential | null
-    if (!credential) return false
+    if (!credential) return 'cancelled'
 
-    localStorage.setItem(CRED_KEY(walletAddress), toB64Url(new Uint8Array(credential.rawId)))
+    // Only with the fingerprint's own secret: a passcode sealed any other way
+    // could be read by a script in this page without a fingerprint.
     const prf = prfFirst(credential)
-    if (prf) await writeV3(walletAddress, rawPasscode, toB64(prfSalt), prf)
-    else await writeV2(walletAddress, rawPasscode, toB64(prfSalt)) // upgraded to v3 on the first unlock if the device can
-    return true
+    if (!prf) return 'unsupported'
+    localStorage.setItem(CRED_KEY(walletAddress), toB64Url(new Uint8Array(credential.rawId)))
+    await writeV3(walletAddress, rawPasscode, toB64(prfSalt), prf)
+    return 'ok'
   } catch (e) {
     // Includes the user cancelling/dismissing the OS prompt - NotAllowedError
     // is WebAuthn's standard rejection for a cancelled or timed-out prompt.
     console.warn('[biometric] registration failed or cancelled:', e instanceof Error ? e.message : e)
-    return false
+    return 'cancelled'
   }
 }
 
@@ -363,10 +336,11 @@ export async function verifyBiometricAndGetPasscode(walletAddress: string, store
     const credIdB64 = localStorage.getItem(CRED_KEY(walletAddress))
     const secretRaw = localStorage.getItem(SECRET_KEY(walletAddress))
     if (!credIdB64 || !secretRaw) return null
-    const rec = JSON.parse(secretRaw) as SecretRecord
-    // Salt for the fingerprint-derived key: the record's own, or a new one
-    // for an older record we'd like to upgrade.
-    const saltB64 = ('salt' in rec && rec.salt) ? rec.salt : toB64(crypto.getRandomValues(new Uint8Array(32)))
+    const rec = JSON.parse(secretRaw) as Partial<SecretRecord> & { v?: number }
+    // Only fingerprint-sealed (v3) records: an older one is removed and the
+    // passcode is used (dropWeakBiometricRecord).
+    if (rec.v !== 3 || !rec.salt || !rec.iv || !rec.ciphertext) { dropWeakBiometricRecord(walletAddress); return null }
+    const saltB64 = rec.salt
 
     const challenge = crypto.getRandomValues(new Uint8Array(32))
     const assertion = await navigator.credentials.get({
@@ -381,26 +355,10 @@ export async function verifyBiometricAndGetPasscode(walletAddress: string, store
     if (!assertion) return null // OS check didn't succeed - do not proceed to decrypt
     const prf = prfFirst(assertion)
 
-    let passcode: string
-    if (rec.v === 3) {
-      if (!prf) return null // this device no longer gives the fingerprint secret - use the passcode
-      passcode = await open(await prfKey(prf), rec.iv, rec.ciphertext)
-    } else if (rec.v === 2) {
-      const key = await idbGet(walletAddress.toLowerCase())
-      if (!key) return null
-      passcode = await open(key, rec.iv, rec.ciphertext)
-    } else {
-      const old = rec as { key: string; iv: string; ciphertext: string }
-      const legacy = await crypto.subtle.importKey('raw', fromB64(old.key), { name: 'AES-GCM' }, false, ['decrypt'])
-      passcode = await open(legacy, old.iv, old.ciphertext)
-    }
+    // This device no longer gives the fingerprint secret - use the passcode.
+    if (!prf) return null
+    const passcode = await open(await prfKey(prf), rec.iv, rec.ciphertext)
 
-    // Upgrade older records now that we hold the passcode: to v3 when the
-    // fingerprint gave us its secret, otherwise v1 → v2.
-    try {
-      if (prf && rec.v !== 3) await writeV3(walletAddress, passcode, saltB64, prf)
-      else if (!rec.v) await writeV2(walletAddress, passcode, saltB64)
-    } catch (e) { console.warn('[biometric] upgrade skipped:', e instanceof Error ? e.message : e) }
     if (storedHash) {
       if (rec.forHash === storedHash) {
         // Confirmed against this exact hash before → verified now, instantly.
@@ -442,16 +400,29 @@ export async function verifyBiometricAndGetPasscode(walletAddress: string, store
  */
 export async function updateBiometricPasscode(walletAddress: string, newPasscode: string): Promise<boolean> {
   try {
+    const credIdB64 = localStorage.getItem(CRED_KEY(walletAddress))
     const secretRaw = localStorage.getItem(SECRET_KEY(walletAddress))
-    if (!secretRaw) return false
-    const rec = JSON.parse(secretRaw) as SecretRecord
-    // No fingerprint prompt here: v1/v2/v3 all re-seal as v2 with a fresh
-    // non-extractable key (v3 needs the fingerprint to re-derive its key);
-    // the next fingerprint unlock upgrades it back to v3 automatically.
-    await writeV2(walletAddress, newPasscode, 'salt' in rec ? rec.salt : undefined)
+    if (!credIdB64 || !secretRaw) return false
+    // Sealed with the fingerprint's own secret only: one scan now re-derives
+    // it for the new passcode. No scan (cancelled, no PRF): fingerprint
+    // unlock is turned off rather than kept in a weaker form.
+    const saltB64 = toB64(crypto.getRandomValues(new Uint8Array(32)))
+    const assertion = await navigator.credentials.get({
+      publicKey: {
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        allowCredentials: [{ type: 'public-key', id: fromB64Url(credIdB64) }],
+        userVerification: 'required',
+        timeout: 30000,
+        extensions: { prf: { eval: { first: fromB64(saltB64) } } } as any,
+      },
+    }) as PublicKeyCredential | null
+    const prf = prfFirst(assertion)
+    if (!prf) { removeBiometric(walletAddress); return false }
+    await writeV3(walletAddress, newPasscode, saltB64, prf)
     return true
   } catch (e) {
     console.warn('[biometric] updateBiometricPasscode failed:', e instanceof Error ? e.message : e)
+    removeBiometric(walletAddress)
     return false
   }
 }
