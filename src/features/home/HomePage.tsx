@@ -4376,7 +4376,8 @@ export function HomePage() {
         {/* ── ASSETS - all 3 tokens ────────────────────────────────────────── */}
         <div ref={assetsCardRef}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isDesktop ? 6 : 12 }}>
-            <span style={{ fontSize: 16, fontWeight: 700 }}>Assets</span>
+            {/* Same heading size as Quick Actions on the phone. */}
+            <span style={{ fontSize: isDesktop ? 16 : 19, fontWeight: 700, letterSpacing: isDesktop ? undefined : '-0.3px' }}>Assets</span>
             {!accountLock.locked && <button onClick={handleFaucet}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
@@ -4396,7 +4397,7 @@ export function HomePage() {
               <span style={{ minWidth: 90, textAlign: 'right' }}>Value (USD)</span>
             </div>
           )}
-          <div style={{ background: 'var(--glass-fill)', borderRadius: isDesktop ? 18 : 16, border: isDesktop ? '1px solid var(--border)' : '1px solid var(--glass-edge)', overflow: 'hidden', boxShadow: isDesktop ? 'var(--shadow-1)' : 'var(--glass-card)' }}>
+          <div style={{ background: 'var(--glass-fill)', borderRadius: isDesktop ? 18 : 22, border: '1px solid var(--border)', overflow: 'hidden', boxShadow: isDesktop ? 'var(--shadow-1)' : 'var(--glass-card)' }}>
             <AssetRow
               icon="/logos/tokens/usdc.png"
               fallbackColor="var(--usdc-icon)" fallbackChar="$"
