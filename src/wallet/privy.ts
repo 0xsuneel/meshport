@@ -52,7 +52,7 @@ export function setPrivyBridge(b: PrivyBridge | null): void {
   bridge = b
   // A new Privy (PrivyRoot rebuilt it - a new iframe) has to authenticate
   // its wallets again: their warm-up starts over.
-  if (!b) { warmed.clear(); warming.clear() }
+  if (!b) { warmed.clear(); warming.clear(); clearWarmRetries() }
   // Privy's SDK is running (PrivyRoot) - not merely this module loaded.
   if (b) void import('@/lib/perfTrace').then(m => m.markStartup('provider')).catch(() => {})
   for (const w of [...waiters]) w()
@@ -76,6 +76,40 @@ export function setPrivyBridge(b: PrivyBridge | null): void {
 export const PRIVY_WARM_MESSAGE = 'MeshPort: unlocking this wallet on this device. This signature only checks the wallet is ready - it does not approve any payment.'
 const warmed = new Set<string>()
 const warming = new Map<string, Promise<boolean>>()
+
+// A warm-up that fails (Privy's iframe slow to answer, a dropped request)
+// is tried again a few times, so the wallet doesn't stay "not ready" - with
+// the slow first signature left for the person's payment - until something
+// else happens to warm it. Never past this list; a new Privy starts over.
+export const PRIVY_WARM_RETRY_MS = [3_000, 10_000, 30_000]
+const warmAttempts = new Map<string, number>()
+const warmRetryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+function clearWarmRetries(): void {
+  for (const t of warmRetryTimers.values()) clearTimeout(t)
+  warmRetryTimers.clear()
+  warmAttempts.clear()
+}
+function scheduleWarmRetry(a: string, address: string): void {
+  if (warmRetryTimers.has(a)) return
+  const n = warmAttempts.get(a) ?? 0
+  if (n >= PRIVY_WARM_RETRY_MS.length) return
+  warmAttempts.set(a, n + 1)
+  warmRetryTimers.set(a, setTimeout(() => {
+    warmRetryTimers.delete(a)
+    if (!warmed.has(a)) void warmPrivySigner(address)
+  }, PRIVY_WARM_RETRY_MS[n]))
+}
+/** A real signature succeeded: the wallet is authenticated with Privy - as warm as the warm-up makes it. */
+function noteSigned(address: string): void {
+  const a = address.toLowerCase()
+  if (warmed.has(a) || !bridge?.wallets.some(w => w.toLowerCase() === a)) return
+  warmed.add(a)
+  const t = warmRetryTimers.get(a)
+  if (t) { clearTimeout(t); warmRetryTimers.delete(a) }
+  warmAttempts.delete(a)
+  void import('@/lib/walletReadiness').then(m => m.recompute()).catch(() => {})
+}
+
 export function warmPrivySigner(address: string): Promise<boolean> {
   const a = address.toLowerCase()
   if (warmed.has(a)) return Promise.resolve(true)
@@ -86,10 +120,15 @@ export function warmPrivySigner(address: string): Promise<boolean> {
   const p = timed('warm-up', async () => b, x => x.signMessage(PRIVY_WARM_MESSAGE, address), address)
     .then(() => {
       // Only if it's still the same Privy (not rebuilt meanwhile).
-      if (bridge === b || (bridge && bridge.wallets.some(w => w.toLowerCase() === a))) warmed.add(a)
+      if (bridge === b || (bridge && bridge.wallets.some(w => w.toLowerCase() === a))) { warmed.add(a); warmAttempts.delete(a) }
       return true
     })
-    .catch(() => false)
+    .catch(() => {
+      // Still a Privy that lists this wallet (the bridge object changes on
+      // every Privy state update; setPrivyBridge(null) cancels retries).
+      if (bridge?.wallets.some(w => w.toLowerCase() === a)) scheduleWarmRetry(a, address)
+      return false
+    })
     .finally(() => {
       warming.delete(a)
       void import('@/lib/walletReadiness').then(m => m.recompute()).catch(() => {})
@@ -107,7 +146,7 @@ export function warmPrivySigner(address: string): Promise<boolean> {
 export function recheckPrivySigners(): Promise<boolean>[] {
   const b = bridge
   if (!b?.ready || !b.authenticated || !b.wallets.length) return []
-  for (const w of b.wallets) warmed.delete(w.toLowerCase())
+  for (const w of b.wallets) { warmed.delete(w.toLowerCase()); warmAttempts.delete(w.toLowerCase()) }
   void import('@/lib/walletReadiness').then(m => m.recompute()).catch(() => {})
   return b.wallets.map(w => warmPrivySigner(w))
 }
@@ -278,14 +317,20 @@ export function privyAccount(address: string): WalletAccount {
     address: address as Hex,
     async signMessage({ message }) {
       const m = typeof message === 'string' ? message : { raw: typeof message.raw === 'string' ? message.raw : bytesToHex(message.raw) }
-      return timed('signMessage', open, b => b.signMessage(m, address), address)
+      const sig = await timed('signMessage', open, b => b.signMessage(m, address), address)
+      noteSigned(address)
+      return sig
     },
     async signTransaction(transaction) {
-      return timed('signTransaction', open, b => b.signTransaction(privyTransaction(transaction), address), address)
+      const sig = await timed('signTransaction', open, b => b.signTransaction(privyTransaction(transaction), address), address)
+      noteSigned(address)
+      return sig
     },
     async signTypedData(typedData) {
       const { domain, types, primaryType, message } = typedData as TypedDataDefinition
-      return timed('signTypedData', open, b => b.signTypedData(jsonTypedData({ domain, types, primaryType, message }), address), address)
+      const sig = await timed('signTypedData', open, b => b.signTypedData(jsonTypedData({ domain, types, primaryType, message }), address), address)
+      noteSigned(address)
+      return sig
     },
   })
   const account = Object.assign(base, { meshportWallet: true as const, privyWallet: true as const }) as WalletAccount

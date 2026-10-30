@@ -84,4 +84,18 @@ describe('wallet readiness', () => {
     noteRestoring(false) // no passcode copy opened it
     expect(await r).toBe(false)
   })
+
+  it('never waits forever: a Privy wallet that never becomes ready settles false after the timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      setPrivyConnectedProbe(() => false)
+      setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'privy', signer: {} })
+      let done: boolean | null = null
+      void untilSignerReady(5_000).then(v => { done = v })
+      await vi.advanceTimersByTimeAsync(4_999)
+      expect(done).toBeNull()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(done).toBe(false)
+    } finally { vi.useRealTimers() }
+  })
 })

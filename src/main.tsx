@@ -77,6 +77,7 @@ try {
 import './store/themeStore'
 import { useAuthStore } from './store'
 import { startWalletReadiness } from './lib/walletReadiness'
+import { awayPastAutoLock } from './lib/autoLock'
 
 // Clear all legacy mock/fake data from localStorage on startup
 clearLegacyData()
@@ -92,11 +93,11 @@ clearLegacyData()
   try { hadSession = sessionStorage.getItem(SESSION_FLAG) === '1'; sessionStorage.setItem(SESSION_FLAG, '1') } catch { /* private mode */ }
   // Also lock when this is a reload of a tab the phone discarded after it
   // sat in the background past the auto-lock time (App.tsx records when the
-  // app was hidden; 15 min, same as there).
+  // app was hidden; the same setting as there - lib/autoLock.ts).
   let awayTooLong = false
   try {
     const hiddenAt = Number(sessionStorage.getItem('meshport:hidden-at') || 0)
-    awayTooLong = hiddenAt > 0 && Date.now() - hiddenAt > 15 * 60 * 1000
+    awayTooLong = awayPastAutoLock(hiddenAt, Date.now(), useAuthStore.getState().autoLockMinutes)
     sessionStorage.removeItem('meshport:hidden-at')
   } catch { /* private mode */ }
   const auth = useAuthStore.getState()

@@ -36,7 +36,12 @@ vi.mock('@/wallet', () => ({
 }))
 
 // Privy doesn't list this wallet (an old device-kept Google / email one).
-vi.mock('@/wallet/privy', () => ({ restorePrivyAccount: async () => null, privyState: () => '' }))
+const privyWarm = { connected: false, warmPrivySigner: vi.fn(async (_a: string) => true) }
+vi.mock('@/wallet/privy', () => ({
+  restorePrivyAccount: async () => null, privyState: () => '',
+  privySignerConnected: () => privyWarm.connected,
+  warmPrivySigner: (a: string) => privyWarm.warmPrivySigner(a),
+}))
 
 import { restorePrivateKey } from './restoreWallet'
 import { useWalletReadiness } from './walletReadiness'
@@ -162,5 +167,20 @@ describe('restorePrivateKey', () => {
     expect(await restorePrivateKey()).toBe(false)
     expect(auth.walletAddress).toBeTruthy()
     expect(useWalletReadiness.getState().phase).toBe('locked')
+  })
+
+  it('an existing Privy signer that is not authenticated yet: restore starts its warm-up instead of just saying OK', async () => {
+    privyWarm.connected = false; privyWarm.warmPrivySigner.mockClear()
+    setAuth({ walletSource: 'privy', signer: {} })
+    expect(await restorePrivateKey()).toBe(true)
+    await vi.waitFor(() => expect(privyWarm.warmPrivySigner).toHaveBeenCalledWith('0x1111111111111111111111111111111111111111'))
+  })
+
+  it('an already-warm Privy signer is left alone', async () => {
+    privyWarm.connected = true; privyWarm.warmPrivySigner.mockClear()
+    setAuth({ walletSource: 'privy', signer: {} })
+    expect(await restorePrivateKey()).toBe(true)
+    await flush(); await flush()
+    expect(privyWarm.warmPrivySigner).not.toHaveBeenCalled()
   })
 })

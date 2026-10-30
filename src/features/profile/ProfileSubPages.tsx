@@ -16,6 +16,7 @@ function buildProfileUpdateMessage(
   ].join('\n')
 }
 import { handBiometricPasscode, handBiometricPending } from '@/lib/biometricHandoff'
+import { AUTO_LOCK_OPTIONS, autoLockLabel } from '@/lib/autoLock'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import {
@@ -68,6 +69,8 @@ export function SecurityPage() {
   const { showToastMessage } = useUIStore()
   const passcodeLockEnabled = useAuthStore(s => s.passcodeLockEnabled)
   const setPasscodeLockEnabled = useAuthStore(s => s.setPasscodeLockEnabled)
+  const autoLockMinutes = useAuthStore(s => s.autoLockMinutes)
+  const setAutoLockMinutes = useAuthStore(s => s.setAutoLockMinutes)
   const biometricEnabled = useAuthStore(s => s.biometricEnabled)
   const setBiometricEnabled = useAuthStore(s => s.setBiometricEnabled)
   const walletAddress = useAuthStore(s => s.walletAddress)
@@ -157,6 +160,26 @@ export function SecurityPage() {
             <ToggleItem icon={<Lock className="w-5 h-5 text-accent-text" />} label="Passcode Lock"
               description="Locks when offline or the browser is closed" enabled={passcodeLockEnabled}
               onToggle={() => { setPasscodeLockEnabled(!passcodeLockEnabled); showToastMessage(`Auto-lock ${!passcodeLockEnabled ? 'enabled' : 'disabled'}`) }} />
+            {passcodeLockEnabled && (
+              <div className="flex items-center gap-3 px-4 py-3.5">
+                <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center flex-shrink-0">
+                  <ClockIcon className="w-5 h-5 text-accent-text" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-text-primary">Lock after</p>
+                  <p className="text-xs text-text-secondary mt-0.5">Unused or in the background</p>
+                  <div role="radiogroup" aria-label="Lock after" className="flex flex-wrap gap-1.5 mt-2">
+                    {AUTO_LOCK_OPTIONS.map(m => (
+                      <button key={m} role="radio" aria-checked={autoLockMinutes === m}
+                        onClick={() => { if (m !== autoLockMinutes) { setAutoLockMinutes(m); showToastMessage(`Locks after ${autoLockLabel(m)}`) } }}
+                        className={`h-8 px-3 rounded-full text-xs font-semibold border active:scale-[.97] transition-transform ${autoLockMinutes === m ? 'bg-brand text-white border-black/10' : 'bg-transparent text-text-secondary border-border'}`}>
+                        {autoLockLabel(m)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
             <button onClick={() => navigate('/security/change-passcode')} className="w-full text-left active:opacity-70">
               <SecRow icon={<KeyRound className="w-5 h-5 text-accent-text" />} title="Change Passcode" sub="Update your 6-digit passcode"
                 right={<ChevronRight className="w-4 h-4 text-text-secondary" />} />
