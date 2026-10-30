@@ -140,9 +140,11 @@ export function startWalletReadiness(): void {
 
 /**
  * Resolves true once the wallet can sign (signer_ready), false if it settles
- * without that (locked, error, signed out). Event-driven - no polling.
+ * without that (locked, error, signed out) - or after `timeoutMs`, so no
+ * caller can wait forever on a phase that never settles (a Privy wallet
+ * whose warm-up keeps failing stays 'wallet_discovered'). Event-driven.
  */
-export function untilSignerReady(): Promise<boolean> {
+export function untilSignerReady(timeoutMs = 60_000): Promise<boolean> {
   const settled = (p: WalletPhase): boolean | null =>
     p === 'signer_ready' ? true : p === 'error' || p === 'locked' || p === 'idle' ? false : null
   return new Promise(resolve => {
@@ -150,8 +152,9 @@ export function untilSignerReady(): Promise<boolean> {
     if (now !== null) { resolve(now); return }
     const unsub = useWalletReadiness.subscribe(s => {
       const v = settled(s.phase)
-      if (v !== null) { unsub(); resolve(v) }
+      if (v !== null) { clearTimeout(timer); unsub(); resolve(v) }
     })
+    const timer = setTimeout(() => { unsub(); resolve(false) }, timeoutMs)
   })
 }
 

@@ -191,7 +191,17 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 async function attemptRestore(generation: number, rawPasscode?: string): Promise<Outcome> {
   const { walletAddress, signer, walletSource } = useAuthStore.getState()
 
-  if (signer) return OK
+  if (signer) {
+    // A Privy signer object can exist while Privy hasn't authenticated the
+    // wallet yet (walletReadiness 'wallet_discovered'): start its warm-up so
+    // the first payment doesn't pay for it. Not awaited - the signer itself
+    // waits for Privy's connection when it signs, and readiness reports
+    // 'signer_ready' only once the warm-up answers (untilSignerReady).
+    if (walletSource === 'privy' && walletAddress) {
+      void import('@/wallet/privy').then(m => { if (!m.privySignerConnected(walletAddress)) void m.warmPrivySigner(walletAddress) }).catch(() => {})
+    }
+    return OK
+  }
   if (!walletAddress) return fail(null)
 
   // ── 1. a Privy wallet: Privy keeps the key in its secure hardware and opens

@@ -1,3 +1,4 @@
+import { autoLockMs } from '@/lib/autoLock'
 import { useState, useEffect, Suspense } from 'react'
 import { useIsStandalone } from './hooks/useIsStandalone'
 import { createBrowserRouter, RouterProvider, Navigate, useLocation } from 'react-router-dom'
@@ -710,22 +711,25 @@ export default function App() {
   // left the app - one put down with MeshPort on screen stayed unlocked.
   // A touch, key or scroll counts as use; the check runs once when the
   // time would be up, not on every touch.
+  // How long: the person's auto-lock setting (lib/autoLock.ts), read at each
+  // check so a change in Settings applies at once (checks are at most a
+  // minute apart).
   useEffect(() => {
-    const IDLE_LOCK_MS = 5 * 60 * 1000 // 5 minutes without a touch
+    const idleMs = () => autoLockMs(useAuthStore.getState().autoLockMinutes)
     let lastUse = Date.now()
     let timer: ReturnType<typeof setTimeout> | undefined
     const check = () => {
-      const left = lastUse + IDLE_LOCK_MS - Date.now()
-      if (left > 0) { timer = setTimeout(check, left); return }
+      const left = lastUse + idleMs() - Date.now()
+      if (left > 0) { timer = setTimeout(check, Math.min(left, 60_000)); return }
       // Hidden: the background lock handles it on return.
-      if (document.visibilityState !== 'visible') { timer = setTimeout(check, IDLE_LOCK_MS); return }
+      if (document.visibilityState !== 'visible') { timer = setTimeout(check, 60_000); return }
       const { isAuthenticated, passcodeLockEnabled, isLocked, lock } = useAuthStore.getState()
       if (isAuthenticated && passcodeLockEnabled && !isLocked) {
         document.documentElement.classList.add('mp-locking')
         lock()
       }
       lastUse = Date.now()
-      timer = setTimeout(check, IDLE_LOCK_MS)
+      timer = setTimeout(check, 60_000)
     }
     const used = () => { lastUse = Date.now() }
     // Coming back to the app counts as use: time in the background has its
@@ -734,7 +738,7 @@ export default function App() {
     const events = ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll'] as const
     for (const e of events) window.addEventListener(e, used, { passive: true, capture: true })
     document.addEventListener('visibilitychange', onVisible)
-    timer = setTimeout(check, IDLE_LOCK_MS)
+    timer = setTimeout(check, 60_000)
     return () => {
       clearTimeout(timer)
       for (const e of events) window.removeEventListener(e, used, { capture: true })
@@ -745,7 +749,6 @@ export default function App() {
   useEffect(() => {
     let hiddenAt: number | null = null
     const STALE_AFTER_MS = 2 * 60 * 1000 // 2 minutes
-    const AUTO_LOCK_AFTER_MS = 15 * 60 * 1000 // 15 minutes hidden - same value in main.tsx
     const HIDDEN_AT_KEY = 'meshport:hidden-at'
 
     const onVisibilityChange = () => {
@@ -763,7 +766,7 @@ export default function App() {
         try { sessionStorage.removeItem(HIDDEN_AT_KEY) } catch { /* private mode */ }
         // Auto-lock after a long time in the background (like other wallets
         // do), so a phone left unattended doesn't stay unlocked for hours.
-        if (awayMs > AUTO_LOCK_AFTER_MS) {
+        if (awayMs > autoLockMs(useAuthStore.getState().autoLockMinutes)) {
           const { isAuthenticated, passcodeLockEnabled, isLocked, lock } = useAuthStore.getState()
           if (isAuthenticated && passcodeLockEnabled && !isLocked) {
             // Hide the app in this same event, before the next frame, so the

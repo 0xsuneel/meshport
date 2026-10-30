@@ -265,6 +265,51 @@ describe('warm-up: the wallet is authenticated before the first payment', () => 
     expect(privy.recheckPrivySigners()).toEqual([])
   })
 
+  it('a failed warm-up is tried again on its own - ready once a retry answers', async () => {
+    vi.useFakeTimers()
+    let failures = 1
+    const b = fakeBridge()
+    const sign = b.signMessage
+    b.signMessage = async (m, a) => {
+      if (m === privy.PRIVY_WARM_MESSAGE && failures > 0) { failures--; throw new Error('iframe not answering') }
+      return sign(m, a)
+    }
+    setPrivyBridge(b)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(privy.privySignerConnected(ADDR)).toBe(false)
+    await vi.advanceTimersByTimeAsync(privy.PRIVY_WARM_RETRY_MS[0])
+    expect(privy.privySignerConnected(ADDR)).toBe(true)
+  })
+
+  it('retries are bounded, and a rebuilt Privy cancels them', async () => {
+    vi.useFakeTimers()
+    let warmCalls = 0
+    const b = fakeBridge()
+    b.signMessage = async m => { if (m === privy.PRIVY_WARM_MESSAGE) warmCalls++; throw new Error('down') }
+    setPrivyBridge(b)
+    for (const ms of privy.PRIVY_WARM_RETRY_MS) await vi.advanceTimersByTimeAsync(ms)
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(warmCalls).toBe(1 + privy.PRIVY_WARM_RETRY_MS.length)
+    // A new failing Privy schedules again; dropping it cancels the retry.
+    warmCalls = 0
+    setPrivyBridge(null); setPrivyBridge(b)
+    await vi.advanceTimersByTimeAsync(0)
+    setPrivyBridge(null)
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(warmCalls).toBe(1)
+  })
+
+  it("a real payment's signature counts as warm - readiness doesn't stay 'not ready' after it", async () => {
+    warmFails = true
+    try {
+      const b = fakeBridge({ signMessage: async () => { throw new Error('warm failed') } })
+      setPrivyBridge(b); await flush(); await flush()
+      expect(privy.privySignerConnected(ADDR)).toBe(false)
+      await privyAccount(ADDR).signTransaction({ chainId: 1, to: '0x2222222222222222222222222222222222222222', nonce: 0, gas: 21000n, gasPrice: 1n })
+      expect(privy.privySignerConnected(ADDR)).toBe(true)
+    } finally { warmFails = false }
+  })
+
   it('the warm-up is a plain message - never a transaction', async () => {
     const b = fakeBridge(); setPrivyBridge(b); await flush()
     expect(b.calls.some(c => c[0] === 'tx' || c[0] === 'typed')).toBe(false)
