@@ -6,6 +6,7 @@
 // My ads. USDC moves through the escrow contract on Arc; the fiat payment
 // happens between the two people, outside the app.
 
+import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import { useLatched } from '@/hooks/useLatched'
 import { SendIcon } from '@/components/ui/SendIcon'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
@@ -587,10 +588,10 @@ export function P2PCreateOfferPage() {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
       // Unlock the wallet key at the same time as the passcode check (both are
-      // slow on purpose) instead of after it - restorePrivateKey below joins
+      // slow on purpose) instead of after it - getReadySigner below joins
       // this same in-flight unlock. Silent: a wrong passcode must only show
       // "Incorrect passcode".
-      if (!useAuthStore.getState().signer) import('@/lib/restoreWallet').then(m => m.restorePrivateKey(passEntry, { silent: true })).catch(() => {})
+      prepareSigner(passEntry)
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
       // Verifying the passcode only proves it's correct - it does NOT by
       // itself put the private key back in memory. signer is
@@ -599,12 +600,11 @@ export function P2PCreateOfferPage() {
       // Without this call, a correct passcode entry here was previously
       // followed by a release/accept/cancel that still failed with
       // "Couldn't access your wallet on this device" - the exact bug this
-      // fixes. Passing the just-verified passcode lets restorePrivateKey
+      // fixes. Passing the just-verified passcode lets getReadySigner
       // decrypt this device's locally-stored encrypted key immediately,
       // no extra prompt needed.
-      const { restorePrivateKey } = await import('@/lib/restoreWallet')
-      const restored = await restorePrivateKey(passEntry)
-      if (!restored && !useAuthStore.getState().signer) {
+      const restored = await getReadySigner(passEntry)
+      if (!restored) {
         setPassError("Couldn't unlock your wallet on this device. Try reloading the app.")
         return
       }
@@ -987,10 +987,10 @@ export function P2POfferDetailPage() {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
       // Unlock the wallet key at the same time as the passcode check (both are
-      // slow on purpose) instead of after it - restorePrivateKey below joins
+      // slow on purpose) instead of after it - getReadySigner below joins
       // this same in-flight unlock. Silent: a wrong passcode must only show
       // "Incorrect passcode".
-      if (!useAuthStore.getState().signer) import('@/lib/restoreWallet').then(m => m.restorePrivateKey(passEntry, { silent: true })).catch(() => {})
+      prepareSigner(passEntry)
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
       // Verifying the passcode only proves it's correct - it does NOT by
       // itself put the private key back in memory. signer is
@@ -999,12 +999,11 @@ export function P2POfferDetailPage() {
       // Without this call, a correct passcode entry here was previously
       // followed by a release/accept/cancel that still failed with
       // "Couldn't access your wallet on this device" - the exact bug this
-      // fixes. Passing the just-verified passcode lets restorePrivateKey
+      // fixes. Passing the just-verified passcode lets getReadySigner
       // decrypt this device's locally-stored encrypted key immediately,
       // no extra prompt needed.
-      const { restorePrivateKey } = await import('@/lib/restoreWallet')
-      const restored = await restorePrivateKey(passEntry)
-      if (!restored && !useAuthStore.getState().signer) {
+      const restored = await getReadySigner(passEntry)
+      if (!restored) {
         setPassError("Couldn't unlock your wallet on this device. Try reloading the app.")
         return
       }
@@ -1480,10 +1479,10 @@ export function P2PTradePage() {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
       // Unlock the wallet key at the same time as the passcode check (both are
-      // slow on purpose) instead of after it - restorePrivateKey below joins
+      // slow on purpose) instead of after it - getReadySigner below joins
       // this same in-flight unlock. Silent: a wrong passcode must only show
       // "Incorrect passcode".
-      if (!useAuthStore.getState().signer) import('@/lib/restoreWallet').then(m => m.restorePrivateKey(passEntry, { silent: true })).catch(() => {})
+      prepareSigner(passEntry)
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
       // Verifying the passcode only proves it's correct - it does NOT by
       // itself put the private key back in memory. signer is
@@ -1492,12 +1491,11 @@ export function P2PTradePage() {
       // Without this call, a correct passcode entry here was previously
       // followed by a release/accept/cancel that still failed with
       // "Couldn't access your wallet on this device" - the exact bug this
-      // fixes. Passing the just-verified passcode lets restorePrivateKey
+      // fixes. Passing the just-verified passcode lets getReadySigner
       // decrypt this device's locally-stored encrypted key immediately,
       // no extra prompt needed.
-      const { restorePrivateKey } = await import('@/lib/restoreWallet')
-      const restored = await restorePrivateKey(passEntry)
-      if (!restored && !useAuthStore.getState().signer) {
+      const restored = await getReadySigner(passEntry)
+      if (!restored) {
         setPassError("Couldn't unlock your wallet on this device. Try reloading the app.")
         return
       }
@@ -2021,10 +2019,10 @@ export function P2PMyOffersPage() {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
       // Unlock the wallet key at the same time as the passcode check (both are
-      // slow on purpose) instead of after it - restorePrivateKey below joins
+      // slow on purpose) instead of after it - getReadySigner below joins
       // this same in-flight unlock. Silent: a wrong passcode must only show
       // "Incorrect passcode".
-      if (!useAuthStore.getState().signer) import('@/lib/restoreWallet').then(m => m.restorePrivateKey(passEntry, { silent: true })).catch(() => {})
+      prepareSigner(passEntry)
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
       // Verifying the passcode only proves it's correct - it does NOT by
       // itself put the private key back in memory. signer is
@@ -2033,12 +2031,11 @@ export function P2PMyOffersPage() {
       // Without this call, a correct passcode entry here was previously
       // followed by a release/accept/cancel that still failed with
       // "Couldn't access your wallet on this device" - the exact bug this
-      // fixes. Passing the just-verified passcode lets restorePrivateKey
+      // fixes. Passing the just-verified passcode lets getReadySigner
       // decrypt this device's locally-stored encrypted key immediately,
       // no extra prompt needed.
-      const { restorePrivateKey } = await import('@/lib/restoreWallet')
-      const restored = await restorePrivateKey(passEntry)
-      if (!restored && !useAuthStore.getState().signer) {
+      const restored = await getReadySigner(passEntry)
+      if (!restored) {
         setPassError("Couldn't unlock your wallet on this device. Try reloading the app.")
         return
       }
@@ -2105,10 +2102,10 @@ export function P2PMyOffersPage() {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
       // Unlock the wallet key at the same time as the passcode check (both are
-      // slow on purpose) instead of after it - restorePrivateKey below joins
+      // slow on purpose) instead of after it - getReadySigner below joins
       // this same in-flight unlock. Silent: a wrong passcode must only show
       // "Incorrect passcode".
-      if (!useAuthStore.getState().signer) import('@/lib/restoreWallet').then(m => m.restorePrivateKey(passEntry, { silent: true })).catch(() => {})
+      prepareSigner(passEntry)
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
     }
     setShowEditPasscode(false); setPassEntry(''); setPassError('')
@@ -2117,10 +2114,7 @@ export function P2PMyOffersPage() {
     if (!offer || !user?.id) return
     setEditSaving(true)
     // Instant-order ads may update their limits on-chain - that needs the key.
-    if (offer.autoAccept && storedPasscode && !useAuthStore.getState().signer) {
-      const { restorePrivateKey } = await import('@/lib/restoreWallet')
-      await restorePrivateKey(passEntry).catch(() => false)
-    }
+    if (offer.autoAccept && storedPasscode) await getReadySigner(passEntry)
     const floating = offer.priceType === 'floating'
     const result = await updateOfferDetails(offer, user.id, {
       ...(floating ? { priceType: 'floating' as const, floatMarginPct: parseFloat(editMargin) } : { pricePerUsdc: parseFloat(editPrice) }),
@@ -2156,14 +2150,13 @@ export function P2PMyOffersPage() {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
       // Unlock the wallet key at the same time as the passcode check (both are
-      // slow on purpose) instead of after it - restorePrivateKey below joins
+      // slow on purpose) instead of after it - getReadySigner below joins
       // this same in-flight unlock. Silent: a wrong passcode must only show
       // "Incorrect passcode".
-      if (!useAuthStore.getState().signer) import('@/lib/restoreWallet').then(m => m.restorePrivateKey(passEntry, { silent: true })).catch(() => {})
+      prepareSigner(passEntry)
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
-      const { restorePrivateKey } = await import('@/lib/restoreWallet')
-      const restored = await restorePrivateKey(passEntry)
-      if (!restored && !useAuthStore.getState().signer) {
+      const restored = await getReadySigner(passEntry)
+      if (!restored) {
         setPassError("Couldn't unlock your wallet on this device. Try reloading the app.")
         return
       }

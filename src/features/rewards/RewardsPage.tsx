@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { getReadySigner } from '@/lib/paymentReadiness'
 import { POINTS_EARNED_EVENT } from '@/lib/pointsEarned'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
@@ -363,14 +364,7 @@ export function RewardsPage() {
     if (!username)             { setClaimError('Username not set'); return }
     if (totalPoints < MIN_CLAIM_POINTS) { setClaimError(`Need at least ${MIN_CLAIM_POINTS} points to claim`); return }
 
-    let activeSigner = signer
-    if (!activeSigner) {
-      try {
-        const { restorePrivateKey } = await import('@/lib/restoreWallet')
-        await restorePrivateKey()
-        activeSigner = useAuthStore.getState().signer
-      } catch (e) { console.error('[Rewards] restore key failed:', e) }
-    }
+    const activeSigner = await getReadySigner()
     if (!activeSigner) { useAuthStore.getState().lock(); window.location.href = '/auth/lock'; return }
 
     const pointsToUse = Math.min(typedPoints, totalPoints, dailyRemaining, MAX_CLAIM_POINTS)

@@ -133,11 +133,12 @@ function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => vo
   useEffect(() => {
     const known = [addresses, linked].filter(Boolean).join(',')
     if (!ready || !authenticated || !known) return
-    const { walletAddress, walletSource, signer, setWallet, isLocked } = useAuthStore.getState()
-    // Locked: unlocking opens it (restoreWallet). 'social-auto': a sign-in
-    // that gave up on a slow Privy took a Privy wallet for an old device-only
-    // one - Privy's own record listing the address settles it.
-    if (signer || !walletAddress || isLocked) return
+    const { walletAddress, walletSource, signer, setWallet } = useAuthStore.getState()
+    // Also behind the lock screen: the app lock only covers the app (store
+    // lock()), so the wallet is ready the moment it's unlocked. 'social-auto':
+    // a sign-in that gave up on a slow Privy took a Privy wallet for an old
+    // device-only one - Privy's own record listing the address settles it.
+    if (signer || !walletAddress) return
     if (walletSource !== 'privy' && walletSource !== 'social-auto') return
     if (!known.toLowerCase().split(',').includes(walletAddress.toLowerCase())) return
     setWallet(walletAddress, privyAccount(walletAddress), 'privy')
@@ -246,10 +247,11 @@ export default function PrivyRoot() {
     privyRebuilds++
     setGeneration(g => g + 1)
   }
-  // Back from the background (Android freezes the page) or unlocked: the
-  // same Privy is checked, not replaced. One silent warm-up signature proves
-  // the wallet still signs - the lock screen waits for it (walletReadiness),
-  // so the payment after unlock signs at once. Rebuilding Privy here (what
+  // Back from a long background (Android freezes the page): the same Privy
+  // is checked, not replaced. One silent warm-up signature proves the wallet
+  // still signs - the lock screen waits for it (walletReadiness), so the
+  // payment after unlock signs at once. (Locking itself no longer touches
+  // Privy - it's an app lock only, store lock().) Rebuilding Privy here (what
   // this did until 28 Oct) threw its session away on every return: the next
   // signature was always a cold start. Rebuilt only when the check shows the
   // iframe is dead after all - Privy quiet while the app's own requests are
@@ -276,13 +278,11 @@ export default function PrivyRoot() {
       stopWatch = watch
       void Promise.all(checks).then(() => { answered = true; watch() })
     }
-    const onLocked = () => { if (lastHiddenAt) recheck() }
     const onVisible = () => {
       if (document.visibilityState === 'visible' && lastHiddenAt && performance.now() - lastHiddenAt >= LONG_BACKGROUND_MS) recheck()
     }
-    window.addEventListener('meshport:wallet-locked', onLocked)
     document.addEventListener('visibilitychange', onVisible)
-    return () => { stopWatch?.(); window.removeEventListener('meshport:wallet-locked', onLocked); document.removeEventListener('visibilitychange', onVisible) }
+    return () => { stopWatch?.(); document.removeEventListener('visibilitychange', onVisible) }
   }, [])
   return (
     <PrivyProvider

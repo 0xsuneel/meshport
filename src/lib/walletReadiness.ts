@@ -122,13 +122,15 @@ export function startWalletReadiness(): void {
   })
   if (typeof window !== 'undefined') window.addEventListener(ARC_RPC_OK_EVENT, noteNetworkReady)
   if (typeof document !== 'undefined') {
-    // Back in the foreground / back online with the wallet closed (and the
-    // app not locked - the lock screen opens it with the passcode): open it
+    // Back in the foreground / back online with the wallet closed: open it
     // again through restorePrivateKey, which joins any open already running -
-    // never a second, overlapping one. A wallet that's open is left alone.
+    // never a second, overlapping one. Also behind the lock screen (an app
+    // lock only - store lock()): what opens without a passcode is ready the
+    // moment it's unlocked; a created / imported wallet still needs the
+    // passcode the lock screen asks for. A wallet that's open is left alone.
     const reopen = () => {
-      const { walletAddress, signer, isLocked } = useAuthStore.getState()
-      if (!walletAddress || signer || isLocked) return
+      const { walletAddress, signer } = useAuthStore.getState()
+      if (!walletAddress || signer) return
       if (hadSigner && resumeStartedAt == null) resumeStartedAt = performance.now()
       void import('./restoreWallet').then(m => m.restorePrivateKey(undefined, { silent: true })).catch(() => {})
     }

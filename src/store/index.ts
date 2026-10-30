@@ -328,20 +328,21 @@ export const useAuthStore = create<AuthStore>()(
           biometricEnabled: false,
         }))
       },
-      // Locking also drops the decrypted key from memory and this tab's
-      // session cache - unlocking restores it with the passcode (see
-      // PasscodeLockPage), so a locked app holds nothing usable.
+      // App lock only: the lock screen covers the app (AuthGuard / the
+      // route guards send every screen to /auth/lock, so nothing - including
+      // background signing in AppLayout - runs behind it), and the wallet
+      // stays open: the signer, the wallet frame's open key and Privy's
+      // warmed session are kept, so after unlocking Pay signs at once instead
+      // of opening and warming the wallet again. Every value-moving signature
+      // still needs the person's passcode / biometric (and, for a frame
+      // wallet, the frame's own approval - lib/walletApproval). What locking
+      // does drop: "this passcode was already verified" (it is checked again
+      // at unlock) and any legacy app-side key copy. Logout, and a reload
+      // (memory gone), still close the wallet for real.
       lock:   () => {
         const addr = get().walletAddress
-        const source = get().walletSource
-        set({ isLocked: true, signer: null })
-        // Wallet providers get ready for the unlock (PrivyRoot opens a fresh Privy).
-        try { window.dispatchEvent(new Event('meshport:wallet-locked')) } catch { /* no window */ }
+        set({ isLocked: true })
         import('@/lib/security').then(({ clearSessionPrivateKey, forgetVerifiedPasscodes }) => { clearSessionPrivateKey(addr); forgetVerifiedPasscodes() }).catch(() => {})
-        // Only wallets whose key is in the wallet frame have anything there to
-        // lock. For Google / email (Privy) and Circle ones this loaded and
-        // started the whole frame on every fresh open, beside Privy loading.
-        if (source !== 'privy' && source !== 'circle') import('@/wallet').then(({ lockWallet }) => lockWallet(addr ?? undefined)).catch(() => {})
       },
       unlock: () => {
         set({ isLocked: false, lastActivityAt: Date.now() })

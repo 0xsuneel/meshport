@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { HistoryIcon } from '@/components/ui/HistoryRow'
 import { PinSheet } from '@/components/ui/PinSheet'
@@ -551,6 +552,7 @@ export function SwapPage() {
   // the user taps Swap → enters their passcode.
   useEffect(() => {
     import('@/lib/swapService').then(({ warmSwapSdk }) => warmSwapSdk())
+    prepareSigner()
     import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
     import('@/lib/swapIntentService').then(m => { void m.warmSwapIntent() }).catch(() => {})
   }, [])
@@ -752,7 +754,10 @@ export function SwapPage() {
     // same tick, before that re-render happens. Reading live state here is
     // what makes that actually work instead of silently using the stale
     // null it closed over.
-    const activeSigner = useAuthStore.getState().signer
+    // The swap itself: the readiness check (lib/paymentReadiness) - joins
+    // the open handleConfirm started with the passcode, and refuses a signer
+    // that isn't this account's. An estimate only needs one already open.
+    const activeSigner = action === 'swap' ? await getReadySigner() : useAuthStore.getState().signer
     if (!activeSigner) {
       throw Object.assign(new Error('Wallet unavailable - unlock your wallet and try again.'), { isUncertain: false })
     }
@@ -1006,10 +1011,7 @@ export function SwapPage() {
     // is that the wallet needs the passcode re-entered (see
     // WalletRecoveryBanner, which now offers exactly that inline).
     if (!signer || !walletAddress) {
-      const { restorePrivateKey } = await import('@/lib/restoreWallet')
-      await restorePrivateKey().catch(() => {})
-      const fresh = useAuthStore.getState()
-      if (!fresh.signer || !fresh.walletAddress) {
+      if (!(await getReadySigner())) {
         setError('Your wallet needs to be unlocked - check the banner at the top of the app, or try again in a moment.')
         setStep('idle')
         return
@@ -1346,6 +1348,7 @@ export function SwapPage() {
     try {
     if (storedPasscode) {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
+      prepareSigner(passEntry) // opens the wallet alongside the passcode check
       const { verifyPasscode } = await import('@/lib/security')
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
     }

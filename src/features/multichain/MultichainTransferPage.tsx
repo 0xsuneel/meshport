@@ -1,4 +1,5 @@
 import { backLayerPop } from '@/lib/backLayers'
+import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { isAccountLockedNow, ACCOUNT_LOCKED_MESSAGE } from '@/lib/accountLockRule'
@@ -599,7 +600,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const showResumed = !!resumed && step === 'form'
   // Wake the RPC proxy as soon as the confirm step opens (cold-start off the critical path).
   useEffect(() => {
-    if (step === 'confirm') import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
+    if (step === 'confirm') { prepareSigner(); import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {}) }
   }, [step])
   // Inside the Hub the flow sits below the Hub's title bar, balance card and
   // tabs. While the transfer processes (and on its result) the Hub unpins its
@@ -1273,14 +1274,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     if (!numAmount || !address || !senderAddress) return null
     const requestKey = feeRequestKey
     // The open wallet if there is one, otherwise ask the wallet frame to open it
-    let activeKey = signer
-    if (!activeKey) {
-      try {
-        const { restorePrivateKey } = await import('@/lib/restoreWallet')
-        await restorePrivateKey(undefined)
-        activeKey = useAuthStore.getState().signer
-      } catch {}
-    }
+    const activeKey = await getReadySigner()
     if (!activeKey) return null
     if (!silent) setFeeEstimate(f => ({ ...f, loading: true, error: '' }))
     try {
@@ -1600,10 +1594,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     // one wasn't applicable (e.g. no encrypted key yet, no passcode set).
     // The wallet frame does the decrypt (src/wallet); restorePrivateKey is
     // single-flight, so step 4 just awaits this same attempt.
-    let earlyDecryptPromise: Promise<boolean> | null = null
-    if (!signer && storedPasscode && senderAddress && passEntry) {
-      earlyDecryptPromise = import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(passEntry, { silent: true })).catch(() => false)
-    }
+    const hadEarly = !signer && !!storedPasscode && !!senderAddress && !!passEntry
+    if (hadEarly) prepareSigner(passEntry)
 
     // ── 1. Passcode verification (only blocking work that MUST happen first) ──
     if (storedPasscode) {
@@ -1665,26 +1657,17 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
     try {
       // ── 4. Open the wallet (PBKDF2 in the wallet frame - happens during broadcasting view) ──
-      let activeSigner = signer
-      if (!activeSigner && earlyDecryptPromise) {
-        await earlyDecryptPromise
-        activeSigner = useAuthStore.getState().signer
-      }
-
-      // Slow path: any other way the wallet frame can open it
+      // The readiness check (lib/paymentReadiness): joins the open started
+      // with the passcode above, and refuses a signer that isn't this account's.
       const restoreStarted = Date.now()
-      if (!activeSigner) {
-        const { restorePrivateKey } = await import('@/lib/restoreWallet')
-        await restorePrivateKey(storedPasscode ? passEntry : undefined)
-        activeSigner = useAuthStore.getState().signer
-      }
+      const activeSigner = await getReadySigner(storedPasscode ? passEntry : undefined)
       if (!activeSigner) {
         // Logged with what's needed to tell why (client_errors): which kind of
         // wallet, how long opening it took, and whether Privy was up.
         const s = useAuthStore.getState()
         const privyUp = await import('@/wallet/privy').then(m => !!m.privySolanaAddress() || m.privyConfigured()).catch(() => false)
         import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
-          `[transfer no signer] source=${s.walletSource} restoreMs=${Date.now() - restoreStarted} hadEarly=${!!earlyDecryptPromise} passcode=${!!storedPasscode} privy=${privyUp} chain=${chain.sdk}`,
+          `[transfer no signer] source=${s.walletSource} restoreMs=${Date.now() - restoreStarted} hadEarly=${hadEarly} passcode=${!!storedPasscode} privy=${privyUp} chain=${chain.sdk}`,
         ))).catch(() => {})
         throw new Error('Wallet key unavailable. Lock and unlock the app.')
       }

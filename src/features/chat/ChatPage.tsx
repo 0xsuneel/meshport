@@ -1,4 +1,5 @@
 import { backLayerPop } from '@/lib/backLayers'
+import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
 import { SendIcon } from '@/components/ui/SendIcon'
 import { reachCheck, chatCountChanged, STRANGER_PAY_BLOCKED, BLOCKED_YOU, cachedPrivacy, fetchMyPrivacy, fetchMyRequestIds, fetchBlocked, blockUser, unblockUser, type ChatPrivacy } from '@/lib/privacy'
@@ -2733,10 +2734,7 @@ export function ChatConversationPage() {
   // the broadcast leg. Warming at 'form' (sheet opens) gives the full
   // amount-entry time as a free warm-up window instead.
   useEffect(() => {
-    if (payStep === 'form' || payStep === 'confirm') {
-      import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
-      import('@/lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
-    }
+    if (payStep === 'form' || payStep === 'confirm') preparePayments() // + the wallet (lib/paymentReadiness)
   }, [payStep])
   // Broadcast but not yet confirmed - shown as "submitted", not success.
   const [payPending, setPayPending] = useState(false)
@@ -2824,8 +2822,7 @@ export function ChatConversationPage() {
   // isolates already hot before the user opens the pay sheet at all.
   // Fire-and-forget: errors silently ignored, pure warm-ups.
   useEffect(() => {
-    import('@/lib/arcService').then(m => { m.warmArcRpc() }).catch(() => {})
-    import('@/lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
+    preparePayments()
     import('@/lib/security').catch(() => {})
   }, [])
 
@@ -3859,8 +3856,7 @@ export function ChatConversationPage() {
     // The real preparePayment (with the actual amount) fires when the user
     // taps the confirm button inside the sheet - that's where payAmount is
     // known and the correct preflight can be made.
-    import('@/lib/arcService').then(m => { m.warmArcRpc() }).catch(() => {})
-    import('@/lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
+    preparePayments()
     // Refresh USDC + EURC + cirBTC balances live when sheet opens
     const addr = useAuthStore.getState().walletAddress || ''
     if (addr) {
@@ -4036,9 +4032,7 @@ export function ChatConversationPage() {
       // key warm in memory). `silent: true` so a wrong PIN doesn't flip on
       // the wallet-recovery banner before "Incorrect passcode" below even
       // shows.
-      if (!signer) {
-        import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(payPassEntry || undefined, { silent: true })).catch(() => {})
-      }
+      prepareSigner(payPassEntry)
       const { verifyPasscode } = await import('@/lib/security')
       const correct = await verifyPasscode(payPassEntry, storedPasscode)
       if (!correct) {
@@ -4061,14 +4055,7 @@ export function ChatConversationPage() {
     setPayError(''); setPayPending(false); setPayStep('processing')
     payStartRef.current = performance.now()
 
-    let activeSigner = signer
-    if (!activeSigner) {
-      try {
-        const { restorePrivateKey } = await import('@/lib/restoreWallet')
-        await restorePrivateKey(payPassEntry || undefined)
-        activeSigner = useAuthStore.getState().signer
-      } catch {}
-    }
+    const activeSigner = await getReadySigner(payPassEntry)
     if (!activeSigner) { const { walletUnavailableMessage } = await import('@/lib/restoreWallet'); setPayError(walletUnavailableMessage()); setPayStep('confirm'); chatPayInFlightRef.current = false; return }
 
     try {

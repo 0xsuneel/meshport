@@ -1,4 +1,5 @@
 import { backLayerPop } from '@/lib/backLayers'
+import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
 import { displayOrderNumber } from '@/lib/orderLabels'
 import { orderKindOf, orderTitle, paymentOrderTag, type OrderKind } from '@/lib/merchantPay'
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
@@ -535,9 +536,9 @@ export function PaySendPage() {
   // Warming them NOW (on page mount, not on passcode open) means the
   // actual payment's Edge Function call hits a hot isolate, not a cold one.
   // Fire-and-forget: errors silently ignored, these are pure warm-ups.
+  // The wallet too (lib/paymentReadiness): opened and warmed before Pay.
   useEffect(() => {
-    import('@/lib/arcService').then(m => { m.warmArcRpc() }).catch(() => {})
-    import('@/lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
+    preparePayments()
     import('@/lib/security').catch(() => {})
   }, [])
 
@@ -852,9 +853,7 @@ export function PaySendPage() {
       // fails this speculative attempt and must not flip on the app-wide
       // "wallet recovery needed" banner before the passcode check below
       // even reports "Incorrect passcode".
-      if (!signer) {
-        import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(pin || undefined, { silent: true })).catch(() => {})
-      }
+      prepareSigner(pin)
       // PERF: start the send's preflight (server intent/nonce, gas, balance)
       // now too, so the pay-intent round trip overlaps passcode verification
       // and key restore instead of following them. runProcessing's send
@@ -913,12 +912,7 @@ export function PaySendPage() {
     }
     setProcessStage('preparing')
 
-    let activeSigner = signer
-    if (!activeSigner) {
-      const { restorePrivateKey } = await import('@/lib/restoreWallet')
-      const restored = await restorePrivateKey(pin || undefined)
-      if (restored) activeSigner = useAuthStore.getState().signer
-    }
+    const activeSigner = await getReadySigner(pin)
     if (!activeSigner) { const { walletUnavailableMessage } = await import('@/lib/restoreWallet'); setTxError(walletUnavailableMessage()); setProcessStage('failed'); return }
     payStep('wallet')
 

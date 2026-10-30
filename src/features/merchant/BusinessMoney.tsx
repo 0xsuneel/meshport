@@ -5,6 +5,7 @@
 //   • Requests: every request and its live status
 // All numbers come from merchant_payment_intents / merchant_payments, which
 // only the merchant-pay Edge Function changes after verifying on-chain.
+import { getReadySigner } from '@/lib/paymentReadiness'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Copy, Share2, MessageCircle, QrCode, Users, CheckCircle2 } from 'lucide-react'
@@ -362,12 +363,7 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
     else { setRunChains(list); setSteps({}) }
     setRunning(true); setScreenOpen(true)
     try {
-      let signer = useAuthStore.getState().signer
-      if (!signer) {
-        const { restorePrivateKey } = await import('@/lib/restoreWallet')
-        await restorePrivateKey(passcode, { silent: true }).catch(() => false)
-        signer = useAuthStore.getState().signer
-      }
+      const signer = await getReadySigner(passcode, { silent: true })
       if (!signer) throw new Error('Wallet unavailable - unlock MeshPort and try again')
       const { merchantClaimAll } = await import('@/lib/ubClaim')
       const r = await merchantClaimAll({

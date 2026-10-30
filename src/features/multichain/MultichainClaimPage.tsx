@@ -13,6 +13,7 @@
  * MeshPort V2: Inspired by PayPal/Revolut/Cash App
  * "Sending money to friends" not "Managing blockchain infrastructure"
  */
+import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import { backLayerPop } from '@/lib/backLayers'
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
@@ -881,55 +882,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // second, disconnected notion of claim progress sitting in the codebase.
   // Removed along with its backing functions in bridgeTracker.ts.
 
+  // The signer through the readiness check (lib/paymentReadiness): opens
+  // the wallet with the just-verified passcode when needed (a cold
+  // created / imported wallet can't open without it), joins any open
+  // already running, and refuses a signer that isn't this account's.
   const getKey = useCallback(async (passcode?: string) => {
-    const s0 = (await import('@/store')).useAuthStore.getState()
-    let key = s0.signer, addr = s0.walletAddress
-    if (key && addr) return { signer: key, addr }
-
-    // The signer is deliberately never persisted to disk (see store/index.ts
-    // partialize + App.tsx) - it's re-derived from the mnemonic, or for
-    // social-auto accounts fetched fresh from the server, on every app
-    // load/reload. That restore is async and, for the server-fetch path,
-    // a real network round trip - it can easily take longer than a short
-    // fixed poll on a slow connection. This used to only poll raw store
-    // state for 8 x 400ms (3.2s total) and give up with "Wallet not
-    // available" → Claim Failed, even while restoration was still quietly
-    // in progress in the background. Instead, actively await the same
-    // shared, single-flight restorePrivateKey() used everywhere else in
-    // the app (it no-ops instantly if a restore is already in flight or
-    // already done), then fall back to a more generous poll.
-    //
-    // BUG FIX (transaction-speed/reliability audit): this used to call
-    // restorePrivateKey() with NO passcode. For a local (create/import-seed/
-    // import-privkey) wallet whose sessionStorage-cached key has already
-    // gone cold (session cache cleared on 'offline', or just an old tab),
-    // restoreWallet.ts's own decrypt step (step 3) needs a passcode to try
-    // and had none here - `pendingRawPasscode` is only ever stashed by the
-    // passcode SETUP/CHANGE screens, never by this page's own passcode-
-    // confirm sheet. The result: a claim on a cold session silently fell
-    // through every restore path, burned the full ~10s poll below, and
-    // failed with "Wallet unavailable" - even though the user had just
-    // typed their correct passcode into the sheet one line above this call.
-    // handlePasscodeConfirm now passes that verified passcode through.
-    if (addr && !key) {
-      try {
-        const { restorePrivateKey } = await import('@/lib/restoreWallet')
-        await restorePrivateKey(passcode)
-      } catch {}
-      const s1 = (await import('@/store')).useAuthStore.getState()
-      key = s1.signer; addr = s1.walletAddress
-    }
-
-    // Remaining fallback: addr itself not hydrated yet (auth store persist
-    // rehydration hasn't landed on first render) or restore is genuinely
-    // still settling. 20 x 500ms = 10s - generous enough to cover a slow
-    // network restore without leaving the scan screen spinning forever.
-    for (let i = 0; i < 20 && !(key && addr); i++) {
-      await new Promise(r => setTimeout(r, 500))
-      const s = (await import('@/store')).useAuthStore.getState()
-      key = s.signer; addr = s.walletAddress
-    }
-    return (key && addr) ? { signer: key, addr } : null
+    const signer = await getReadySigner(passcode)
+    const addr = (await import('@/store')).useAuthStore.getState().walletAddress
+    return signer && addr ? { signer, addr } : null
   }, [])
 
   const loadSdk = useCallback(async () => {
@@ -1451,7 +1411,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     // independent PBKDF2 derives from the same passcode, otherwise run
     // back-to-back). `silent: true` so a wrong PIN doesn't flip on the
     // wallet-recovery banner before "Incorrect passcode" below even shows.
-    import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(passEntry, { silent: true })).catch(() => {})
+    prepareSigner(passEntry)
     const { verifyPasscode } = await import('@/lib/security')
     if (!await verifyPasscode(passEntry, storedPasscode!)) {
       setPassError('Incorrect passcode. Try again.'); setPassEntry(''); return

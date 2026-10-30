@@ -2,6 +2,7 @@
 // They would all run the moment that nonce is used - the person chooses to
 // cancel them here instead. Checked once per wallet per session.
 
+import { getReadySigner } from '@/lib/paymentReadiness'
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/store'
 import type { StuckPayments, CancelOutcome } from '@/lib/stuckPayments'
@@ -34,8 +35,10 @@ export function StuckPaymentsBanner() {
     setConfirming(false)
     setStep('Signing')
     try {
+      const ready = await getReadySigner()
+      if (!ready) throw new Error('wallet not open')
       const { cancelStuckPayments } = await import('@/lib/stuckPayments')
-      const out = await cancelStuckPayments(signer, stuck, setStep)
+      const out = await cancelStuckPayments(ready, stuck, setStep)
       setResult(out)
       checked.set(key, null)
       setStuck(null)
