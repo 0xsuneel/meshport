@@ -11,6 +11,7 @@
 // The Business tab owns the rules here: a minimum per chain, an optional
 // wait between settlements (Admin → Features), the passcode check and
 // unlocking the wallet key on this device (the key never leaves it).
+import { getReadySigner } from '@/lib/paymentReadiness'
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { useAuthStore } from '@/store'
 import type { WalletAccount } from '@/wallet'
@@ -109,12 +110,7 @@ function runReducer(s: RunState, a: RunAction): RunState {
 }
 
 export async function unlockSigner(passcode?: string): Promise<WalletAccount> {
-  let signer = useAuthStore.getState().signer
-  if (!signer) {
-    const { restorePrivateKey } = await import('@/lib/restoreWallet')
-    await restorePrivateKey(passcode, { silent: true }).catch(() => false)
-    signer = useAuthStore.getState().signer
-  }
+  const signer = await getReadySigner(passcode, { silent: true })
   if (!signer) throw new Error('Wallet is locked - unlock MeshPort and try again')
   return signer
 }

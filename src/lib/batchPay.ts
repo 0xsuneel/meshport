@@ -6,6 +6,7 @@
 // (docs/BULKPAY_TRANSACTION_INTENT_MIGRATION_AUDIT.md), the screen made
 // resumable as soon as the batch is out, and one Activity row for the payer
 // plus one for each person paid.
+import { getReadySigner } from './paymentReadiness'
 import { createPublicClient, encodeFunctionData } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { useAuthStore } from '@/store'
@@ -179,12 +180,7 @@ export async function sendBatch(resolved: BatchRecipient[], opts: SendBatchOptio
   const idempotencyKey = crypto.randomUUID()
 
   status('Restoring wallet signer...')
-  let activeSigner = useAuthStore.getState().signer
-  if (!activeSigner) {
-    const { restorePrivateKey } = await import('@/lib/restoreWallet')
-    await restorePrivateKey()
-    activeSigner = useAuthStore.getState().signer
-  }
+  const activeSigner = await getReadySigner()
   if (!activeSigner) { useAuthStore.getState().lock(); return { state: 'locked' } }
 
   // A definite batch failure goes to Activity as one failed Bulk Payment

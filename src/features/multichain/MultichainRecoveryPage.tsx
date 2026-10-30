@@ -15,6 +15,7 @@ const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) =
 // Every action checks the chain first, so a transfer that already arrived is
 // simply marked completed - nothing can be minted twice.
 
+import { getReadySigner } from '@/lib/paymentReadiness'
 import { isSolanaAddress } from '@/lib/solana'
 import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -152,11 +153,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
   }
 
   const getSigner = async (): Promise<WalletAccount> => {
-    let signer = useAuthStore.getState().signer
-    if (!signer) {
-      const { restorePrivateKey } = await import('@/lib/restoreWallet')
-      if (await restorePrivateKey()) signer = useAuthStore.getState().signer
-    }
+    const signer = await getReadySigner()
     if (!signer) throw new Error("Couldn't unlock your wallet on this device.")
     return signer
   }
