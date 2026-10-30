@@ -406,6 +406,9 @@ export function ChangePasscodePage() {
           useAuthStore.getState().setBiometricEnabled(false)
           showToastMessage('Fingerprint / Face unlock was turned off - turn it on again in Settings', 'info')
         }
+      } else if (walletAddress) {
+        // Setting off: a leftover record would still hold the OLD passcode.
+        (await import('@/lib/biometric')).removeBiometric(walletAddress)
       }
 
       // A frame wallet's passcode is checked by the frame - no hash kept here

@@ -25,7 +25,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Fingerprint, ScanFace } from 'lucide-react'
 import { useAuthStore } from '@/store'
-import { hasBiometricRegistered, verifyBiometricAndGetPasscode, biometricLabel, isBiometricSupported } from '@/lib/biometric'
+import { hasBiometricRegistered, unlockWithBiometric, biometricLabel, isBiometricSupported, shouldAutoPromptBiometric } from '@/lib/biometric'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { hapticError } from '@/lib/feedback'
 import { BiometricFirst } from './BiometricFirst'
@@ -130,9 +130,10 @@ export function PinKeypad({
 
   // Biometric on (phone) → fingerprint / Face ID first. A cancelled or failed
   // scan stays here ("Pay with fingerprint" to try again); the number pad
-  // appears on "Use passcode", or after a wrong passcode.
+  // appears on "Use passcode", or after a wrong passcode. After several
+  // unconfirmed prompts in a row it starts on the pad (key still there).
   const [mode, setMode] = useState<'bio' | 'pin'>(() =>
-    autoBiometric && biometricReady && !isDesktop ? 'bio' : 'pin')
+    autoBiometric && biometricReady && !isDesktop && shouldAutoPromptBiometric(walletAddress) ? 'bio' : 'pin')
   // The prompt is about to open by itself (below): show "Waiting for…" from
   // the first frame instead of "Tap to use…" flipping as the sheet appears.
   const [autoPending, setAutoPending] = useState(() => mode === 'bio' && typeof document !== 'undefined' && document.visibilityState === 'visible')
@@ -143,22 +144,37 @@ export function PinKeypad({
   // gets the fingerprint button back.
   useEffect(() => { if (!value && viaBiometricRef.current) setBiometricTrying(false) }, [value])
 
+  // The open OS prompt, so "Use passcode" (or the pad closing) can close it
+  // - a payment never waits on a prompt the person has walked away from.
+  const promptRef = useRef<AbortController | null>(null)
+  const closePrompt = () => { promptRef.current?.abort(); promptRef.current = null }
+  useEffect(() => closePrompt, [])
+
   const tryBiometric = async () => {
     if (!walletAddress || biometricTrying) return
     setBiometricTrying(true)
     setAutoPending(false)
-    const pc = await verifyBiometricAndGetPasscode(walletAddress, storedPasscodeHash ?? undefined)
+    closePrompt()
+    const ctrl = new AbortController()
+    promptRef.current = ctrl
+    const r = await unlockWithBiometric(walletAddress, storedPasscodeHash ?? undefined, ctrl.signal)
+    if (promptRef.current === ctrl) promptRef.current = null
+    // Closed by "Use passcode" / typing meanwhile: never fill over that.
+    if (ctrl.signal.aborted || (!r.ok && r.reason === 'cancelled' && valueRef.current.length > 0)) { setBiometricTrying(false); return }
     // Accepted: stay on "Waiting for…" while the sheet closes - switching
     // back to "Tap to use…" for that moment read like the scan had failed.
-    if (!pc) setBiometricTrying(false)
-    // A cancelled/failed check shows no error - cancelling is a normal
-    // choice. The fingerprint view stays, with its button to try again and
-    // "Use passcode"; from the number pad, the pad just stays.
-    if (pc) {
-      viaBiometricRef.current = true
-      onBiometric?.() // optional notification hook for a caller that wants one
-      onChange(pc)
+    if (!r.ok) {
+      setBiometricTrying(false)
+      // The record can't work any more (it was removed): straight to the pad.
+      if (r.reason === 'invalidated' || r.reason === 'not-registered') setMode('pin')
+      // Otherwise a cancelled/failed check shows no error - cancelling is a
+      // normal choice. The fingerprint view stays, with its button to try
+      // again and "Use passcode"; from the number pad, the pad just stays.
+      return
     }
+    viaBiometricRef.current = true
+    onBiometric?.() // optional notification hook for a caller that wants one
+    onChange(r.passcode)
   }
 
   // Biometric enabled → the fingerprint / Face ID prompt opens by itself as
@@ -175,7 +191,8 @@ export function PinKeypad({
   tryBiometricRef.current = tryBiometric
   // Don't wait for the capability probe: the prompt opens at once, and if
   // the device can't do it the call just fails into the passcode pad.
-  const canAuto = autoBiometric && biometricReady && liveSupported !== false
+  // Not after several unconfirmed prompts in a row (shouldAutoPromptBiometric).
+  const canAuto = autoBiometric && biometricReady && liveSupported !== false && !!walletAddress && shouldAutoPromptBiometric(walletAddress)
   useEffect(() => {
     if (!canAuto) { setAutoPending(false); return }
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -202,6 +219,7 @@ export function PinKeypad({
     // manual, even if a biometric attempt happened earlier in this same
     // keypad's lifetime (e.g. user cancelled biometric, then typed).
     viaBiometricRef.current = false
+    closePrompt()
     if (key === 'del') {
       completedRef.current = false
       onChange(value.slice(0, -1))
@@ -232,7 +250,7 @@ export function PinKeypad({
       <div className="w-full">
         {/* Same height as dots (46) + number pad (4×56 + 3×10) */}
         <BiometricFirst Icon={Icon} label={label} verb={bioVerb} trying={biometricTrying || autoPending} onTry={tryBiometric}
-          onUsePasscode={() => { setAutoPending(false); setMode('pin') }} height={short ? 254 : 300} />
+          onUsePasscode={() => { closePrompt(); setAutoPending(false); setMode('pin') }} height={short ? 254 : 300} />
       </div>
     )
   }

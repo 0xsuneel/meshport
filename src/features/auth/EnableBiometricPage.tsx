@@ -5,7 +5,11 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Fingerprint, ScanFace } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useAuthStore, useUIStore } from '@/store'
-import { isBiometricSupported, registerBiometric, biometricLabel, recordBiometricOfferSkip, isApplePasskeyDevice } from '@/lib/biometric'
+import {
+  isBiometricSupported, registerBiometric, confirmBiometricRegistration, abandonBiometricRegistration, removeBiometric,
+  biometricLabel, biometricFailureMessage, recordBiometricOfferSkip, isApplePasskeyDevice,
+  type BiometricRegisterResult, type PendingBiometricRegistration,
+} from '@/lib/biometric'
 
 /**
  * Shown right after a passcode is confirmed - for new signups (create/
@@ -52,43 +56,54 @@ export function EnableBiometricPage() {
   }, [supported, nextPath, navigate])
 
   const settledRef = useRef(false)
+  // Credential created, verification test still owed (Safari allows one
+  // prompt per tap) - see registerBiometric. Memory only.
+  const [pending, setPending] = useState<PendingBiometricRegistration | null>(null)
+  const pendingRef = useRef(pending)
+  pendingRef.current = pending
+  // Leaving without confirming forgets the half-made credential.
+  useEffect(() => () => { if (pendingRef.current) abandonBiometricRegistration(pendingRef.current) }, [])
 
-  const handleEnable = async () => {
-    if (!walletAddress || !rawPasscode) { navigate(nextPath, { replace: true }); return }
-    setWorking(true)
-    const result = await registerBiometric(walletAddress, rawPasscode, user?.displayName || user?.username || 'MeshPort user')
-    const ok = result === 'ok'
-    // If the user already tapped Skip while this was still in flight (a
-    // real possibility - this call can hang for the full WebAuthn timeout,
-    // or longer if something OS/browser-level goes wrong, e.g. a browser's
-    // own password-manager sync failing mid-flow), don't act on a result
-    // that's arriving after they've already moved on. They're on a
-    // different screen by now; navigating or toasting here would be
-    // acting on a decision that's no longer relevant.
-    if (settledRef.current) return
-    settledRef.current = true
+  const settle = (result: BiometricRegisterResult) => {
+    // If the user already tapped Skip while this was still in flight (the
+    // call can hang for the full WebAuthn timeout), don't act on a result
+    // that arrives after they've moved on - and don't leave behind what it
+    // made: they said no.
+    if (settledRef.current) {
+      if (result.status === 'ok' && walletAddress) removeBiometric(walletAddress)
+      if (result.status === 'needs-confirm') abandonBiometricRegistration(result.pending)
+      return
+    }
     setWorking(false)
-    if (ok) {
+    if (result.status === 'needs-confirm') { setPending(result.pending); return }
+    settledRef.current = true
+    setPending(null)
+    if (result.status === 'ok') {
+      // Only now - the credential exists, the passcode is sealed, and a real
+      // unlock (the verification test) reproduced it.
       useAuthStore.getState().setBiometricEnabled(true)
       showToastMessage(`${label} enabled`, 'success')
     } else {
-      // Cancelled the OS prompt, or genuinely failed - either way this is a
-      // normal, expected outcome, not an error state. Just continue on;
-      // they can always turn it on later from Settings. Treated the same
-      // as an explicit Skip for the 24h unlock-offer cooldown below - a
-      // cancelled OS prompt is a "not now" just as much as tapping Skip.
+      // Nothing was stored - the passcode keeps working exactly as before.
+      // A cancel counts as "not now" for the 24h unlock-offer cooldown.
       if (walletAddress) recordBiometricOfferSkip(walletAddress)
-      // No fingerprint-tied secret on this phone: unlock with the passcode
-      // (a weaker fingerprint copy could be read without a fingerprint).
-      showToastMessage(result === 'unsupported'
-        ? `This phone can't keep ${label} unlock secure - use your passcode`
-        : `${label} not enabled - you can turn it on later in Settings`, 'info')
+      showToastMessage(biometricFailureMessage(result.reason, label), result.reason === 'cancelled' ? 'info' : 'error')
     }
     navigate(nextPath, { replace: true })
   }
 
+  const handleEnable = async () => {
+    if (!walletAddress || !rawPasscode) { navigate(nextPath, { replace: true }); return }
+    setWorking(true)
+    const p = pendingRef.current
+    settle(p
+      ? await confirmBiometricRegistration(p)
+      : await registerBiometric(walletAddress, rawPasscode, user?.displayName || user?.username || 'MeshPort user'))
+  }
+
   const handleSkip = () => {
     settledRef.current = true
+    if (pendingRef.current) { abandonBiometricRegistration(pendingRef.current); setPending(null) }
     if (walletAddress) recordBiometricOfferSkip(walletAddress)
     navigate(nextPath, { replace: true })
   }
@@ -109,8 +124,13 @@ export function EnableBiometricPage() {
         <div>
           <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary mb-2">Enable {label}?</h2>
           <p className="text-text-secondary text-[14px] leading-[1.5] max-w-xs mx-auto">
-            Unlock MeshPort and approve transactions faster using {label} instead of your passcode.
-            Your passcode still works anytime as a fallback.
+            {pending
+              ? <>One more step: confirm with {label} once more to finish turning it on.</>
+              : <>Unlock MeshPort and approve transactions faster using {label} instead of your passcode.
+                Your passcode still works anytime as a fallback.</>}
+          </p>
+          <p className="text-text-secondary text-[12px] leading-[1.5] max-w-xs mx-auto mt-2 opacity-80">
+            Your device decides how it checks it&apos;s you - it may also accept its own screen-lock PIN or passcode.
           </p>
         </div>
 
@@ -126,7 +146,7 @@ export function EnableBiometricPage() {
         <div className="w-full max-w-xs space-y-3 mt-4">
           <button onClick={handleEnable} disabled={working}
             className="w-full py-4 bg-brand rounded-2xl text-white font-bold shadow-elevation-2 active:scale-[.98] transition-transform disabled:opacity-60 border border-black/10">
-            {working ? 'Checking…' : `Enable ${label}`}
+            {working ? 'Checking…' : pending ? `Confirm with ${label}` : `Enable ${label}`}
           </button>
           <button onClick={handleSkip}
             className="w-full py-4 bg-transparent text-text-secondary font-semibold active:scale-[.98] transition-transform">

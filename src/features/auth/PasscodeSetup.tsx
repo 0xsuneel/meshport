@@ -10,7 +10,7 @@ import { ERROR_MOTION } from '@/lib/motion'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore, useUIStore } from '@/store'
 import { hashPasscode, verifyPasscode, getPasscodeLockoutRemainingMs, clearPasscodeLockout, WALLET_UNAVAILABLE } from '@/lib/security'
-import { hasBiometricRegistered, verifyBiometricAndGetPasscode, biometricLabel, isBiometricSupported, wasBiometricOfferSkippedRecently } from '@/lib/biometric'
+import { hasBiometricRegistered, unlockWithBiometric, biometricLabel, isBiometricSupported, wasBiometricOfferSkippedRecently, shouldAutoPromptBiometric } from '@/lib/biometric'
 import { afterSplash } from '@/lib/splash'
 import { greetingTime, greetingText } from '@/lib/greeting'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -297,11 +297,13 @@ export function PasscodeLockPage() {
   const canUseBiometric = biometricReady && liveSupported !== false
   // Biometric on → fingerprint / Face ID first; the number pad appears once
   // the scan fails or is cancelled, or on "Use passcode".
-  const [mode, setMode] = useState<'bio' | 'pin'>(() => (biometricReady ? 'bio' : 'pin'))
+  // After several unconfirmed prompts in a row: the pad first (key still there).
+  const autoAllowed = !!walletAddress && shouldAutoPromptBiometric(walletAddress)
+  const [mode, setMode] = useState<'bio' | 'pin'>(() => (biometricReady && autoAllowed ? 'bio' : 'pin'))
   // The prompt is about to open by itself (below): show "Waiting for…" from
   // the first frame. Showing "Tap to use…" until the prompt opened flipped
   // the text right as the lock screen appeared.
-  const [autoPending, setAutoPending] = useState(() => biometricReady && typeof document !== 'undefined' && document.visibilityState === 'visible')
+  const [autoPending, setAutoPending] = useState(() => biometricReady && autoAllowed && typeof document !== 'undefined' && document.visibilityState === 'visible')
   useEffect(() => { if (liveSupported === false) { setMode('pin'); setAutoPending(false) } }, [liveSupported])
 
   const handleUnlock = async (val: string) => {
@@ -404,18 +406,32 @@ export function PasscodeLockPage() {
   const storedPasscodeHash = passcode
   // Lock screen is up → show the app again (see 'mp-locking' in App.tsx).
   useEffect(() => { document.documentElement.classList.remove('mp-locking') }, [])
+  // The open OS prompt: "Use passcode" or typing closes it.
+  const promptRef = useRef<AbortController | null>(null)
+  const closePrompt = () => { promptRef.current?.abort(); promptRef.current = null }
+  useEffect(() => closePrompt, [])
   const tryBiometric = async () => {
     if (!walletAddress || biometricTrying) return
     setBiometricTrying(true)
     setAutoPending(false)
-    const pc = await verifyBiometricAndGetPasscode(walletAddress, storedPasscodeHash ?? undefined)
+    closePrompt()
+    const ctrl = new AbortController()
+    promptRef.current = ctrl
+    const r = await unlockWithBiometric(walletAddress, storedPasscodeHash ?? undefined, ctrl.signal)
+    if (promptRef.current === ctrl) promptRef.current = null
+    if (ctrl.signal.aborted) { setBiometricTrying(false); return }
     // Accepted: stay on "Waiting…" until Home is up - switching back to "Tap
     // to use biometrics" for that moment read like the scan had failed.
-    if (!pc) setBiometricTrying(false)
+    if (!r.ok) {
+      setBiometricTrying(false)
+      // The record was removed (can't work any more): straight to the pad.
+      if (r.reason === 'invalidated' || r.reason === 'not-registered') setMode('pin')
+    }
     // A cancelled/failed biometric check shows no error - cancelling is an
     // entirely normal choice here, not a mistake. The fingerprint view stays
     // ("Unlock with fingerprint" to try again, or "Use passcode").
-    if (pc) {
+    if (r.ok) {
+      const pc = r.passcode
       // Fixed (/cso follow-up): a real OS-verified Face ID/fingerprint
       // success recovers the true passcode via a device-bound credential -
       // it isn't a guess, so it must not be blocked by the brute-force
@@ -440,7 +456,7 @@ export function PasscodeLockPage() {
   tryBiometricRef.current = tryBiometric
   // Don't wait for the capability probe: the prompt opens at once, and if
   // the device can't do it the call just fails into the passcode pad.
-  const canAuto = biometricReady && liveSupported !== false
+  const canAuto = biometricReady && liveSupported !== false && autoAllowed
   useEffect(() => {
     if (!canAuto) { setAutoPending(false); return }
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -463,6 +479,7 @@ export function PasscodeLockPage() {
   const handleChange = (v: string) => {
     if (error) { setError(false); setInput(''); return }
     if (checking) return
+    closePrompt()
     setInput(v)
   }
 
@@ -501,7 +518,7 @@ export function PasscodeLockPage() {
                 passcode" swaps in place without the logo moving. */}
             <BiometricFirst Icon={BiometricIcon} label={label} verb="Unlock" trying={biometricTrying || autoPending} onTry={tryBiometric}
               status={opening ? 'Opening wallet…' : undefined}
-              onUsePasscode={() => { setAutoPending(false); setMode("pin") }} height={short ? 302 : 352} />
+              onUsePasscode={() => { closePrompt(); setAutoPending(false); setMode("pin") }} height={short ? 302 : 352} />
             <button onClick={handleSignOut} className="mt-6 text-text-muted text-sm hover:text-text-secondary transition-colors">
               Sign out
             </button>

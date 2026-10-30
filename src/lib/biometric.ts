@@ -2,62 +2,76 @@ import { markPasscodeVerified, isPasscodeVerifiedThisSession } from './security'
 /**
  * lib/biometric.ts
  *
- * Real WebAuthn platform-authenticator integration - this is genuinely new,
- * not a wire-up. The "Biometric Login" toggle that already existed in
- * Settings (SecurityPage) was only ever a plain boolean flag; nothing in
- * the codebase actually called the WebAuthn API before this. Flipping that
- * toggle did nothing except change what a settings row displayed.
+ * Real WebAuthn platform-authenticator integration: Face ID / Touch ID /
+ * Android fingerprint / Windows Hello unlock of the passcode, entirely on
+ * this device.
  *
  * ── What this actually does ─────────────────────────────────────────────
- * navigator.credentials.create() registers a real platform credential -
- * this is what triggers the genuine OS-level Face ID / Android fingerprint
- * enrollment prompt. navigator.credentials.get() later re-triggers that
- * same OS prompt to unlock. MeshPort never sees the fingerprint or face
- * data itself - only a Success/Failed result from the browser, exactly as
- * described in the request this was built from.
+ * navigator.credentials.create() registers a real platform credential (the
+ * OS enrollment prompt); navigator.credentials.get() later re-triggers the
+ * same OS prompt to unlock. MeshPort never sees fingerprint or face data -
+ * only the authenticator's result.
  *
- * ── Being honest about what security property this provides ───────────
- * A native app can gate a Keychain/Keystore-held secret behind biometric
- * hardware, so the secret is physically unextractable without a successful
- * biometric check. A PWA running in a browser has no equivalent - there is
- * no secure enclave JS can hand a secret to and get back "only unlockable
- * by fingerprint." What IS real and meaningful here: the app will not
- * attempt to retrieve the stored passcode at all until
- * navigator.credentials.get() has returned a genuine, OS-verified success -
- * a real biometric check, not a UI trick. What is NOT true: this isn't
- * hardware-backed encryption the way a native Keychain entry is. The
- * WebAuthn PRF extension can provide real hardware-derived key material on
- * newer browsers/OS versions, but its support is inconsistent enough
- * (varies by browser, OS version, and even which authenticator) that
- * getting it subtly wrong would create a false sense of security - worse
- * than being upfront about a simpler, correctly-understood model. This
- * trades a small amount of theoretical strength for something that is
- * correct and honest about what it does on every supported device.
+ * ── How the stored passcode is protected ────────────────────────────────
+ * The passcode is sealed (AES-GCM) with a key derived from the WebAuthn
+ * "PRF" extension: a secret the authenticator computes from the credential
+ * and a per-record salt, and only hands out after user verification. The
+ * key is never stored, so reading this browser's storage gets an attacker
+ * nothing usable. There is deliberately NO fallback: a device/browser
+ * without PRF simply doesn't get biometric unlock (passcode only) - a copy
+ * sealed any other way could be read by script without a fingerprint.
+ *
+ * ── Registration sequence (registerBiometric) ───────────────────────────
+ *  1. create() with prf.eval - some authenticators return the PRF output
+ *     right away, many only report `prf.enabled: true` (Chrome + Google
+ *     Password Manager, several Android/Windows builds). `enabled: false`
+ *     means no PRF: the new credential is discarded, nothing is saved.
+ *  2. get() for that credential with the SAME salt - this yields the PRF
+ *     output when create() didn't, and in every case is the verification
+ *     test: it is exactly the unlock path, so a success here means unlock
+ *     will work after a refresh or PWA restart. If create() did return an
+ *     output, the two must be identical.
+ *  3. Seal the passcode, decrypt it again, compare - then write the
+ *     credential id and the sealed record together; if either write fails
+ *     both are removed. Any failure after create() discards the credential
+ *     (signalUnknownCredential, where the browser supports it).
+ *  The caller turns the biometric setting on only after all of that.
+ *  If step 2's prompt can't open by itself (Safari allows one WebAuthn
+ *  prompt per tap), the result is 'needs-confirm' and the page asks for one
+ *  more tap (confirmBiometricRegistration) or discards it on Skip
+ *  (abandonBiometricRegistration).
+ *
+ * ── Biometric vs. "user verification" ──────────────────────────────────
+ * userVerification: 'required' is the strongest a website can ask for, but
+ * it means "the device verified its owner", not "a biometric was used":
+ * Windows Hello accepts its PIN, Android its screen-lock PIN/pattern, and
+ * iOS/macOS the device passcode after failed Face ID / Touch ID. No web API
+ * can require biometric-only, so the copy says so instead of promising it.
+ *
+ * ── Relying party / origin ───────────────────────────────────────────────
+ * rp.id is left to the browser's default: the current hostname. That is
+ * meshport.xyz in production and the deployment's own host on Vercel
+ * previews / localhost, and it matches where the record lives (localStorage
+ * is per-origin too). A record made on one host never applies to another,
+ * so there is nothing to keep in sync across hosts.
  *
  * ── Storage ──────────────────────────────────────────────────────────────
- * Per wallet address (a device can have multiple accounts): the WebAuthn
- * credential id, and the passcode encrypted with a key that is either
- * produced by the fingerprint hardware (PRF) or held as a non-extractable
- * key in IndexedDB - see "How the stored passcode is protected" below.
- * Never the passcode in plaintext, never sent anywhere - 100% on-device.
+ * Per wallet address: the credential id and the sealed passcode. Never the
+ * passcode in plaintext, never sent anywhere.
  */
 
 const CRED_KEY    = (addr: string) => `meshport_biometric_cred_${addr.toLowerCase()}`
 const SECRET_KEY  = (addr: string) => `meshport_biometric_secret_${addr.toLowerCase()}`
+const FAIL_KEY    = (addr: string) => `meshport_biometric_fails_${addr.toLowerCase()}`
 const RP_NAME = 'MeshPort'
+const PROMPT_TIMEOUT_MS = 30000
+/** Consecutive unconfirmed prompts after which the prompt stops opening by itself. */
+const AUTO_PROMPT_MAX_FAILS = 3
 
-// ── How the stored passcode is protected (SECRET_KEY record, by version) ───
-//  v3 - the unlock key comes from the fingerprint hardware itself (WebAuthn
-//       "PRF"): the authenticator only produces it after a successful
-//       biometric check, and it is never stored anywhere. Reading this
-//       browser's storage gets an attacker nothing usable.
-//  v2 - fallback where PRF isn't available: the unlock key is a
-//       NON-EXTRACTABLE Web Crypto key kept in IndexedDB. Its bytes can't be
-//       read out or copied by any script; it can only be used by this app.
-//  v1 - legacy (before this fix): the raw key sat in localStorage right next
-//       to the ciphertext, so anything able to read localStorage could read
-//       the passcode. Upgraded automatically on the next fingerprint unlock
-//       (or passcode change) - see verifyBiometricAndGetPasscode.
+// Older records (v1: key beside the ciphertext; v2: non-extractable
+// IndexedDB key usable by any script in the page) are dropped - see
+// dropWeakBiometricRecord. Only the legacy IndexedDB store is still touched,
+// to clear it.
 const IDB_NAME = 'meshport-biometric'
 const IDB_STORE = 'keys'
 const PRF_INFO = new TextEncoder().encode('meshport-biometric-prf-v3')
@@ -81,13 +95,42 @@ async function idbDelete(id: string): Promise<void> {
   } catch { /* best-effort */ }
 }
 
-// v3 only (older v1 / v2 records are removed - dropWeakBiometricRecord).
 type SecretRecord = { v: 3; salt: string; iv: string; ciphertext: string } & {
   // The stored passcode HASH (public, already in localStorage) that this
   // record's passcode was confirmed to match. When it still equals the
   // current hash, a successful fingerprint unlock counts as verified at once
   // - no second 600k-round passcode check. Not a passcode verifier itself.
   forHash?: string
+}
+
+function readRecord(walletAddress: string): { credId: string; rec: SecretRecord } | null {
+  try {
+    const credId = localStorage.getItem(CRED_KEY(walletAddress))
+    const raw = localStorage.getItem(SECRET_KEY(walletAddress))
+    if (!credId || !raw) return null
+    const rec = JSON.parse(raw) as Partial<SecretRecord>
+    if (rec.v !== 3 || !rec.salt || !rec.iv || !rec.ciphertext) return null
+    return { credId, rec: rec as SecretRecord }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Writes the credential id and sealed record together. If either write
+ * fails (storage full / blocked) both are removed, so a half-written
+ * registration never looks enabled.
+ */
+function saveRecord(walletAddress: string, credId: string, rec: SecretRecord): boolean {
+  try {
+    localStorage.setItem(SECRET_KEY(walletAddress), JSON.stringify(rec))
+    localStorage.setItem(CRED_KEY(walletAddress), credId)
+    void idbDelete(walletAddress.toLowerCase())
+    return true
+  } catch {
+    try { localStorage.removeItem(SECRET_KEY(walletAddress)); localStorage.removeItem(CRED_KEY(walletAddress)) } catch { /* blocked */ }
+    return false
+  }
 }
 
 /** Remember that this record's passcode matches `storedHash`. */
@@ -101,7 +144,7 @@ function setRecordForHash(walletAddress: string, storedHash: string): void {
   } catch { /* best-effort */ }
 }
 
-async function prfKey(prfOutput: BufferSource): Promise<CryptoKey> {
+async function prfKey(prfOutput: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   const ikm = await crypto.subtle.importKey('raw', prfOutput, 'HKDF', false, ['deriveKey'])
   return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: PRF_INFO }, ikm, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
 }
@@ -114,12 +157,18 @@ async function open(key: CryptoKey, iv: string, ciphertext: string): Promise<str
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(iv) }, key, fromB64(ciphertext))
   return new TextDecoder().decode(pt)
 }
-/** v3: sealed with the fingerprint-derived key; nothing key-like stored. */
-async function writeV3(walletAddress: string, passcode: string, salt: string, prfOutput: BufferSource): Promise<void> {
-  const rec: SecretRecord = { v: 3, salt, ...(await seal(await prfKey(prfOutput), passcode)) }
-  localStorage.setItem(SECRET_KEY(walletAddress), JSON.stringify(rec))
-  await idbDelete(walletAddress.toLowerCase())
+
+/**
+ * Seals `passcode` under a PRF output and proves the round trip before
+ * anything is stored: a record that can't be opened again is never written.
+ */
+async function sealVerified(prf: Uint8Array<ArrayBuffer>, passcode: string, salt: string): Promise<SecretRecord | null> {
+  const key = await prfKey(prf)
+  const sealed = await seal(key, passcode)
+  if ((await open(key, sealed.iv, sealed.ciphertext)) !== passcode) return null
+  return { v: 3, salt, ...sealed }
 }
+
 /**
  * Only v3 records are kept: v1 kept its AES key right beside the sealed
  * passcode, and v2's device key can be used by any script running in this
@@ -137,41 +186,167 @@ export function dropWeakBiometricRecord(walletAddress: string): boolean {
   return true
 }
 
-const prfFirst = (cred: PublicKeyCredential | null): ArrayBuffer | null => {
-  try { return ((cred as any)?.getClientExtensionResults?.()?.prf?.results?.first as ArrayBuffer) ?? null } catch { return null }
+// ─── WebAuthn plumbing ───────────────────────────────────────────────────
+
+type PrfExtension = { enabled?: boolean; results?: { first?: BufferSource } }
+
+function prfExtension(cred: PublicKeyCredential | null): PrfExtension | null {
+  try {
+    const ext = (cred as unknown as { getClientExtensionResults?: () => { prf?: PrfExtension } } | null)?.getClientExtensionResults?.()
+    return ext?.prf ?? null
+  } catch {
+    return null
+  }
 }
 
-function toB64(bytes: Uint8Array): string { return btoa(String.fromCharCode(...bytes)) }
+/** The PRF output as its own byte array (it may arrive as an ArrayBuffer or a view). */
+function prfOutput(ext: PrfExtension | null): Uint8Array<ArrayBuffer> | null {
+  const first = ext?.results?.first
+  if (!first) return null
+  const view = ArrayBuffer.isView(first)
+    ? new Uint8Array(first.buffer, first.byteOffset, first.byteLength)
+    : new Uint8Array(first as ArrayBuffer)
+  if (view.byteLength === 0) return null
+  const out = new Uint8Array(view.byteLength)
+  out.set(view)
+  return out
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false
+  let diff = 0
+  for (let i = 0; i < a.byteLength; i++) diff |= a[i] ^ b[i]
+  return diff === 0
+}
+
+function toB64(bytes: Uint8Array): string { let s = ''; for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s) }
 function fromB64(str: string): Uint8Array<ArrayBuffer> { return new Uint8Array(atob(str).split('').map(c => c.charCodeAt(0))) }
 function toB64Url(bytes: Uint8Array): string { return toB64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') }
 function fromB64Url(str: string): Uint8Array<ArrayBuffer> { return fromB64(str.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - str.length % 4) % 4)) }
 
 function sleep(ms: number) { return new Promise(resolve => setTimeout(resolve, ms)) }
 
+/** One assertion for one known credential, evaluating PRF with `salt`. */
+async function getAssertion(credId: string, salt: Uint8Array<ArrayBuffer>, signal?: AbortSignal): Promise<PublicKeyCredential | null> {
+  return await navigator.credentials.get({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ type: 'public-key', id: fromB64Url(credId) }],
+      userVerification: 'required',
+      timeout: PROMPT_TIMEOUT_MS,
+      extensions: { prf: { eval: { first: salt } } } as AuthenticationExtensionsClientInputs,
+    },
+    signal,
+  }) as PublicKeyCredential | null
+}
+
+/**
+ * Tells the authenticator a credential is no longer used, so a discarded
+ * registration doesn't stay behind as a stray "MeshPort" passkey. Only
+ * where the browser supports it (Chrome 132+, Safari 26+); a no-op
+ * elsewhere. Never throws.
+ */
+function discardCredential(credId: string): void {
+  try {
+    const signal = (globalThis.PublicKeyCredential as unknown as { signalUnknownCredential?: (o: { rpId: string; credentialId: string }) => Promise<void> } | undefined)?.signalUnknownCredential
+    const rpId = typeof location !== 'undefined' ? location.hostname : ''
+    if (typeof signal !== 'function' || !rpId || !credId) return
+    void signal.call(globalThis.PublicKeyCredential, { rpId, credentialId: credId }).catch(() => {})
+  } catch { /* best-effort */ }
+}
+
+/** A stable, non-identifying user handle per wallet: re-enabling replaces the passkey instead of adding another. */
+async function userHandle(walletAddress: string): Promise<Uint8Array<ArrayBuffer>> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`meshport-biometric:${walletAddress.toLowerCase()}`))
+  return new Uint8Array(digest.slice(0, 16))
+}
+
+// ─── Errors ──────────────────────────────────────────────────────────────
+
+export type BiometricFailureReason =
+  | 'cancelled'      // prompt dismissed, timed out, or refused without a tap
+  | 'unsupported'    // no platform authenticator, or no PRF
+  | 'no-screen-lock' // the device has no fingerprint / face / screen lock set up
+  | 'security'       // the page's origin can't use WebAuthn (wrong host, not https)
+  | 'exists'         // the authenticator already holds this credential
+  | 'storage'        // the record couldn't be saved
+  | 'mismatch'       // the verification test didn't reproduce the key
+  | 'error'          // anything else
+
+export function biometricFailureMessage(reason: BiometricFailureReason, label: string): string {
+  switch (reason) {
+    case 'cancelled':      return `${label} wasn't confirmed, so nothing changed. You can turn it on later in Settings.`
+    case 'unsupported':    return `This device or browser can't keep ${label} unlock encrypted. Keep using your passcode.`
+    case 'no-screen-lock': return `Set up ${label} or a screen lock on this device first, then try again.`
+    case 'security':       return `${label} can't be used on this web address. Open MeshPort from its secure (https) address and try again.`
+    case 'exists':         return `This device already has a MeshPort passkey for this account. Remove it in your device's passkey settings and try again.`
+    case 'storage':        return `Couldn't save ${label} on this device (browser storage is full or blocked). Keep using your passcode.`
+    case 'mismatch':       return `The ${label} check didn't match, so nothing was saved. Please try again.`
+    default:               return `Couldn't turn on ${label}. Your passcode still works.`
+  }
+}
+
+/** Maps a WebAuthn DOMException to what actually went wrong. */
+export function classifyWebAuthnError(e: unknown): BiometricFailureReason {
+  const name = (e as { name?: string } | null)?.name
+  switch (name) {
+    case 'NotAllowedError':
+    case 'AbortError':
+      return 'cancelled'
+    case 'NotSupportedError':
+      return 'unsupported'
+    case 'ConstraintError':
+      return 'no-screen-lock'
+    case 'SecurityError':
+      return 'security'
+    case 'InvalidStateError':
+      return 'exists'
+    case 'QuotaExceededError':
+      return 'storage'
+    default:
+      return 'error'
+  }
+}
+
+// ─── Capability ──────────────────────────────────────────────────────────
+
 async function checkPlatformAuthenticator(): Promise<boolean> {
   try {
-    return await (PublicKeyCredential as any).isUserVerifyingPlatformAuthenticatorAvailable()
+    return await (PublicKeyCredential as unknown as { isUserVerifyingPlatformAuthenticatorAvailable: () => Promise<boolean> }).isUserVerifyingPlatformAuthenticatorAvailable()
   } catch {
     return false
   }
 }
 
 /**
- * Whether this device/browser can do a real platform biometric check at all.
+ * Whether the browser says it supports PRF. `undefined` when it can't say
+ * (no getClientCapabilities - older Chrome/Safari that may still support
+ * PRF): registration then finds out for real and fails safely.
+ */
+async function checkPrfCapability(): Promise<boolean | undefined> {
+  try {
+    const get = (PublicKeyCredential as unknown as { getClientCapabilities?: () => Promise<Record<string, boolean>> }).getClientCapabilities
+    if (typeof get !== 'function') return undefined
+    const caps = await get.call(PublicKeyCredential)
+    const prf = caps?.['extension:prf']
+    return typeof prf === 'boolean' ? prf : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Whether this device/browser can do biometric unlock at all: a
+ * user-verifying platform authenticator, and PRF (unless the browser can't
+ * tell - see checkPrfCapability).
  *
- * Retries once on a `false` result: some iOS Safari versions have a
- * confirmed timing quirk where isUserVerifyingPlatformAuthenticatorAvailable()
- * spuriously reports unsupported on the very first call right after a fresh
- * page mount, even though Face ID is genuinely available - then correctly
- * returns true moments later. Without this, that false negative silently
- * skipped the biometric enrollment offer during wallet creation
- * (EnableBiometricPage auto-navigates away when this resolves false) with
- * no error or indication anything was wrong. A single retry after a short
- * delay costs nothing on devices that are genuinely unsupported (still
- * false the second time) and fixes the false-negative case.
+ * Retries once on a `false` platform result: some iOS Safari versions
+ * spuriously report unsupported on the very first call right after a fresh
+ * page mount, then correctly return true moments later.
  */
 export async function isBiometricSupported(): Promise<boolean> {
   if (typeof window === 'undefined' || !window.PublicKeyCredential) return false
+  if ((await checkPrfCapability()) === false) return false
   if (await checkPlatformAuthenticator()) return true
   await sleep(350)
   return checkPlatformAuthenticator()
@@ -207,12 +382,9 @@ export function isApplePasskeyDevice(): boolean {
   return /iPhone|iPad|iPod|Macintosh/.test(ua)
 }
 
+/** A complete, current (v3) record exists for this wallet on this device. */
 export function hasBiometricRegistered(walletAddress: string): boolean {
-  try {
-    return !!localStorage.getItem(CRED_KEY(walletAddress)) && !!localStorage.getItem(SECRET_KEY(walletAddress))
-  } catch {
-    return false
-  }
+  return !!readRecord(walletAddress)
 }
 
 // ─── Skip-offer cooldown ───────────────────────────────────────────────────
@@ -232,13 +404,7 @@ export function recordBiometricOfferSkip(walletAddress: string) {
  * logout (see store/index.ts's logout()). A logout is a real fresh start:
  * the next login (or a seed phrase re-imported for this same address)
  * should get the auto-offer again on the next unlock regardless of
- * whether it was skipped before logging out. Without this, a skip
- * recorded before logout silently survived in localStorage (SKIP_KEY is
- * per-wallet-address, not per-session) and kept suppressing the offer for
- * up to 24h into the NEW session, which looked like it "never" offered
- * again even though the user had genuinely logged back in.
- * If the user skips it again in the new session, a fresh 24h cooldown is
- * recorded as normal - this only clears a STALE cooldown from before.
+ * whether it was skipped before logging out.
  */
 export function clearBiometricOfferSkip(walletAddress: string): void {
   try { localStorage.removeItem(SKIP_KEY(walletAddress)) } catch { /* best-effort */ }
@@ -257,181 +423,257 @@ export function wasBiometricOfferSkippedRecently(walletAddress: string): boolean
   }
 }
 
-/**
- * Registers a real platform WebAuthn credential - this line is what
- * triggers the actual OS Face ID / fingerprint enrollment prompt - then
- * encrypts and stores the raw passcode locally, gated behind it. Returns
- * false (not a throw) on any failure, including the user cancelling the
- * OS prompt - cancelling is an expected, normal outcome here, not an error
- * condition the caller needs to handle specially.
- */
-/** 'unsupported': the phone gives no fingerprint-tied secret (PRF) - nothing is kept; use the passcode. */
-export async function registerBiometric(walletAddress: string, rawPasscode: string, userLabel: string): Promise<'ok' | 'cancelled' | 'unsupported'> {
-  if (!(await isBiometricSupported())) return 'unsupported'
-  try {
-    const challenge = crypto.getRandomValues(new Uint8Array(32))
-    const userId = crypto.getRandomValues(new Uint8Array(16))
-    const prfSalt = crypto.getRandomValues(new Uint8Array(32))
+// ─── Auto-prompt back-off ────────────────────────────────────────────────
+// A prompt that keeps getting dismissed (passkey deleted in the OS, a
+// sensor that won't read, or someone who simply prefers typing) must not
+// stand in front of every payment. After a few unconfirmed prompts in a
+// row the pad stops opening it by itself; the key stays to tap.
+function recordPromptFailure(walletAddress: string): void {
+  try { localStorage.setItem(FAIL_KEY(walletAddress), String(promptFailures(walletAddress) + 1)) } catch { /* best-effort */ }
+}
+function resetPromptFailures(walletAddress: string): void {
+  try { localStorage.removeItem(FAIL_KEY(walletAddress)) } catch { /* best-effort */ }
+}
+function promptFailures(walletAddress: string): number {
+  try { const n = Number(localStorage.getItem(FAIL_KEY(walletAddress))); return Number.isFinite(n) ? n : 0 } catch { return 0 }
+}
+/** Whether the biometric prompt may open by itself (it always may when tapped). */
+export function shouldAutoPromptBiometric(walletAddress: string): boolean {
+  return promptFailures(walletAddress) < AUTO_PROMPT_MAX_FAILS
+}
 
+// ─── Registration ────────────────────────────────────────────────────────
+
+/** A created credential still waiting for its verification test (memory only). */
+export type PendingBiometricRegistration = {
+  walletAddress: string
+  passcode: string
+  credId: string
+  salt: string
+  /** PRF output create() returned, if any - the test's output must match it. */
+  fromCreate: Uint8Array<ArrayBuffer> | null
+}
+
+export type BiometricRegisterResult =
+  | { status: 'ok' }
+  | { status: 'needs-confirm'; pending: PendingBiometricRegistration }
+  | { status: 'failed'; reason: BiometricFailureReason }
+
+const failed = (reason: BiometricFailureReason): BiometricRegisterResult => ({ status: 'failed', reason })
+
+/**
+ * Registers a platform credential and stores the passcode sealed under its
+ * PRF output - see "Registration sequence" at the top. Never throws. On
+ * anything but 'ok' nothing is stored (a 'needs-confirm' credential exists
+ * only in memory until confirmed or abandoned), so passcode login is
+ * untouched.
+ */
+export async function registerBiometric(walletAddress: string, rawPasscode: string, userLabel: string): Promise<BiometricRegisterResult> {
+  if (!walletAddress || !rawPasscode) return failed('error')
+  if (!(await isBiometricSupported())) return failed('unsupported')
+  // Re-enabling replaces whatever this device had for the wallet.
+  removeBiometric(walletAddress)
+
+  let credId: string | null = null
+  try {
+    const salt = crypto.getRandomValues(new Uint8Array(32))
     const credential = await navigator.credentials.create({
       publicKey: {
-        challenge,
-        rp: { name: RP_NAME },
-        user: { id: userId, name: userLabel, displayName: userLabel },
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        rp: { name: RP_NAME }, // id: the current hostname (see "Relying party" above)
+        user: { id: await userHandle(walletAddress), name: userLabel, displayName: userLabel },
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
-          userVerification: 'required', // this is what forces an actual biometric check, not just "device present"
-          // 'discouraged', not 'preferred' - we never need a discoverable
-          // credential (verifyBiometricAndGetPasscode always passes the
-          // exact stored credential id via allowCredentials, never a
-          // usernameless/discoverable lookup). Requesting one anyway is
-          // what makes Windows/Edge treat this as a "passkey" and try to
-          // save it to Microsoft Password Manager (cloud sync) instead of
-          // just binding it locally to Windows Hello - if that sync
-          // service is unreachable, the OS shows its own "Can't reach
-          // Microsoft Password Manager" dialog and the whole registration
-          // stalls on it. 'discouraged' keeps the credential device-local,
-          // the same as every other platform this already worked on.
+          userVerification: 'required',
+          // 'discouraged': unlock always names the exact credential, so a
+          // discoverable one isn't needed - and asking for one is what made
+          // Windows/Edge try to sync it to Microsoft Password Manager and
+          // stall when that service was unreachable.
           residentKey: 'discouraged',
         },
-        timeout: 30000, // was 60s - a genuine browser/OS-level hang shouldn't leave the user waiting a full minute before even Skip's fallback kicks in
-        attestation: 'none', // we don't run a relying-party server to verify attestation - not needed for this device-local model
-        // Ask the fingerprint hardware for a secret (PRF) - see the storage
-        // notes at the top. Browsers without it simply ignore this.
-        extensions: { prf: { eval: { first: prfSalt } } } as any,
+        timeout: PROMPT_TIMEOUT_MS,
+        attestation: 'none', // no relying-party server - device-local model
+        extensions: { prf: { eval: { first: salt } } } as AuthenticationExtensionsClientInputs,
       },
     }) as PublicKeyCredential | null
-    if (!credential) return 'cancelled'
+    if (!credential) return failed('cancelled')
+    credId = toB64Url(new Uint8Array(credential.rawId))
 
-    // Only with the fingerprint's own secret: a passcode sealed any other way
-    // could be read by a script in this page without a fingerprint.
-    const prf = prfFirst(credential)
-    if (!prf) return 'unsupported'
-    localStorage.setItem(CRED_KEY(walletAddress), toB64Url(new Uint8Array(credential.rawId)))
-    await writeV3(walletAddress, rawPasscode, toB64(prfSalt), prf)
-    return 'ok'
+    const ext = prfExtension(credential)
+    // Explicitly no PRF on this authenticator - never store a weaker copy.
+    if (ext?.enabled === false) { discardCredential(credId); return failed('unsupported') }
+
+    const pending: PendingBiometricRegistration = { walletAddress, passcode: rawPasscode, credId, salt: toB64(salt), fromCreate: prfOutput(ext) }
+    credId = null // finishRegistration owns it from here
+    return await finishRegistration(pending, true)
   } catch (e) {
-    // Includes the user cancelling/dismissing the OS prompt - NotAllowedError
-    // is WebAuthn's standard rejection for a cancelled or timed-out prompt.
-    console.warn('[biometric] registration failed or cancelled:', e instanceof Error ? e.message : e)
-    return 'cancelled'
+    if (credId) discardCredential(credId)
+    const reason = classifyWebAuthnError(e)
+    console.warn('[biometric] registration failed:', reason, e instanceof Error ? `${e.name}: ${e.message}` : e)
+    return failed(reason)
   }
 }
 
-/**
- * Triggers the real OS biometric prompt via navigator.credentials.get().
- * Only on a genuine success does this ever touch the locally-stored
- * encrypted passcode. Returns the raw passcode on success, or null on any
- * failure/cancellation - never throws, so callers can treat this as a
- * plain "did it work" check without try/catch of their own.
- */
-/**
- * `storedHash` (the current passcode hash) lets a successful scan count as
- * already verified: see SecretRecord.forHash. Without it, callers verify the
- * returned passcode the normal way.
- */
-export async function verifyBiometricAndGetPasscode(walletAddress: string, storedHash?: string): Promise<string | null> {
+/** The verification test for a 'needs-confirm' registration - call from a tap. */
+export function confirmBiometricRegistration(pending: PendingBiometricRegistration): Promise<BiometricRegisterResult> {
+  return finishRegistration(pending, false)
+}
+
+/** Skip after 'needs-confirm': forgets the unconfirmed credential. */
+export function abandonBiometricRegistration(pending: PendingBiometricRegistration): void {
+  discardCredential(pending.credId)
+}
+
+async function finishRegistration(p: PendingBiometricRegistration, firstAttempt: boolean): Promise<BiometricRegisterResult> {
+  let assertion: PublicKeyCredential | null
   try {
-    const credIdB64 = localStorage.getItem(CRED_KEY(walletAddress))
-    const secretRaw = localStorage.getItem(SECRET_KEY(walletAddress))
-    if (!credIdB64 || !secretRaw) return null
-    const rec = JSON.parse(secretRaw) as Partial<SecretRecord> & { v?: number }
-    // Only fingerprint-sealed (v3) records: an older one is removed and the
-    // passcode is used (dropWeakBiometricRecord).
-    if (rec.v !== 3 || !rec.salt || !rec.iv || !rec.ciphertext) { dropWeakBiometricRecord(walletAddress); return null }
-    const saltB64 = rec.salt
-
-    const challenge = crypto.getRandomValues(new Uint8Array(32))
-    const assertion = await navigator.credentials.get({
-      publicKey: {
-        challenge,
-        allowCredentials: [{ type: 'public-key', id: fromB64Url(credIdB64) }],
-        userVerification: 'required',
-        timeout: 30000, // was 60s - same reasoning as registerBiometric above
-        extensions: { prf: { eval: { first: fromB64(saltB64) } } } as any,
-      },
-    }) as PublicKeyCredential | null
-    if (!assertion) return null // OS check didn't succeed - do not proceed to decrypt
-    const prf = prfFirst(assertion)
-
-    // This device no longer gives the fingerprint secret - use the passcode.
-    if (!prf) return null
-    const passcode = await open(await prfKey(prf), rec.iv, rec.ciphertext)
-
-    if (storedHash) {
-      if (rec.forHash === storedHash) {
-        // Confirmed against this exact hash before → verified now, instantly.
-        await markPasscodeVerified(passcode, storedHash)
-        setRecordForHash(walletAddress, storedHash) // the upgrade above may have rewritten the record
-      } else {
-        // Not confirmed yet (older record, or the passcode changed): the
-        // caller does the full check. Once that passes, remember it so the
-        // next scan is instant.
-        const pc = passcode
-        setTimeout(() => {
-          isPasscodeVerifiedThisSession(pc, storedHash)
-            .then(ok => { if (ok) setRecordForHash(walletAddress, storedHash) })
-            .catch(() => {})
-        }, 4000)
-      }
-    }
-    return passcode
+    assertion = await getAssertion(p.credId, fromB64(p.salt))
   } catch (e) {
-    // Includes the user cancelling the OS prompt, or a wrong/no-longer-
-    // enrolled biometric - treated identically to "not available right
-    // now", falling back to manual passcode entry, never a hard error.
-    console.warn('[biometric] verification failed or cancelled:', e instanceof Error ? e.message : e)
-    return null
+    const reason = classifyWebAuthnError(e)
+    // The second prompt can be refused for want of a fresh tap (Safari):
+    // keep the credential and ask for one.
+    if (reason === 'cancelled' && firstAttempt) return { status: 'needs-confirm', pending: p }
+    discardCredential(p.credId)
+    console.warn('[biometric] verification test failed:', reason, e instanceof Error ? `${e.name}: ${e.message}` : e)
+    return failed(reason)
+  }
+  try {
+    if (!assertion) { discardCredential(p.credId); return failed('cancelled') }
+    if (toB64Url(new Uint8Array(assertion.rawId)) !== p.credId) { discardCredential(p.credId); return failed('mismatch') }
+    const prf = prfOutput(prfExtension(assertion))
+    if (!prf) { discardCredential(p.credId); return failed('unsupported') }
+    if (p.fromCreate && !sameBytes(p.fromCreate, prf)) { discardCredential(p.credId); return failed('mismatch') }
+    const rec = await sealVerified(prf, p.passcode, p.salt)
+    if (!rec) { discardCredential(p.credId); return failed('mismatch') }
+    if (!saveRecord(p.walletAddress, p.credId, rec)) { discardCredential(p.credId); return failed('storage') }
+    resetPromptFailures(p.walletAddress)
+    return { status: 'ok' }
+  } catch (e) {
+    discardCredential(p.credId)
+    console.warn('[biometric] sealing failed:', e instanceof Error ? `${e.name}: ${e.message}` : e)
+    return failed('error')
   }
 }
 
+// ─── Unlock ──────────────────────────────────────────────────────────────
+
+export type BiometricUnlockResult =
+  | { ok: true; passcode: string; reason?: undefined }
+  | { ok: false; passcode?: undefined; reason: 'not-registered' | 'cancelled' | 'invalidated' | 'error' }
+
 /**
- * Re-encrypts the locally-stored biometric copy of the passcode after the
- * user changes their passcode - reusing the SAME AES key and the SAME
- * WebAuthn credential set up at registerBiometric() time, so this never
- * triggers a new Face ID/fingerprint enrollment prompt and never creates a
- * second/separate biometric PIN. Biometric unlock always decrypts to
- * whatever the current real passcode is, nothing else.
- *
- * Called from ChangePasscodePage right after a passcode change succeeds.
- * No-op (returns false) if biometric was never registered for this wallet -
- * there is nothing local to keep in sync.
+ * A record that can no longer produce the passcode (no PRF on this
+ * assertion, or it no longer decrypts) is removed and the setting turned
+ * off, so later payments go straight to the passcode instead of opening a
+ * prompt that can't work.
+ */
+function invalidate(walletAddress: string, why: string): void {
+  console.warn('[biometric] record invalidated:', why)
+  removeBiometric(walletAddress)
+  import('@/store').then(({ useAuthStore, useUIStore }) => {
+    if (!useAuthStore.getState().biometricEnabled) return
+    useAuthStore.getState().setBiometricEnabled(false)
+    useUIStore.getState().showToastMessage(`${biometricLabel()} unlock stopped working on this device and was turned off - use your passcode`, 'info')
+  }).catch(() => {})
+}
+
+/**
+ * Opens the OS prompt and, only on a verified success, recovers the
+ * passcode. Never throws. `signal` lets the caller close the prompt (the
+ * person chose "Use passcode"). `storedHash` lets a successful scan count as
+ * already verified - see SecretRecord.forHash.
+ */
+export async function unlockWithBiometric(walletAddress: string, storedHash?: string, signal?: AbortSignal): Promise<BiometricUnlockResult> {
+  if (!walletAddress) return { ok: false, reason: 'not-registered' }
+  if (dropWeakBiometricRecord(walletAddress)) { invalidate(walletAddress, 'legacy record'); return { ok: false, reason: 'invalidated' } }
+  const stored = readRecord(walletAddress)
+  if (!stored) return { ok: false, reason: 'not-registered' }
+  const { credId, rec } = stored
+
+  let assertion: PublicKeyCredential | null
+  try {
+    assertion = await getAssertion(credId, fromB64(rec.salt), signal)
+  } catch (e) {
+    const reason = classifyWebAuthnError(e)
+    if (!signal?.aborted) recordPromptFailure(walletAddress)
+    console.warn('[biometric] unlock prompt failed:', reason, e instanceof Error ? `${e.name}: ${e.message}` : e)
+    return { ok: false, reason: reason === 'cancelled' ? 'cancelled' : 'error' }
+  }
+  if (signal?.aborted) return { ok: false, reason: 'cancelled' }
+  if (!assertion) { recordPromptFailure(walletAddress); return { ok: false, reason: 'cancelled' } }
+
+  const prf = prfOutput(prfExtension(assertion))
+  if (!prf) { invalidate(walletAddress, 'no PRF output'); return { ok: false, reason: 'invalidated' } }
+  let passcode: string
+  try {
+    passcode = await open(await prfKey(prf), rec.iv, rec.ciphertext)
+  } catch {
+    invalidate(walletAddress, 'does not decrypt')
+    return { ok: false, reason: 'invalidated' }
+  }
+  resetPromptFailures(walletAddress)
+
+  if (storedHash) {
+    if (rec.forHash === storedHash) {
+      // Confirmed against this exact hash before → verified now, instantly.
+      await markPasscodeVerified(passcode, storedHash).catch(() => {})
+    } else {
+      // Not confirmed yet (older record, or the passcode changed): the
+      // caller does the full check. Once that passes, remember it so the
+      // next scan is instant.
+      setTimeout(() => {
+        isPasscodeVerifiedThisSession(passcode, storedHash)
+          .then(ok => { if (ok) setRecordForHash(walletAddress, storedHash) })
+          .catch(() => {})
+      }, 4000)
+    }
+  }
+  return { ok: true, passcode }
+}
+
+/** unlockWithBiometric for callers that only need the passcode or null. */
+export async function verifyBiometricAndGetPasscode(walletAddress: string, storedHash?: string, signal?: AbortSignal): Promise<string | null> {
+  const r = await unlockWithBiometric(walletAddress, storedHash, signal)
+  return r.ok ? r.passcode : null
+}
+
+/**
+ * Re-seals the biometric copy after a passcode change: one scan of the SAME
+ * credential with a fresh salt, round-trip checked, then written together.
+ * No new enrollment. Cancelled / no PRF / anything wrong: biometric unlock
+ * is turned off rather than kept in a weaker or stale form. Returns false
+ * then (and when nothing was registered).
  */
 export async function updateBiometricPasscode(walletAddress: string, newPasscode: string): Promise<boolean> {
+  const stored = readRecord(walletAddress)
+  if (!stored) { removeBiometric(walletAddress); return false }
   try {
-    const credIdB64 = localStorage.getItem(CRED_KEY(walletAddress))
-    const secretRaw = localStorage.getItem(SECRET_KEY(walletAddress))
-    if (!credIdB64 || !secretRaw) return false
-    // Sealed with the fingerprint's own secret only: one scan now re-derives
-    // it for the new passcode. No scan (cancelled, no PRF): fingerprint
-    // unlock is turned off rather than kept in a weaker form.
-    const saltB64 = toB64(crypto.getRandomValues(new Uint8Array(32)))
-    const assertion = await navigator.credentials.get({
-      publicKey: {
-        challenge: crypto.getRandomValues(new Uint8Array(32)),
-        allowCredentials: [{ type: 'public-key', id: fromB64Url(credIdB64) }],
-        userVerification: 'required',
-        timeout: 30000,
-        extensions: { prf: { eval: { first: fromB64(saltB64) } } } as any,
-      },
-    }) as PublicKeyCredential | null
-    const prf = prfFirst(assertion)
-    if (!prf) { removeBiometric(walletAddress); return false }
-    await writeV3(walletAddress, newPasscode, saltB64, prf)
-    return true
+    const salt = crypto.getRandomValues(new Uint8Array(32))
+    const assertion = await getAssertion(stored.credId, salt)
+    const prf = prfOutput(prfExtension(assertion))
+    const rec = prf ? await sealVerified(prf, newPasscode, toB64(salt)) : null
+    if (rec && saveRecord(walletAddress, stored.credId, rec)) { resetPromptFailures(walletAddress); return true }
   } catch (e) {
-    console.warn('[biometric] updateBiometricPasscode failed:', e instanceof Error ? e.message : e)
-    removeBiometric(walletAddress)
-    return false
+    console.warn('[biometric] updateBiometricPasscode failed:', classifyWebAuthnError(e), e instanceof Error ? e.message : e)
   }
+  removeBiometric(walletAddress)
+  return false
 }
 
-/** Called from Settings when the user disables biometric login, or on logout. (A passcode change now calls updateBiometricPasscode instead of this, so the credential survives a passcode change.) */
+/**
+ * Settings → off, logout, a failed passcode re-seal, or an invalid record:
+ * removes this wallet's record and tells the authenticator the passkey is
+ * no longer used (where supported).
+ */
 export function removeBiometric(walletAddress: string): void {
+  let credId: string | null = null
   try {
+    credId = localStorage.getItem(CRED_KEY(walletAddress))
     localStorage.removeItem(CRED_KEY(walletAddress))
     localStorage.removeItem(SECRET_KEY(walletAddress))
+    localStorage.removeItem(FAIL_KEY(walletAddress))
   } catch { /* best-effort */ }
+  if (credId) discardCredential(credId)
   void idbDelete(walletAddress.toLowerCase())
 }
