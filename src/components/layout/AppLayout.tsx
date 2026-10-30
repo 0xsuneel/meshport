@@ -456,10 +456,15 @@ export function AppLayout() {
   // Fingerprint unlock is kept only sealed by the fingerprint itself: older
   // records (readable without one) are removed - turned on again in Settings
   // where the phone supports it (lib/biometric.ts dropWeakBiometricRecord).
+  // The setting also follows the record: none on this device (storage
+  // cleared, another browser / home-screen app container) → shown off.
   useEffect(() => {
     if (!walletAddress) return
     void import('@/lib/biometric').then(m => {
-      if (m.dropWeakBiometricRecord(walletAddress)) useAuthStore.getState().setBiometricEnabled(false)
+      const dropped = m.dropWeakBiometricRecord(walletAddress)
+      if (dropped || (useAuthStore.getState().biometricEnabled && !m.hasBiometricRegistered(walletAddress))) {
+        useAuthStore.getState().setBiometricEnabled(false)
+      }
     }).catch(() => {})
   }, [walletAddress])
 
