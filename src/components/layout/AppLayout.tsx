@@ -566,7 +566,6 @@ export function AppLayout() {
     import('@/lib/restoreWallet')
       .then(({ restorePrivateKey }) => restorePrivateKey(undefined, { silent: walletSource !== 'social-auto' }))
       .catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walletAddress, walletSource])
   useEffect(() => {
     if (!walletAddress || signer || walletSource !== 'social-auto') return
