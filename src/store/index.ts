@@ -1,4 +1,3 @@
-import { DEFAULT_AUTO_LOCK_MINUTES, normalizeAutoLockMinutes, type AutoLockMinutes } from '@/lib/autoLock'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { User } from '@/types'
@@ -111,8 +110,6 @@ interface AuthStore {
   passcode: string | null
   biometricEnabled: boolean
   passcodeLockEnabled: boolean
-  /** Auto-lock after this many minutes unused or in the background (lib/autoLock.ts). */
-  autoLockMinutes: AutoLockMinutes
 
   setUser: (user: User) => void
   updateAvatar: (avatarUrl: string | null) => void
@@ -124,7 +121,6 @@ interface AuthStore {
   setPasscode: (code: string) => void
   setBiometricEnabled: (enabled: boolean) => void
   setPasscodeLockEnabled: (enabled: boolean) => void
-  setAutoLockMinutes: (minutes: AutoLockMinutes) => void
   logout: () => void
   lock: () => void
   unlock: () => void
@@ -172,7 +168,6 @@ export const useAuthStore = create<AuthStore>()(
       passcode: null,
       biometricEnabled: false,
       passcodeLockEnabled: true,
-      autoLockMinutes: DEFAULT_AUTO_LOCK_MINUTES,
 
 
       setUser: (user) => {
@@ -213,7 +208,6 @@ export const useAuthStore = create<AuthStore>()(
       setPasscode: (code) => set({ passcode: code }),
       setBiometricEnabled: (enabled) => set({ biometricEnabled: enabled }),
       setPasscodeLockEnabled: (enabled) => set({ passcodeLockEnabled: enabled }),
-      setAutoLockMinutes: (minutes) => set({ autoLockMinutes: normalizeAutoLockMinutes(minutes) }),
 
       logout: () => {
         const currentAddr = get().walletAddress
@@ -366,7 +360,6 @@ export const useAuthStore = create<AuthStore>()(
         passcode:            state.passcode,
         biometricEnabled:    state.biometricEnabled,
         passcodeLockEnabled: state.passcodeLockEnabled,
-        autoLockMinutes:     state.autoLockMinutes,
         isLocked:            state.isLocked,
         lastActivityAt:      state.lastActivityAt,
 
