@@ -51,7 +51,7 @@ specific messages instead of all being reported as "cancelled".
 |---|---|
 | Settings → off | record removed, credential signalled unknown |
 | Re-enable | same user handle per wallet, so the passkey is replaced, not duplicated |
-| Passcode change | one scan re-seals with a fresh salt; cancel → biometric off |
+| Passcode change | one scan re-seals with a fresh salt; the old record is removed first. If the prompt is cancelled or refused (Safari: no fresh tap after hashing), the Enable screen asks for one tap to finish ("Keep Face ID on?"); Skip turns it off |
 | Logout | record removed (store `logout()`) |
 | Credential deleted in OS | prompt fails like a cancel → passcode |
 | Storage cleared / other container | `AppLayout` turns the setting off |
@@ -94,13 +94,23 @@ passcode change, UV failure, credential deletion, disable/re-enable.
 
 ## Remaining limitations
 
-- Some browsers return no `getClientCapabilities()`; support is then found
-  out at registration (one OS prompt, then a clear "unsupported" message).
-- `signalUnknownCredential` exists only in newer Chrome/Safari; elsewhere a
-  discarded credential may stay listed in the OS passkey manager (harmless,
-  unusable without its record).
-- Passcode change on Safari may refuse the re-seal prompt (no fresh gesture
-  after the passcode hashing); biometric is then turned off and can be
-  re-enabled in Settings.
-- Safari may evict a non-installed site's storage after 7 days without use;
-  the setting then turns off and the passcode is used.
+These can't be fixed in web code without weakening the design:
+
+- **No PRF (older iOS before 18, older Windows Hello, some third-party
+  passkey managers):** biometric unlock is refused cleanly and the passcode
+  is used. Supporting them would mean storing a key script can read, which
+  is the insecure downgrade this design rules out.
+- **iPhone/iPad home-screen app vs Safari tab:** iOS gives them separate
+  storage, so each needs its own enable. The lock screen offers it in the
+  app automatically (24h cooldown after Skip).
+- **Browsers without `getClientCapabilities()`:** PRF support is found out
+  at registration (one OS prompt, then a clear "unsupported" message).
+- **Browsers without `signalUnknownCredential`** (before Chrome 132 /
+  Safari 26): a discarded credential may stay listed in the OS passkey
+  manager. Harmless (unusable without its record); re-enabling uses the same
+  user handle, so it is replaced rather than duplicated where the manager
+  stores passkeys by user.
+- **Storage eviction:** after registration the app asks for persistent
+  storage (`navigator.storage.persist()`). Browsers may decline, and Safari's
+  7-day rule for sites not added to the Home Screen still applies; the
+  setting then turns off and the passcode is used.
