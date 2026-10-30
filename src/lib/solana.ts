@@ -19,7 +19,7 @@ const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
 /** Bytes a base58 string decodes to (leading '1's are zero bytes). */
 export function base58Length(s: string): number {
-  let bytes: number[] = []
+  const bytes: number[] = []
   for (const ch of s) {
     let carry = ALPHABET.indexOf(ch)
     if (carry < 0) return -1
