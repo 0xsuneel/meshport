@@ -452,6 +452,8 @@ export type PendingBiometricRegistration = {
   salt: string
   /** PRF output create() returned, if any - the test's output must match it. */
   fromCreate: Uint8Array<ArrayBuffer> | null
+  /** Re-sealing an existing credential for a new passcode (updateBiometricPasscode). */
+  reseal?: boolean
 }
 
 export type BiometricRegisterResult =
@@ -548,12 +550,27 @@ async function finishRegistration(p: PendingBiometricRegistration, firstAttempt:
     if (!rec) { discardCredential(p.credId); return failed('mismatch') }
     if (!saveRecord(p.walletAddress, p.credId, rec)) { discardCredential(p.credId); return failed('storage') }
     resetPromptFailures(p.walletAddress)
+    requestPersistentStorage()
     return { status: 'ok' }
   } catch (e) {
     discardCredential(p.credId)
     console.warn('[biometric] sealing failed:', e instanceof Error ? `${e.name}: ${e.message}` : e)
     return failed('error')
   }
+}
+
+/**
+ * Asks the browser not to evict this site's storage (the record lives in
+ * localStorage). Best-effort: browsers may decline, and Safari's 7-day rule
+ * for sites not added to the Home Screen still applies - the setting then
+ * turns itself off (AppLayout) and the passcode is used.
+ */
+function requestPersistentStorage(): void {
+  try {
+    const storage = (globalThis.navigator as Navigator | undefined)?.storage
+    if (typeof storage?.persist !== 'function') return
+    void storage.persisted().then(already => (already ? true : storage.persist())).catch(() => {})
+  } catch { /* best-effort */ }
 }
 
 // ─── Unlock ──────────────────────────────────────────────────────────────
@@ -641,24 +658,32 @@ export async function verifyBiometricAndGetPasscode(walletAddress: string, store
 /**
  * Re-seals the biometric copy after a passcode change: one scan of the SAME
  * credential with a fresh salt, round-trip checked, then written together.
- * No new enrollment. Cancelled / no PRF / anything wrong: biometric unlock
- * is turned off rather than kept in a weaker or stale form. Returns false
- * then (and when nothing was registered).
+ * No new enrollment. The old record (old passcode) is removed first,
+ * whatever happens next.
+ *  - 'ok': on for the new passcode.
+ *  - 'needs-confirm': the prompt was cancelled or refused for want of a
+ *    fresh tap (Safari, after the passcode hashing). The credential is kept;
+ *    finish with confirmBiometricRegistration from a tap (the Enable screen),
+ *    or abandonBiometricRegistration. Off until then.
+ *  - 'failed': off (no PRF, storage, nothing registered...).
  */
-export async function updateBiometricPasscode(walletAddress: string, newPasscode: string): Promise<boolean> {
+export async function updateBiometricPasscode(walletAddress: string, newPasscode: string): Promise<BiometricRegisterResult> {
   const stored = readRecord(walletAddress)
-  if (!stored) { removeBiometric(walletAddress); return false }
-  try {
-    const salt = crypto.getRandomValues(new Uint8Array(32))
-    const assertion = await getAssertion(stored.credId, salt)
-    const prf = prfOutput(prfExtension(assertion))
-    const rec = prf ? await sealVerified(prf, newPasscode, toB64(salt)) : null
-    if (rec && saveRecord(walletAddress, stored.credId, rec)) { resetPromptFailures(walletAddress); return true }
-  } catch (e) {
-    console.warn('[biometric] updateBiometricPasscode failed:', classifyWebAuthnError(e), e instanceof Error ? e.message : e)
+  if (!stored) { removeBiometric(walletAddress); return failed('error') }
+  clearLocalRecord(walletAddress)
+  const pending: PendingBiometricRegistration = {
+    walletAddress, passcode: newPasscode, credId: stored.credId,
+    salt: toB64(crypto.getRandomValues(new Uint8Array(32))), fromCreate: null, reseal: true,
   }
-  removeBiometric(walletAddress)
-  return false
+  return finishRegistration(pending, true)
+}
+
+function clearLocalRecord(walletAddress: string): void {
+  try {
+    localStorage.removeItem(CRED_KEY(walletAddress))
+    localStorage.removeItem(SECRET_KEY(walletAddress))
+    localStorage.removeItem(FAIL_KEY(walletAddress))
+  } catch { /* best-effort */ }
 }
 
 /**
@@ -668,12 +693,8 @@ export async function updateBiometricPasscode(walletAddress: string, newPasscode
  */
 export function removeBiometric(walletAddress: string): void {
   let credId: string | null = null
-  try {
-    credId = localStorage.getItem(CRED_KEY(walletAddress))
-    localStorage.removeItem(CRED_KEY(walletAddress))
-    localStorage.removeItem(SECRET_KEY(walletAddress))
-    localStorage.removeItem(FAIL_KEY(walletAddress))
-  } catch { /* best-effort */ }
+  try { credId = localStorage.getItem(CRED_KEY(walletAddress)) } catch { /* blocked */ }
+  clearLocalRecord(walletAddress)
   if (credId) discardCredential(credId)
   void idbDelete(walletAddress.toLowerCase())
 }

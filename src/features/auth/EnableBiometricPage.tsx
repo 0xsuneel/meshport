@@ -1,6 +1,6 @@
 import { CONTROL_MOTION } from '@/lib/motion'
 import { useEffect, useState, useRef } from 'react'
-import { takeBiometricPasscode, clearBiometricPasscode } from '@/lib/biometricHandoff'
+import { takeBiometricPasscode, takeBiometricPending, clearBiometricPasscode } from '@/lib/biometricHandoff'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Fingerprint, ScanFace } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -56,9 +56,11 @@ export function EnableBiometricPage() {
   }, [supported, nextPath, navigate])
 
   const settledRef = useRef(false)
-  // Credential created, verification test still owed (Safari allows one
-  // prompt per tap) - see registerBiometric. Memory only.
-  const [pending, setPending] = useState<PendingBiometricRegistration | null>(null)
+  // Credential created (or a passcode change to re-seal), verification test
+  // still owed (Safari allows one prompt per tap) - see registerBiometric /
+  // updateBiometricPasscode. Memory only.
+  const [pending, setPending] = useState<PendingBiometricRegistration | null>(() => takeBiometricPending())
+  const reseal = !!pending?.reseal
   const pendingRef = useRef(pending)
   pendingRef.current = pending
   // Leaving without confirming forgets the half-made credential.
@@ -82,7 +84,7 @@ export function EnableBiometricPage() {
       // Only now - the credential exists, the passcode is sealed, and a real
       // unlock (the verification test) reproduced it.
       useAuthStore.getState().setBiometricEnabled(true)
-      showToastMessage(`${label} enabled`, 'success')
+      showToastMessage(reseal ? `${label} is on for your new passcode` : `${label} enabled`, 'success')
     } else {
       // Nothing was stored - the passcode keeps working exactly as before.
       // A cancel counts as "not now" for the 24h unlock-offer cooldown.
@@ -93,9 +95,9 @@ export function EnableBiometricPage() {
   }
 
   const handleEnable = async () => {
-    if (!walletAddress || !rawPasscode) { navigate(nextPath, { replace: true }); return }
-    setWorking(true)
     const p = pendingRef.current
+    if (!walletAddress || (!rawPasscode && !p)) { navigate(nextPath, { replace: true }); return }
+    setWorking(true)
     settle(p
       ? await confirmBiometricRegistration(p)
       : await registerBiometric(walletAddress, rawPasscode, user?.displayName || user?.username || 'MeshPort user'))
@@ -122,9 +124,11 @@ export function EnableBiometricPage() {
         </motion.div>
 
         <div>
-          <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary mb-2">Enable {label}?</h2>
+          <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary mb-2">{reseal ? `Keep ${label} on?` : `Enable ${label}?`}</h2>
           <p className="text-text-secondary text-[14px] leading-[1.5] max-w-xs mx-auto">
-            {pending
+            {reseal
+              ? <>Your passcode changed. Confirm with {label} once to keep using it - otherwise it turns off and your passcode works as usual.</>
+              : pending
               ? <>One more step: confirm with {label} once more to finish turning it on.</>
               : <>Unlock MeshPort and approve transactions faster using {label} instead of your passcode.
                 Your passcode still works anytime as a fallback.</>}
@@ -134,7 +138,7 @@ export function EnableBiometricPage() {
           </p>
         </div>
 
-        {apple && (
+        {apple && !pending && (
           <div className="w-full max-w-xs rounded-2xl px-4 py-3 text-left text-[13px] leading-[1.5]"
             style={{ background: 'color-mix(in srgb, var(--brand) 9%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 22%, transparent)', color: 'var(--text-secondary)' }}>
             <p className="font-semibold text-text-primary mb-1">Apple will ask to "Save a passkey"</p>

@@ -395,19 +395,52 @@ describe('disable / re-enable / passcode change / logout', () => {
     await lib.registerBiometric(WALLET, PASSCODE, 'Sunil')
     const credId = storage.getItem(credKey)
     const oldSalt = JSON.parse(storage.getItem(secretKey)!).salt
-    expect(await lib.updateBiometricPasscode(WALLET, '111222')).toBe(true)
+    expect(await lib.updateBiometricPasscode(WALLET, '111222')).toEqual({ status: 'ok' })
     expect(storage.getItem(credKey)).toBe(credId)
     expect(JSON.parse(storage.getItem(secretKey)!).salt).not.toBe(oldSalt)
     expect(auth.createCalls).toHaveLength(1) // no new enrollment
     expect((await lib.unlockWithBiometric(WALLET)).passcode).toBe('111222')
   })
 
-  it('a passcode change whose scan is cancelled turns biometric unlock off instead of keeping the old passcode', async () => {
+  it('a passcode change whose scan is refused (Safari: no fresh tap) drops the old passcode at once and finishes from one tap', async () => {
     const lib = await load()
     await lib.registerBiometric(WALLET, PASSCODE, 'Sunil')
     auth.getErrors = [new DOMException('x', 'NotAllowedError')]
-    expect(await lib.updateBiometricPasscode(WALLET, '111222')).toBe(false)
+    const r = await lib.updateBiometricPasscode(WALLET, '111222')
+    if (r.status !== 'needs-confirm') throw new Error('expected needs-confirm')
+    expect(r.pending.reseal).toBe(true)
+    expect(lib.hasBiometricRegistered(WALLET)).toBe(false) // the old passcode is never recoverable again
+    expect(PKC.signalUnknownCredential).not.toHaveBeenCalled() // the credential is kept for the confirm
+    expect(await lib.confirmBiometricRegistration(r.pending)).toEqual({ status: 'ok' })
+    expect(auth.createCalls).toHaveLength(1) // still no new enrollment
+    expect((await lib.unlockWithBiometric(WALLET)).passcode).toBe('111222')
+  })
+
+  it('a refused passcode re-seal that is then skipped discards the credential', async () => {
+    const lib = await load()
+    await lib.registerBiometric(WALLET, PASSCODE, 'Sunil')
+    auth.getErrors = [new DOMException('x', 'NotAllowedError')]
+    const r = await lib.updateBiometricPasscode(WALLET, '111222')
+    if (r.status !== 'needs-confirm') throw new Error('expected needs-confirm')
+    lib.abandonBiometricRegistration(r.pending)
+    expect(PKC.signalUnknownCredential).toHaveBeenCalledWith({ rpId: 'meshport.xyz', credentialId: r.pending.credId })
+    expect(storage.map.size).toBe(0)
+  })
+
+  it('a passcode re-seal without PRF turns biometric unlock off', async () => {
+    const lib = await load()
+    await lib.registerBiometric(WALLET, PASSCODE, 'Sunil')
+    auth.getPrf = false
+    expect(await lib.updateBiometricPasscode(WALLET, '111222')).toEqual({ status: 'failed', reason: 'unsupported' })
     expect(lib.hasBiometricRegistered(WALLET)).toBe(false)
+  })
+
+  it('asks the browser to keep storage after a successful registration', async () => {
+    const lib = await load()
+    const persist = vi.fn(async () => true)
+    ;(navigator as unknown as { storage: unknown }).storage = { persisted: vi.fn(async () => false), persist }
+    await lib.registerBiometric(WALLET, PASSCODE, 'Sunil')
+    await vi.waitFor(() => expect(persist).toHaveBeenCalled())
   })
 
   it('records are per wallet', async () => {

@@ -15,7 +15,7 @@ function buildProfileUpdateMessage(
     `avatarUrl: ${avatarUrl ?? ''}`,
   ].join('\n')
 }
-import { handBiometricPasscode } from '@/lib/biometricHandoff'
+import { handBiometricPasscode, handBiometricPending } from '@/lib/biometricHandoff'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import {
@@ -35,7 +35,7 @@ import { useThemeStore, resolveTheme, type ThemeMode } from '@/store/themeStore'
 import { switchTheme } from '@/lib/themeTransition'
 import { Avatar } from '@/components/ui/Avatar'
 import { copySensitiveToClipboard, timeAgo } from '@/lib/utils'
-import { biometricLabel, removeBiometric } from '@/lib/biometric'
+import { biometricLabel, removeBiometric, type PendingBiometricRegistration } from '@/lib/biometric'
 import { markP2PNotificationRead, markAllP2PNotificationsReadOnServer, P2P_TYPES } from '@/lib/p2pNotifications'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
@@ -398,14 +398,17 @@ export function ChangePasscodePage() {
         await setWalletPasscode(walletAddress, newPass, storedPasscode ? oldPass : newPass)
         inFrame = true
       }
+      let resealPending: PendingBiometricRegistration | null = null
       if (walletAddress && biometricEnabled) {
         const { updateBiometricPasscode } = await import('@/lib/biometric')
-        // One fingerprint scan re-seals it for the new passcode; without it,
-        // fingerprint unlock is turned off (never kept in a weaker form).
-        if (!(await updateBiometricPasscode(walletAddress, newPass))) {
-          useAuthStore.getState().setBiometricEnabled(false)
-          showToastMessage('Fingerprint / Face unlock was turned off - turn it on again in Settings', 'info')
-        }
+        // One fingerprint scan re-seals it for the new passcode; never kept
+        // in a weaker form. Off until it's sealed for the new passcode.
+        const r = await updateBiometricPasscode(walletAddress, newPass)
+        if (r.status !== 'ok') useAuthStore.getState().setBiometricEnabled(false)
+        // Cancelled, or refused for want of a fresh tap (Safari, after the
+        // hashing above): one tap on the next screen finishes it.
+        if (r.status === 'needs-confirm') resealPending = r.pending
+        else if (r.status === 'failed') showToastMessage('Fingerprint / Face unlock was turned off - turn it on again in Settings', 'info')
       } else if (walletAddress) {
         // Setting off: a leftover record would still hold the OLD passcode.
         (await import('@/lib/biometric')).removeBiometric(walletAddress)
@@ -417,7 +420,12 @@ export function ChangePasscodePage() {
       setPasscode(inFrame ? FRAME_PASSCODE : hashed)
       // Show success immediately - local passcode (and its dependents) are already updated
       showToastMessage('Passcode updated successfully', 'success')
-      navigate(-1)
+      if (resealPending) {
+        handBiometricPending(resealPending)
+        navigate('/auth/enable-biometric', { replace: true, state: { next: '/security' } })
+      } else {
+        navigate(-1)
+      }
       // The passcode (even hashed) never leaves this device: a 6-digit PIN's
       // hash can be reversed in seconds by anyone who could read it.
     } catch {
