@@ -1,4 +1,4 @@
-import { autoLockMs } from '@/lib/autoLock'
+import { awayPastAutoLock } from '@/lib/autoLock'
 import { useState, useEffect, Suspense } from 'react'
 import { useIsStandalone } from './hooks/useIsStandalone'
 import { createBrowserRouter, RouterProvider, Navigate, useLocation } from 'react-router-dom'
@@ -706,46 +706,8 @@ export default function App() {
   // in place (useOnReconnect). This used to reload the whole page, which
   // also threw away the open wallet - wallet apps keep it open until their
   // own auto-lock. Short backgrounds (switching apps briefly) do nothing.
-  // Left open and untouched: lock, like wallet apps' auto-lock (MetaMask
-  // Mobile, Phantom). The background lock below only covers a phone that
-  // left the app - one put down with MeshPort on screen stayed unlocked.
-  // A touch, key or scroll counts as use; the check runs once when the
-  // time would be up, not on every touch.
-  // How long: the person's auto-lock setting (lib/autoLock.ts), read at each
-  // check so a change in Settings applies at once (checks are at most a
-  // minute apart).
-  useEffect(() => {
-    const idleMs = () => autoLockMs(useAuthStore.getState().autoLockMinutes)
-    let lastUse = Date.now()
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const check = () => {
-      const left = lastUse + idleMs() - Date.now()
-      if (left > 0) { timer = setTimeout(check, Math.min(left, 60_000)); return }
-      // Hidden: the background lock handles it on return.
-      if (document.visibilityState !== 'visible') { timer = setTimeout(check, 60_000); return }
-      const { isAuthenticated, passcodeLockEnabled, isLocked, lock } = useAuthStore.getState()
-      if (isAuthenticated && passcodeLockEnabled && !isLocked) {
-        document.documentElement.classList.add('mp-locking')
-        lock()
-      }
-      lastUse = Date.now()
-      timer = setTimeout(check, 60_000)
-    }
-    const used = () => { lastUse = Date.now() }
-    // Coming back to the app counts as use: time in the background has its
-    // own rule (15 min, below).
-    const onVisible = () => { if (document.visibilityState === 'visible') used() }
-    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll'] as const
-    for (const e of events) window.addEventListener(e, used, { passive: true, capture: true })
-    document.addEventListener('visibilitychange', onVisible)
-    timer = setTimeout(check, 60_000)
-    return () => {
-      clearTimeout(timer)
-      for (const e of events) window.removeEventListener(e, used, { capture: true })
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [])
-
+  // No lock while the app is on screen (like UPI apps): the phone's own
+  // screen timeout turns the screen off, which is the background rule below.
   useEffect(() => {
     let hiddenAt: number | null = null
     const STALE_AFTER_MS = 2 * 60 * 1000 // 2 minutes
@@ -761,12 +723,13 @@ export default function App() {
         return
       }
       if (document.visibilityState === 'visible' && hiddenAt) {
+        const hiddenAt0 = hiddenAt
         const awayMs = Date.now() - hiddenAt
         hiddenAt = null
         try { sessionStorage.removeItem(HIDDEN_AT_KEY) } catch { /* private mode */ }
-        // Auto-lock after a long time in the background (like other wallets
-        // do), so a phone left unattended doesn't stay unlocked for hours.
-        if (awayMs > autoLockMs(useAuthStore.getState().autoLockMinutes)) {
+        // Back after more than 5 minutes in the background (lib/autoLock.ts,
+        // like UPI apps): the lock screen, before anything else is drawn.
+        if (awayPastAutoLock(hiddenAt0, Date.now())) {
           const { isAuthenticated, passcodeLockEnabled, isLocked, lock } = useAuthStore.getState()
           if (isAuthenticated && passcodeLockEnabled && !isLocked) {
             // Hide the app in this same event, before the next frame, so the

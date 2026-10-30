@@ -93,11 +93,11 @@ clearLegacyData()
   try { hadSession = sessionStorage.getItem(SESSION_FLAG) === '1'; sessionStorage.setItem(SESSION_FLAG, '1') } catch { /* private mode */ }
   // Also lock when this is a reload of a tab the phone discarded after it
   // sat in the background past the auto-lock time (App.tsx records when the
-  // app was hidden; the same setting as there - lib/autoLock.ts).
+  // app was hidden; the same 5 minutes as there - lib/autoLock.ts).
   let awayTooLong = false
   try {
     const hiddenAt = Number(sessionStorage.getItem('meshport:hidden-at') || 0)
-    awayTooLong = awayPastAutoLock(hiddenAt, Date.now(), useAuthStore.getState().autoLockMinutes)
+    awayTooLong = awayPastAutoLock(hiddenAt, Date.now())
     sessionStorage.removeItem('meshport:hidden-at')
   } catch { /* private mode */ }
   const auth = useAuthStore.getState()
