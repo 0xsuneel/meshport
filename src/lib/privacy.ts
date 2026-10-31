@@ -76,14 +76,51 @@ export async function saveMyPrivacy(userId: string, patch: Partial<ChatPrivacy>)
  */
 export type Reach = { canPay: boolean; toRequests: boolean; blocked: boolean; canRequest: boolean }
 const OPEN: Reach = { canPay: true, toRequests: false, blocked: false, canRequest: true }
-export async function reachCheck(recipientId: string): Promise<Reach> {
-  try {
-    const { data, error } = await supabase.rpc('chat_reach_check', { recipient: recipientId })
-    const row = Array.isArray(data) ? data[0] : data
-    if (error || !row) return OPEN
-    return { canPay: row.can_pay !== false, toRequests: row.to_requests === true, blocked: row.blocked === true, canRequest: row.can_request !== false }
-  } catch { return OPEN }
+// A real answer is reused for a minute, and one already on its way is
+// shared: the check made when the recipient is picked is the one the
+// payment uses (it ran twice, and the payment waited for its own).
+const REACH_TTL_MS = 60_000
+const reachAnswers = new Map<string, { reach: Reach; at: number }>()
+const reachRunning = new Map<string, Promise<Reach>>()
+
+function fetchReach(recipientId: string): Promise<Reach> {
+  const running = reachRunning.get(recipientId)
+  if (running) return running
+  const p = (async (): Promise<Reach> => {
+    try {
+      const { data, error } = await supabase.rpc('chat_reach_check', { recipient: recipientId })
+      const row = Array.isArray(data) ? data[0] : data
+      if (error || !row) return OPEN
+      const reach = { canPay: row.can_pay !== false, toRequests: row.to_requests === true, blocked: row.blocked === true, canRequest: row.can_request !== false }
+      reachAnswers.set(recipientId, { reach, at: Date.now() })
+      return reach
+    } catch { return OPEN }
+  })().finally(() => reachRunning.delete(recipientId))
+  reachRunning.set(recipientId, p)
+  return p
 }
+
+/**
+ * `maxWaitMs`: for a payment - never wait longer than this. No answer by
+ * then is treated like a failed check (it fails open, as above): a payment
+ * waited 11 s on it while the app was starting up. The check still finishes
+ * in the background, so the next one has the answer.
+ */
+export async function reachCheck(recipientId: string, opts?: { maxWaitMs?: number }): Promise<Reach> {
+  const hit = reachAnswers.get(recipientId)
+  if (hit && Date.now() - hit.at < REACH_TTL_MS) return hit.reach
+  const p = fetchReach(recipientId)
+  if (!opts?.maxWaitMs) return p
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<Reach>(resolve => { timer = setTimeout(() => resolve(OPEN), opts.maxWaitMs) })
+  try { return await Promise.race([p, late]) } finally { clearTimeout(timer) }
+}
+
+/** Payments wait at most this long for the privacy check (reachCheck). */
+export const PAYMENT_REACH_WAIT_MS = 1500
+
+/** Test hook. */
+export function resetReachCache(): void { reachAnswers.clear(); reachRunning.clear() }
 
 // ── Blocking (chat_blocks: yours only) ─────────────────────────────────────
 // A blocked person can't message you (the database refuses it) or pay you
@@ -125,6 +162,7 @@ export const chatCountChanged = () => { try { window.dispatchEvent(new Event(CHA
 
 export async function blockUser(userId: string, otherId: string): Promise<void> {
   clearBlockedCache()
+  reachAnswers.delete(otherId)
   const { error } = await supabase.from('chat_blocks').upsert({ owner_id: userId, blocked_id: otherId }, { onConflict: 'owner_id,blocked_id', ignoreDuplicates: true })
   if (error) throw error
   chatCountChanged()
@@ -132,6 +170,7 @@ export async function blockUser(userId: string, otherId: string): Promise<void> 
 
 export async function unblockUser(userId: string, otherId: string): Promise<void> {
   clearBlockedCache()
+  reachAnswers.delete(otherId)
   const { error } = await supabase.from('chat_blocks').delete().eq('owner_id', userId).eq('blocked_id', otherId)
   if (error) throw error
   chatCountChanged()

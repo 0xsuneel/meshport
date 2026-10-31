@@ -66,6 +66,25 @@ export function formatNotifAmount(amount: number, tokenSymbol?: string): string 
 // the transfer is already linked to an order, or an open order is due this
 // amount (exactly or within 10% - those become "Payment received" or
 // "Payment needs review"). Every other deposit notifies as before.
+// The open orders, shared for a few seconds: on start-up a batch of received
+// payments is notified at once, and each asked for the same list - 8
+// identical requests competing with the person's own payment.
+type OpenOrderDue = { requested_amount: unknown; received_amount: unknown; expires_at: string | null }
+const OPEN_ORDERS_TTL_MS = 10_000
+let openOrders: { at: number; p: Promise<OpenOrderDue[]> } | null = null
+function openOrderDues(): Promise<OpenOrderDue[]> {
+  if (openOrders && Date.now() - openOrders.at < OPEN_ORDERS_TTL_MS) return openOrders.p
+  const p: Promise<OpenOrderDue[]> = Promise.resolve(supabase.from('merchant_payment_intents')
+    .select('requested_amount, received_amount, expires_at')
+    .in('status', ['pending', 'partially_paid'])
+    .limit(200))
+    .then(({ data }) => (data ?? []) as OpenOrderDue[])
+  // A failed lookup isn't kept: the next payment asks again.
+  p.catch(() => { if (openOrders?.p === p) openOrders = null })
+  openOrders = { at: Date.now(), p }
+  return p
+}
+
 async function isMerchantOrderPayment(id: string | undefined, amount: number, tokenSymbol?: string): Promise<boolean> {
   if ((tokenSymbol || 'USDC').toUpperCase() !== 'USDC' || !(amount > 0)) return false
   const tx = id?.startsWith('ext_recv_tx_') ? id.slice('ext_recv_tx_'.length).toLowerCase() : null
@@ -77,11 +96,8 @@ async function isMerchantOrderPayment(id: string | undefined, amount: number, to
       if (r.ok) { const j = await r.json().catch(() => null); if (j?.found) return true }
     } catch { /* fall through to intent check */ }
   }
-  const { data: open } = await supabase.from('merchant_payment_intents')
-    .select('requested_amount, received_amount, expires_at')
-    .in('status', ['pending', 'partially_paid'])
-    .limit(200)
-  return (open ?? []).some((i: any) => {
+  const open = await openOrderDues()
+  return open.some((i: any) => {
     if (i.expires_at && new Date(i.expires_at).getTime() < Date.now() - 5 * 60_000) return false
     const due = Number(i.requested_amount) - Number(i.received_amount)
     return due > 0 && Math.abs(due - amount) <= Math.max(0.1 * due, 0.01)
