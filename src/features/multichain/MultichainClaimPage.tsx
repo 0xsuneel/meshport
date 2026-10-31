@@ -1242,7 +1242,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           const sdkId = toSdkChainId(chain.chainId)
           if (!merchantMode && (claimRoute === 'ub' || !canBringOverCctp(chain.chainId)) && UB_CLAIM_CHAINS.has(sdkId)) {
             const { AppKit } = sdkRef.current ?? await loadSdk()
-            const kit = new AppKit({ disableErrorReporting: true } as any)
+            const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
             const adapter = await buildAdapter(wallet.signer)
             setUbClaimChains(prev => prev.includes(chain.chainId) ? prev : [...prev, chain.chainId])
             runUbClaim({
@@ -1454,7 +1454,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         // Never prompts here: without an unlocked key the fees are shown on the next screen.
         if (!signer || !walletAddress) { if (!cancelled) setUbFee(prev => ({ ...prev, loading: false, needsUnlock: true })); return }
         const { AppKit } = sdkRef.current ?? await loadSdk()
-        const kit = new AppKit({ disableErrorReporting: true } as any)
+        const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
         const adapter = await buildAdapter(signer)
         const r = await estimateUbClaimFee({ kit, adapter, walletAddr: walletAddress, fromChain: selectedSdkId, amount: claimAmt })
         if (!cancelled) setUbFee({ approx: false, ...r, forKey: ubFeeKey, loading: false, error: '', needsUnlock: false })

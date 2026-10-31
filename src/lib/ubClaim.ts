@@ -822,7 +822,7 @@ async function _runAutoFinish(p: { walletAddress: string; signer: WalletAccount 
     const [{ AppKit }, { createWalletAdapter }] = await Promise.all([
       import('@circle-fin/app-kit'), import('@/wallet'),
     ])
-    const kit = new AppKit({ disableErrorReporting: true } as any)
+    const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
     const rows = await getUnifiedBalances(kit, p.walletAddress)
     const serverOwned = await serverOwnedChains(p.walletAddress)
     const ready = rows.filter(r => r.chain !== ARC_CHAIN_KEY && r.confirmed >= UB_MIN_SWEEP && !inFlight.has(r.chain) && !serverOwned.has(r.chain))
