@@ -63,6 +63,7 @@ import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
 import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { claimFeeSummary, type SignedClaimFee } from '@/lib/claimFees'
+import { startMoveTimer, type MoveTimer } from '@/lib/moveTimings'
 import { bridgeTokenDecimals, bridgeTokenInfo, type CctpxToken } from '@/lib/tokenBridge'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { moveSteps, indexFromBringStage, indexFromClaimStatus, indexFromCctpStage } from '@/lib/moveSteps'
@@ -519,6 +520,27 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const [error,          setError]         = useState('')
   const [,               setTxRecords]     = useState<ActivityRecord[]>([])
   const [chainProgress,  setChainProgress] = useState<ChainProgress[]>([])
+  // Step timings for this bring (lib/moveTimings → Supabase move_timings):
+  // passcode, wallet open, then each stage as it's reached.
+  const moveTimerRef = useRef<MoveTimer | null>(null)
+  useEffect(() => {
+    const t = moveTimerRef.current, cp = chainProgress[0]
+    if (!t || t.finished || !cp) return
+    // approving = getting the fee quote / signing; burning = signed, relayer sending;
+    // attesting = sent (Circle attesting); minting / done = arriving on Arc.
+    if (cp.stage !== 'waiting' && cp.stage !== 'error') t.mark(cp.stage)
+  }, [chainProgress])
+  useEffect(() => {
+    const t = moveTimerRef.current
+    if (!t || t.finished) return
+    const txHash = chainProgress[0]?.txHash
+    if (confirmPhase === 'submitted') t.mark('handed_off')
+    if (confirmPhase === 'done') { t.mark('arrived'); t.finish({ ok: true, txHash }) }
+    else if (step === 'failed') t.finish({ ok: false, error: error || chainProgress[0]?.msg, txHash })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmPhase, step])
+  // Left before it arrived (a bring finishes without this screen): save what was timed.
+  useEffect(() => () => { moveTimerRef.current?.finish({ ok: false, error: 'screen closed before arrival' }) }, [])
   // Per chain, what each gasless bring signed: MeshPort's fee and the cap
   // on Circle's CCTP fee - see lib/claimFees for how the success screen
   // turns these into the fees actually paid.
@@ -1215,6 +1237,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     setError('')
     const wallet = await getKey(passcode)
     if (!wallet) { setError('Wallet unavailable'); setStep('failed'); return }
+    moveTimerRef.current?.mark('wallet_open')
 
     const selChains = chains
       .filter(c => selected === c.chainId && c.claimable > 0)
@@ -1467,10 +1490,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       setShowPasscodeSheet(true)
       return
     }
+    moveTimerRef.current = startMoveTimer('bring', { route: token ? 'cctpx' : claimRoute, chain: selected ?? undefined, token: coin })
     setConfirmPhase('processing')
     setStep('confirm')
     await executeClaim()
-  }, [selectedTotal, storedPasscode, executeClaim])
+  }, [selectedTotal, storedPasscode, executeClaim, token, claimRoute, selected, coin])
 
   const handlePasscodeConfirm = useCallback(async () => {
     if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
@@ -1481,10 +1505,13 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     // back-to-back). `silent: true` so a wrong PIN doesn't flip on the
     // wallet-recovery banner before "Incorrect passcode" below even shows.
     prepareSigner(passEntry)
+    const timer = startMoveTimer('bring', { route: token ? 'cctpx' : claimRoute, chain: selected ?? undefined, token: coin })
     const { verifyPasscode } = await import('@/lib/security')
     if (!await verifyPasscode(passEntry, storedPasscode!)) {
       setPassError('Incorrect passcode. Try again.'); setPassEntry(''); return
     }
+    timer.mark('passcode')
+    moveTimerRef.current = timer
     const enteredPasscode = passEntry
     setPassError(''); setPassEntry('')
     setShowPasscodeSheet(false)
@@ -1494,7 +1521,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     // BUG FIX comment) - never used for the speculative restore above (that
     // one is already in flight/done via the shared single-flight guard).
     await executeClaim(enteredPasscode)
-  }, [passEntry, storedPasscode, executeClaim])
+  }, [passEntry, storedPasscode, executeClaim, token, claimRoute, selected, coin])
 
   const selectedChain = chains.find(c => c.chainId === selected)
 

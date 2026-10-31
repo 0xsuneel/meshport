@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
+import { startMoveTimer, type MoveTimer } from '@/lib/moveTimings'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { HistoryIcon } from '@/components/ui/HistoryRow'
 import { PinSheet } from '@/components/ui/PinSheet'
@@ -746,6 +747,7 @@ export function SwapPage() {
     // the open handleConfirm started with the passcode, and refuses a signer
     // that isn't this account's. An estimate only needs one already open.
     const activeSigner = action === 'swap' ? await getReadySigner() : useAuthStore.getState().signer
+    if (action === 'swap' && activeSigner) moveTimerRef.current?.mark('wallet_open')
     if (!activeSigner) {
       throw Object.assign(new Error('Wallet unavailable - unlock your wallet and try again.'), { isUncertain: false })
     }
@@ -1032,7 +1034,20 @@ export function SwapPage() {
   // swapService.ts) - replaces the old fixed "approve after 5s" timer.
   const confirmLockRef = useRef(false)
   const [swapProgress, setSwapProgress] = useState<SwapProgressState>(INITIAL_SWAP_PROGRESS)
-  const onSwapProgress = useCallback((p: SwapProgress) => setSwapProgress(prev => applySwapProgress(prev, p)), [])
+  // Step timings for this swap (lib/moveTimings → Supabase move_timings).
+  const moveTimerRef = useRef<MoveTimer | null>(null)
+  const onSwapProgress = useCallback((p: SwapProgress) => {
+    moveTimerRef.current?.mark(p.kind)
+    setSwapProgress(prev => applySwapProgress(prev, p))
+  }, [])
+  useEffect(() => {
+    const t = moveTimerRef.current
+    if (!t || t.finished) return
+    if (step === 'done') t.finish({ ok: true, txHash: txHash || undefined })
+    else if (step === 'failed') t.finish({ ok: false, error })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step])
+  useEffect(() => () => { moveTimerRef.current?.finish({ ok: false, error: 'screen closed before the end' }) }, [])
 
   const executeSwap = useCallback(async () => {
     swapStartRef.current = Date.now()
@@ -1332,11 +1347,13 @@ export function SwapPage() {
     if (confirmLockRef.current) return
     confirmLockRef.current = true
     try {
+    const timer = startMoveTimer('swap', { route: `${tokenIn.id}>${tokenOut.id}`, chain: 'Arc_Testnet', token: tokenIn.id })
     if (storedPasscode) {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       prepareSigner(passEntry) // opens the wallet alongside the passcode check
       const { verifyPasscode } = await import('@/lib/security')
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
+      timer.mark('passcode')
     }
     // Gas on Arc is always paid in native USDC, no matter which token is
     // being swapped - a EURC/cirBTC→USDC swap still needs leftover native
@@ -1359,6 +1376,7 @@ export function SwapPage() {
     // that quote rather than firing another SDK call from the passcode
     // sheet.
     setPassEntry(''); setPassError(''); setShowPasscodeSheet(false)
+    moveTimerRef.current = timer
     await executeSwap()
     } finally {
       confirmLockRef.current = false
