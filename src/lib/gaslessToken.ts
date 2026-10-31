@@ -96,12 +96,26 @@ export function checkTokenQuote(q: TokenQuote, token: CctpxToken, total: bigint,
 export const toTokenUnits = (token: CctpxToken, n: number) => BigInt(Math.round(n * 10 ** DECIMALS[token]))
 export const fromTokenUnits = (token: CctpxToken, u: bigint) => Number(u) / 10 ** DECIMALS[token]
 
+// Same idea as gaslessBridge: the quote Review showed is the one signed when
+// the user confirms within a few seconds (a CCTPx quote costs a Circle call and
+// several chain reads). The relayer re-prices at submit time regardless.
+const QUOTE_REUSE_MS = 25_000
+const recentQuotes = new Map<string, { at: number; quote: TokenQuote }>()
+
+/** Drops the remembered quotes (a failed relay: the next try prices afresh). */
+export function forgetTokenQuotes(): void { recentQuotes.clear() }
+
 async function fetchQuote(chainId: string, token: CctpxToken, total: bigint, recipient: string): Promise<TokenQuote> {
+  const key = `${chainId}|${token}|${total}|${recipient.toLowerCase()}`
+  const hit = recentQuotes.get(key)
+  if (hit && Date.now() - hit.at < QUOTE_REUSE_MS) return hit.quote
   const { authApiHeaders } = await import('@/lib/supabase')
   const qs = new URLSearchParams({ action: 'token_quote', chain: chainId, token, amount: total.toString(), recipient })
   const r = await fetch(`/api/bridge-relay?${qs}`, { headers: await authApiHeaders() })
   const q = await r.json().catch(() => null) as (TokenQuote & { error?: string }) | null
   if (!r.ok || !q) throw new Error(q?.error || 'Could not get a fee quote')
+  recentQuotes.set(key, { at: Date.now(), quote: q })
+  if (recentQuotes.size > 20) recentQuotes.delete(recentQuotes.keys().next().value as string)
   return q
 }
 
@@ -201,7 +215,7 @@ export async function bringTokenGasless(p: {
     }),
   })
   const out = await rr.json().catch(() => null) as { txHash?: Hex; error?: string; pending?: boolean } | null
-  if (!rr.ok || !out?.txHash) throw new Error(out?.error || 'Relayer did not accept the transfer')
+  if (!rr.ok || !out?.txHash) { recentQuotes.clear(); throw new Error(out?.error || 'Relayer did not accept the transfer') }
   if (out.pending) {
     p.onStatus?.('Confirming…')
     let receipt: any = null

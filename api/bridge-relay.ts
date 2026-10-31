@@ -50,10 +50,16 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const ARC_DOMAIN = 26
 const FORWARD_HOOK = '0x636374702d666f72776172640000000000000000000000000000000000000000'
-// Use production Iris by default; set IRIS_ENV=sandbox in Vercel for testnet deployments.
-const IRIS = (process.env.IRIS_ENV || '') === 'sandbox'
-  ? 'https://iris-api-sandbox.circle.com'
-  : 'https://iris-api.circle.com'
+// MeshPort is testnet-only, and testnet burns/fees exist only in Circle's
+// SANDBOX Iris - so sandbox is the default. IRIS_ENV=production opts in to the
+// production Iris (mainnet build). With production here, a deployment that
+// never set IRIS_ENV capped maxFee from MAINNET fee tables (e.g. 0.325 bps vs
+// the sandbox's 1.3 bps from Base Sepolia). A cap under what the sandbox
+// requires is held as insufficient_fee until standard finality (15+ min)
+// instead of the fast ~10 s.
+const IRIS = (process.env.IRIS_ENV || '') === 'production'
+  ? 'https://iris-api.circle.com'
+  : 'https://iris-api-sandbox.circle.com'
 const ROUTER_GAS = 260_000n           // receiveWithAuthorization + transfer + approve + depositForBurnWithHook
 const MAX_AUTH_WINDOW_SEC = 2 * 60 * 60
 const MIN_TOTAL_UNITS = 1_000_000n    // 1 USDC
@@ -663,10 +669,15 @@ async function cctpMaxFee(srcDomain: number, burn: bigint, rowsIn?: IrisFeeRow[]
   return ((protocol + forward) * 120n) / 100n + 1n
 }
 
+/** The chain's gas price, cached 10 s (a quote and the relay right after it share one read). */
+function chainGasPrice(pub: any, chainKey: string): Promise<bigint> {
+  return cached(gasPriceCache, chainKey, 'price', GAS_PRICE_TTL_MS, () => pub.getGasPrice() as Promise<bigint>)
+}
+
 /** MeshPort's fee: the relayer's gas for the router call, priced in USDC -
  *  what that gas costs, nothing more (no margin, no minimum). */
 async function relayFee(pub: any, chainKey: string): Promise<bigint> {
-  const gasPrice: bigint = await cached(gasPriceCache, chainKey, 'price', GAS_PRICE_TTL_MS, () => pub.getGasPrice() as Promise<bigint>)
+  const gasPrice = await chainGasPrice(pub, chainKey)
   const nativeUsd = Number(process.env[`BRIDGE_NATIVE_USD_${chainKey.toUpperCase()}`] || CHAINS[chainKey].gasUsd)
   // wei → USDC units: wei * usd / 1e18 * 1e6 = wei * usd / 1e12
   const units = (ROUTER_GAS * gasPrice * BigInt(Math.round(nativeUsd * 100))) / 100n / 1_000_000_000_000n
@@ -777,14 +788,25 @@ const TOKEN_ABI = [
 ] as const
 
 
-// Circle's CCTPx token registry: where each token is deployed (by CCTP domain), cached 5 min.
-let _registry: { at: number; tokens: Array<{ tokenId: string; deployments: Array<{ domainId: number; tokenAddress: string; enabled?: boolean }> }> } | null = null
-async function cctpxRegistry() {
-  if (_registry && Date.now() - _registry.at < 5 * 60_000) return _registry.tokens
+// Circle's CCTPx token registry: where each token is deployed (by CCTP domain).
+//
+// The registry lists ~1,000 tokens in pages of 50, and a page can only be
+// asked for after the one before it - walking it all took 2.5 s warm and
+// 10-20 s on a cold serverless start, which is exactly the delay every EURC /
+// cirBTC quote and Bring paid. Circle's endpoint filters by token id
+// (?tokenId=), so one ~130 ms request returns just the token needed; the full
+// walk stays as the fallback if the filter ever stops working.
+type CctpxDeployment = { domainId: number; tokenAddress: string; enabled?: boolean }
+type CctpxToken = { tokenId: string; deployments: CctpxDeployment[] }
+
+const REGISTRY_TTL_MS = 5 * 60_000
+let _registry: { at: number; tokens: CctpxToken[] } | null = null
+async function cctpxRegistry(): Promise<CctpxToken[]> {
+  if (_registry && Date.now() - _registry.at < REGISTRY_TTL_MS) return _registry.tokens
   const tokens: any[] = []
   let after = ''
   for (let page = 0; page < 20; page++) {
-    const r = await fetch(`${CCTPX_IRIS}/v2/cctpx/tokens${after ? `?pageAfter=${encodeURIComponent(after)}` : ''}`, { signal: AbortSignal.timeout(10_000) })
+    const r = await fetch(`${CCTPX_IRIS}/v2/cctpx/tokens?pageSize=200${after ? `&pageAfter=${encodeURIComponent(after)}` : ''}`, { signal: AbortSignal.timeout(10_000) })
     if (!r.ok) throw new Error('Circle token registry unavailable')
     const j = await r.json() as { data?: any[]; nextPageAfter?: string | null }
     tokens.push(...(j.data ?? []))
@@ -795,10 +817,40 @@ async function cctpxRegistry() {
   return tokens
 }
 
+const deploymentsCache = new Map<string, { at: number; deployments: Promise<CctpxDeployment[]> }>()
+const lastGoodDeployments = new Map<string, CctpxDeployment[]>()
+
+async function loadCctpxDeployments(symbol: string): Promise<CctpxDeployment[]> {
+  const id = CCTPX_TOKENS[symbol].id
+  try {
+    const r = await fetch(`${CCTPX_IRIS}/v2/cctpx/tokens?tokenId=${id}`, { signal: AbortSignal.timeout(5_000) })
+    if (r.ok) {
+      const j = await r.json() as { data?: CctpxToken[] }
+      const t = (j.data ?? []).find(x => String(x.tokenId).toLowerCase() === id)
+      if (t) return t.deployments
+    }
+  } catch { /* fall back to the full registry */ }
+  const t = (await cctpxRegistry()).find(x => String(x.tokenId).toLowerCase() === id)
+  return t?.deployments ?? []
+}
+
+/** The token's deployments (cached 5 min; a failed refresh keeps serving the last good answer). */
+async function cctpxDeployments(symbol: string): Promise<CctpxDeployment[]> {
+  try {
+    const rows = await cached(deploymentsCache, symbol, 'deployments', REGISTRY_TTL_MS, () => loadCctpxDeployments(symbol))
+    lastGoodDeployments.set(symbol, rows)
+    return rows
+  } catch (e) {
+    const stale = lastGoodDeployments.get(symbol)
+    if (stale) return stale
+    throw e
+  }
+}
+
 /** The token's contract on `domain` when Circle has it on there AND on Arc; null otherwise. */
-async function cctpxTokenAddress(symbol: string, domain: number): Promise<`0x${string}` | null> {
-  const t = (await cctpxRegistry()).find(x => String(x.tokenId).toLowerCase() === CCTPX_TOKENS[symbol].id)
-  const on = (d: number) => t?.deployments.find(x => x.domainId === d && x.enabled !== false && isHex(x.tokenAddress, 20))
+export async function cctpxTokenAddress(symbol: string, domain: number): Promise<`0x${string}` | null> {
+  const deployments = await cctpxDeployments(symbol)
+  const on = (d: number) => deployments.find(x => x.domainId === d && x.enabled !== false && isHex(x.tokenAddress, 20))
   return on(ARC_DOMAIN) && on(domain) ? on(domain)!.tokenAddress as `0x${string}` : null
 }
 
@@ -839,13 +891,29 @@ export function tokenFeeUnits(totalWei: bigint, gasUsd: number, symbol: string, 
 }
 
 async function tokenFee(pub: any, chainKey: string, symbol: string, nativeFee: bigint): Promise<bigint> {
-  const gasPrice: bigint = await pub.getGasPrice()
+  const gasPrice = await chainGasPrice(pub, chainKey)
   const gasUsd = Number(process.env[`BRIDGE_NATIVE_USD_${chainKey.toUpperCase()}`] || CHAINS[chainKey].gasUsd)
   return tokenFeeUnits(TOKEN_ROUTER_GAS * gasPrice + nativeFee, gasUsd, symbol)
 }
 
+// How a token is pulled and its EIP-712 domain never change for a deployed
+// token: read once (it was 3-5 sequential RPC calls on every quote).
+const tokenAuthCache = new Map<string, Promise<{ auth: '3009' | 'permit' | null; name: string; version: string }>>()
+function tokenAuth(pub: any, token: `0x${string}`) {
+  const key = `${pub.chain?.id}|${token.toLowerCase()}`
+  let hit = tokenAuthCache.get(key)
+  if (!hit) {
+    hit = readTokenAuth(pub, token)
+    tokenAuthCache.set(key, hit)
+    // Only a definite EIP-3009 answer is kept: a failure, or a fallback to
+    // permit / nothing that a flaky RPC read could have caused, is re-read next time.
+    hit.then(v => { if (v.auth !== '3009') tokenAuthCache.delete(key) }, () => tokenAuthCache.delete(key))
+  }
+  return hit
+}
+
 /** How the token lets the router pull it, and its EIP-712 domain. */
-async function tokenAuth(pub: any, token: `0x${string}`) {
+async function readTokenAuth(pub: any, token: `0x${string}`) {
   let auth: '3009' | 'permit' | null = null
   try { await pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'authorizationState', args: [ZERO_ADDRESS, '0x' + '00'.repeat(32)] }); auth = '3009' } catch { /* not EIP-3009 */ }
   if (!auth) { try { await pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'nonces', args: [ZERO_ADDRESS] }); auth = 'permit' } catch { /* no permit */ } }
@@ -872,7 +940,11 @@ async function tokenQuote(req: VercelRequest, res: VercelResponse) {
   const token = await cctpxTokenAddress(symbol, c.domain)
   if (!token) return res.status(400).json({ error: `${symbol} can't be brought from this chain right now` })
   const { pub } = await clients(chainKey)
-  const [q, info] = await Promise.all([cctpxQuoteAnySpeed(symbol, c.domain, BigInt(amount), recipient), tokenAuth(pub, token)])
+  // Circle's quote, the token's signing domain and the gas price: all at once.
+  const [q, info] = await Promise.all([
+    cctpxQuoteAnySpeed(symbol, c.domain, BigInt(amount), recipient), tokenAuth(pub, token),
+    chainGasPrice(pub, chainKey).catch(() => undefined),
+  ])
   if (!info.auth) return res.status(400).json({ error: `${symbol} on this chain can't be moved with a signature` })
   const fee = await tokenFee(pub, chainKey, symbol, q.nativeFee)
   return res.status(200).json({
@@ -922,10 +994,26 @@ async function tokenRelay(req: VercelRequest, res: VercelResponse) {
     token: token as `0x${string}`, tokenId: t.id, destinationDomain: ARC_DOMAIN, recipient: b.recipient as `0x${string}`,
     fee, minFinalityThreshold: Number(b.minFinalityThreshold), salt: b.salt as `0x${string}`,
   }
-  const nonce = await pub.readContract({ address: router, abi: TOKEN_ROUTER_ABI, functionName: 'tokenBridgeNonce', args: [bridgeArgs] }) as `0x${string}`
-  const used = a
-    ? await pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'authorizationState', args: [auth.from, nonce] })
-    : await pub.readContract({ address: router, abi: TOKEN_ROUTER_ABI, functionName: 'usedNonce', args: [auth.from, nonce] })
+  // Everything the checks need, at once: the replay check (nonce, then whether
+  // it was used), Circle's fee quote for exactly this transfer, the sender's
+  // balance and the gas price. These used to be four rounds in a row.
+  const amount = value - fee
+  const replay = (async () => {
+    const nonce = await pub.readContract({ address: router, abi: TOKEN_ROUTER_ABI, functionName: 'tokenBridgeNonce', args: [bridgeArgs] }) as `0x${string}`
+    const used = a
+      ? await pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'authorizationState', args: [auth.from, nonce] })
+      : await pub.readContract({ address: router, abi: TOKEN_ROUTER_ABI, functionName: 'usedNonce', args: [auth.from, nonce] })
+    return { nonce, used }
+  })()
+  const [{ nonce, used }, quoted, bal] = await Promise.all([
+    replay,
+    // Circle's fee for exactly this transfer, paid by the relayer; the user's fee must still cover it.
+    // A failed quote is held back, not thrown: a retry of an already-sent transfer must still answer "already submitted".
+    cctpxQuote(symbol, c.domain, amount, String(b.recipient), Number(b.minFinalityThreshold) === 1000)
+      .then(v => ({ v }), (e: unknown) => ({ e })),
+    pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'balanceOf', args: [auth.from] }) as Promise<bigint>,
+    chainGasPrice(pub, chainKey).catch(() => undefined),
+  ])
   if (used) {
     const logs = await pub.getContractEvents({ address: router, abi: TOKEN_ROUTER_ABI, eventName: 'TokenBridged', args: { from: auth.from, nonce }, fromBlock: 'earliest' }).catch(() => [])
     const hit = (logs as any[])[0]
@@ -933,12 +1021,8 @@ async function tokenRelay(req: VercelRequest, res: VercelResponse) {
       : res.status(409).json({ error: 'This authorization was already used' })
   }
 
-  // Circle's fee for exactly this transfer, paid by the relayer; the user's fee must still cover it.
-  const amount = value - fee
-  const [q, bal] = await Promise.all([
-    cctpxQuote(symbol, c.domain, amount, String(b.recipient), Number(b.minFinalityThreshold) === 1000),
-    pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'balanceOf', args: [auth.from] }) as Promise<bigint>,
-  ])
+  if ('e' in quoted) throw quoted.e
+  const q = quoted.v
   const needed = await tokenFee(pub, chainKey, symbol, q.nativeFee)
   if (fee * 100n < needed * 80n) return res.status(400).json({ error: 'Fee too low - please try again' })
   if (bal < value) return res.status(400).json({ error: `Not enough ${symbol} on this chain` })
@@ -1132,15 +1216,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       destinationDomain: ARC_DOMAIN, mintRecipient: b.mintRecipient as `0x${string}`, fee, maxFee,
       minFinalityThreshold: Number(b.minFinalityThreshold), hookData: FORWARD_HOOK as `0x${string}`, salt: b.salt as `0x${string}`,
     }
+    // The quote and the balance don't depend on the nonce: started now, they
+    // run while the nonce and its "already used" check are read (two rounds).
+    const quoteP = quote(chainKey, value)
+    const balP = pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'balanceOf', args: [a.from] }) as Promise<bigint>
+    quoteP.catch(() => {}); balP.catch(() => {}) // surfaced where they are awaited below
     const nonce = await pub.readContract({ address: router, abi: ROUTER_ABI, functionName: 'bridgeNonce', args: [bridgeArgs] }) as `0x${string}`
-
-    // The three pre-checks are independent reads - fetched together (they used
-    // to be three round trips in a row) and then checked in the same order.
-    const [used, now_q, bal] = await Promise.all([
-      pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'authorizationState', args: [a.from, nonce] }),
-      quote(chainKey, value),
-      pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'balanceOf', args: [a.from] }) as Promise<bigint>,
-    ])
+    const used = await pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'authorizationState', args: [a.from, nonce] })
     // Already used → return the transaction that used it (safe retries).
     if (used) {
       const logs = await pub.getContractEvents({ address: router, abi: ROUTER_ABI, eventName: 'Bridged', args: { from: a.from, nonce }, fromBlock: 'earliest' }).catch(() => [])
@@ -1149,6 +1231,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : res.status(409).json({ error: 'This authorization was already used' })
     }
 
+    const [now_q, bal] = await Promise.all([quoteP, balP])
     // The fee must still cover the relayer's gas (some slack for price moves since the quote).
     if (fee * 100n < now_q.fee * 80n) return res.status(400).json({ error: 'Fee too low - please try again' })
     if (maxFee * 100n < now_q.maxFee * 80n) return res.status(400).json({ error: 'Bridge fee too low - please try again' })

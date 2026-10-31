@@ -26,7 +26,7 @@
 import { encodeFunctionData, decodeFunctionResult, pad, parseUnits, type Hex } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { arcRpcJson } from './arc'
-import { CCTP_DOMAINS, fetchIrisMessage, type IrisMessage } from './cctpTracker'
+import { CCTP_DOMAINS, IRIS, fetchIrisMessage, type IrisMessage } from './cctpTracker'
 import { FORWARD_HOOK, FAST_FINALITY, ARC_DOMAIN } from './gaslessBridge'
 
 export const TOKEN_MESSENGER_V2 = '0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA' as Hex
@@ -93,14 +93,14 @@ export function irisFeeRows(destination: string, forward: boolean): Promise<Iris
   const hit = feeRows.get(key)
   if (hit && Date.now() - hit.at < FEE_ROWS_TTL_MS) return hit.rows
   const rows = (async () => {
-    for (const host of ['https://iris-api-sandbox.circle.com', 'https://iris-api.circle.com']) {
-      try {
-        const r = await fetch(`${host}/v2/burn/USDC/fees/${ARC_DOMAIN}/${dst}${forward ? '?forward=true' : ''}`, { signal: AbortSignal.timeout(5000) })
-        if (!r.ok) continue
-        const json = await r.json()
-        if (Array.isArray(json) && json.length) return json as IrisFeeRow[]
-      } catch { /* the other host */ }
-    }
+    // Only the configured Iris: the other network's fee table is a different
+    // price list, and a maxFee cap built from it can hold a FAST transfer back.
+    try {
+      const r = await fetch(`${IRIS}/v2/burn/USDC/fees/${ARC_DOMAIN}/${dst}${forward ? '?forward=true' : ''}`, { signal: AbortSignal.timeout(5000) })
+      if (!r.ok) return null
+      const json = await r.json()
+      if (Array.isArray(json) && json.length) return json as IrisFeeRow[]
+    } catch { /* Iris unreachable: the caller falls back */ }
     return null
   })()
   const entry = { at: Date.now(), rows }

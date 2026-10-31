@@ -6,7 +6,7 @@
 // src/wallet/privy.ts a bridge to create wallets and sign. Privy's own
 // confirmation modals are off: the app's passcode / biometric is the approval.
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   PrivyProvider, usePrivy, useWallets, useCreateWallet, useSignTransaction, useSignMessage, useSignTypedData,
   useSubscribeToJwtAuthWithFlag,
@@ -24,6 +24,7 @@ import { useAuthStore } from '@/store'
 import { privyAccount, privyAppId, recheckPrivySigners, setPrivyBridge, privyNeedsRebuild, PRIVY_NEEDED_EVENT } from './privy'
 import { useSupabaseSession } from './PrivyGate'
 import { whenPrivyQuiet, rebuildGapMs } from './privyActivity'
+import { createJwtProvider, browserWait, browserWake, needsResync, resyncDelayMs, RESYNC_BEFORE_REBUILD } from './privyJwt'
 
 // Privy silent this long, with the app's own requests answered meanwhile:
 // its load is stuck, not slow (see PrivyBridgeSync).
@@ -53,10 +54,26 @@ const SUPPORTED_CHAINS: [Chain, ...Chain[]] = [
 function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => void }) {
   const { session, loading } = useSupabaseSession()
   const signedIn = !!session && !session.anonymous
-  useSubscribeToJwtAuthWithFlag({
+  // The token Privy signs in with. It never answers "no token" while the
+  // MeshPort session exists but can't be refreshed right now (that answer
+  // signs Privy out) - it waits for the connection instead - see privyJwt.ts.
+  const [jwt] = useState(() => createJwtProvider({
+    getSession: () => supabase.auth.getSession() as never,
+    wait: browserWait, now: Date.now, onWake: browserWake,
+  }))
+  useEffect(() => { jwt.resume(); return () => jwt.abort() }, [jwt])
+  // Privy re-reads the token when `isLoading` goes from true to false: a short
+  // true is how a failed / signed-out sync is started again.
+  const [kick, setKick] = useState(false)
+  useEffect(() => {
+    if (!kick) return
+    const t = setTimeout(() => setKick(false), 50)
+    return () => clearTimeout(t)
+  }, [kick])
+  const { state: syncState } = useSubscribeToJwtAuthWithFlag({
     isAuthenticated: signedIn,
-    isLoading: loading,
-    getExternalJwt: async () => (await supabase.auth.getSession()).data.session?.access_token,
+    isLoading: loading || kick,
+    getExternalJwt: () => jwt.get(),
   })
 
   const { ready, authenticated, user, getAccessToken } = usePrivy()
@@ -86,10 +103,51 @@ function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => vo
   const solanaEmbedded = solanaWallets.filter(w => (w.standardWallet as { isPrivyWallet?: boolean }).isPrivyWallet === true)
   const solanaAddresses = solanaEmbedded.map(w => w.address).join(',')
 
+  // Privy signed out while MeshPort is signed in. Privy's sync gives up for
+  // good after one failed attempt (a dropped request while signing in), and
+  // skips the sync when it sees the same token again after Privy logged itself
+  // out - so nothing brought it back until a reload ("Your wallet didn't
+  // open", Try Again waiting on the same dead Privy). A failed sync is
+  // started again (2, 5, 10 s); a Privy that is signed out with no error, or
+  // still failing after RESYNC_BEFORE_REBUILD tries, is rebuilt (PrivyRoot).
+  const status = syncState.status
+  const statusRef = useRef(status)
+  statusRef.current = status
+  const resyncs = useRef(0)
+  const [syncFailed, setSyncFailed] = useState(false)
+  const needs = needsResync({ signedIn, ready, authenticated, status })
+  const needsRef = useRef(needs)
+  needsRef.current = needs
+  const attemptResync = useCallback(() => {
+    const n = resyncs.current
+    if ((statusRef.current === 'error' || statusRef.current === 'initial') && n < RESYNC_BEFORE_REBUILD) { resyncs.current = n + 1; setKick(true) }
+    else setSyncFailed(true)
+  }, [])
+  useEffect(() => {
+    if (authenticated) { resyncs.current = 0; setSyncFailed(false); return }
+    if (!needs) return
+    const delay = status === 'error' ? resyncDelayMs(resyncs.current) : 3_000
+    const t = setTimeout(attemptResync, delay)
+    return () => clearTimeout(t)
+  }, [authenticated, needs, status, attemptResync])
+  useEffect(() => {
+    if (syncState.status !== 'error') return
+    const why = syncState.error instanceof Error ? syncState.error.message : String(syncState.error ?? 'unknown')
+    void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
+      `[privy sync] sign-in with MeshPort failed (re-sync #${resyncs.current + 1}, online=${typeof navigator === 'undefined' || navigator.onLine}): ${why.slice(0, 200)}`,
+    ))).catch(() => {})
+  }, [syncState])
+  // A payment / sign-in needs the wallet now, or the connection came back: no waiting out the delay.
+  useEffect(() => {
+    const now = () => { if (needsRef.current) attemptResync() }
+    window.addEventListener(PRIVY_NEEDED_EVENT, now)
+    window.addEventListener('online', now)
+    return () => { window.removeEventListener(PRIVY_NEEDED_EVENT, now); window.removeEventListener('online', now) }
+  }, [attemptResync])
   useEffect(() => {
     const quiet = { uiOptions: { showWalletUIs: false } }
     setPrivyBridge({
-      ready, authenticated,
+      ready, authenticated, syncFailed,
       wallets: addresses ? addresses.split(',') : [],
       linked: linked ? linked.split(',') : [],
       solanaWallets: solanaAddresses ? solanaAddresses.split(',') : [],
@@ -112,7 +170,7 @@ function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => vo
       signTypedData: async (typedData, address) => (await signTypedData(typedData as never, { ...quiet, address })).signature as Hex,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, authenticated, addresses, linked, solanaAddresses, solanaListReady])
+  }, [ready, authenticated, syncFailed, addresses, linked, solanaAddresses, solanaListReady])
   // A Privy account gets its Solana wallet once its Arc wallet exists - new
   // and existing accounts alike, once per session at most - and only once
   // Privy has loaded its Solana wallets and the account has none.
@@ -153,6 +211,14 @@ function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => vo
     window.addEventListener('meshport:wallet-unlocked', warm)
     return () => { document.removeEventListener('visibilitychange', warm); window.removeEventListener('meshport:wallet-unlocked', warm) }
   }, [ready, authenticated, getAccessToken])
+  useEffect(() => {
+    if (!syncFailed) return
+    void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
+      `[privy sync] Privy still signed out after ${resyncs.current} re-sync(s), status=${statusRef.current} - rebuilding Privy`,
+    ))).catch(() => {})
+    onWalletStuck('Privy signed out, sync failed')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncFailed])
   // Start-up timeline (client_errors), once per page load when it was slow:
   // where a cold start spends its time - Privy loaded, signed in, wallet listed.
   useEffect(() => {

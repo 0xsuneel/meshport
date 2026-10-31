@@ -25,6 +25,8 @@ export const privyConfigured = (): boolean => !!APP_ID
 export interface PrivyBridge {
   ready: boolean
   authenticated: boolean
+  /** MeshPort is signed in but Privy still isn't, after several re-syncs (PrivyRoot): a fresh Privy may fix it. */
+  syncFailed?: boolean
   /** Addresses of this user's Privy embedded Ethereum wallets, once Privy's
    *  wallet iframe has connected them (can take seconds after sign-in). */
   wallets: string[]
@@ -219,6 +221,7 @@ export const PRIVY_NEEDED_EVENT = 'meshport:privy-needed'
  */
 export function privyNeedsRebuild(): boolean {
   if (!bridge || !bridge.ready) return true
+  if (bridge.syncFailed) return true
   return bridge.authenticated && bridge.linked.length > 0 && bridge.wallets.length === 0
 }
 
@@ -237,7 +240,8 @@ export async function restorePrivyAccount(address: string, timeoutMs = 15_000, l
   const a = address.toLowerCase()
   const mine = (b: PrivyBridge) => b.linked.some(w => w.toLowerCase() === a) || b.wallets.some(w => w.toLowerCase() === a)
   // The wallet is needed now: a Privy that isn't up gets started again (PrivyRoot decides if it's time).
-  if ((!bridge || !bridge.ready) && typeof window !== 'undefined') window.dispatchEvent(new Event(PRIVY_NEEDED_EVENT))
+  // Also a Privy that is up but signed out: PrivyRoot starts its sign-in again at once.
+  if ((!bridge || !bridge.ready || !bridge.authenticated) && typeof window !== 'undefined') window.dispatchEvent(new Event(PRIVY_NEEDED_EVENT))
   try { await whenBridge(() => true, timeoutMs) } catch { return null }
   try { await whenBridge(mine, listWaitMs) } catch { return null }
   return privyAccount(address)

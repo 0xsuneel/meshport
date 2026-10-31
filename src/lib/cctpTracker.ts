@@ -17,14 +17,17 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-// Use the production Iris API for mainnet flows; fall back to sandbox when the
-// app is explicitly configured for testnet. VITE_IRIS_ENV='sandbox' opts in to
-// the sandbox URL - the default is the production endpoint so production CCTP
-// mints are never invisible.
-const IRIS_ENV = (import.meta.env.VITE_IRIS_ENV as string | undefined) || 'production'
-const IRIS = IRIS_ENV === 'sandbox'
-  ? 'https://iris-api-sandbox.circle.com'
-  : 'https://iris-api.circle.com'
+// MeshPort runs on Arc Testnet and Circle's testnets only (NETWORK_MODE in
+// blockchain/chains.ts), and testnet burns exist only in Circle's SANDBOX
+// Iris. So sandbox is the default; VITE_IRIS_ENV='production' opts in to the
+// production Iris for a future mainnet build. (It used to default to
+// production: a build without VITE_IRIS_ENV then asked the wrong service, got
+// "not found" for every testnet burn and showed "Burning…" forever.)
+export const IRIS_SANDBOX = 'https://iris-api-sandbox.circle.com'
+export const IRIS_PRODUCTION = 'https://iris-api.circle.com'
+const IRIS_ENV = (import.meta.env.VITE_IRIS_ENV as string | undefined) || 'sandbox'
+export const IRIS = IRIS_ENV === 'production' ? IRIS_PRODUCTION : IRIS_SANDBOX
+const IRIS_OTHER = IRIS === IRIS_SANDBOX ? IRIS_PRODUCTION : IRIS_SANDBOX
 
 /** CCTP domain per chain id used in activity rows (Circle's domain table). */
 export const CCTP_DOMAINS: Record<string, number> = {
@@ -85,8 +88,7 @@ export async function fetchIrisMessage(srcChain: string, burnTxHash: string): Pr
   // Testnet burns are only known to Circle's sandbox Iris and mainnet burns
   // only to production - try the configured one, then the other, so a
   // mis-set VITE_IRIS_ENV can't hide a burn that's ready to finish.
-  const other = IRIS.includes('sandbox') ? 'https://iris-api.circle.com' : 'https://iris-api-sandbox.circle.com'
-  for (const base of [IRIS, other]) {
+  for (const base of [IRIS, IRIS_OTHER]) {
     try {
       const res = await fetch(`${base}/v2/messages/${domain}?transactionHash=${burnTxHash}`)
       if (!res.ok) continue
@@ -101,15 +103,20 @@ export async function fetchCctpProgress(srcChain: string, burnTxHash: string, kn
   if (knownMintTx) return progressFromIris(null, knownMintTx)
   const domain = CCTP_DOMAINS[srcChain]
   if (domain === undefined || !isBurnTxId(srcChain, burnTxHash)) return null
-  try {
-    const res = await fetch(`${IRIS}/v2/messages/${domain}?transactionHash=${burnTxHash}`)
-    if (res.status === 404) return progressFromIris(null)
-    if (!res.ok) return null
-    const data = await res.json() as { messages?: IrisMessage[] }
-    return progressFromIris(data.messages?.[0])
-  } catch {
-    return null
+  // The configured Iris first; the other one only when the first has no record
+  // of this burn (a mis-set VITE_IRIS_ENV must not leave a burn on "Burning…").
+  let notFound = false
+  for (const base of [IRIS, IRIS_OTHER]) {
+    try {
+      const res = await fetch(`${base}/v2/messages/${domain}?transactionHash=${burnTxHash}`)
+      if (res.status === 404) { notFound = true; continue }
+      if (!res.ok) continue
+      const data = await res.json() as { messages?: IrisMessage[] }
+      if (data.messages?.[0]) return progressFromIris(data.messages[0])
+      notFound = true
+    } catch { /* try the other one */ }
   }
+  return notFound ? progressFromIris(null) : null
 }
 
 const isFinal = (p: CctpProgress | null) => p?.stage === 'done' || p?.stage === 'error'
@@ -118,7 +125,7 @@ const isFinal = (p: CctpProgress | null) => p?.stage === 'done' || p?.stage === 
  * Live progress for one burn: checks every few seconds while the page is
  * visible, again as soon as it becomes visible, and stops once finished.
  */
-export function useCctpProgress(srcChain: string | undefined, burnTxHash: string | undefined, knownMintTx?: string, intervalMs = 4000): CctpProgress | null {
+export function useCctpProgress(srcChain: string | undefined, burnTxHash: string | undefined, knownMintTx?: string, intervalMs = 2000): CctpProgress | null {
   const [progress, setProgress] = useState<CctpProgress | null>(() => (knownMintTx ? progressFromIris(null, knownMintTx) : null))
   const last = useRef<CctpProgress | null>(progress)
   useEffect(() => {

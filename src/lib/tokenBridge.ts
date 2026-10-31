@@ -14,6 +14,7 @@
 // recipient gets exactly the amount sent.
 
 import { useEffect, useState } from 'react'
+import { CCTP_DOMAINS, IRIS_SANDBOX } from './cctpTracker'
 
 export type BridgeToken = 'USDC' | 'EURC' | 'cirBTC'
 export type CctpxToken = Exclude<BridgeToken, 'USDC'>
@@ -84,9 +85,37 @@ export function routeChains(deployments: Map<string, string>): string[] {
 }
 
 // ── Live registry (browser) ─────────────────────────────────────────────────
-const IRIS_SANDBOX = 'https://iris-api-sandbox.circle.com' // testnet chains
+// Circle's registry lists ~1,000 tokens, 50 per page, each page asked for only
+// after the one before it - walking it from a phone took seconds before
+// "Finding chains…" cleared. The registry endpoint filters by token id, so
+// the one token a screen needs is a single ~130 ms request (EURC and cirBTC
+// in parallel). The kit's own fetcher stays as the fallback.
 let fetcherP: Promise<{ getStaleWhileRevalidate(): Promise<{ tokens: RegistryToken[] }> }> | null = null
 let domainsP: Promise<Record<string, number>> | null = null
+
+/** The same token ids as lib/gaslessToken.ts's CCTPX_TOKEN_IDS (kept apart so this light module stays light; tokenBridge.test.ts pins them equal). */
+export const CCTPX_REGISTRY_IDS: Record<CctpxToken, string> = {
+  EURC:   '0x2587821a0ee7daa174b95436b5dab1731cfa1844775b010217d3c0dd02a4eecd',
+  cirBTC: '0x7c27b7b6485f3ea49b7d1a439e288d3c3116f533302afabb7e372dfc0770cc7d',
+}
+
+/** CCTP domain per route chain, from the app's own table (no kit import needed). */
+export function staticRouteDomains(): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const sdk of Object.keys(CCTPX_CHAIN_DEFS)) { const d = CCTP_DOMAINS[sdk]; if (typeof d === 'number') out[sdk] = d }
+  return out
+}
+
+/** One token's registry row, by id. Throws when Circle doesn't answer or doesn't list it. */
+export async function fetchTokenRow(token: CctpxToken, fetchImpl: typeof fetch = fetch): Promise<RegistryToken> {
+  const id = CCTPX_REGISTRY_IDS[token]
+  const r = await fetchImpl(`${IRIS_SANDBOX}/v2/cctpx/tokens?tokenId=${id}`, { signal: AbortSignal.timeout(6000) })
+  if (!r.ok) throw new Error('Circle token registry unavailable')
+  const j = await r.json() as { data?: RegistryToken[] }
+  const row = (j.data ?? []).find(t => String(t.tokenId).toLowerCase() === id)
+  if (!row) throw new Error(`${token} not found in Circle's registry`)
+  return row
+}
 
 function registryFetcher() {
   fetcherP ??= import('@circle-fin/provider-cctpx').then(m => m.createCCTPXTokenRegistryFetcher({ baseUrl: IRIS_SANDBOX, ttlMs: 5 * 60_000 }) as never)
@@ -110,6 +139,10 @@ function chainDomains(): Promise<Record<string, number>> {
 
 /** `token`'s live deployments (chain id → contract address). Throws when the registry can't be read. */
 export async function tokenDeployments(token: CctpxToken): Promise<Map<string, string>> {
+  try {
+    const row = await fetchTokenRow(token)
+    return deploymentsFromRegistry([row], token, () => token, staticRouteDomains())
+  } catch { /* the kit's registry fetcher below */ }
   const [fetcher, domains, { resolveToKnownTokenSymbol }] = await Promise.all([
     registryFetcher(), chainDomains(), import('@circle-fin/provider-cctpx'),
   ])
@@ -117,17 +150,39 @@ export async function tokenDeployments(token: CctpxToken): Promise<Map<string, s
   return deploymentsFromRegistry(reg.tokens ?? [], token, id => resolveToKnownTokenSymbol(id, 'testnet'), domains)
 }
 
+// The last routes seen are also kept on the device: the first screen of a new
+// session shows them at once and refreshes behind, like later visits do.
+const PERSIST_KEY = 'meshport:cctpx-routes:v1'
+const PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000
+function readPersisted(token: CctpxToken): { chains: string[]; deployments: Map<string, string> } | undefined {
+  try {
+    const all = JSON.parse(localStorage.getItem(PERSIST_KEY) || '{}') as Record<string, { at: number; deployments: Array<[string, string]> }>
+    const e = all[token]
+    if (!e || Date.now() - e.at > PERSIST_MAX_AGE_MS) return undefined
+    const deployments = new Map(e.deployments)
+    return { chains: routeChains(deployments), deployments }
+  } catch { return undefined }
+}
+function writePersisted(token: CctpxToken, deployments: Map<string, string>): void {
+  try {
+    const all = JSON.parse(localStorage.getItem(PERSIST_KEY) || '{}') as Record<string, unknown>
+    all[token] = { at: Date.now(), deployments: [...deployments.entries()] }
+    localStorage.setItem(PERSIST_KEY, JSON.stringify(all))
+  } catch { /* storage unavailable: in-memory only */ }
+}
+
 // The last routes looked up per token: a screen opening again (or a chip
 // switched back) shows them at once and refreshes in the background, like
 // USDC's chain list - no "Finding chains…" every time.
 const lastRoutes = new Map<CctpxToken, { chains: string[]; deployments: Map<string, string> }>()
+for (const t of ['EURC', 'cirBTC'] as const) { const p = readPersisted(t); if (p) lastRoutes.set(t, p) }
 const lookups = new Map<CctpxToken, Promise<{ chains: string[]; deployments: Map<string, string> }>>()
 
 function lookupRoutes(token: CctpxToken) {
   let p = lookups.get(token)
   if (!p) {
     p = tokenDeployments(token)
-      .then(dep => { const r = { chains: routeChains(dep), deployments: dep }; lastRoutes.set(token, r); return r })
+      .then(dep => { const r = { chains: routeChains(dep), deployments: dep }; lastRoutes.set(token, r); writePersisted(token, dep); return r })
       .finally(() => lookups.delete(token))
     lookups.set(token, p)
   }
@@ -135,8 +190,10 @@ function lookupRoutes(token: CctpxToken) {
 }
 
 /** Look up EURC's and cirBTC's routes in the background (a payment screen opening). */
+const prewarmed = new Set<CctpxToken>()
 export function prewarmTokenRoutes(): void {
-  for (const t of ['EURC', 'cirBTC'] as const) if (!lastRoutes.has(t)) lookupRoutes(t).catch(() => {})
+  // Once per session, even when routes from the last visit are already known: they refresh behind.
+  for (const t of ['EURC', 'cirBTC'] as const) if (!prewarmed.has(t)) { prewarmed.add(t); lookupRoutes(t).catch(() => {}) }
 }
 
 /**
