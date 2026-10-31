@@ -1,4 +1,4 @@
-import { useLayoutEffect } from 'react'
+import { useLayoutEffect, useSyncExternalStore } from 'react'
 
 // While any popup is mounted (centred popups, sheets, history receipts, the
 // payment success flash), <html> carries `popup-open`, which switches off
@@ -14,6 +14,13 @@ import { useLayoutEffect } from 'react'
 // A counter keeps the class on while popups are stacked.
 let openPopups = 0
 
+// Separately, on every device: how many popups / sheets / Hub pages are open,
+// for things that must step out of their way (useAnyPopupOpen) - the
+// notifications card sat over the Review button of Transfer's panel.
+let anyOpen = 0
+const listeners = new Set<() => void>()
+const notify = () => { for (const l of [...listeners]) l() }
+
 // Phones: index.css already switches every page blur off for good (the
 // `(hover: none) and (pointer: coarse)` rule), so the class would change
 // nothing - and toggling it restyles the whole page (`#root *`) as each popup
@@ -21,6 +28,11 @@ let openPopups = 0
 const BLURS_ALWAYS_OFF = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none) and (pointer: coarse)').matches
 
 export function usePopupOpen() {
+  useLayoutEffect(() => {
+    anyOpen += 1
+    notify()
+    return () => { anyOpen = Math.max(0, anyOpen - 1); notify() }
+  }, [])
   useLayoutEffect(() => {
     if (BLURS_ALWAYS_OFF) return
     openPopups += 1
@@ -37,4 +49,13 @@ export function usePopupOpen() {
 export function PopupOpen() {
   usePopupOpen()
   return null
+}
+
+/** True while any popup, sheet or Hub page (anything using usePopupOpen) is open. */
+export function useAnyPopupOpen(): boolean {
+  return useSyncExternalStore(
+    l => { listeners.add(l); return () => { listeners.delete(l) } },
+    () => anyOpen > 0,
+    () => false,
+  )
 }
