@@ -1,15 +1,16 @@
 // ── Bring EURC / cirBTC to Arc (Circle CCTPx) ───────────────────────────────
 // The Hub's Bring tab, personal accounts only, with EURC or cirBTC picked:
 // the chains Circle's registry has the token on (and on Arc), the balance of
-// it on each, and a one-chain flow - amount, passcode, then one kit.bridge()
-// from that chain to Arc: approve, send, Circle attests, Circle's forwarder
-// delivers on Arc.
+// it on each, and a one-chain flow - amount, passcode, then the bring.
 //
-// Unlike USDC Bring there is no MeshPort relayer here: the send is signed
-// and paid on the source chain, so the wallet needs that chain's native gas
-// (ETH / AVAX / POL) - and CCTPx's own fee is charged in that same native
-// currency. Checked before anything is signed; the recipient gets exactly
-// the amount sent.
+// Through MeshPort's relayer, like USDC (lib/gaslessToken): the user signs
+// once, the relayer pays the chain's gas and Circle's CCTPx fee, and
+// MeshPort's fee comes out of the token - no ETH / AVAX / POL needed. Circle's
+// forwarder delivers on Arc; the screen follows the Arc balance until it lands.
+//
+// A chain without MeshPortTokenRouter yet (VITE_TOKEN_ROUTERS) falls back to
+// a kit.bridge() the wallet pays itself, in that chain's native coin -
+// checked before anything is signed.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/store'
@@ -21,6 +22,7 @@ import { ARC_CHAIN_KEY, explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplo
 import { formatAmount, trimTrailingZeros } from '@/lib/utils'
 import { bridgeTokenDecimals, bridgeTokenInfo, useTokenRouteChains, type CctpxToken } from '@/lib/tokenBridge'
 import type { WalletAccount } from '@/wallet'
+import { hasTokenRouter, quoteGaslessToken, bringTokenGasless } from '@/lib/gaslessToken'
 
 /** A CCTPx chain (kit id) → MeshPort's chain id, name and native currency. */
 const CHAIN_INFO: Record<string, { id: string; label: string; native: string }> = {
@@ -129,6 +131,10 @@ export function TokenBringList({ token, onPick }: { token: CctpxToken; onPick: (
               <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
                   color: 'var(--success-text)', background: 'color-mix(in srgb, var(--success) 14%, transparent)' }}>CCTPx</span>
+                {!hasTokenRouter(info.id) && (
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                    color: 'var(--warning)', background: 'color-mix(in srgb, var(--warning) 14%, transparent)' }}>Needs gas</span>
+                )}
               </div>
             </div>
             <span style={{ fontSize: 'min(16px, 4.2vw)', fontWeight: 800, color: has ? 'var(--text-primary)' : 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', flexShrink: 1, minWidth: 0, maxWidth: '58%', textAlign: 'right' }}>
@@ -138,10 +144,30 @@ export function TokenBringList({ token, onPick }: { token: CctpxToken; onPick: (
         )
       })}
       <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text-secondary)', padding: '2px 4px' }}>
-        Sent from your wallet on that chain: it needs a little of the chain's own gas coin (ETH, AVAX or POL), which also pays Circle's fee.
+        {routes.chains.every(sdk => hasTokenRouter(chainInfo(sdk).id))
+          ? `No gas needed: MeshPort pays the network and Circle's fee, and takes a small fee in ${token}.`
+          : `On chains marked "Needs gas", your wallet pays the gas and Circle's fee in that chain's own coin (ETH, AVAX or POL).`}
       </div>
     </>
   )
+}
+
+// The token's balance in the wallet on Arc.
+async function readArcToken(token: CctpxToken, owner: string): Promise<number> {
+  const m = await import('@/lib/arcService')
+  return token === 'EURC' ? m.readEURCBalanceOrThrow(owner) : m.readCirBtcBalanceOrThrow(owner)
+}
+
+/** Waits (up to 20 min) until `amount` more of the token is on Arc than `before`. */
+async function waitForArc(token: CctpxToken, owner: string, before: number | null, amount: number, keepGoing: () => boolean): Promise<boolean> {
+  if (before === null) return false
+  const until = Date.now() + 20 * 60_000
+  while (Date.now() < until && keepGoing()) {
+    await new Promise(r => setTimeout(r, 5_000))
+    const now = await readArcToken(token, owner).catch(() => null)
+    if (now !== null && now >= before + amount * 0.999) return true
+  }
+  return false
 }
 
 // ── One bring ───────────────────────────────────────────────────────────────
@@ -167,6 +193,14 @@ export function TokenBringFlow({ token, chain, onClose, onDone }: {
   const [steps, setSteps] = useState<Record<StepKey, 'pending' | 'active' | 'done' | 'error'>>({ approve: 'pending', transfer: 'pending', fetchAttestation: 'pending', forward: 'pending' })
   const [hashes, setHashes] = useState<{ send?: string; deliver?: string }>({})
   const busy = useRef(false)
+  // Through MeshPort's relayer (no gas on the chain) when it has the token router.
+  const gasless = hasTokenRouter(info.id)
+  const [relayQuote, setRelayQuote] = useState<{ fee: number; receive: number } | null>(null)
+  const [relayQuoteError, setRelayQuoteError] = useState('')
+  const [received, setReceived] = useState<number | null>(null)
+  const [delivered, setDelivered] = useState(false)
+  const alive = useRef(true)
+  useEffect(() => () => { alive.current = false }, [])
 
   const num = parseFloat(amount) || 0
   const over = num > chain.balance
@@ -193,10 +227,23 @@ export function TokenBringFlow({ token, chain, onClose, onDone }: {
     return { fee, gas, quote: est?.quote ?? null, native }
   }, [params, chain.sdk, walletAddress])
 
-  // On Review, when the wallet is already open: the fee before the passcode.
+  // Relayer: MeshPort's fee in the token, before the passcode.
+  useEffect(() => {
+    setRelayQuote(null); setRelayQuoteError('')
+    if (!gasless || !valid || !walletAddress) return
+    let cancelled = false
+    const t = setTimeout(() => {
+      quoteGaslessToken({ chainId: info.id, token, amount: num, recipient: walletAddress, tokenAddress: chain.tokenAddress })
+        .then(q => { if (!cancelled) setRelayQuote(q) })
+        .catch(e => { if (!cancelled) setRelayQuoteError(String(e?.message || 'Could not get a fee quote')) })
+    }, 500)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [gasless, valid, walletAddress, info.id, token, num, chain.tokenAddress])
+
+  // Paying itself: when the wallet is already open, the fee before the passcode.
   useEffect(() => {
     setQuote(null)
-    if (!valid || !walletAddress) return
+    if (gasless || !valid || !walletAddress) return
     let cancelled = false
     const t = setTimeout(async () => {
       const signer = await getReadySigner(undefined, { silent: true })
@@ -204,7 +251,7 @@ export function TokenBringFlow({ token, chain, onClose, onDone }: {
       try { const q = await estimate(await buildDirectAdapter(signer)); if (!cancelled) setQuote(q) } catch { /* shown after the passcode */ }
     }, 500)
     return () => { cancelled = true; clearTimeout(t) }
-  }, [valid, walletAddress, estimate])
+  }, [gasless, valid, walletAddress, estimate])
 
   const run = useCallback(async (passcode?: string) => {
     if (busy.current) return
@@ -220,6 +267,33 @@ export function TokenBringFlow({ token, chain, onClose, onDone }: {
       if (!signer) { setPassError("Couldn't open your wallet. Try again."); setPass(''); return }
       setPinOpen(false); setPass(''); setPassError(''); setError('')
       setPhase('sending')
+
+      if (gasless) {
+        // One signature; MeshPort's relayer sends it and pays the gas and Circle's fee.
+        const before = await readArcToken(token, walletAddress!).catch(() => null)
+        setSteps(s => ({ ...s, approve: 'active' }))
+        const r = await bringTokenGasless({
+          chainId: info.id, token, amount: num, tokenAddress: chain.tokenAddress, signer, walletAddress: walletAddress!,
+          onStatus: msg => { if (msg === 'Submitting…' || msg === 'Confirming…') setSteps(s => ({ ...s, approve: 'done', transfer: 'active' })) },
+        })
+        setHashes({ send: r.txHash })
+        setReceived(r.receive)
+        setSteps({ approve: 'done', transfer: 'done', fetchAttestation: 'active', forward: 'pending' })
+        const { user } = useAuthStore.getState()
+        import('@/lib/ActivityService').then(({ Activity }) => Activity.claim({
+          walletAddress: walletAddress!, userId: user?.id, txHash: r.txHash, amount: r.receive, sourceChain: info.id, tokenSymbol: token,
+        })).catch(() => {})
+        onDone?.()
+        // Circle attests and its forwarder delivers on Arc: follow the Arc balance.
+        const landed = await waitForArc(token, walletAddress!, before, r.receive, () => alive.current)
+        if (!alive.current) return
+        setDelivered(landed)
+        setSteps({ approve: 'done', transfer: 'done', fetchAttestation: landed ? 'done' : 'active', forward: landed ? 'done' : 'pending' })
+        setPhase('done')
+        if (landed) onDone?.()
+        return
+      }
+
       const adapter = await buildDirectAdapter(signer)
       // Nothing is signed until the wallet can pay the gas and Circle's fee.
       const q = await estimate(adapter)
@@ -267,6 +341,8 @@ export function TokenBringFlow({ token, chain, onClose, onDone }: {
         })).catch(() => {})
       }
       setSteps({ approve: 'done', transfer: 'done', fetchAttestation: 'done', forward: 'done' })
+      setReceived(num)
+      setDelivered(true)
       setPhase('done')
       onDone?.()
     } catch (e: any) {
@@ -281,13 +357,16 @@ export function TokenBringFlow({ token, chain, onClose, onDone }: {
     } finally {
       busy.current = false
     }
-  }, [storedPasscode, estimate, params, info, token, walletAddress, num, onDone])
+  }, [storedPasscode, estimate, params, info, token, walletAddress, num, onDone, gasless, chain.tokenAddress])
 
   const tok = bridgeTokenInfo(token)
   const box = { padding: '14px 16px', borderRadius: 16, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' } as const
   const primary = (enabled: boolean) => ({ width: '100%', padding: '15px 0', borderRadius: 16, border: 'none', fontSize: 15, fontWeight: 700,
     cursor: enabled ? 'pointer' : 'default', color: '#fff', background: 'var(--brand)', opacity: enabled ? 1 : 0.45 }) as const
-  const LABEL: Record<StepKey, string> = { approve: `Approve ${token}`, transfer: `Send from ${info.label}`, fetchAttestation: 'Circle attestation', forward: 'Deliver on Arc' }
+  const LABEL: Record<StepKey, string> = gasless
+    ? { approve: 'Sign', transfer: `Sent from ${info.label} - MeshPort pays the gas`, fetchAttestation: 'Circle attestation', forward: 'Arrived on Arc' }
+    : { approve: `Approve ${token}`, transfer: `Send from ${info.label}`, fetchAttestation: 'Circle attestation', forward: 'Deliver on Arc' }
+  const canBring = valid && (!gasless || !!relayQuote)
   const sendUrl = hashes.send ? explorerTxUrl(info.id, hashes.send) : null
   const deliverUrl = hashes.deliver ? arcExplorerTxUrl(hashes.deliver) : null
 
@@ -316,7 +395,23 @@ export function TokenBringFlow({ token, chain, onClose, onDone }: {
               style={{ padding: '6px 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--brand-text)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Max</button>
           </div>
           {over && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>More than you have on {info.label}.</div>}
-          {valid && (
+          {valid && gasless && (
+            <div style={{ ...box, display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
+              {([
+                ['You send', `${fmtToken(token, num)} ${token}`],
+                ['MeshPort fee', relayQuote ? `${fmtToken(token, relayQuote.fee)} ${token}` : relayQuoteError ? '-' : '…'],
+                ['You receive on Arc', relayQuote ? `${fmtToken(token, relayQuote.receive)} ${token}` : '…'],
+              ] as const).map(([k, v]) => (
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>{k}</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 700, textAlign: 'right' }}>{v}</span>
+                </div>
+              ))}
+              {relayQuoteError && <div role="alert" style={{ color: 'var(--danger)' }}>{relayQuoteError}</div>}
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>No gas needed - MeshPort pays the network and Circle's fee · Circle CCTPx</div>
+            </div>
+          )}
+          {valid && !gasless && (
             <div style={{ ...box, display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
               {([
                 ['You receive on Arc', `${fmtToken(token, num)} ${token}`],
@@ -336,7 +431,7 @@ export function TokenBringFlow({ token, chain, onClose, onDone }: {
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Circle CCTPx · 20–90s · native {token} on Arc</div>
             </div>
           )}
-          <button disabled={!valid} onClick={() => { setPass(''); setPassError(''); setPinOpen(true) }} style={primary(valid)}>
+          <button disabled={!canBring} onClick={() => { setPass(''); setPassError(''); setPinOpen(true) }} style={primary(canBring)}>
             Bring {valid ? `${fmtToken(token, num)} ` : ''}{token} to Arc
           </button>
           <button onClick={onClose} style={{ ...primary(true), background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Back</button>
@@ -346,7 +441,9 @@ export function TokenBringFlow({ token, chain, onClose, onDone }: {
       {phase !== 'form' && (
         <div style={{ ...box, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>
-            {phase === 'sending' ? `Bringing ${fmtToken(token, num)} ${token}…` : phase === 'done' ? `${fmtToken(token, num)} ${token} is on Arc` : "Bring didn't finish"}
+            {phase === 'sending' ? `Bringing ${fmtToken(token, num)} ${token}…`
+              : phase === 'done' ? (delivered ? `${fmtToken(token, received ?? num)} ${token} is on Arc` : `${fmtToken(token, received ?? num)} ${token} is on its way`)
+              : "Bring didn't finish"}
           </div>
           {STEPS.map(k => (
             <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
@@ -355,7 +452,8 @@ export function TokenBringFlow({ token, chain, onClose, onDone }: {
               <span style={{ color: steps[k] === 'pending' ? 'var(--text-secondary)' : 'var(--text-primary)', fontWeight: steps[k] === 'active' ? 700 : 500 }}>{LABEL[k]}</span>
             </div>
           ))}
-          {phase === 'sending' && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Keep this open until it's sent from {info.label}.</div>}
+          {phase === 'sending' && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{hashes.send ? 'Sent - Circle is delivering it to Arc. You can close this.' : `Keep this open until it's sent from ${info.label}.`}</div>}
+          {phase === 'done' && !delivered && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>It left {info.label}; Circle delivers it to your Arc wallet shortly.</div>}
           {error && <div role="alert" style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--danger)' }}>{error}</div>}
           {phase === 'failed' && hashes.send && (
             <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>It already left {info.label} - Circle will still deliver it to Arc.</div>

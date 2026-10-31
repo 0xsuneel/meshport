@@ -14,6 +14,10 @@
 //        { txHash } - the CCTP burn. Idempotent: an authorization that was
 //        already used returns the transaction that used it.
 //
+//   GET  ?action=token_quote / POST { action:'token_relay' }
+//        The same for EURC and cirBTC over Circle CCTPx, through
+//        MeshPortTokenRouter - see the block above the handler.
+//
 //   POST { action:'call', chain, to, data }
 //        Submits, from the relayer wallet, one of a few calls whose outcome
 //        doesn't depend on who sends them - so the user needs no gas:
@@ -656,6 +660,283 @@ async function quote(chainKey: string, total: bigint) {
   return { fee, maxFee, usdcName, usdcVersion, pub }
 }
 
+// ── EURC / cirBTC (Circle CCTPx) through MeshPortTokenRouter ───────────────
+// The same relayer, the CCTPx counterpart of the USDC flow above:
+//
+//   GET  ?action=token_quote&chain=Base_Sepolia&token=EURC&amount=<token units>[&recipient=0x…]
+//        → { fee, nativeFee, finality, token, tokenId, decimals, auth, domainName, domainVersion }
+//        fee       = MeshPort fee, in the token (the relayer's gas + Circle's
+//                    CCTPx fee, which the relayer pays in the chain's native coin)
+//        auth      = '3009' (ReceiveWithAuthorization) or 'permit' (EIP-2612)
+//
+//   POST { action:'token_relay', chain, symbol, bridge, authorization | permit }
+//        Checks it, gets a fresh signed quote from Circle, simulates and submits
+//        MeshPortTokenRouter.bridgeWith{Authorization,Permit} paying Circle's fee
+//        as msg.value → { txHash }. Idempotent like 'relay'.
+//
+// Env: TOKEN_ROUTERS {"Base_Sepolia":"0x…"}, optional CCTPX_IRIS (default
+// sandbox - CCTPx testnet chains), BRIDGE_EURC_USD / BRIDGE_CIRBTC_USD (rough
+// token prices, to turn the native cost into the token), BRIDGE_TOKEN_MAX_FEE_USD
+// (cap, default 0.50).
+
+const CCTPX_IRIS = (process.env.CCTPX_IRIS || 'https://iris-api-sandbox.circle.com').replace(/\/+$/, '')
+const TOKEN_ROUTER_GAS = 420_000n     // receive/permit + fee transfer + approves + crossChainTransfer
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+
+/** CCTPx token ids on testnet (@circle-fin/provider-cctpx KNOWN_TOKEN_IDS_BY_NETWORK). */
+export const CCTPX_TOKENS: Record<string, { id: `0x${string}`; decimals: number; usdEnv: string; usd: number; min: bigint }> = {
+  EURC:   { id: '0x2587821a0ee7daa174b95436b5dab1731cfa1844775b010217d3c0dd02a4eecd', decimals: 6, usdEnv: 'BRIDGE_EURC_USD',   usd: 1.1,     min: 1_000_000n }, // 1 EURC
+  cirBTC: { id: '0x7c27b7b6485f3ea49b7d1a439e288d3c3116f533302afabb7e372dfc0770cc7d', decimals: 8, usdEnv: 'BRIDGE_CIRBTC_USD', usd: 100_000, min: 1_000n },     // 0.00001 cirBTC
+}
+
+const TOKEN_BRIDGE_COMPONENTS = [
+  { name: 'token', type: 'address' }, { name: 'tokenId', type: 'bytes32' }, { name: 'destinationDomain', type: 'uint32' },
+  { name: 'recipient', type: 'address' }, { name: 'fee', type: 'uint256' }, { name: 'minFinalityThreshold', type: 'uint32' },
+  { name: 'salt', type: 'bytes32' },
+] as const
+const TOKEN_ROUTER_ABI = [
+  {
+    type: 'function', name: 'bridgeWithAuthorization', stateMutability: 'payable',
+    inputs: [
+      { name: 'b', type: 'tuple', components: TOKEN_BRIDGE_COMPONENTS },
+      { name: 'a', type: 'tuple', components: [
+        { name: 'from', type: 'address' }, { name: 'value', type: 'uint256' },
+        { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' },
+        { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' },
+      ] },
+      { name: 'signedQuote', type: 'bytes' },
+    ],
+    outputs: [{ name: 'nonce', type: 'bytes32' }],
+  },
+  {
+    type: 'function', name: 'bridgeWithPermit', stateMutability: 'payable',
+    inputs: [
+      { name: 'b', type: 'tuple', components: TOKEN_BRIDGE_COMPONENTS },
+      { name: 'p', type: 'tuple', components: [
+        { name: 'from', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'deadline', type: 'uint256' },
+        { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' },
+        { name: 'bv', type: 'uint8' }, { name: 'br', type: 'bytes32' }, { name: 'bs', type: 'bytes32' },
+      ] },
+      { name: 'signedQuote', type: 'bytes' },
+    ],
+    outputs: [{ name: 'nonce', type: 'bytes32' }],
+  },
+  { type: 'function', name: 'bridgeNonce', stateMutability: 'view', inputs: [{ name: 'b', type: 'tuple', components: TOKEN_BRIDGE_COMPONENTS }], outputs: [{ type: 'bytes32' }] },
+  { type: 'function', name: 'usedNonce', stateMutability: 'view', inputs: [{ type: 'address' }, { type: 'bytes32' }], outputs: [{ type: 'bool' }] },
+  {
+    type: 'event', name: 'TokenBridged', inputs: [
+      { name: 'from', type: 'address', indexed: true }, { name: 'nonce', type: 'bytes32', indexed: true },
+      { name: 'token', type: 'address', indexed: true }, { name: 'destinationDomain', type: 'uint32', indexed: false },
+      { name: 'recipient', type: 'address', indexed: false }, { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'fee', type: 'uint256', indexed: false },
+    ],
+  },
+] as const
+const TOKEN_ABI = [
+  ...USDC_ABI,
+  { type: 'function', name: 'nonces', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'eip712Domain', stateMutability: 'view', inputs: [], outputs: [
+    { type: 'bytes1' }, { type: 'string' }, { type: 'string' }, { type: 'uint256' }, { type: 'address' }, { type: 'bytes32' }, { type: 'uint256[]' },
+  ] },
+] as const
+
+function tokenRouters(): Record<string, `0x${string}`> {
+  try {
+    const parsed = JSON.parse(process.env.TOKEN_ROUTERS || '{}') as Record<string, string>
+    const out: Record<string, `0x${string}`> = {}
+    for (const [k, v] of Object.entries(parsed)) if (CHAINS[k] && isHex(v, 20)) out[k] = v
+    return out
+  } catch { return {} }
+}
+
+// Circle's CCTPx token registry: where each token is deployed (by CCTP domain), cached 5 min.
+let _registry: { at: number; tokens: Array<{ tokenId: string; deployments: Array<{ domainId: number; tokenAddress: string; enabled?: boolean }> }> } | null = null
+async function cctpxRegistry() {
+  if (_registry && Date.now() - _registry.at < 5 * 60_000) return _registry.tokens
+  const tokens: any[] = []
+  let after = ''
+  for (let page = 0; page < 20; page++) {
+    const r = await fetch(`${CCTPX_IRIS}/v2/cctpx/tokens${after ? `?pageAfter=${encodeURIComponent(after)}` : ''}`, { signal: AbortSignal.timeout(10_000) })
+    if (!r.ok) throw new Error('Circle token registry unavailable')
+    const j = await r.json() as { data?: any[]; nextPageAfter?: string | null }
+    tokens.push(...(j.data ?? []))
+    if (!j.nextPageAfter) break
+    after = j.nextPageAfter
+  }
+  _registry = { at: Date.now(), tokens }
+  return tokens
+}
+
+/** The token's contract on `domain` when Circle has it on there AND on Arc; null otherwise. */
+async function cctpxTokenAddress(symbol: string, domain: number): Promise<`0x${string}` | null> {
+  const t = (await cctpxRegistry()).find(x => String(x.tokenId).toLowerCase() === CCTPX_TOKENS[symbol].id)
+  const on = (d: number) => t?.deployments.find(x => x.domainId === d && x.enabled !== false && isHex(x.tokenAddress, 20))
+  return on(ARC_DOMAIN) && on(domain) ? on(domain)!.tokenAddress as `0x${string}` : null
+}
+
+/** Circle's signed CCTPx fee quote (native fee) for `amount` to `recipient` on Arc. */
+async function cctpxQuote(symbol: string, srcDomain: number, amount: bigint, recipient: string, fast: boolean) {
+  const r = await fetch(`${CCTPX_IRIS}/v2/quote/cctpx/${CCTPX_TOKENS[symbol].id}/${srcDomain}/${ARC_DOMAIN}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      amount: amount.toString(), feeToken: ZERO_ADDRESS,
+      requests: [{ type: 'FORWARD', params: { msgType: 'TransferMessage', destinationAddress: recipient } }, ...(fast ? [{ type: 'PRE_FINALITY' }] : [])],
+    }),
+    signal: AbortSignal.timeout(10_000),
+  })
+  const j = await r.json().catch(() => null) as { signedQuote?: string; feeToken?: string; feeTotalAmount?: string } | null
+  if (!r.ok || !j?.signedQuote || !isHex(j.signedQuote) || !isUint(j.feeTotalAmount)) throw new Error('Circle fee quote unavailable')
+  if (String(j.feeToken || ZERO_ADDRESS).toLowerCase() !== ZERO_ADDRESS) throw new Error('Unexpected Circle fee token')
+  return { signedQuote: j.signedQuote as `0x${string}`, nativeFee: BigInt(j.feeTotalAmount) }
+}
+
+/** Fast (1000) when Circle quotes it, otherwise standard (2000). */
+async function cctpxQuoteAnySpeed(symbol: string, srcDomain: number, amount: bigint, recipient: string) {
+  try { return { ...(await cctpxQuote(symbol, srcDomain, amount, recipient, true)), finality: 1000 } }
+  catch { return { ...(await cctpxQuote(symbol, srcDomain, amount, recipient, false)), finality: 2000 } }
+}
+
+/**
+ * MeshPort's fee in the token: the relayer's gas for the router call plus
+ * Circle's native fee, priced at the chain's gas-token and the token's rough
+ * USD prices, capped (testnet gas has no real value) - the cap only lowers it.
+ */
+export function tokenFeeUnits(totalWei: bigint, gasUsd: number, symbol: string, env: Record<string, string | undefined> = process.env): bigint {
+  const t = CCTPX_TOKENS[symbol]
+  const tokenUsd = Number(env[t.usdEnv] || t.usd)
+  const capUsd = Number(env.BRIDGE_TOKEN_MAX_FEE_USD || 0.5)
+  const usd = Math.min(Number(totalWei) / 1e18 * gasUsd, capUsd)
+  return BigInt(Math.ceil(usd / tokenUsd * 10 ** t.decimals))
+}
+
+async function tokenFee(pub: any, chainKey: string, symbol: string, nativeFee: bigint): Promise<bigint> {
+  const gasPrice: bigint = await pub.getGasPrice()
+  const gasUsd = Number(process.env[`BRIDGE_NATIVE_USD_${chainKey.toUpperCase()}`] || CHAINS[chainKey].gasUsd)
+  return tokenFeeUnits(TOKEN_ROUTER_GAS * gasPrice + nativeFee, gasUsd, symbol)
+}
+
+/** How the token lets the router pull it, and its EIP-712 domain. */
+async function tokenAuth(pub: any, token: `0x${string}`) {
+  let auth: '3009' | 'permit' | null = null
+  try { await pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'authorizationState', args: [ZERO_ADDRESS, '0x' + '00'.repeat(32)] }); auth = '3009' } catch { /* not EIP-3009 */ }
+  if (!auth) { try { await pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'nonces', args: [ZERO_ADDRESS] }); auth = 'permit' } catch { /* no permit */ } }
+  let name = '', version = '1'
+  try {
+    const d = await pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'eip712Domain' }) as any[]
+    name = d[1]; version = d[2] || '1'
+  } catch {
+    name = await pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'name' }) as string
+    try { version = await pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'version' }) as string } catch { /* EIP-2612 default */ }
+  }
+  return { auth, name, version }
+}
+
+async function tokenQuote(req: VercelRequest, res: VercelResponse) {
+  const chainKey = String(req.query.chain || '')
+  const symbol = String(req.query.token || '')
+  const amount = String(req.query.amount || '')
+  const recipient = isHex(req.query.recipient, 20) ? String(req.query.recipient) : '0x0000000000000000000000000000000000000001'
+  if (!CHAINS[chainKey] || !tokenRouters()[chainKey]) return res.status(400).json({ error: 'Gasless bringing is not available for this chain' })
+  if (!CCTPX_TOKENS[symbol]) return res.status(400).json({ error: 'Unsupported token' })
+  if (!isUint(amount) || BigInt(amount) < CCTPX_TOKENS[symbol].min) return res.status(400).json({ error: 'Amount too small' })
+  const c = CHAINS[chainKey]
+  const token = await cctpxTokenAddress(symbol, c.domain)
+  if (!token) return res.status(400).json({ error: `${symbol} can't be brought from this chain right now` })
+  const { pub } = await clients(chainKey)
+  const [q, info] = await Promise.all([cctpxQuoteAnySpeed(symbol, c.domain, BigInt(amount), recipient), tokenAuth(pub, token)])
+  if (!info.auth) return res.status(400).json({ error: `${symbol} on this chain can't be moved with a signature` })
+  const fee = await tokenFee(pub, chainKey, symbol, q.nativeFee)
+  return res.status(200).json({
+    fee: fee.toString(), nativeFee: q.nativeFee.toString(), finality: q.finality, token, tokenId: CCTPX_TOKENS[symbol].id,
+    decimals: CCTPX_TOKENS[symbol].decimals, auth: info.auth, domainName: info.name, domainVersion: info.version,
+  })
+}
+
+async function tokenRelay(req: VercelRequest, res: VercelResponse) {
+  const { chain: chainKey, symbol, bridge: b, authorization: a, permit: p } = (req.body ?? {}) as any
+  const router = tokenRouters()[chainKey]
+  if (!CHAINS[chainKey] || !router) return res.status(400).json({ error: 'Gasless bringing is not available for this chain' })
+  if (!CCTPX_TOKENS[symbol]) return res.status(400).json({ error: 'Unsupported token' })
+  if (!b || (!a === !p)) return res.status(400).json({ error: 'Missing bridge or authorization' })
+  if (!isHex(b.token, 20) || !isHex(b.tokenId, 32) || !isHex(b.recipient, 20) || !isUint(b.fee) || !isHex(b.salt, 32))
+    return res.status(400).json({ error: 'Malformed bridge parameters' })
+  const auth = a ?? p
+  if (!isHex(auth.from, 20) || !isUint(auth.value) || !isHex(auth.signature, 65)) return res.status(400).json({ error: 'Malformed authorization' })
+  if (a && (!isUint(a.validAfter) || !isUint(a.validBefore))) return res.status(400).json({ error: 'Malformed authorization' })
+  if (p && (!isUint(p.deadline) || !isHex(p.bridgeSignature, 65))) return res.status(400).json({ error: 'Malformed permit' })
+
+  // Only the user's own EURC / cirBTC, to their own wallet on Arc.
+  const t = CCTPX_TOKENS[symbol]
+  if (String(b.tokenId).toLowerCase() !== t.id) return res.status(400).json({ error: 'Wrong token id' })
+  if (Number(b.destinationDomain) !== ARC_DOMAIN) return res.status(400).json({ error: 'Only bringing to Arc is supported' })
+  if (String(b.recipient).toLowerCase() !== String(auth.from).toLowerCase()) return res.status(400).json({ error: 'Funds can only be brought to your own wallet' })
+  if (![1000, 2000].includes(Number(b.minFinalityThreshold))) return res.status(400).json({ error: 'Unsupported finality' })
+  const now = Math.floor(Date.now() / 1000)
+  const until = Number(a ? a.validBefore : p.deadline)
+  if (until <= now + 30 || until > now + MAX_AUTH_WINDOW_SEC) return res.status(400).json({ error: 'Authorization window is invalid or expired' })
+  const value = BigInt(auth.value), fee = BigInt(b.fee)
+  if (value < t.min || fee >= value) return res.status(400).json({ error: 'Amount too small' })
+
+  const session = await sessionInfo(req)
+  if (!session || session.wallet !== String(auth.from).toLowerCase()) return res.status(403).json({ error: 'Not signed in to this wallet' })
+  const block = spendBlock(session.canSpend)
+  if (block) return res.status(block.status).json({ error: block.error })
+  if (!allowRelay(session.wallet)) return res.status(429).json({ error: 'Too many requests - try again shortly' })
+
+  const c = CHAINS[chainKey]
+  const token = await cctpxTokenAddress(symbol, c.domain)
+  if (!token || token.toLowerCase() !== String(b.token).toLowerCase()) return res.status(400).json({ error: `${symbol} can't be brought from this chain right now` })
+  const { pub, wallet } = await clients(chainKey)
+  if (!wallet) return res.status(503).json({ error: 'Relayer is not configured' })
+
+  const bridgeArgs = {
+    token: token as `0x${string}`, tokenId: t.id, destinationDomain: ARC_DOMAIN, recipient: b.recipient as `0x${string}`,
+    fee, minFinalityThreshold: Number(b.minFinalityThreshold), salt: b.salt as `0x${string}`,
+  }
+  const nonce = await pub.readContract({ address: router, abi: TOKEN_ROUTER_ABI, functionName: 'bridgeNonce', args: [bridgeArgs] }) as `0x${string}`
+  const used = a
+    ? await pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'authorizationState', args: [auth.from, nonce] })
+    : await pub.readContract({ address: router, abi: TOKEN_ROUTER_ABI, functionName: 'usedNonce', args: [auth.from, nonce] })
+  if (used) {
+    const logs = await pub.getContractEvents({ address: router, abi: TOKEN_ROUTER_ABI, eventName: 'TokenBridged', args: { from: auth.from, nonce }, fromBlock: 'earliest' }).catch(() => [])
+    const hit = (logs as any[])[0]
+    return hit ? res.status(200).json({ txHash: hit.transactionHash, alreadySubmitted: true })
+      : res.status(409).json({ error: 'This authorization was already used' })
+  }
+
+  // Circle's fee for exactly this transfer, paid by the relayer; the user's fee must still cover it.
+  const amount = value - fee
+  const [q, bal] = await Promise.all([
+    cctpxQuote(symbol, c.domain, amount, String(b.recipient), Number(b.minFinalityThreshold) === 1000),
+    pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'balanceOf', args: [auth.from] }) as Promise<bigint>,
+  ])
+  const needed = await tokenFee(pub, chainKey, symbol, q.nativeFee)
+  if (fee * 100n < needed * 80n) return res.status(400).json({ error: 'Fee too low - please try again' })
+  if (bal < value) return res.status(400).json({ error: `Not enough ${symbol} on this chain` })
+
+  const { parseSignature } = await import('viem')
+  const vrs = (sig: `0x${string}`) => { const s = parseSignature(sig); return { v: s.v !== undefined ? Number(s.v) : 27 + (s.yParity ?? 0), r: s.r, s: s.s } }
+  const call = a
+    ? (() => { const s = vrs(a.signature); return { functionName: 'bridgeWithAuthorization' as const,
+        args: [bridgeArgs, { from: a.from, value, validAfter: BigInt(a.validAfter), validBefore: BigInt(a.validBefore), ...s }, q.signedQuote] } })()
+    : (() => { const s = vrs(p.signature), bs = vrs(p.bridgeSignature); return { functionName: 'bridgeWithPermit' as const,
+        args: [bridgeArgs, { from: p.from, value, deadline: BigInt(p.deadline), ...s, bv: bs.v, br: bs.r, bs: bs.s }, q.signedQuote] } })()
+
+  // Simulate first: a bad signature or changed parameter never costs gas.
+  const { request } = await pub.simulateContract({
+    account: wallet.account, address: router, abi: TOKEN_ROUTER_ABI, ...call, value: q.nativeFee,
+  } as any).catch((e: any) => { throw Object.assign(new Error(e?.shortMessage || 'Transfer would fail'), { status: 400 }) })
+  const txHash = await wallet.writeContract({ ...request, ...(await relayFees(pub, pub.chain.id)) })
+  try {
+    const receipt = await pub.waitForTransactionReceipt({ hash: txHash, timeout: 40_000 })
+    if (receipt.status !== 'success') return res.status(502).json({ error: 'Transaction reverted', txHash })
+    return res.status(200).json({ txHash })
+  } catch {
+    return res.status(200).json({ txHash, pending: true })
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Content-Type', 'application/json')
   res.setHeader('Cache-Control', 'no-store')
@@ -732,6 +1013,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // ── Quote ────────────────────────────────────────────────────────────
       const quoteIp = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown'
       if (!allowQuote(quoteIp)) return res.status(429).json({ error: 'Too many requests - try again shortly' })
+      if (req.query.action === 'token_quote') return await tokenQuote(req, res)
       const chainKey = String(req.query.chain || '')
       const total = String(req.query.amount || '')
       if (!CHAINS[chainKey] || !routers()[chainKey]) return res.status(400).json({ error: 'Gasless bridging is not available for this chain' })
@@ -782,6 +1064,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if ((req.body as any)?.action === 'call') return await relayCall(req, res)
+    if ((req.body as any)?.action === 'token_relay') return await tokenRelay(req, res)
 
     // ── Relay ────────────────────────────────────────────────────────────
     const { chain: chainKey, bridge: b, authorization: a } = (req.body ?? {}) as any
