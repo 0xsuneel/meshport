@@ -802,6 +802,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const [tokenPickerOpen, setTokenPickerOpen] = useState(false)
   const isTokenRoute = bridgeToken !== 'USDC'
   const tokenSym = bridgeToken
+  /** An amount of the coin as shown: cirBTC to 8 decimals, the rest like USDC. */
+  const fmtTokAmount = (n: number) => bridgeToken === 'cirBTC' ? trimTrailingZeros(n.toFixed(8)) : formatAmount(n)
   const tokenRoutes = useTokenRouteChains(bridgeToken)
   // The token's balance on Arc (USDC uses the wallet store's `balance`).
   const [tokenBalance, setTokenBalance] = useState<number | null>(null)
@@ -3019,8 +3021,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // The shared progress page's view of this transfer (see lib/moveSteps).
   const transferStepTexts = moveSteps({
     kind: 'transfer', route: chain.ub ? 'ub' : 'cctp', from: 'Arc', to: chain.name,
-    amount: formatAmount(numAmount), recipient: address ? `${address.slice(0, 6)}…${address.slice(-4)}` : undefined,
-    forwarder: transferForwarder,
+    amount: isTokenRoute ? fmtTokAmount(numAmount) : formatAmount(numAmount), recipient: address ? `${address.slice(0, 6)}…${address.slice(-4)}` : undefined,
+    forwarder: transferForwarder, token: tokenSym,
   })
   const transferStepIndex = indexFromStepStates(bridgeSteps.map(s => s.status))
 
@@ -3401,7 +3403,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             <motion.div key="broadcasting" initial={false}
               style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
               <MoveProgress
-                kind="transfer" route={chain.ub ? 'ub' : 'cctp'}
+                kind="transfer" route={chain.ub ? 'ub' : 'cctp'} token={tokenSym}
                 fromLabel="Arc" toLabel={chain.name} amount={numAmount}
                 steps={transferStepTexts}
                 current={transferStepIndex}
@@ -3510,12 +3512,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   ]}
                   steps={processSteps.map(s => s.label)}
                   detailRows={[
-                    { label: 'Bridge', value: chain.ub ? 'Circle Gateway' : 'Circle CCTP' },
+                    { label: 'Bridge', value: isTokenRoute ? 'Circle CCTPx' : chain.ub ? 'Circle Gateway' : 'Circle CCTP' },
                     { label: 'Total Fees', value: totalFeesLabel },
                   ]}
                   links={[
-                    ...(sourceHref ? [{ title: chain.ub ? 'View on Arc Explorer' : 'View Burn on Arc Explorer', explorer: 'ArcScan', hash: sourceHash, href: sourceHref }] : []),
-                    ...(destHref ? [{ title: chain.ub ? `View on ${chain.name}` : `View Mint on ${chain.name}`, explorer: chain.name, hash: destMintHash, href: destHref }] : []),
+                    ...(sourceHref ? [{ title: chain.ub ? 'View on Arc Explorer' : isTokenRoute ? 'View Send on Arc Explorer' : 'View Burn on Arc Explorer', explorer: 'ArcScan', hash: sourceHash, href: sourceHref }] : []),
+                    ...(destHref ? [{ title: chain.ub ? `View on ${chain.name}` : isTokenRoute ? `View Delivery on ${chain.name}` : `View Mint on ${chain.name}`, explorer: chain.name, hash: destMintHash, href: destHref }] : []),
                   ]}
                   linksNote={forwarderMint && sourceHref
                     ? `${fmtTok(successInfo?.receiverGets || 0)} ${tokenSym} was delivered on ${chain.name} by Circle's Forwarding Service - there's no separate destination transaction hash to view.`
@@ -3675,6 +3677,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                       className="w-full py-3 rounded-xl bg-transparent border border-border text-text-secondary font-medium text-sm">
                       Open Recover
                     </button>
+                  ) : isTokenRoute && burnTxHashRef.current ? (
+                    // EURC / cirBTC already left Arc: Circle's forwarder
+                    // delivers it - there's no mint to finish, and a retry
+                    // would send it twice.
+                    <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>
+                      Your {tokenSym} already left Arc - Circle delivers it to {chain.name}. Check there before sending again.
+                    </p>
                   ) : (
                     !chain.ub && burnTxHashRef.current ? (
                     // The USDC already left Arc and Circle has (or will have)

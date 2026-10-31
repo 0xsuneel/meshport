@@ -63,6 +63,7 @@ import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
 import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { claimFeeSummary, type SignedClaimFee } from '@/lib/claimFees'
+import { bridgeTokenDecimals, bridgeTokenInfo, type CctpxToken } from '@/lib/tokenBridge'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { moveSteps, indexFromBringStage, indexFromClaimStatus, indexFromCctpStage } from '@/lib/moveSteps'
 import { MoveProgress } from '@/components/multichain/MoveProgress'
@@ -224,6 +225,8 @@ function toSdkChainId(internalId: string): string {
 // more (see gaslessBridge's small-amount fee limits). One constant for the amount screen, the
 // pre-claim estimate and executeClaim's own re-check.
 const MIN_CLAIM_AMOUNT = 1.00
+/** EURC / cirBTC: the relayer's minimum (api/bridge-relay CCTPX_TOKENS). */
+const TOKEN_MIN_BRING: Record<CctpxToken, number> = { EURC: 1, cirBTC: 0.00001 }
 
 /** Bring: a Unified Balance fee above this (USD) picks CCTP and warns. */
 const UB_HIGH_FEE_USD = 0.5
@@ -306,10 +309,22 @@ function StepSwap({ push, children }: { push: boolean; children: ReactNode }) {
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function MultichainClaimPage({ embedded = false, onClose, initialChain, initialBalance, trackClaimId, merchantMode = false, onFocusChange, pushScreens = false }: { embedded?: boolean; onClose?: () => void; initialChain?: string; initialBalance?: number; trackClaimId?: string; merchantMode?: boolean; onFocusChange?: (f: 'none' | 'processing' | 'result') => void
+export function MultichainClaimPage({ embedded = false, onClose, initialChain, initialBalance, trackClaimId, merchantMode = false, onFocusChange, pushScreens = false, token, tokenAddress }: { embedded?: boolean; onClose?: () => void; initialChain?: string; initialBalance?: number; trackClaimId?: string; merchantMode?: boolean; onFocusChange?: (f: 'none' | 'processing' | 'result') => void
   /** Hub on a phone (inside its Bring page): screens swap at once, and the
    *  processing and Track Progress screens slide in from the right. */
-  pushScreens?: boolean } = {}) {
+  pushScreens?: boolean
+  /** EURC / cirBTC instead of USDC (personal accounts, from the Hub): the same
+   *  screens, through MeshPortRouter's CCTPx path (lib/gaslessToken). */
+  token?: CctpxToken
+  /** That token's contract on initialChain, from Circle's registry. */
+  tokenAddress?: string } = {}) {
+  // The coin this Bring moves, and how its amounts read.
+  const coin: string = token ?? 'USDC'
+  const coinChar = !token ? '$' : token === 'EURC' ? '€' : ''
+  const coinDecimals = token ? bridgeTokenDecimals(token) : CLAIM_DECIMALS
+  const fmtCoin = useCallback((n: number) => token === 'cirBTC' ? (trimTrailingZeros(n.toFixed(8)) || '0') : formatAmount(n), [token])
+  const minClaim = token ? TOKEN_MIN_BRING[token] : MIN_CLAIM_AMOUNT
+  const minText = `Minimum ${coinChar}${token ? fmtCoin(minClaim) : trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}${coinChar ? '' : ` ${coin}`}`
   // Only ever rendered inside the Hub (MultichainPage), so the page always
   // uses its phone layout; on desktop its screens open in the Hub's
   // right-hand panel (isDesktopMq).
@@ -466,7 +481,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   }, [keypadOpen, showPasscodeSheet])
   const [,               setIsSubmitted]   = useState(false)
   const [chains,         setChains]        = useState<ChainEntry[]>(() => prefilledFromHub
-    ? [{ chainId: initialChain!, claimable: Math.floor((initialBalance ?? 0) * 100) / 100, pending: 0 }] : [])
+    ? [{ chainId: initialChain!, claimable: token ? (initialBalance ?? 0) : Math.floor((initialBalance ?? 0) * 100) / 100, pending: 0 }] : [])
   const [claimableTotal, setClaimableTotal] = useState(0)
   const [selected,       setSelected]      = useState<string | null>(() => prefilledFromHub ? initialChain! : null)
   // Which way the chain-select <-> amount-entry slide should travel - set on
@@ -894,6 +909,18 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const fetchClaimFeeEstimate = useCallback(async (chainId: string, amount: number) => {
     const key = `${chainId}|${amount}`
     setFeeEstimate(prev => ({ ...prev, loading: true, error: '' }))
+    // EURC / cirBTC: the relayer's quote - MeshPort's fee in the token covers
+    // the gas and Circle's CCTPx fee (the relayer pays both).
+    if (token) {
+      try {
+        const { quoteGaslessToken } = await import('@/lib/gaslessToken')
+        const q = await quoteGaslessToken({ chainId, token, amount, recipient: useAuthStore.getState().walletAddress || '', tokenAddress })
+        setFeeEstimate({ loading: false, error: '', totalFee: q.fee, receiverGets: q.receive, forKey: key, networkFee: q.fee, bridgeFee: 0 })
+      } catch (e: any) {
+        setFeeEstimate({ loading: false, error: e?.message || 'Fee estimate unavailable', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0 })
+      }
+      return
+    }
     // Gasless chains: the relayer's own quote - the exact fees the claim
     // will sign, so what's shown here is what's charged.
     // Solana: Circle's fee only - MeshPort pays the SOL network fee.
@@ -919,7 +946,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       return
     }
     setFeeEstimate({ loading: false, error: 'Not available for this chain', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0 })
-  }, [])
+  }, [token, tokenAddress])
 
   // Debounced trigger - fires ~600ms after the user stops typing/adjusting
   // the amount, same cadence MultichainTransferPage.tsx uses for its own
@@ -930,7 +957,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   useEffect(() => {
     if (step !== 'select' || !selected) return
     const amt = parseFloat(claimAmounts[selected] ?? '0') || 0
-    if (amt < MIN_CLAIM_AMOUNT) {
+    if (amt < minClaim) {
       setFeeEstimate({ loading: false, error: '', totalFee: 0, receiverGets: 0, forKey: '', networkFee: 0, bridgeFee: 0 })
       return
     }
@@ -994,6 +1021,19 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     // invalidating just the external-balance cache entries before the read
     // below, so a forced scan is always genuinely fresh.
     if (force) refreshScope({ kind: 'external', wallet: wallet.addr })
+    // EURC / cirBTC: just that token on the chain picked in the Hub.
+    if (token) {
+      if (initialChain && tokenAddress) {
+        try {
+          const { readTokenBalance } = await import('./TokenBring')
+          const bal = await readTokenBalance(initialChain, tokenAddress, wallet.addr, bridgeTokenDecimals(token))
+          setChains([{ chainId: initialChain, claimable: bal, pending: 0 }])
+          setClaimableTotal(bal)
+        } catch { /* keep the balance the Hub passed in */ }
+      }
+      if (!quiet) setStep('select')
+      return
+    }
     try {
       // Admin-disabled chains must never contribute to claimableTotal -
       // same isChainEnabledForClaim filter Home's scanExternalBalances and
@@ -1024,7 +1064,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       )
     }
     if (!quiet) setStep('select')
-  }, [getKey, trackClaimIdFromHub, settingsMap, settingsLoaded, accountKind, canOf])
+  }, [getKey, trackClaimIdFromHub, settingsMap, settingsLoaded, accountKind, canOf, token, tokenAddress, initialChain])
 
   const handleManualRefresh = useCallback(() => {
     if (Date.now() < refreshCooldownUntil) return
@@ -1044,7 +1084,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // readExternalChainBalance - not a full rescan - the moment a claim or
   // transfer genuinely completes.
   useEffect(() => {
-    if (!walletAddress) return
+    // These events carry USDC balances - EURC / cirBTC reads its own.
+    if (!walletAddress || token) return
     let cancelled = false
     const onExternal = (e: Event) => {
       const d = (e as CustomEvent).detail || {}
@@ -1085,7 +1126,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         .subscribe()
     })
     return () => { cancelled = true; channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal) }
-  }, [walletAddress])
+  }, [walletAddress, token])
 
   useEffect(() => {
     scan(false, prefilledFromHub)
@@ -1177,10 +1218,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
     const selChains = chains
       .filter(c => selected === c.chainId && c.claimable > 0)
-      .filter(c => (parseFloat(claimAmounts[c.chainId] ?? '0') || 0) >= 1.00)
+      .filter(c => (parseFloat(claimAmounts[c.chainId] ?? '0') || 0) >= minClaim)
 
     if (selChains.length === 0) {
-      setError('Please enter an amount of at least $1.00')
+      setError(`Please enter an amount of at least ${coinChar}${fmtCoin(minClaim)}${coinChar ? '' : ` ${coin}`}`)
       setStep('failed')
       return
     }
@@ -1213,12 +1254,12 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
         // MIN_CLAIM_AMOUNT (module-level, shared with the amount screen's own
         // gate and the pre-claim fee estimate) - see its doc comment.
-        if (claimAmount < MIN_CLAIM_AMOUNT) {
+        if (claimAmount < minClaim) {
           // Previously just `return`ed here with zero feedback - the
           // chain's progress card stayed on whatever it last showed
           // (usually nothing), silently doing nothing with no
           // explanation. Surface it the same way a real failure would be.
-          chainErrors[chain.chainId] = `Minimum $${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))} to claim`
+          chainErrors[chain.chainId] = `${minText} to claim`
           setChain(chain.chainId, 'error', chainErrors[chain.chainId], 0)
           return
         }
@@ -1228,7 +1269,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         // finished through Recover - never shown as plain "Failed".
         const noteNothingMoved = (err: unknown, route: 'ub' | 'cctp') => {
           import('@/lib/failure').then(({ classifyFailure, recordFailure }) => recordFailure({
-            feature: 'bring', walletAddress: wallet.addr, amount: claimAmount, token: 'USDC',
+            feature: 'bring', walletAddress: wallet.addr, amount: claimAmount, token: coin,
             sourceChain: chain.chainId, destinationChain: ARC_CHAIN_KEY, failure: classifyFailure(err),
             metadata: { route, claim_failed_before_burn: true },
           })).catch(() => {})
@@ -1236,7 +1277,45 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         let burned = false
 
         try {
-          setChain(chain.chainId, 'approving', `Preparing ${formatAmount(claimAmount)} USDC…`, 25)
+          setChain(chain.chainId, 'approving', `Preparing ${fmtCoin(claimAmount)} ${coin}…`, 25)
+
+          // ── EURC / cirBTC (lib/gaslessToken) ──
+          // One signature, no gas: MeshPort's relayer sends it through
+          // MeshPortRouter (paying the gas and Circle's CCTPx fee; MeshPort's
+          // fee comes out of the token) and Circle's forwarder delivers on
+          // Arc. There's no claims row: the Arc balance says when it landed.
+          if (token) {
+            const [{ bringTokenGasless }, { readArcToken, waitForArc }] = await Promise.all([import('@/lib/gaslessToken'), import('./TokenBring')])
+            const before = await readArcToken(token, wallet.addr).catch(() => null)
+            const r = await bringTokenGasless({
+              chainId: chain.chainId, token, amount: claimAmount, tokenAddress, signer: wallet.signer, walletAddress: wallet.addr,
+              onStatus: msg => msg === 'Submitting…' || msg === 'Confirming…'
+                ? setChain(chain.chainId, 'burning', msg === 'Confirming…' ? `Waiting for ${getMeta(chain.chainId).label} to confirm the transfer…` : 'Signed - MeshPort is sending the transfer…', 45)
+                : setChain(chain.chainId, 'approving', msg === 'Signing…' ? `Signing the ${token} transfer…` : 'Getting fee…', 25),
+            })
+            burned = true
+            setClaimFees(prev => ({ ...prev, [chain.chainId]: { meshport: r.fee, circleCap: 0 } }))
+            setIsSubmitted(true)
+            setChain(chain.chainId, 'attesting', 'Sent - Circle is delivering it to Arc…', 65, { txHash: r.txHash })
+            // Circle's forwarder finishes it from here - the screen can be left.
+            setConfirmPhase(phase => phase === 'processing' ? 'submitted' : phase)
+            const { user } = useAuthStore.getState()
+            import('@/lib/ActivityService').then(({ Activity }) => Activity.claim({
+              walletAddress: wallet.addr, userId: user?.id, txHash: r.txHash, amount: r.receive, sourceChain: chain.chainId,
+              tokenSymbol: token, status: 'pending', meshportFee: r.fee,
+            })).catch(() => {})
+            const startedAt = Date.now()
+            void waitForArc(token, wallet.addr, before, r.receive, () => true).then(async landed => {
+              if (!landed) return
+              setChain(chain.chainId, 'done', `${fmtCoin(r.receive)} ${token} is in your Arc wallet`, 100)
+              setConfirmPhase(phase => (phase === 'processing' || phase === 'submitted' || phase === 'tracking') ? 'done' : phase)
+              notifyClaimArrived(r.receive, chain.chainId, Date.now() - startedAt, undefined, r.txHash, token)
+              const { updateActivityStatus } = await import('@/lib/ActivityService')
+              await updateActivityStatus(r.txHash, wallet.addr, 'completed')
+              refreshBalancesAfterTx(wallet.addr)
+            }).catch(() => {})
+            return { chainId: chain.chainId, amount: claimAmount }
+          }
 
           // ── Unified Balance route (Gateway): deposit on source → spend to Arc ──
           const sdkId = toSdkChainId(chain.chainId)
@@ -1378,7 +1457,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       setChainProgress(prev => prev.map(p => p.stage !== 'done' ? { ...p, stage: 'error', msg: 'Failed', pct: 0 } : p))
       setStep('failed')
     }
-  }, [walletAddress, selectedTotal, chains, selected, claimAmounts, getKey, loadSdk, claimRoute, merchantMode])
+  }, [walletAddress, selectedTotal, chains, selected, claimAmounts, getKey, loadSdk, claimRoute, merchantMode, token, tokenAddress, coin, minClaim, minText, coinChar, fmtCoin])
 
   const handleClaimTap = useCallback(async () => {
     if (selectedTotal <= 0) return
@@ -1426,17 +1505,18 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // More than this chain has: warn, and don't show what "would" arrive.
   const claimOver = !!selectedChain && claimAmt > selectedChain.claimable
   const claimEstimateIsLive = feeEstimate.forKey === `${selected}|${claimAmt}`
-  const showClaimEstimateRow = claimAmt >= MIN_CLAIM_AMOUNT
+  const showClaimEstimateRow = claimAmt >= minClaim
   const estimateReady = showClaimEstimateRow && claimEstimateIsLive && !feeEstimate.loading && !feeEstimate.error
   // Route (CCTP vs Unified Balance) - UB only for chains Gateway supports.
   const selectedSdkId = selected ? toSdkChainId(selected) : ''
   // What the chain supports (merchants: never Unified Balance; CCTP is the
   // gasless router) and what the Admin Panel has on for this account.
-  const selectedRoutes = selected ? bringRoutes(settingsMap, selected, accountKind, canOf(selected)) : []
+  // EURC / cirBTC: only MeshPortRouter's CCTPx route (no Unified Balance for them).
+  const selectedRoutes = !selected ? [] : token ? ['cctp'] : bringRoutes(settingsMap, selected, accountKind, canOf(selected))
   const ubAvailable = selectedRoutes.includes('ub')
   const cctpAvailable = selectedRoutes.includes('cctp')
   const effectiveRoute: 'cctp' | 'ub' = !ubAvailable ? 'cctp' : !cctpAvailable ? 'ub' : claimRoute
-  const reviewEnabled = claimAmt >= MIN_CLAIM_AMOUNT && claimAmt <= (selectedChain?.claimable ?? 0) && (effectiveRoute === 'ub' || estimateReady)
+  const reviewEnabled = claimAmt >= minClaim && claimAmt <= (selectedChain?.claimable ?? 0) && (effectiveRoute === 'ub' || estimateReady)
   // Unified Balance route: Circle Gateway's fee quote for this exact claim
   // (read-only, signs nothing), fetched ~600ms after the amount settles.
   const [ubFee, setUbFee] = useState<{ forKey: string; loading: boolean; error: string; needsUnlock: boolean
@@ -1445,7 +1525,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const ubFeeKey = `${selected}|${claimAmt}`
   useEffect(() => {
     // Quoted whichever route is picked, so the switch can show both fees.
-    if (step !== 'select' || !selected || !ubAvailable || claimAmt < MIN_CLAIM_AMOUNT) return
+    if (step !== 'select' || !selected || !ubAvailable || claimAmt < minClaim) return
     let cancelled = false
     setUbFee(prev => ({ ...prev, loading: true, error: '', needsUnlock: false, forKey: ubFeeKey }))
     const t = setTimeout(async () => {
@@ -1475,9 +1555,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // flip to real numbers together, once the estimate for this exact amount
   // actually succeeds.
   const claimReceiveLabel = !showClaimEstimateRow
-    ? `$${formatAmount(claimAmt)} on Arc`
+    ? `${coinChar}${fmtCoin(claimAmt)}${token && !coinChar ? ` ${coin}` : ''} on Arc`
     : estimateReady
-    ? `At least $${formatAmount(feeEstimate.receiverGets)} on Arc`
+    // EURC / cirBTC: exactly this (Circle's fee is paid by MeshPort, not taken from it).
+    ? `${token ? '' : 'At least '}${coinChar}${fmtCoin(feeEstimate.receiverGets)}${token && !coinChar ? ` ${coin}` : ''} on Arc`
     : 'Calculating…'
   const feeRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 11, color: COLORS.muted, fontVariantNumeric: 'tabular-nums' }
   const fmtFee = (n: number) => `$${trimTrailingZeros(n.toFixed(4))} USDC`
@@ -1494,6 +1575,13 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             <div style={feeRowStyle}><span>Fees</span><span>Calculating…</span></div>
           ) : feeEstimate.error ? (
             <div style={{ ...feeRowStyle, color: COLORS.error }}><span>Fees</span><span style={{ textAlign: 'right' }}>{feeEstimate.error}</span></div>
+          ) : token ? (
+            // EURC / cirBTC: one fee, in the token - it pays MeshPort back for
+            // the gas and Circle's CCTPx fee.
+            <div style={{ ...feeRowStyle, color: COLORS.text, fontWeight: 600 }}>
+              <span>MeshPort fee (gas + Circle fee)</span>
+              <span>{fmtCoin(feeEstimate.totalFee)} {coin}</span>
+            </div>
           ) : (
             <>
               <div style={feeRowStyle}>
@@ -1888,7 +1976,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                       <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getMeta(selectedChain.chainId).label}</span>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={COLORS.muted} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6"/></svg>
                     </span>
-                    <span style={{ fontSize: 12, color: COLORS.muted, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatAmount(selectedChain.claimable)} USDC</span>
+                    <span style={{ fontSize: 12, color: COLORS.muted, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtCoin(selectedChain.claimable)} {coin}</span>
                   </span>
                 </button>
                 <div aria-hidden="true" style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1909,30 +1997,33 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               {/* Amount, with what arrives and the fees right under it */}
               <div style={{ padding: '16px 18px', borderRadius: 22, background: COLORS.surface,
                 border: `1.5px solid ${claimOver || error ? COLORS.error : keypadOpen ? COLORS.primary : COLORS.border}` }}>
-                <span style={{ fontSize: 13, color: COLORS.muted }}>Amount (USDC)</span>
+                <span style={{ fontSize: 13, color: COLORS.muted }}>Amount ({coin})</span>
                 {/* Same field on desktop (typed in) and mobile (opens the keypad). */}
                 <div style={{ marginTop: 8 }}>
                   <AmountField
                     value={claimAmounts[selected!] ?? ''}
-                    onChange={v => { setClaimAmounts(prev => ({ ...prev, [selected!]: sanitizeAmountInput(v, CLAIM_DECIMALS) })); setError('') }}
+                    onChange={v => { setClaimAmounts(prev => ({ ...prev, [selected!]: sanitizeAmountInput(v, coinDecimals) })); setError('') }}
                     onTap={desktopInput ? undefined : () => { setAmountConfirmed(false); setKeypadOpen(true) }}
                     editing={keypadOpen}
                     boxRef={amountBoxRef}
                     onMax={() => {
-                      setClaimAmounts(prev => ({ ...prev, [selected!]: parseFloat(selectedChain.claimable.toFixed(2)).toString() }))
+                      // The whole balance, cut (never rounded up) to the coin's decimals.
+                      const d = coinDecimals
+                      setClaimAmounts(prev => ({ ...prev, [selected!]: trimTrailingZeros((Math.floor(selectedChain.claimable * 10 ** d) / 10 ** d).toFixed(d)) }))
                       setError('')
                     }}
-                    invalid={!!error || claimOver || (claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT)}
-                    ariaLabel="Amount in USDC"
-                    token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
-                    quick={quickAmounts([10, 50, 100], '$', v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') }, selectedChain.claimable)}
+                    invalid={!!error || claimOver || (claimAmt > 0 && claimAmt < minClaim)}
+                    ariaLabel={`Amount in ${coin}`}
+                    symbol={token ? coinChar : undefined}
+                    token={{ label: coin, logo: token ? bridgeTokenInfo(token).logo : '/logos/tokens/usdc.png' }}
+                    quick={token ? [] : quickAmounts([10, 50, 100], '$', v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') }, selectedChain.claimable)}
                   />
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 13 }}>
-                    <span style={{ color: COLORS.muted }}>Available: {formatAmount(selectedChain.claimable)} USDC</span>
+                    <span style={{ color: COLORS.muted }}>Available: {fmtCoin(selectedChain.claimable)} {coin}</span>
                     {claimOver ? (
-                      <span style={{ fontWeight: 700, color: COLORS.error }}>Insufficient balance · Max {formatAmount(selectedChain.claimable)}</span>
-                    ) : claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT && (
-                      <span style={{ fontWeight: 700, color: COLORS.error }}>Minimum ${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}</span>
+                      <span style={{ fontWeight: 700, color: COLORS.error }}>Insufficient balance · Max {fmtCoin(selectedChain.claimable)}</span>
+                    ) : claimAmt > 0 && claimAmt < minClaim && (
+                      <span style={{ fontWeight: 700, color: COLORS.error }}>{minText}</span>
                     )}
                   </div>
                 </div>
@@ -1987,7 +2078,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: COLORS.muted, alignSelf: 'center' }}>
                     {/* One short line - the long version pushed the fee warning and
                         the Bring button off shorter screens. */}
-                    {effectiveRoute === 'ub'
+                    {token
+                      ? <><b style={{ color: COLORS.text, fontWeight: 600 }}>Via Circle CCTPx</b> · gasless, native {coin} on Arc</>
+                      : effectiveRoute === 'ub'
                       ? <><b style={{ color: COLORS.text, fontWeight: 600 }}>Via Unified Balance</b> · finish in Recover if you leave</>
                       : <><b style={{ color: COLORS.text, fontWeight: 600 }}>Burn & mint</b> · fast, gasless, arrives on Arc</>}
                   </p>
@@ -2024,7 +2117,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   onClick={e => {
                     e.stopPropagation()
                     const amt = parseFloat(claimAmounts[selected!] ?? '0') || 0
-                    if (amt < MIN_CLAIM_AMOUNT) { setError(`Minimum $${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}`); return }
+                    if (amt < minClaim) { setError(minText); return }
                     if (amt > selectedChain.claimable) { setError('Exceeds available balance'); return }
                     if (effectiveRoute === 'cctp' && !estimateReady) return
                     if (effectiveRoute === 'ub' && ubFeeTooHigh) return
@@ -2036,7 +2129,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   className="active:scale-[.98] transition"
                   style={{ width: '100%', height: 56, borderRadius: 18, fontSize: 16, fontWeight: 700, border: 'none', color: '#fff',
                     background: COLORS.primary, cursor: bringEnabled ? 'pointer' : 'not-allowed', opacity: bringEnabled ? 1 : 0.45 }}>
-                  {claimAmt > 0 ? `Bring ${formatAmount(claimAmt)} USDC` : 'Bring'}
+                  {claimAmt > 0 ? `Bring ${fmtCoin(claimAmt)} ${coin}` : 'Bring'}
                 </button>
               </div>
             </motion.div>
@@ -2052,11 +2145,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 value={claimAmounts[selected!] ?? ''}
                 onChange={v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') }}
                 balance={selectedChain.claimable}
-                token="USDC"
-                decimals={CLAIM_DECIMALS}
+                token={coin}
+                decimals={coinDecimals}
                 doneLabel="Done"
                 doneEnabled={true}
-                error={claimOver ? 'Insufficient balance' : claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT ? `Minimum $${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}` : ''}
+                error={claimOver ? 'Insufficient balance' : claimAmt > 0 && claimAmt < minClaim ? minText : ''}
                 onClose={() => setKeypadOpen(false)}
                 onDone={() => {
                   const amt = parseFloat(claimAmounts[selected!] ?? '0') || 0
@@ -2074,9 +2167,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           <PinSheet open={showPasscodeSheet} id="mc-pass"
             onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
             title={desktopInput ? 'Authorize Claim' : 'Confirm claim'}
-            subtitle={desktopInput ? `From ${selectedChain ? getMeta(selectedChain.chainId).label : 'Multichain'}` : `Confirm claim of $${formatAmount(selectedTotal)} USDC`}
-            amountLabel={`$${formatAmount(selectedTotal)} USDC`} placement="panel"
-            card={{ label: 'Claiming from', name: selectedChain ? getMeta(selectedChain.chainId).label : 'Multichain', detail: 'To your Arc balance', amount: `$${formatAmount(selectedTotal)}`, unit: 'USDC' }}
+            subtitle={desktopInput ? `From ${selectedChain ? getMeta(selectedChain.chainId).label : 'Multichain'}` : `Confirm claim of ${coinChar}${fmtCoin(selectedTotal)} ${coin}`}
+            amountLabel={`${coinChar}${fmtCoin(selectedTotal)} ${coin}`} placement="panel"
+            card={{ label: 'Claiming from', name: selectedChain ? getMeta(selectedChain.chainId).label : 'Multichain', detail: 'To your Arc balance', amount: `${coinChar}${fmtCoin(selectedTotal)}`, unit: coin }}
             bioVerb="Claim"
             value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }} error={passError || undefined}
             onComplete={(_, viaBiometric) => { setPaidViaBiometric(!!viaBiometric); handlePasscodeConfirm() }} />
@@ -2118,13 +2211,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             const reached = errored ? lastClaimStageRef.current : stage
             const chainId = cp0?.chainId ?? trackRec?.chainId
             // Same route decision claimOneChain makes.
-            const isUbRoute = !!cp0 && (ubClaimChains.includes(cp0.chainId)
+            const isUbRoute = !token && !!cp0 && (ubClaimChains.includes(cp0.chainId)
               || (!merchantMode && (claimRoute === 'ub' || !canBringOverCctp(cp0.chainId)) && UB_CLAIM_CHAINS.has(toSdkChainId(cp0.chainId))))
             const route = isUbRoute ? 'ub' : 'cctp'
             const srcLabel = chainId ? getMeta(chainId).label : 'source chain'
             const steps = moveSteps({
-              kind: 'bring', route, from: srcLabel, to: 'Arc', amount: formatAmount(displayTotal || trackClaimRow?.amount || 0),
+              kind: 'bring', route, from: srcLabel, to: 'Arc', amount: fmtCoin(displayTotal || trackClaimRow?.amount || 0),
               fastFinality: isUbRoute && !!chainId && ubClaimEta(toSdkChainId(chainId)) === 'under a minute',
+              token: coin,
             })
             let current = cp0 ? indexFromBringStage(route, reached, cp0.handedOff) : 1
             if (!isUbRoute && trackClaimRow) current = Math.max(current, indexFromClaimStatus(trackClaimRow.status))
@@ -2148,7 +2242,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', overflowX: 'hidden', padding: '0 12px 12px' }}
             >
               <MoveProgress
-                kind="bring" route={route} fromLabel={chainProgress.length > 1 ? `${chainProgress.length} chains` : srcLabel} toLabel="Arc"
+                kind="bring" route={route} token={coin} fromLabel={chainProgress.length > 1 ? `${chainProgress.length} chains` : srcLabel} toLabel="Arc"
                 amount={displayTotal || trackClaimRow?.amount || 0}
                 steps={steps} current={current} failed={failed} safe={safe} timeSteps
                 loading={!cp0 && !trackClaimRow}
@@ -2178,13 +2272,13 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             const timeLabel = new Date().toLocaleString('en-US', {
               month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
             })
-            const fmtAmount = `${formatAmount(displayTotal)} USDC`
+            const fmtAmount = `${fmtCoin(displayTotal)} ${coin}`
             // Fees actually paid: MeshPort's fee, plus Circle's CCTP fee as
             // taken (burned − arrived) once the funds are on Arc - until
             // then only its cap is known, shown as "up to" (it used to be
             // added in as if the whole cap had been charged).
             const fees = claimFeeSummary(claimFees, Object.values(claimsByStatus))
-            const usdc = (n: number) => `${trimTrailingZeros(n.toFixed(4))} USDC`
+            const usdc = (n: number) => token ? `${fmtCoin(n)} ${coin}` : `${trimTrailingZeros(n.toFixed(4))} USDC`
             const hasFees = Object.keys(claimFees).length > 0
             const totalFeesLabel = fees.final
               ? usdc(fees.meshport + fees.circle)
@@ -2196,7 +2290,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             const processSteps = moveSteps({
               kind: 'bring', route: doneUb ? 'ub' : 'cctp',
               from: fromChainIds.length === 1 ? getMeta(fromChainIds[0]).label : `${fromChainIds.length} chains`, to: 'Arc',
-              amount: formatAmount(displayTotal),
+              amount: fmtCoin(displayTotal), token: coin,
             })
 
             return (
@@ -2229,11 +2323,12 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   // destination_tx_hash (→ p.mintTxHash) once the mint lands.
                   const mintHref = arcExplorerTxUrl(p.mintTxHash)
                   return [
-                    ...(burnHref && p.txHash ? [{ title: `View Burn on ${label}`, explorer: label, hash: p.txHash, href: burnHref }] : []),
+                    ...(burnHref && p.txHash ? [{ title: token ? `View Send on ${label}` : `View Burn on ${label}`, explorer: label, hash: p.txHash, href: burnHref }] : []),
                     ...(mintHref && p.mintTxHash ? [{ title: 'View Mint on Arc Explorer', explorer: 'ArcScan', hash: p.mintTxHash, href: mintHref }] : []),
                   ]
                 })
-                const mintPending = chainProgress.some(p => !p.mintTxHash)
+                // EURC / cirBTC: Circle's forwarder delivers - no Arc transaction of ours to link.
+                const mintPending = !token && chainProgress.some(p => !p.mintTxHash)
                 return (
                 <SuccessReceipt
                   actions={[
@@ -2248,7 +2343,12 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     { label: 'Time', value: timeLabel },
                   ]}
                   steps={processSteps.map(s => s.done)}
-                  detailRows={[
+                  detailRows={token ? [
+                    // MeshPort's fee in the token paid the gas and Circle's CCTPx fee.
+                    { label: 'MeshPort Fee', value: usdc(fees.meshport) },
+                    { label: 'Circle Fee', value: 'Paid by MeshPort' },
+                    { label: 'Total Fees', value: usdc(fees.meshport) },
+                  ] : [
                     ...(hasFees ? [
                       { label: 'MeshPort Fee', value: usdc(fees.meshport) },
                       { label: 'Circle Fee', value: circleFeeLabel },

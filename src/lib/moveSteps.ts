@@ -7,6 +7,8 @@
 //
 //   CCTP (provider-cctp-v2 "Bridge Process"): Approval → Burn → Attestation → Mint
 //   Gateway (provider-gateway-v1): Deposit, then Sign → Fetch Attestation → Mint
+//   CCTPx (EURC / cirBTC, provider-cctpx): Approve → Send → Attestation → Deliver
+//     (route 'cctp' with a `token`: the same four positions, so the same mappers)
 //
 // Bring over CCTP is MeshPort's gasless route: you sign, MeshPort's relayer
 // sends the burn (paying the gas), Circle's forwarder mints on Arc. Bring over
@@ -46,10 +48,29 @@ export function moveSteps(p: {
   forwarder?: boolean
   /** Bring UB: the source chain finalizes in under a minute. */
   fastFinality?: boolean
+  /** The coin: USDC (default), or EURC / cirBTC over Circle CCTPx. */
+  token?: string
 }): MoveStepText[] {
   const { kind, route, from, to, amount } = p
   const usdc = `${amount} USDC`
   const toWho = p.recipient ? ` to ${p.recipient}` : ''
+  // EURC / cirBTC (Circle CCTPx): sent and delivered - not burned and minted.
+  const tok = p.token && p.token !== 'USDC' ? p.token : null
+  if (tok) {
+    const coin = `${amount} ${tok}`
+    if (kind === 'transfer') return [
+      { label: `Approve ${tok}`, upcoming: `Let Circle's bridge use ${coin} on Arc`, active: 'Approving on Arc…', done: `Circle's bridge can use the ${tok}`, eta: 'under a second' },
+      { label: 'Send from Arc', upcoming: `Sends the ${tok} out of Arc`, active: `Sending ${coin} from Arc…`, done: `${tok} left your Arc wallet`, eta: 'under a second' },
+      { label: 'Circle attestation', upcoming: 'Circle confirms the transfer', active: 'Circle is signing the transfer…', done: 'Circle signed the transfer', eta: '20–90 seconds' },
+      { label: `Deliver on ${to}`, upcoming: `${tok} delivered${toWho}`, active: `Circle's forwarder is delivering on ${to}…`, done: `${tok} arrived${toWho}`, eta: 'under a minute' },
+    ]
+    return [
+      { label: `Sign on ${from}`, upcoming: `Approve ${coin} – no gas needed`, active: 'Signing – no gas needed…', done: 'Authorized – no gas needed', eta: 'a second' },
+      { label: `Send from ${from}`, upcoming: "MeshPort sends it and pays the gas and Circle's fee", active: `MeshPort is sending ${coin} from ${from}…`, done: "MeshPort paid the gas and Circle's fee", eta: 'a few seconds' },
+      { label: 'Circle attestation', upcoming: 'Circle confirms the transfer', active: 'Circle is signing the transfer…', done: 'Circle signed the transfer', eta: '20–90 seconds' },
+      { label: 'Deliver on Arc', upcoming: `${tok} lands in your Arc wallet`, active: "Circle's forwarder is delivering on Arc…", done: `${tok} is in your Arc wallet`, eta: 'under a minute' },
+    ]
+  }
   // Texts never restate the step's own name: "upcoming" says what the step
   // is for, "done" says what it achieved. "You can close the app" lives in
   // the page's Safe to leave note, not here.

@@ -32,11 +32,11 @@ import { canBringOverCctp } from '@/lib/gaslessBridge'
 import { useMerchant, useBusinessTab, isMerchantClaim, useAccountKind } from '@/lib/merchant'
 import { isChainEnabledForBring, isChainEnabledForSettle, isCoinEnabled } from '@/lib/featureFilters'
 import { BRIDGE_TOKENS, type BridgeToken, type CctpxToken } from '@/lib/tokenBridge'
-import { TokenBringList, TokenBringFlow, type TokenBringChain } from './TokenBring'
+import { TokenBringList, type TokenBringChain } from './TokenBring'
 import { BusinessMoney } from '@/features/merchant/BusinessMoney'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
-import { formatAmount, timeAgo, copyToClipboard } from '@/lib/utils'
+import { formatAmount, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { moveBreakdown, moveLabels, formatFee, formatMoveAmount, type MoveBreakdown } from '@/lib/moveFees'
 import { subscribeToWalletClaims, type Claim as ServerClaim } from '@/lib/claimService'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -110,7 +110,10 @@ interface ActivityItem {
   // 'ub' | 'cctp' when finished through Recover → "Recovered via UB/CCTP".
   recoveredVia?: string
   // Claim route; 'ub' claims come from the activity table (no claims row).
-  route?: 'ub' | 'cctp'
+  // 'cctpx': EURC / cirBTC over Circle CCTPx (activity table too).
+  route?: 'ub' | 'cctp' | 'cctpx'
+  /** The coin moved: USDC when absent, or EURC / cirBTC. */
+  tokenSymbol?: string
   status: 'pending' | 'success' | 'failed'
   amount: number
   // For claims: `amount` shows the real arrived figure once known.
@@ -177,6 +180,19 @@ function markOwnClaims(items: ActivityItem[]): ActivityItem[] {
 }
 
 /** Bring / Transfer: what was sent, what landed and the fees, once the arrived amount is known. */
+/** An amount of the item's coin: "$12.5" (USDC), "€12.5" (EURC), "0.0005 cirBTC". */
+function itemMoney(item: ActivityItem, n: number): string {
+  const sym = item.tokenSymbol || 'USDC'
+  if (sym === 'USDC') return `$${formatAmount(n)}`
+  if (sym === 'EURC') return `€${formatAmount(n)}`
+  return `${trimTrailingZeros(n.toFixed(8)) || '0'} ${sym}`
+}
+/** The same, always with the coin's name: "$12.5 USDC", "€12.5 EURC", "0.0005 cirBTC". */
+function itemMoneyUnit(item: ActivityItem, n: number): string {
+  const sym = item.tokenSymbol || 'USDC'
+  return sym === 'cirBTC' ? itemMoney(item, n) : `${itemMoney(item, n)} ${sym}`
+}
+
 function hubMove(item: ActivityItem): MoveBreakdown | null {
   if (item.isRecovery || item.chainReceipt || item.status !== 'success') return null
   return item.type === 'transfer'
@@ -239,7 +255,7 @@ function trackedInfo(item: ActivityItem, arrivedMint?: string): TrackedMoveInfo 
 const cctpBurnChain = (item: ActivityItem) => (item.type === 'claim' ? item.chain : ARC_CHAIN_KEY)
 // Pending moves the CCTP tracker can follow (UB claims and merchant rows have their own).
 const isTrackableCctp = (item: ActivityItem) =>
-  item.status === 'pending' && item.route !== 'ub' && !item.isRecovery && !item.chainReceipt && !item.autoConvert
+  item.status === 'pending' && item.route !== 'ub' && item.route !== 'cctpx' && !item.isRecovery && !item.chainReceipt && !item.autoConvert
   && !!item.sourceTxHash && /^0x[0-9a-fA-F]{64}$/.test(item.sourceTxHash)
 
 // One logo per distinct chain for the scanning animation.
@@ -450,12 +466,12 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   const [arrived, setArrived] = useState<Record<string, string | undefined>>({})
   const markArrived = (id: string, mintTxHash?: string) =>
     setArrived(prev => (id in prev ? prev : { ...prev, [id]: mintTxHash }))
-  const bringSubOpen = (hubTab === 'bring' && !!claimChain) || !!(trackClaim || trackUb || trackCctp)
+  const bringSubOpen = (hubTab === 'bring' && (!!claimChain || !!tokenBring)) || !!(trackClaim || trackUb || trackCctp)
   useEffect(() => {
     if (!bringSubOpen) return
     let poppedByBack = false
     window.history.pushState({ ...(window.history.state ?? {}), mpHubSub: true }, '')
-    const close = () => { setClaimChain(null); setTrackUb(null); setTrackCctp(null); closeTracking() }
+    const close = () => { setClaimChain(null); setTokenBring(null); setTrackUb(null); setTrackCctp(null); closeTracking() }
     const onPop = () => {
       // Back closed a sheet / keypad on top (lib/backLayers): not ours.
       if (backLayerPop()) return
@@ -753,7 +769,30 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
           recoveredVia: item.metadata?.recovered_via || undefined,
           error:        item.error || undefined,
           needsRecovery: item.status === 'failed' && !item.metadata?.nothing_moved,
+          tokenSymbol:  item.tokenSymbol || 'USDC',
+          ...(item.tokenSymbol && item.tokenSymbol !== 'USDC' ? { route: 'cctpx' as const } : {}),
         }))
+
+        // EURC / cirBTC brought in over Circle CCTPx (TokenBring → Bring):
+        // an activity row only - no claims row, no Unified Balance intent.
+        const cctpxClaimItems: ActivityItem[] = bridges
+          .filter((item: any) => item.activityType === 'claim' && item.metadata?.route === 'cctpx' && !item.metadata?.nothing_moved)
+          .map((item: any) => ({
+            id:         item.id ?? item.txHash,
+            type:       'claim',
+            route:      'cctpx',
+            tokenSymbol: item.tokenSymbol || 'EURC',
+            status:     item.status === 'failed' ? 'failed' : item.status === 'pending' ? 'pending' : 'success',
+            amount:     item.amount ?? 0,
+            claimedAmount: item.metadata?.claimed_amount != null ? Number(item.metadata.claimed_amount) : undefined,
+            arrivedAmount: item.status === 'completed' ? (item.amount ?? undefined) : undefined,
+            meshportFee: item.metadata?.meshport_fee != null ? Number(item.metadata.meshport_fee) : undefined,
+            chain:      item.sourceChain || '',
+            chainLabel: CHAIN_LABELS[item.sourceChain] ?? String(item.sourceChain || 'Chain').replace(/_(Sepolia|Testnet|Fuji)$/,'').replace(/_/g, ' '),
+            timestamp:  new Date(item.createdAt).getTime(),
+            sourceTxHash: item.txHash,
+            error:      item.error || undefined,
+          }))
 
         // Bring Funds that failed before anything left the source chain
         // (lib/failure.ts) - plain "Failed" with the reason, nothing to recover.
@@ -763,6 +802,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
             id:         item.id,
             type:       'claim',
             status:     'failed',
+            tokenSymbol: item.tokenSymbol || 'USDC',
             amount:     item.amount ?? 0,
             chain:      item.sourceChain || '',
             chainLabel: CHAIN_LABELS[item.sourceChain] ?? String(item.sourceChain || 'Chain').replace(/_(Sepolia|Testnet|Fuji)$/,'').replace(/_/g, ' '),
@@ -825,7 +865,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
 
         const receiptItems = await receiptsPromise
         if (!current()) return
-        setDbActivity(markOwnClaims([...claimItems, ...ubClaimItems, ...bridgeItems, ...failedBringItems, ...recoveryItems, ...stuckItems, ...receiptItems]).sort((a, b) => b.timestamp - a.timestamp))
+        setDbActivity(markOwnClaims([...claimItems, ...ubClaimItems, ...cctpxClaimItems, ...bridgeItems, ...failedBringItems, ...recoveryItems, ...stuckItems, ...receiptItems]).sort((a, b) => b.timestamp - a.timestamp))
       } catch {
         // Even if the rest fails, a merchant still sees payments on other chains.
         const receipts = await loadChainReceiptItems()
@@ -1026,6 +1066,10 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                       setTrackCctp(item)
                       if (isDesktop) setHubTab(item.type === 'claim' ? 'bring' : 'transfer')
                       window.scrollTo?.({ top: 0, behavior: 'smooth' })
+                    } else if (item.route === 'cctpx') {
+                      // EURC / cirBTC: no tracker of their own - the receipt
+                      // shows it as Processing… until it lands on Arc.
+                      setSelectedItem(item)
                     } else if (isPending && item.route === 'ub') {
                       // UB claims have no `claims` row - TrackedMove follows
                       // their server intent on the same progress page.
@@ -1090,10 +1134,10 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                       {/* Own transfer arriving on another chain: the same money as the
                           "Transfer to …" row (already −), so no sign - not new income. */}
                       {isFailed || item.ownReceipt || item.ownClaim
-                        ? `$${formatAmount(item.amount)}`
+                        ? itemMoney(item, item.amount)
                         : isClaim
-                          ? `+$${formatAmount(item.amount)}`
-                          : `-$${formatAmount(item.amount)}`
+                          ? `+${itemMoney(item, item.amount)}`
+                          : `-${itemMoney(item, item.amount)}`
                       }
                     </div>
                     {isPending && (
@@ -1259,15 +1303,22 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
 
         {/* EURC / cirBTC: its own page over the chain list, like a USDC chain's. */}
         <HubPage open={hubTab === 'bring' && bringToken !== 'USDC' && !!tokenBring}
-          header={(
+          header={!flowFocused && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 4px' }}>
               <HubPageBack onClick={() => setTokenBring(null)} />
-              <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Bring {bringToken}</span>
+              <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Bring Funds</span>
             </div>
           )}>
+          {/* The same Bring screens as USDC, for the token. */}
           {sheetTokenBring && bringToken !== 'USDC' && (
-            <TokenBringFlow key={`${bringToken}-${sheetTokenBring.sdk}`} token={bringToken as CctpxToken} chain={sheetTokenBring}
-              onClose={() => setTokenBring(null)} onDone={() => refreshBalancesAfterTx(walletAddress)} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 8px' }}>
+              <Suspense fallback={<InlineSpinner />}>
+                <ClaimSheetBody key={`${bringToken}-${sheetTokenBring.chainId}`} embedded pushScreens
+                  initialChain={sheetTokenBring.chainId} initialBalance={sheetTokenBring.balance}
+                  token={bringToken as CctpxToken} tokenAddress={sheetTokenBring.tokenAddress}
+                  onClose={() => setTokenBring(null)} onFocusChange={setFlowFocus} />
+              </Suspense>
+            </div>
           )}
         </HubPage>
 
@@ -1438,7 +1489,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
         }
         const hashRow = (label: string, hash: string) => ({ label, value: `${hash.slice(0, 6)}…${hash.slice(-4)}`, onCopy: copyRow(label, hash), copied: rowCopied === label })
         const primaryHash = isClaimItem ? (it.destinationTxHash || it.sourceTxHash) : (it.sourceTxHash || it.destinationTxHash)
-        const amountText = `${status === 'failed' ? '' : isClaimItem ? '+' : '-'}$${formatAmount(it.amount)} USDC`
+        const amountText = `${status === 'failed' ? '' : isClaimItem ? '+' : '-'}${itemMoneyUnit(it, it.amount)}`
 
         return (
           <ReceiptPopup
@@ -1453,9 +1504,16 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
             // the title the outcome - rows add only what those don't.
             rows={[
               ...(move ? [
-                { label: moveLbl.sent, value: `$${formatMoveAmount(move.sent)} USDC` },
-                { label: moveLbl.received, value: `$${formatMoveAmount(move.received)} USDC`, positive: true },
-                { label: 'Fees paid', value: formatFee(move.fees) },
+                ...(it.route === 'cctpx' ? [
+                  // EURC / cirBTC: amounts and MeshPort's fee in the token.
+                  { label: moveLbl.sent, value: itemMoneyUnit(it, move.sent) },
+                  { label: moveLbl.received, value: itemMoneyUnit(it, move.received), positive: true },
+                  { label: 'Fees paid', value: itemMoneyUnit(it, move.fees) },
+                ] : [
+                  { label: moveLbl.sent, value: `$${formatMoveAmount(move.sent)} USDC` },
+                  { label: moveLbl.received, value: `$${formatMoveAmount(move.received)} USDC`, positive: true },
+                  { label: 'Fees paid', value: formatFee(move.fees) },
+                ]),
               ] : []),
               ...(it.merchant && walletAddress ? [{ label: 'Paid to', value: `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`, onCopy: copyRow('Paid to', walletAddress), copied: rowCopied === 'Paid to' }] : []),
               ...(primaryHash && !isRecoveredClaim ? [hashRow('Transaction Hash', primaryHash)] : []),
@@ -1464,15 +1522,19 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
             detailRows={[
               ...(chainReceiptLabel(it) ? [{ label: 'Status', value: chainReceiptLabel(it)!, positive: status === 'success' }] : []),
               ...(it.merchant && !it.isRecovery ? [{ label: 'Type', value: `Moved to Arc from ${it.chainLabel || it.chain}` }] : []),
-              ...(isClaimItem && it.route ? [{ label: 'Route', value: it.route === 'ub' ? 'Unified Balance' : 'CCTP' }] : []),
+              ...((isClaimItem || it.route === 'cctpx') && it.route ? [{ label: 'Route', value: it.route === 'ub' ? 'Unified Balance' : it.route === 'cctpx' ? 'Circle CCTPx' : 'CCTP' }] : []),
               ...(it.recoveredVia ? [{ label: 'Recovered', value: `Via ${it.recoveredVia.toUpperCase()}` }] : []),
-              ...(move && move.meshportFee > 0 ? [
+              ...(it.route === 'cctpx' ? [
+                // EURC / cirBTC: MeshPort's fee (in the token) paid the gas and Circle's fee.
+                ...(move && move.meshportFee > 0 ? [{ label: 'MeshPort fee', value: itemMoneyUnit(it, move.meshportFee) }] : []),
+                ...(isClaimItem ? [{ label: 'Circle fee', value: 'Paid by MeshPort' }] : [{ label: 'Circle fee', value: 'Paid in USDC on Arc' }]),
+              ] : move && move.meshportFee > 0 ? [
                 { label: 'MeshPort fee', value: formatFee(move.meshportFee) },
                 { label: netFeeLabel, value: formatFee(move.networkFee) },
               ] : move && move.fees > 0 ? [{ label: netFeeLabel, value: formatFee(move.networkFee) }] : []),
               // The summary row above already shows one of these two.
-              ...(it.sourceTxHash && !isRecoveredClaim && it.sourceTxHash !== primaryHash ? [hashRow(isClaimItem ? 'Source Tx (Burn)' : 'Source Tx (Arc)', it.sourceTxHash)] : []),
-              ...(it.destinationTxHash && it.destinationTxHash !== primaryHash ? [hashRow(isClaimItem ? 'Destination Tx (Arc Mint)' : 'Destination Tx (Arrival)', it.destinationTxHash)] : []),
+              ...(it.sourceTxHash && !isRecoveredClaim && it.sourceTxHash !== primaryHash ? [hashRow(isClaimItem ? (it.route === 'cctpx' ? 'Source Tx (Send)' : 'Source Tx (Burn)') : 'Source Tx (Arc)', it.sourceTxHash)] : []),
+              ...(it.destinationTxHash && it.destinationTxHash !== primaryHash ? [hashRow(isClaimItem ? (it.route === 'cctpx' ? 'Destination Tx (Arc)' : 'Destination Tx (Arc Mint)') : 'Destination Tx (Arrival)', it.destinationTxHash)] : []),
               ...(it.type === 'transfer' && it.destinationAddress ? [hashRow('Sent To', it.destinationAddress)] : []),
             ]}
             links={[

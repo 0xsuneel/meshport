@@ -79,3 +79,22 @@ describe('step texts', () => {
     }
   })
 })
+
+describe('moveSteps: EURC / cirBTC (Circle CCTPx)', () => {
+  it('Transfer says send and deliver, in the coin - never USDC, burn or mint', () => {
+    const steps = moveSteps({ kind: 'transfer', route: 'cctp', from: 'Arc', to: 'Base', amount: '25', recipient: '0xabc…1234', token: 'EURC' })
+    expect(steps.map(s => s.label)).toEqual(['Approve EURC', 'Send from Arc', 'Circle attestation', 'Deliver on Base'])
+    const text = JSON.stringify(steps)
+    expect(text).toContain('25 EURC')
+    expect(text).not.toMatch(/USDC|[Bb]urn|[Mm]int/)
+  })
+  it('Bring says MeshPort pays the gas and Circle fee, and the coin lands on Arc', () => {
+    const steps = moveSteps({ kind: 'bring', route: 'cctp', from: 'Ethereum', to: 'Arc', amount: '0.0005', token: 'cirBTC' })
+    expect(steps.map(s => s.label)).toEqual(['Sign on Ethereum', 'Send from Ethereum', 'Circle attestation', 'Deliver on Arc'])
+    expect(steps[3].done).toBe('cirBTC is in your Arc wallet')
+    expect(JSON.stringify(steps)).not.toMatch(/USDC|[Bb]urn|[Mm]int/)
+  })
+  it('USDC is unchanged', () => {
+    expect(moveSteps({ kind: 'bring', route: 'cctp', from: 'Base', to: 'Arc', amount: '5', token: 'USDC' })[3].label).toBe('Mint on Arc')
+  })
+})
