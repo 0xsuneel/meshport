@@ -498,11 +498,6 @@ export async function sendUSDC(params: {
   // still costs real gas with no net balance change -- that tradeoff is now
   // the user's own choice, not something this function decides for them.
 
-  // Arc docs Step 3: Convert amount
-  // "If you track 6-decimal balances, convert with: amount = amount6 * 10n ** 12n"
-  const amount6dec = BigInt(Math.round(params.amount * 1_000_000))
-  const amount18dec = amount6dec * (10n ** 12n)  // exact Arc docs formula
-
   // Gas estimation lives in the shared preflight; signing happens locally in
   // relaySend (no wallet client / RPC round trips needed to sign).
 

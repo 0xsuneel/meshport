@@ -8,7 +8,6 @@
 // plus one for each person paid.
 import { getReadySigner } from './paymentReadiness'
 import { createPublicClient, encodeFunctionData } from 'viem'
-import type { WalletAccount } from '@/wallet'
 import { useAuthStore } from '@/store'
 import { arcTransport, arcRpcJson } from '@/lib/arc'
 import { isValidAddress } from '@/lib/arcService'

@@ -17,7 +17,6 @@ import {
   type LedgerStatus,
   type IntentRow,
   type AttemptRow,
-  type LedgerEventRow,
   type DisplayState,
   InvalidTransitionError,
 } from './types'

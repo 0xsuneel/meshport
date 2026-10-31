@@ -2,7 +2,7 @@ import { backLayerPop } from '@/lib/backLayers'
 import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
 import { displayOrderNumber } from '@/lib/orderLabels'
 import { orderKindOf, orderTitle, paymentOrderTag, type OrderKind } from '@/lib/merchantPay'
-import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { TokenLogo } from '@/components/ui/TokenLogo'
 import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
@@ -11,13 +11,12 @@ import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Wallet,
-  AlertCircle, Loader2, CheckCircle2, QrCode,
+  AlertCircle, Loader2, QrCode,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { PanelScanner } from '@/features/scanner/PanelScanner'
 import { Avatar } from '@/components/ui/Avatar'
-import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { PinSheet } from '@/components/ui/PinSheet'
 import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
@@ -97,9 +96,8 @@ export function PaySendPage() {
   const locationState = (location.state || {}) as { returnTo?: string; conversationId?: string; merchantView?: import('@/lib/merchantPay').PaymentView }
   const user = useAuthStore(s => s.user)
   const senderStoredAddress = useAuthStore(s => s.walletAddress)
-  const signer = useAuthStore(s => s.signer)
   const storedPasscode = useAuthStore(s => s.passcode)
-  const { balance, setBalance } = useWalletStore()
+  const { balance } = useWalletStore()
   const { sendRecipient, setSendRecipient, showToastMessage } = useUIStore()
   const settingsMap = useSettingsStore((s) => s.settings)
 
@@ -142,9 +140,6 @@ export function PaySendPage() {
   const [query, setQuery] = useState('')
   const [addressPreview, setAddressPreview] = useState<Recipient | null>(null)
   const [addressResolving, setAddressResolving] = useState(false)
-  const [pasteMode, setPasteMode] = useState(false)
-  const [pasteValue, setPasteValue] = useState('')
-  const [pasteError, setPasteError] = useState('')
   const [recents, setRecents] = useState<Recipient[]>(() => readPeople<Recipient>('pay-recent', user?.id) ?? [])
   const latestQuery = useRef('')
 
@@ -157,7 +152,7 @@ export function PaySendPage() {
   const keypadLift = useKeypadLift(showAmountPad && screen === 'amount', amountBoxRef, !isDesktop)
   // Optional message the payer adds on the amount page (saved with the payment).
   const [note, setNote] = useState('')
-  const [amountError, setAmountError] = useState('')
+  const [, setAmountError] = useState('')
   // ?token= - opened from a token's own page (Home → Assets), so the amount
   // screen starts on that token.
   const [token, setToken] = useState<Token>(() => {
@@ -176,7 +171,6 @@ export function PaySendPage() {
   const [cirbtcBalance, setCirbtcBalance] = useState<number | null>(null)
   const [showTokenPicker, setShowTokenPicker] = useState(false)
   const [estimatedFee, setEstimatedFee] = useState(0.001)
-  const amountInputRef = useRef<HTMLInputElement>(null)
 
   // Review / passcode / processing
   const [showPasscodeSheet, setShowPasscodeSheet] = useState(false)
@@ -691,17 +685,6 @@ export function PaySendPage() {
     goForward('amount')
   }
 
-  const handlePasteSubmit = async () => {
-    const addr = pasteValue.trim()
-    if (!isValidAddress(addr)) { setPasteError('Enter a valid 0x wallet address'); return }
-    setPasteError('')
-    const profile = await getUserByWalletAddress(addr).catch(() => null)
-    const r: Recipient = profile
-      ? { id: profile.id, display: profile.username?.endsWith('.arc') ? profile.username : profile.username + '.arc', displayName: profile.display_name, walletAddress: profile.wallet_address, isUsername: true, avatarUrl: profile.avatar_url, enteredViaAddress: true }
-      : { display: shortenAddress(addr), displayName: 'External Wallet', walletAddress: addr, isUsername: false, enteredViaAddress: true }
-    setRecipient(r); setPasteMode(false); setPasteValue(''); setAmount(''); setAmountError(''); setNote(''); goForward('amount')
-  }
-
   const goBack = () => {
     if (screen === 'review') { goBack2('amount'); return }
     if (screen === 'amount') {
@@ -917,7 +900,6 @@ export function PaySendPage() {
     payStep('wallet')
 
     const toAddr = recipient.walletAddress
-    const senderAddr = senderStoredAddress || user?.walletAddress || ''
     // Self-transfer is now permitted -- previously blocked here.
 
     // One Pay operation = one idempotency key. Now stable across retries
@@ -1092,7 +1074,7 @@ export function PaySendPage() {
       // used for the rewards/balance-refresh blocks just above.
       (async () => {
         try {
-          const { supabase, ensureAnonSession } = await import('@/lib/supabase')
+          const { ensureAnonSession } = await import('@/lib/supabase')
           const { ensureConversation, persistMessage, touchConversation } = await import('@/lib/chatService')
           // Paying an order by link / QR: the chat gets the same payment card
           // as paying the request in chat - with "Bill ORD-… · Paid in full".
@@ -1965,15 +1947,6 @@ export function PaySendPage() {
       </AnimatePresence>
       }
     />
-  )
-}
-
-function SRow({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{label}</span>
-      <span className="text-sm font-semibold" style={{ color: valueColor || 'var(--text-primary)' }}>{value}</span>
-    </div>
   )
 }
 

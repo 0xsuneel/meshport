@@ -1,6 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { useAuthStore } from '@/store'
-import { LoginPage, EmailOTPPage, WalletSetupPage, CreateWalletPage, ImportWalletPage } from '@/features/auth/AuthPages'
+import { LoginPage, WalletSetupPage } from '@/features/auth/AuthPages'
 import { Toast } from '@/components/ui/Toast'
 
 export function AuthGate() {

@@ -2650,9 +2650,8 @@ export async function adminResolveDispute(trade: P2PTrade, resolution: 'resolved
 export async function adminFreezeDisputeViaWallet(trade: P2PTrade, reason: string): Promise<{ success: boolean; message: string }> {
   if (!reason.trim()) return { success: false, message: 'Enter a reason before freezing and forwarding to the Investigator.' }
   try {
-    const { freezeTradeOnChainViaWallet, getConnectedInjectedWalletAddress } = await import('./p2pEscrowContract')
+    const { freezeTradeOnChainViaWallet } = await import('./p2pEscrowContract')
     await freezeTradeOnChainViaWallet(trade.id)
-    const wallet = await getConnectedInjectedWalletAddress()
     await updateTradeStatus(trade.id, { admin_frozen: true })
     await sendTradeMessage(trade.id, 'system', `Pauser reviewed this dispute and forwarded it to an Investigator. Reason: ${reason.trim()}`, true)
     return { success: true, message: 'Frozen and forwarded to an Investigator - a DIFFERENT wallet must now investigate.' }
@@ -2672,9 +2671,8 @@ export async function adminFreezeDisputeViaWallet(trade: P2PTrade, reason: strin
 export async function adminInvestigateDisputeViaWallet(trade: P2PTrade, approveRelease: boolean, reason: string): Promise<{ success: boolean; message: string }> {
   if (!reason.trim()) return { success: false, message: 'Enter a reason before forwarding this to Admin.' }
   try {
-    const { investigateTradeOnChainViaWallet, getConnectedInjectedWalletAddress } = await import('./p2pEscrowContract')
+    const { investigateTradeOnChainViaWallet } = await import('./p2pEscrowContract')
     await investigateTradeOnChainViaWallet(trade.id, approveRelease)
-    const wallet = await getConnectedInjectedWalletAddress()
     await sendTradeMessage(trade.id, 'system', `Investigator reviewed this dispute and forwarded it to an Admin, recommending ${approveRelease ? 'release to buyer' : 'refund to seller'}. Reason: ${reason.trim()}`, true)
     return { success: true, message: `Investigation recorded: recommend ${approveRelease ? 'release to buyer' : 'refund to seller'}. An Admin (a THIRD, different wallet) can now execute this.` }
   } catch (e: any) {

@@ -13,7 +13,7 @@ import { useAuthStore, useUIStore } from '@/store'
 import { useSettingsStore } from '@/store/settingsStore'
 import { formatAmount, timeAgo, copyToClipboard } from '@/lib/utils'
 import {
-  createPaymentRequest, listMyIntents, listMyPayments, subscribeMerchantPayments, paymentLink, orderPayLink, orderChainPayLink,
+  listMyIntents, listMyPayments, subscribeMerchantPayments, orderPayLink, orderChainPayLink,
   cancelPayment, submitPayment, STATUS_LABEL, paymentStageLabel, isArriving, orderLabel, chatCardMessage,
   listUnmatchedDeposits, assignDeposit, dismissDeposit, completeOrder,
   listChainReceipts, getAutoConvert, setAutoConvert, isOwnReceipt, isBridgeReceipt,
@@ -171,7 +171,6 @@ function MoneyHome({ loaded, intents, payments, receipts, chains, claimChains, o
   const listFlash = useReturnFlash('business-money')
   const [tab, setTabState] = useState<MoneyTab>(() => (listFlash.flashId ? lastMoneyTab : 'chains'))
   const setTab = (t: MoneyTab) => { lastMoneyTab = t; setTabState(t) }
-  const walletAddress = useAuthStore(s => s.walletAddress)
   const [q, setQ] = useState('')
   const [showAllReq, setShowAllReq] = useState(false)
   const [showAllCust, setShowAllCust] = useState(false)
@@ -842,9 +841,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <div style={{ display: 'flex', flexDirection: 'column' }}>{children}</div>
     </div>
   )
-}
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{label}</div>{children}</div>
 }
 function Empty({ text }: { text: string }) {
   return <div style={{ padding: 14, textAlign: 'center', fontSize: 13, color: 'var(--text-secondary)', borderRadius: 14, border: '1px dashed var(--border)' }}>{text}</div>

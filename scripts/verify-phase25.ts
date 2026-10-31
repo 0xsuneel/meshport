@@ -58,9 +58,9 @@ async function main() {
 
   console.log('\n── C. Wallet isolation (legacy balanceCache bug) ──')
   clearAll(); rpcCalls = 0
-  const vA = await bm.readArcBalance(WALLET_A, 'USDC')
+  await bm.readArcBalance(WALLET_A, 'USDC')
   const callsAfterA = rpcCalls
-  const vB = await bm.readArcBalance(WALLET_B, 'USDC')
+  await bm.readArcBalance(WALLET_B, 'USDC')
   check('different wallet does NOT reuse cached entry', rpcCalls > callsAfterA,
         `A=${callsAfterA} call(s), B added ${rpcCalls - callsAfterA}`)
 

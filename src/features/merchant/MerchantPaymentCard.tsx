@@ -17,7 +17,7 @@ import { dueText } from '@/lib/businessBills'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
-  watchPayment, getPayment, withLocalPayment, orderLabel, orderKindOf, orderTitle, displayOrderNumber, expiryText, STATUS_LABEL, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type PaymentView,
+  watchPayment, getPayment, withLocalPayment, orderLabel, orderKindOf, orderTitle, expiryText, STATUS_LABEL, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type PaymentView,
 } from '@/lib/merchantPay'
 
 const CHAIN_LABEL: Record<string, string> = {

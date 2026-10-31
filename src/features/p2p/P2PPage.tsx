@@ -474,13 +474,11 @@ export function P2PHubPage() {
 
 // ── Create Offer ─────────────────────────────────────────────────────────────
 export function P2PCreateOfferPage() {
-  const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
   const goBack = useP2PBack('/p2p')
   const walletAddress = useAuthStore(s => s.walletAddress)
   const user = useAuthStore(s => s.user)
   const storedPasscode = useAuthStore(s => s.passcode)
-  const { showToastMessage } = useUIStore()
   const [passEntry, setPassEntry] = useState('')
   const [passError, setPassError] = useState('')
   const [showPasscodeSheet, setShowPasscodeSheet] = useState(false)
@@ -1189,9 +1187,7 @@ export function P2POfferDetailPage() {
 
 // ── Trade Detail - status flow, timer, chat ─────────────────────────────────
 export function P2PTradePage() {
-  const isDesktop = useMediaQuery('(min-width: 980px)')
   const { tradeId } = useParams<{ tradeId: string }>()
-  const navigate = useNavigate()
   const goBack = useP2PBack('/p2p/my-trades')
   const user = useAuthStore(s => s.user)
   const storedPasscode = useAuthStore(s => s.passcode)
@@ -1350,7 +1346,6 @@ export function P2PTradePage() {
   const mins = Math.floor(secondsLeft / 60)
   const secs = secondsLeft % 60
   const expired = isTradeExpired(trade) && (trade.status === 'waiting_for_buyer' || trade.status === 'awaiting_seller_confirmation')
-  const meta = statusMeta(expired ? 'expired' : trade.status)
 
   // Your message shows at once (like the chat), then becomes the saved one;
   // if saving fails it stays with "Not sent · tap to retry".
@@ -1917,7 +1912,6 @@ export function P2PTradePage() {
 
 // ── My Offers ─────────────────────────────────────────────────────────────
 export function P2PMyOffersPage() {
-  const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
   const storedPasscode = useAuthStore(s => s.passcode)
@@ -2432,7 +2426,6 @@ export function P2PMyOffersPage() {
 
 // ── My Trades ─────────────────────────────────────────────────────────────
 export function P2PMyTradesPage() {
-  const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
   const [trades, setTrades] = useState<P2PTrade[]>(() => myTradesCache.get(user?.id ?? '') ?? [])

@@ -17,8 +17,7 @@ import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import type { SwapProgress } from '@/lib/swapService'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  ArrowLeft, ArrowUpDown, Settings, CheckCircle, XCircle, RefreshCw, ChevronDown, Clock, ChevronRight,
-} from 'lucide-react'
+  ArrowLeft, ArrowUpDown, Settings, RefreshCw, ChevronDown, Clock, } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
@@ -84,7 +83,6 @@ const STICKY_CTA = { position: 'sticky', bottom: 0, zIndex: 5, background: 'var(
 
 function addToHistory(_r: SwapRecord, _w: string | null) { /* noop - Supabase handles this */ }
 function loadHistory(_w: string | null): SwapRecord[] { return [] }
-function saveHistory(_h: SwapRecord[], _w: string | null) { /* noop */ }
 
 function timeAgo(ts: number): string {
   const date = new Date(ts)
@@ -337,15 +335,6 @@ function SwapChecklist({ step, error, txHash, progress }: { step: string; error:
   ]
   const swapHash = progress.swapHash || txHash
 
-  const stepBg = (done: boolean, active: boolean, err: boolean) => {
-    if (done) return 'color-mix(in srgb, var(--success) 15%, transparent)'
-    if (active) return 'color-mix(in srgb, var(--brand) 15%, transparent)'
-    if (err) return 'color-mix(in srgb, var(--danger) 15%, transparent)'
-    return 'color-mix(in srgb, var(--text-primary) 6%, transparent)'
-  }
-  const stepText = (done: boolean, active: boolean) =>
-    done ? 'text-success' : active ? 'text-text-primary' : 'text-text-secondary'
-
   return (
     <div style={{ background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)', border: '1px solid var(--border)', borderRadius: 16, padding: '18px 18px 18px 16px' }}>
       {stepDefs.map((s, i) => {
@@ -484,7 +473,6 @@ export function SwapPage() {
   // Mirrors the last quote's total fee so the silent Review-poll can detect
   // a change without depending on a stale closure.
   const totalFeesRef = useRef(0)
-  const amtRef       = useRef<HTMLInputElement>(null)
 
   // ─── Resume an in-flight swap after a refresh ────────────────────────────
   // If the page reloads while a swap was still "swapping"/finishing up, don't
@@ -1111,7 +1099,6 @@ export function SwapPage() {
     })
 
     let attemptId: string | null = null
-    let intentId: string | null = null
 
     try {
       // Wait for both in parallel - the slower of the two determines wall-clock
@@ -1126,7 +1113,6 @@ export function SwapPage() {
         console.warn('[Swap] intent creation failed (swap may have already broadcast):', intentResult.error)
       } else {
         attemptId = intentResult.attemptId
-        intentId = intentResult.intentId ?? null
       }
       const hash   = result?.txHash ?? ''
       const aOut   = result?.amountOut || estimate?.estimatedOutput?.amount || '0'

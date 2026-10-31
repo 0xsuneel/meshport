@@ -18,7 +18,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { shopPayLink } from '@/lib/payLinks'
 import { qrCardFile } from '@/lib/qrCardImage'
 import { staffIntents } from '@/lib/businessTeam'
-import { Store, Clock, Printer, Download, Share2 } from 'lucide-react'
+import { Clock, Printer, Download, Share2 } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName, type BusinessDoc } from '@/lib/merchant'
 import { BusinessDocsField } from '@/features/merchant/BusinessDocsField'
@@ -91,20 +91,6 @@ function ShareSheet({ open, onClose, title, url, text, subject }: { open: boolea
         <LinkShare url={url} text={text} subject={subject} />
       </div>
     </Sheet>
-  )
-}
-
-function Done({ icon, top, amount, note, children }: { icon: React.ReactNode; top?: string; amount: number; note?: string | null; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col items-center text-center px-5 pt-6 gap-4">
-      <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-brand/10 text-brand-text">{icon}</span>
-      <div>
-        {top && <p className="text-sm text-text-muted">{top}</p>}
-        <p className="display text-3xl font-bold tabular-nums text-text-primary">{money(amount)}</p>
-        {note && <p className="text-sm text-text-secondary mt-1">{note}</p>}
-      </div>
-      {children}
-    </div>
   )
 }
 

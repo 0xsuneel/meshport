@@ -73,7 +73,6 @@ export function ReceivePage() {
     const iv = setInterval(load, 30_000)
     return () => { unsub(); clearInterval(iv) }
   }, [isDesktop, walletAddress, tab])
-  if (!user) return null
 
   const displayUsername = (username || (user?.username || '')).replace(/\.arc$/, '')
 
@@ -106,6 +105,10 @@ export function ReceivePage() {
     // Redraw when My QR comes back into view (after Request payment) - the
     // canvas is a fresh, empty element then.
   }, [qrData, requesting])
+
+  // After every hook: returning before one changed the hook order when the
+  // user signed in / out with this page open (React then throws).
+  if (!user) return null
 
   const handleCopy = async (value: string, key: string) => {
     const ok = await copyToClipboard(value)

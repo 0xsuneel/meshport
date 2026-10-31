@@ -452,7 +452,7 @@ export async function updateUserProfile(params: {
 
   // Try by id first (social login users have real Supabase UUIDs)
   if (params.id && !params.id.startsWith('usr_')) {
-    const { data, error } = await supabase.from('users').update(updates).eq('id', params.id).select('id')
+    const { error } = await supabase.from('users').update(updates).eq('id', params.id).select('id')
     if (!error) return { error: null }
   }
 
@@ -467,7 +467,7 @@ export async function updateUserProfile(params: {
 
     if (existing) {
       // Update using the exact id from the found row
-      const { data, error } = await supabase.from('users')
+      const { error } = await supabase.from('users')
         .update(updates).eq('id', existing.id).select('id')
       if (!error) return { error: null }
       return { error: error.message }
@@ -484,7 +484,7 @@ export async function updateUserProfile(params: {
   }
 
   // Last resort: by id
-  const { data, error } = await supabase.from('users').update(updates).eq('id', params.id).select('id')
+  const { error } = await supabase.from('users').update(updates).eq('id', params.id).select('id')
   if (error) return { error: error.message }
   return { error: null }
 }

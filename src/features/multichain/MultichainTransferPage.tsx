@@ -17,15 +17,14 @@ import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import {
-  ArrowLeft, QrCode, Lock, CheckCircle, XCircle, AlertCircle, Loader2, ChevronDown, Clock,
+  ArrowLeft, QrCode, CheckCircle, XCircle, AlertCircle, Clock,
 } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { MeshLoader } from '@/components/ui/MeshLoader'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useWalletStore, useAuthStore, useUIStore } from '@/store'
 import { awardTransactionPoints } from '@/lib/rewards'
 import { notifyRewardMultichain } from '@/lib/notifications'
-import { formatAmount, shortenAddress, midShortenAddress, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
+import { formatAmount, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { useSettingsStore } from '@/store/settingsStore'
 import { transferRoutes } from '@/lib/featureFilters'
@@ -357,16 +356,6 @@ const CHAIN_FALLBACK: Record<string, { bg: string; text: string; label: string }
   sol:       { bg: '#9945FF22', text: '#9945FF', label: 'SOL' },
 }
 
-// Point at parameter t (0-1) along a quadratic bezier - used to position
-// the animated dot/trail on the transfer-progress journey path so its
-// motion follows the actual curve instead of a straight line.
-function quadBezierPoint(t: number, p0: [number, number], p1: [number, number], p2: [number, number]): [number, number] {
-  const mt = 1 - t
-  const x = mt * mt * p0[0] + 2 * mt * t * p1[0] + t * t * p2[0]
-  const y = mt * mt * p0[1] + 2 * mt * t * p1[1] + t * t * p2[1]
-  return [x, y]
-}
-
 // Chain logo img component - official URL with fallback
 function ChainLogoImg({ id, size = 32 }: { id: string; size?: number }) {
   const [ok, setOk] = React.useState(true)
@@ -395,27 +384,6 @@ function ChainLogoImg({ id, size = 32 }: { id: string; size?: number }) {
                objectFit: 'cover', display: 'block', flexShrink: 0 }}
       onError={() => setOk(false)}
     />
-  )
-}
-
-// Small pill shown next to a chain wherever it's picked or displayed -
-// ub===true routes through Circle Gateway (unified balance, <500ms per
-// Circle's own docs: developers.circle.com/gateway/references/supported-blockchains),
-// everything else still goes through the CCTP flow (20-90s Circle
-// attestation). Surfacing this distinction is the whole point: users
-// choosing a destination chain should be able to see up front which ones
-// are the fast path.
-function ChainSpeedBadge({ ub }: { ub: boolean }) {
-  return (
-    <span
-      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-bold flex-shrink-0"
-      style={ub
-        ? { background: 'color-mix(in srgb, var(--success) 14%, transparent)', color: 'var(--success-text)', border: '1px solid rgba(34,197,94,0.3)' }
-        : { background: 'color-mix(in srgb, var(--text-secondary) 12%, transparent)', color: 'var(--text-secondary)', border: '1px solid color-mix(in srgb, var(--text-secondary) 25%, transparent)' }
-      }
-    >
-      {ub ? 'UB' : 'CCTP'}
-    </span>
   )
 }
 
@@ -823,7 +791,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }, [address, amount, selectedChain])
   // MeshPort always uses Fast transfer - no user-facing speed selector anymore.
   const selectedSpeed: SpeedId = 'fast'
-  const [showAllChains,    setShowAllChains]    = useState(false)
   // Destination chip row: keep the selected chain's chip in view (it can sit
   // off-screen when the chain was restored or set from elsewhere).
   const chipRowRef = useRef<HTMLDivElement>(null)
@@ -880,7 +847,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // against a duplicate submission, unlike `loading` which gets cleared
   // right after passcode verification, long before deposit()/spend() run.
   const isConfirmingRef = useRef(false)
-  const [txHash, setTxHash] = useState('')
+  const [, setTxHash] = useState('')
   const [txError, setTxError] = useState('')
   // The raw error behind a plain-language txError (shown under "Technical details").
   const [txErrorDetail, setTxErrorDetail] = useState('')
@@ -913,7 +880,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const lastTotalFeeRef = useRef(0)
   const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null)
   const [gasWarning, setGasWarning] = useState('')
-  const [ticker, setTicker] = useState(0)
+  const [, setTicker] = useState(0)
   // Set when the fee is re-checked immediately before signing (see
   // handleConfirm) and turns out to have moved since the person last saw
   // it on Review - surfaced as a banner there instead of silently signing
@@ -1082,9 +1049,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       const c = ALL_CHAINS.find(c => c.id === selectedChain)!
       return { ...c, ub: routesOf(c.id)[0] === 'ub' }
     })()
-  const popularChains = ENABLED_CHAINS.filter(c => c.popular)
-  const moreChains = ENABLED_CHAINS.filter(c => !c.popular)
-  const visibleChains = showAllChains ? ENABLED_CHAINS : popularChains
 
   // If the admin disables the currently-selected chain, fall back to the
   // first chain that's still enabled.
@@ -1101,7 +1065,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const routesForChain = routesOf(baseChain.id)
   const availableMechanisms: Array<'ub' | 'cctp'> = routesForChain.length ? routesForChain : ['cctp']
   const [selectedRoute, setSelectedRoute] = useState<'ub' | 'cctp' | null>(null)
-  const [showRouteOptions, setShowRouteOptions] = useState(false)
+  const [, setShowRouteOptions] = useState(false)
 
   // Reset the user's manual pick whenever the destination chain changes (a
   // route chosen for one chain shouldn't silently carry over to another),
@@ -1188,11 +1152,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   const stopStepTimer = () => {
     if (stepTimerRef.current) { clearInterval(stepTimerRef.current); stepTimerRef.current = null }
-  }
-
-  // ── Update a single step's state ─────────────────────────────────────────────
-  const updateStep = (key: string, partial: Partial<BridgeStepState>) => {
-    setBridgeSteps(prev => prev.map(s => s.name === key ? { ...s, ...partial } : s))
   }
 
   // ── Address validation ────────────────────────────────────────────────────────
@@ -1576,7 +1535,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
     // Show loading indicator immediately - user gets instant visual feedback
     setLoading(true)
-    const t0 = Date.now()
     const testRunId = newRunId(`send-${chain.id}`)
     const testService: TestService = chain.ub ? 'ub' : 'cctp'
     logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: 'handleConfirm started', data: { amount: numAmount, address } })
@@ -2561,7 +2519,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       const mintStep    = result.steps.find((s: any) => s.name === 'mint')
       const burnStep    = result.steps.find((s: any) => s.name === 'burn')
       const approveStep = result.steps.find((s: any) => s.name === 'approve')
-      const attestStep  = result.steps.find((s: any) => s.name === 'fetchAttestation')
 
       // Arc SDK: txHash is at step.txHash OR step.data.txHash
       const getHash = (step: any): string =>
@@ -2819,74 +2776,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     }
   }
 
-  // ── Step icon ─────────────────────────────────────────────────────────────────
-  const StepIcon = ({ status }: { status: BridgeStepStatus }) => {
-    if (status === 'done') return <CheckCircle className="w-3.5 h-3.5 text-text-primary" />
-    if (status === 'active') return <Loader2 className="w-3 h-3 text-text-primary animate-spin" />
-    if (status === 'error') return <XCircle className="w-3.5 h-3.5 text-text-primary" />
-    return null
-  }
-
-  const stepBg = (s: BridgeStepStatus) =>
-    s === 'done' ? 'bg-success' : s === 'active' ? 'bg-brand' : s === 'error' ? 'bg-danger' : 'bg-text-primary/10'
-
-  const stepText = (s: BridgeStepStatus) =>
-    s === 'done' ? 'text-text-primary' : s === 'active' ? 'text-[var(--brand)]' : s === 'error' ? 'text-danger' : 'text-text-muted'
-
-  // ── Estimated time label + per-step timeout detection ────────────────────────
+  // ── Per-step timeout detection ───────────────────────────────────────────────
   const activeStep = bridgeSteps.find(s => s.status === 'active')
-  const activeStepIdx = bridgeSteps.findIndex(s => s.status === 'active')
-  // ticker triggers re-renders every second so the ring % and estLabel stay live
-  //
-  // UB's spend/arrival step reuses chain.time (the same per-chain estimate
-  // already shown in the chain picker) rather than a flat "~5s" for every
-  // destination. Gateway's own <500ms figure is how fast Circle's
-  // attestation/signature is ready - it isn't a promise about how fast the
-  // destination chain will actually have mined and confirmed the mint
-  // transaction, which is still bounded by that chain's own block time.
-  // Ethereum's ~12s blocks alone make a flat "~5s" wrong for that specific
-  // destination regardless of which bridging method is used underneath.
-  const estLabel = chain.ub
-    ? (activeStepIdx === 0 ? '<1s' : activeStepIdx === UB_SPEND_IDX ? chain.time : '<5s')
-    : (ticker >= 0 && activeStepIdx === 2 ? '20–90s for attestation' : activeStepIdx >= 0 ? '~5s' : '')
-
-  // ── Progress ring percentage ──────────────────────────────────────────────
-  // Each step is an equal-width slice of the ring (100/N). The active
-  // step's slice fills in gradually rather than jumping straight to its
-  // boundary, using a diminishing-returns curve against a rough expected
-  // duration for that step - capped at 90% of the slice so the ring never
-  // visually claims a step finished before the real completion event
-  // (kit.bridge()/kit.unifiedBalance.*  resolving) actually flips it to done.
-  const ringPercent = (() => {
-    const total = bridgeSteps.length || 1
-    const doneCount = bridgeSteps.filter(s => s.status === 'done').length
-    let pct = (doneCount / total) * 100
-    if (activeStep?.startedAt) {
-      const elapsedSec = (Date.now() - activeStep.startedAt) / 1000
-      // Rough expected duration per step: UB steps use the same chain-aware
-      // numbers estLabel already computes (parse the leading digits out of
-      // chain.time, e.g. "<30s" -> 30). CCTP steps now use the exact same
-      // per-chain thresholds the step-advancement timer itself runs on
-      // (getStepThresholds), so the ring's fill speed and the moment a step
-      // actually flips to "done" agree with each other - previously the
-      // ring assumed a flat ~5s for approve/burn/mint regardless of which
-      // step was active or which chain USDC was headed to, while the timer
-      // underneath was already using real per-step, per-chain numbers.
-      const expectedSec = chain.ub
-        ? (activeStepIdx === 0 ? 1 : activeStepIdx === UB_SPEND_IDX ? (parseInt(chain.time.replace(/\D/g, ''), 10) || 15) : 5)
-        : (() => {
-            const t = getStepThresholds(chain)
-            const stepStartMs: Record<string, number> = { approve: 0, burn: t.approve, attestation: t.burn, mint: t.attestation }
-            const key = STEP_KEYS[activeStepIdx]
-            const durationMs = (t[key] ?? t.mint) - (stepStartMs[key] ?? 0)
-            return Math.max(1, durationMs / 1000)
-          })()
-      const withinSlice = Math.min(0.9, elapsedSec / expectedSec)
-      pct += withinSlice * (100 / total)
-    }
-    return Math.min(100, Math.round(pct))
-  })()
-  const ringErrored = bridgeSteps.some(s => s.status === 'error')
 
   // Two-tier waiting UI. The first tier fires while a step is still well
   // inside Circle's own documented normal range (attestation is

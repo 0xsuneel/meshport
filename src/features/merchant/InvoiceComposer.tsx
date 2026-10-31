@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Plus, Receipt, X } from 'lucide-react'
 import { formatAmount } from '@/lib/utils'
-import { createPaymentRequest, invoiceTotal, invoiceBreakdown, type InvoiceItem, type MerchantIntent } from '@/lib/merchantPay'
+import { createPaymentRequest, invoiceBreakdown, type InvoiceItem, type MerchantIntent } from '@/lib/merchantPay'
 import { ActionSheet, SheetPerson, SheetLabel, SheetChips, sheetInputClass, sheetInputStyle } from '@/components/ui/ActionSheet'
 import { DUE_PRESETS, duePresetDate, dueText, isoDay, type DuePresetId } from '@/lib/businessBills'
 import type { SavedItem } from '@/lib/businessItems'

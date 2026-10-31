@@ -489,7 +489,6 @@ export function InsightsPage() {
     return vals.length >= 2 ? vals : [0, ...vals]
   }, [stats, period])
 
-  const periodLabel = period === 'month' ? 'This Month' : period === 'week' ? 'This Week' : 'This Year'
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (

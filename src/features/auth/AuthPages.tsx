@@ -3,10 +3,9 @@ import { MeshPortLogo } from '@/components/ui/MeshPortLogo'
 import { useStepDirection } from '@/hooks/useStepDirection'
 import { useAutoFocus } from '@/hooks/useAutoFocus'
 import { ScreenPush } from '@/components/ui/ScreenPush'
-import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useNavigate, Navigate } from 'react-router-dom'
 import {
-  Mail, ArrowLeft, Eye, EyeOff, Copy, CheckCircle,
+  Mail, ArrowLeft, Eye, EyeOff, CheckCircle,
   AlertCircle, AlertTriangle, RefreshCw, XCircle, AtSign, Loader2,
   Sparkles, Download, Wallet, Lock, Link2, Zap, FileText, KeyRound, Store, User as UserIcon, ChevronRight,
 } from 'lucide-react'
@@ -19,7 +18,6 @@ import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { validateMnemonic } from '@/lib/arc'
 import { createWallet, importWallet, walletStatus, checkRecoveryWords, setWalletPasscode, lockWallet, WalletFrameError, type WalletAccount } from '@/wallet'
 import { WalletSecretFrame } from '@/components/wallet/WalletSecretFrame'
-import { copySensitiveToClipboard } from '@/lib/utils'
 import {
   supabase, upsertUserProfile,
   isUsernameTakenDb, getUserByWalletAddress, ensureAnonSession, resolveAccountForSession, lookupAccountByWallet,
@@ -484,9 +482,7 @@ export function EmailOTPPage() {
   const navigate = useNavigate()
   const setUser = useAuthStore(s => s.setUser)
   const setLoginType = useAuthStore(s => s.setLoginType)
-  const setWallet = useAuthStore(s => s.setWallet)
   const setUsername = useAuthStore(s => s.setUsername)
-  const passcode = useAuthStore(s => s.passcode)
   const { showToastMessage } = useUIStore()
 
   const [step, setStep] = useState<'email' | 'otp'>('email')
@@ -754,8 +750,6 @@ export function CreateWalletPage() {
   const setLoginType = useAuthStore(s => s.setLoginType)
   const user = useAuthStore(s => s.user)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
-  const username = useAuthStore(s => s.username)
-  const passcode = useAuthStore(s => s.passcode)
   const { setBalance } = useWalletStore()
   const { showToastMessage } = useUIStore()
   const [step, setStep] = useState<'generate' | 'backup' | 'confirm' | 'success'>('generate')
@@ -932,8 +926,6 @@ export function ImportWalletPage() {
   const setLoginType = useAuthStore(s => s.setLoginType)
   const user = useAuthStore(s => s.user)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
-  const username = useAuthStore(s => s.username)
-  const passcode = useAuthStore(s => s.passcode)
   const existingWalletAddress = useAuthStore(s => s.walletAddress)
   // Google / email sign-ins hold one MeshPort account per login, so switching
   // that account to a different wallet (= a different account) can't work.

@@ -1,7 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { DragControls, type PanInfo, type Transition } from 'framer-motion'
 import { projectMomentum } from './gesture'
-import { PUSH_EASE_CSS } from './motion'
 
 // Drag-down-to-close for bottom sheets, like every phone payment app.
 //

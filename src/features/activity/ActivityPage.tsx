@@ -421,7 +421,7 @@ export function activityMove(record: ActivityRecord): MoveBreakdown | null {
 export const networkFeeLabel = (record: ActivityRecord) =>
   (record.metadata as any)?.route === 'ub' ? 'Gateway fee' : 'Circle fee'
 
-export function ActivityRow({ record, isFirst, isLast, onSelect, flash, inPanel }: {
+export function ActivityRow({ record, onSelect, flash, inPanel }: {
   record: ActivityRecord; isFirst: boolean; isLast: boolean; onSelect: () => void
   /** The row whose details were just closed - flashes once. */
   flash?: boolean
@@ -430,9 +430,9 @@ export function ActivityRow({ record, isFirst, isLast, onSelect, flash, inPanel 
 }) {
   const {
     metadata, amount, tokenSymbol, createdAt,
-    isClaim, isTransfer, isSend, isReceive, isSwap, isBulk, isBulkReceived, isP2PSellOrder, isP2PRefund, isP2PPurchase, isP2PCredit,
+    isClaim, isReceive, isSwap, isBulkReceived, isP2PCredit,
     isPending, isFailed, isRecovery, reason,
-    statusColor, statusLabel, chain, subtitle, title, amountColor, amountPrefix, counterpartyLabel,
+    statusColor, statusLabel, chain, subtitle, title, amountColor, amountPrefix,
   } = deriveActivityRow(record)
 
   const rowIcon = activityRowIcon(record)

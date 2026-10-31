@@ -37,7 +37,6 @@ export function ProfilePage() {
 
   if (!user) return null
 
-  const isSocial = loginType === 'social'
   const isWallet = loginType === 'wallet' || loginType === null
   const displayUsername = username ? username : (user.username || '').replace(/\.arc$/, '')
   const displayName = user.displayName || (username ? username : (user.username || '').replace(/\.arc$/, '')) || 'MeshPort User'

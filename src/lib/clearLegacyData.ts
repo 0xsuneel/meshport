@@ -38,11 +38,9 @@ export function clearLegacyData(): void {
     'meshport_passcode_salt',
   ]
 
-  let cleared = 0
   keysToRemove.forEach(key => {
     if (localStorage.getItem(key) !== null) {
       localStorage.removeItem(key)
-      cleared++
     }
   })
 
@@ -52,7 +50,6 @@ export function clearLegacyData(): void {
   keysToScan.forEach(key => {
     if (key.startsWith('meshport-wallet-v2-0x')) {
       localStorage.removeItem(key)
-      cleared++
     }
   })
 

@@ -31,7 +31,6 @@ import { supabase } from './supabase'
 import { isBusinessAccountNow } from './merchant'
 import { trimTrailingZeros } from './utils'
 import { ARC_RPCS, arcTransport, arcRpcJson } from './arc'
-import { useAuthStore } from '@/store'
 
 export const POINTS_PER_TX       = 20
 export const MAX_DAILY_POINTS    = 1000
@@ -70,7 +69,6 @@ function rewardReasonFor(actionType: RewardActionType): string {
 
 // Rewards contract address (set after deployment)
 const REWARDS_CONTRACT = (import.meta.env.VITE_REWARDS_CONTRACT || '') as `0x${string}`
-const USDC_CONTRACT    = '0x3600000000000000000000000000000000000000' as const
 
 const REWARDS_ABI = [{
   name: 'claimRewards', type: 'function' as const, stateMutability: 'nonpayable' as const,

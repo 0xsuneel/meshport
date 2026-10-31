@@ -7,7 +7,7 @@ import { loadAssetSlot, saveAssetSlot } from '@/lib/assetSlot'
 import { handBiometricPasscode } from '@/lib/biometricHandoff'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { isUbChain } from '@/lib/ubChains'
-import {useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject, type MutableRefObject, type CSSProperties, type ReactNode} from 'react'
+import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject, type MutableRefObject, type CSSProperties, type ReactNode} from 'react'
 import { flushSync, createPortal } from 'react-dom'
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
 import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
@@ -37,7 +37,7 @@ import { RecentNewsRow } from './RecentNewsRow'
 import { BALANCES_STALE_EVENT, msSinceLastTx, pendingTxBalance, isLaggingRead } from '@/lib/balanceRefresh'
 import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { useSettingsStore } from '@/store/settingsStore'
-import { activityLabel, activitySign, type ActivityRecord } from '@/lib/ActivityService'
+import { activitySign, type ActivityRecord } from '@/lib/ActivityService'
 import { projectMomentum } from '@/lib/gesture'
 import type { BalanceTrend } from '@/lib/balanceTrend'
 // Reused so the desktop "Recent Activity" panel shows the exact same
@@ -129,8 +129,8 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
   // link with `?amount=` baked in (PayPage/PaySendPage already read that
   // param and prefill it), so whoever scans the code lands straight on a
   // payment pre-filled with the amount - they never have to type it in.
-  const [collecting, setCollecting] = useState(false)
-  const [amountInput, setAmountInput] = useState('')
+  const [, setCollecting] = useState(false)
+  const [, setAmountInput] = useState('')
   const [activeAmount, setActiveAmount] = useState<string | null>(null)
 
   // ── QR payload ─────────────────────────────────────────────────────────
@@ -340,22 +340,6 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
     } catch (err: any) {
       if (err?.name !== 'AbortError') showToastMessage('Could not share QR', 'error')
     }
-  }
-
-  const startCollecting = () => {
-    setAmountInput(activeAmount || '')
-    setCollecting(true)
-  }
-
-  const confirmAmount = () => {
-    const value = amountInput.trim()
-    const numeric = Number(value)
-    if (!value || !(numeric > 0)) {
-      showToastMessage('Enter a valid amount', 'error')
-      return
-    }
-    setActiveAmount(numeric.toString())
-    setCollecting(false)
   }
 
   const resetToAddress = () => {
@@ -2427,7 +2411,7 @@ export function HomePage() {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const signer = useAuthStore(s => s.signer)
   const { balance, setBalance } = useWalletStore()
-  const { notifications, unreadCount, badgeLabel, addNotification } = useNotificationStore()
+  const { notifications, unreadCount, badgeLabel } = useNotificationStore()
   const { showToastMessage } = useUIStore()
   // A name that never reached the on-chain registry is registered now (once per session).
   const merchantState = useMerchant()
@@ -3826,12 +3810,6 @@ export function HomePage() {
     return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal); window.removeEventListener(EXTERNAL_SCAN_PROGRESS_EVENT, onScanProgress) }
   }, [walletAddress, settingsMap, settingsLoaded])
 
-  if (!user) return null
-
-  const displayName = user.displayName || username || (user.username || '').replace(/\.arc$/, '') || 'User'
-  const shortAddr = walletAddress ? walletAddress.slice(0, 6) + '...' + walletAddress.slice(-6) : ''
-  const arcHandle = (username || '').replace(/\.arc$/, '') + '.arc'
-
   // ── Desktop-only: Insights column + Recent Activity + Balance trend ────────
   // Skipped entirely on mobile (none of these widgets render there) so no
   // extra network round-trip happens on the phone-shell experience. Fetches
@@ -3996,6 +3974,15 @@ export function HomePage() {
     else decimals = isBtcLike ? 4 : 2
     return trimTrailingZeros(n.toFixed(decimals)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   }
+
+
+  // After every hook: returning before the hooks above changed the hook
+  // order when the user signed in / out with Home open (React then throws).
+  if (!user) return null
+
+  const displayName = user.displayName || username || (user.username || '').replace(/\.arc$/, '') || 'User'
+  const shortAddr = walletAddress ? walletAddress.slice(0, 6) + '...' + walletAddress.slice(-6) : ''
+  const arcHandle = (username || '').replace(/\.arc$/, '') + '.arc'
 
   return (
     <div ref={scrollContainerRef} style={{
