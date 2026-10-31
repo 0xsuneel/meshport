@@ -34,7 +34,7 @@ import { ARC_RPCS, ARC_NETWORK } from '@/lib/arc'
 import { isSolanaAddress } from '@/lib/solana'
 import { useSolanaWallet } from '@/wallet/useSolanaWallet'
 import { circleForwarderMintsTo, noteForwarderMintFailed } from '@/lib/chainRpcs'
-import { gatewaySelfMintsTo, forwarderMintRetry, getUnifiedBalances, UB_MIN_SWEEP } from '@/lib/ubClaim'
+import { gatewaySelfMintsTo, forwarderMintRetry, gatewaySpecAlreadyMinted, getUnifiedBalances, UB_MIN_SWEEP } from '@/lib/ubClaim'
 import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -2189,6 +2189,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             }
             return result
           } catch (resumeErr: any) {
+            // Circle's GatewayMinter refuses a transfer spec that was already
+            // minted - this exact attested transfer (recipient and amount
+            // fixed by Circle's signature) is on the destination already: the
+            // first mint landed and only its confirmation was missed.
+            if (gatewaySpecAlreadyMinted(resumeErr)) {
+              logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'unifiedBalance.spend - already minted (first mint landed)', data: { message: resumeErr?.message } })
+              return { state: 'success', steps: [] }
+            }
             logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'error', label: 'unifiedBalance.spend resume FAILED', data: { message: resumeErr?.message } })
             resumeErr.message = `Resume after ON_CHAIN_FAILURE also failed: ${resumeErr?.message || 'unknown error'}`
             throw resumeErr

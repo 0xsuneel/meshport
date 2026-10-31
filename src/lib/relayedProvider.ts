@@ -127,9 +127,23 @@ async function build(urls: string[], chainKey: string, chainId?: number) {
     return tx.hash!
   }
 
+  // The relayer's receipt, asked of every RPC in turn. An RPC that errors or
+  // lags is "not found yet" (the kit keeps polling) - never an error: the
+  // kit treated one failed lookup as a failed mint (2026-10-31: the mint
+  // landed, the transfer was reported failed).
+  async function relayedReceipt(relayedHash: string) {
+    for (const send of sends) {
+      try {
+        const [r] = await send({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionReceipt', params: [relayedHash] })
+        if (r?.result) return r.result
+      } catch { /* next RPC */ }
+    }
+    return null
+  }
+
   async function aliasedReceipt(hash: string) {
     const a = aliases.get(hash.toLowerCase())!
-    const receipt = await rpcOne('eth_getTransactionReceipt', [a.relayed])
+    const receipt = await relayedReceipt(a.relayed)
     if (!receipt) return null
     return { ...receipt, transactionHash: hash, logs: (receipt.logs ?? []).map((l: any) => ({ ...l, transactionHash: hash })) }
   }
