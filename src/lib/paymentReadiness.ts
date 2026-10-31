@@ -28,7 +28,13 @@ import { startWalletReadiness, walletGeneration, useWalletReadiness, type Wallet
 /** Starts a Privy wallet's warm-up when it isn't warm yet. */
 function warmPrivy(address: string): void {
   void import('@/wallet/privy')
-    .then(m => { if (!m.privySignerConnected(address)) void m.warmPrivySigner(address) })
+    .then(m => {
+      if (!m.privySignerConnected(address)) void m.warmPrivySigner(address)
+      // A payment screen opening: prove the warm wallet still answers (background,
+      // only when nothing signed in the last minute), so a dead one is replaced
+      // before the person presses Pay - not after.
+      else void m.checkPrivyAlive(60_000)
+    })
     .catch(() => {})
 }
 
