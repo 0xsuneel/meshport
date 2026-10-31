@@ -40,7 +40,7 @@ import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLo
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { TokenMenu } from '@/components/ui/TokenMenu'
-import { BRIDGE_TOKENS, bridgeTokenDecimals, bridgeTokenInfo, useTokenRouteChains, type BridgeToken } from '@/lib/tokenBridge'
+import { KIT_CCTPX_CHAINS, BRIDGE_TOKENS, bridgeTokenDecimals, bridgeTokenInfo, useTokenRouteChains, type BridgeToken } from '@/lib/tokenBridge'
 import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -1114,7 +1114,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // The destination chips: every enabled chain for USDC; for EURC / cirBTC
   // only the enabled chains Circle supports that token on (with Arc).
   const OFFERED_CHAINS = isTokenRoute
-    ? ENABLED_CHAINS.filter(c => tokenRoutes.chains?.includes(c.sdk))
+    ? ENABLED_CHAINS.filter(c => tokenRoutes.chains?.includes(c.sdk) && KIT_CCTPX_CHAINS.has(c.sdk))
     : ENABLED_CHAINS
   const offeredKey = OFFERED_CHAINS.map(c => c.id).join(',')
   useEffect(() => {

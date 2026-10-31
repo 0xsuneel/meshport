@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deploymentsFromRegistry, routeChains, type RegistryToken } from './tokenBridge'
+import { deploymentsFromRegistry, routeChains, KIT_CCTPX_CHAINS, type RegistryToken } from './tokenBridge'
 
 const domains = { Arc_Testnet: 26, Ethereum_Sepolia: 0, Base_Sepolia: 6, Avalanche_Fuji: 1 }
 const symbolOf = (id: string) => ({ 'eurc-1': 'EURC', 'btc-1': 'cirBTC' } as Record<string, string>)[id]
@@ -27,5 +27,13 @@ describe('routeChains', () => {
   it('lists the other CCTPx chains where the token is deployed', () => {
     const dep = new Map([['Arc_Testnet', '0xa'], ['Base_Sepolia', '0xb'], ['Solana_Devnet', '0xs']])
     expect(routeChains(dep)).toEqual(['Base_Sepolia'])
+  })
+})
+
+describe('World Chain (EURC)', () => {
+  it('is a route when Circle lists EURC there, but not a kit chain (Bring through the router only)', () => {
+    const dep = new Map([['Arc_Testnet', '0xa'], ['World_Chain_Sepolia', '0xw']])
+    expect(routeChains(dep)).toEqual(['World_Chain_Sepolia'])
+    expect(KIT_CCTPX_CHAINS.has('World_Chain_Sepolia')).toBe(false)
   })
 })

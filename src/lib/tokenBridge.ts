@@ -36,8 +36,16 @@ export const CCTPX_CHAIN_DEFS: Readonly<Record<string, string>> = {
   Optimism_Sepolia: 'OptimismSepolia',
   Avalanche_Fuji: 'AvalancheFuji',
   Polygon_Amoy_Testnet: 'PolygonAmoy',
+  // EURC on World Chain: in Circle's CCTPx, but not yet in the kit's CCTPx
+  // chain list (App Kit 1.20) - so Bring only, through MeshPort's router.
+  World_Chain_Sepolia: 'WorldChainSepolia',
 }
 export const ARC_SDK = 'Arc_Testnet'
+
+/** Chains the kit itself can move EURC / cirBTC on (kit.bridge - Transfer, and Bring paid by the wallet). */
+export const KIT_CCTPX_CHAINS: ReadonlySet<string> = new Set([
+  'Arc_Testnet', 'Ethereum_Sepolia', 'Base_Sepolia', 'Arbitrum_Sepolia', 'Optimism_Sepolia', 'Avalanche_Fuji', 'Polygon_Amoy_Testnet',
+])
 
 /** One registry token, as the registry lists it (only what is used here). */
 export type RegistryToken = {
