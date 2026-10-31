@@ -20,7 +20,7 @@ import { isAccountLockedNow, ACCOUNT_LOCKED_MESSAGE } from '@/lib/accountLockRul
 import { EXTERNAL_CHAINS, SDK_CHAIN_RPCS, ARC_RPCS } from '@/blockchain/chains'
 import { ARC_CHAIN_KEY, explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { formatAmount, trimTrailingZeros } from '@/lib/utils'
-import { bridgeTokenDecimals, bridgeTokenInfo, useTokenRouteChains, type CctpxToken } from '@/lib/tokenBridge'
+import { bridgeTokenDecimals, bridgeTokenInfo, useTokenRouteChains, KIT_CCTPX_CHAINS, type CctpxToken } from '@/lib/tokenBridge'
 import type { WalletAccount } from '@/wallet'
 import { hasTokenRouter, quoteGaslessToken, bringTokenGasless } from '@/lib/gaslessToken'
 
@@ -32,6 +32,7 @@ const CHAIN_INFO: Record<string, { id: string; label: string; native: string }> 
   Optimism_Sepolia:     { id: 'Optimism_Sepolia', label: 'OP Sepolia', native: 'ETH' },
   Avalanche_Fuji:       { id: 'Avalanche_Fuji',   label: 'Avalanche', native: 'AVAX' },
   Polygon_Amoy_Testnet: { id: 'Polygon_Sepolia',  label: 'Polygon',  native: 'POL' },
+  World_Chain_Sepolia:  { id: 'World_Chain_Sepolia', label: 'World Chain', native: 'ETH' },
 }
 const chainInfo = (sdk: string) => CHAIN_INFO[sdk] ?? { id: sdk, label: sdk.replace(/_/g, ' '), native: 'ETH' }
 
@@ -108,14 +109,16 @@ export function TokenBringList({ token, onPick }: { token: CctpxToken; onPick: (
     return () => { cancelled = true }
   }, [walletAddress, routes.chains, routes.deployments, decimals])
 
+  // A chain the kit can't do CCTPx on (World Chain) works only through MeshPort's router.
+  const chains = routes.chains?.filter(sdk => KIT_CCTPX_CHAINS.has(sdk) || hasTokenRouter(chainInfo(sdk).id)) ?? null
   const note = (text: string) => <div style={{ padding: 18, textAlign: 'center', fontSize: 13, color: 'var(--text-secondary)' }}>{text}</div>
   if (routes.loading) return note(`Finding chains that carry ${token}…`)
   if (routes.error) return note(`Couldn't load ${token} routes from Circle. Try again in a moment.`)
-  if (!routes.chains?.length) return note(`${token} can't be brought to Arc from any chain right now.`)
+  if (!chains?.length) return note(`${token} can't be brought to Arc from any chain right now.`)
 
   return (
     <>
-      {routes.chains.map(sdk => {
+      {chains.map(sdk => {
         const info = chainInfo(sdk)
         const bal = balances[sdk]
         const has = (bal ?? 0) > 0
@@ -144,7 +147,7 @@ export function TokenBringList({ token, onPick }: { token: CctpxToken; onPick: (
         )
       })}
       <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text-secondary)', padding: '2px 4px' }}>
-        {routes.chains.every(sdk => hasTokenRouter(chainInfo(sdk).id))
+        {chains.every(sdk => hasTokenRouter(chainInfo(sdk).id))
           ? `No gas needed: MeshPort pays the network and Circle's fee, and takes a small fee in ${token}.`
           : `On chains marked "Needs gas", your wallet pays the gas and Circle's fee in that chain's own coin (ETH, AVAX or POL).`}
       </div>
