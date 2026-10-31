@@ -2,6 +2,7 @@ import { PUSH_OPEN_MS, PUSH_BACK_MS, PUSH_EASE_CSS, PUSH_PARALLAX, DESKTOP_FADE_
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useNavigationType } from 'react-router-dom'
 import { pushLook } from '@/lib/pushLook'
+import { replaceClonedFrames } from '@/lib/snapshotFrames'
 import { useReducedMotion } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useNavDirection } from '@/hooks/useNavDirection'
@@ -42,6 +43,8 @@ const shellOf = (el: HTMLElement) => (el.closest('[data-page-shell]') as HTMLEle
 /** A frozen, non-interactive copy of the page as it looks right now. */
 function takeSnapshot(page: HTMLElement, key: string): Snapshot {
   const node = page.cloneNode(true) as HTMLElement
+  // Wallet frames (recovery phrase, private key, passkey) must not load again in the copy.
+  replaceClonedFrames(page, node)
   const orig = page.querySelectorAll<HTMLElement>('*')
   const copy = node.querySelectorAll<HTMLElement>('*')
   const scrolls: Array<[number, number, number]> = []

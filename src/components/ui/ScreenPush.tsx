@@ -1,6 +1,7 @@
 import { PUSH_OPEN_MS, PUSH_BACK_MS, PUSH_EASE_CSS, PUSH_PARALLAX, DESKTOP_FADE_KEYFRAMES, DESKTOP_FADE_MS } from '@/lib/motion'
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 import { pushLook } from '@/lib/pushLook'
+import { replaceClonedFrames } from '@/lib/snapshotFrames'
 import { useReducedMotion } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY } from '@/lib/motion'
@@ -29,6 +30,8 @@ const PARALLAX = PUSH_PARALLAX
  *  vanishing the instant its Review/Done button is tapped. */
 function pictureOf(el: HTMLElement): { node: HTMLElement; floats: HTMLElement[] } {
   const node = el.cloneNode(true) as HTMLElement
+  // Wallet frames (recovery phrase, private key, passkey) must not load again in the copy.
+  replaceClonedFrames(el, node)
   const orig = el.querySelectorAll<HTMLElement>('*')
   const copy = node.querySelectorAll<HTMLElement>('*')
   const drop: HTMLElement[] = []

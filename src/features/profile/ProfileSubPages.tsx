@@ -642,7 +642,14 @@ function BackupRecoveryPhrasePage() {
     setPasscode('')
     setVerifying(false)
   }
-  const hide = () => { setRevealed(false); setRevealPasscode('') }
+  const hide = () => { setRevealed(false); setRevealPasscode(''); setOpenedTabs(new Set()) }
+  // Tabs opened since the passcode: their frame stays mounted (just hidden)
+  // when switching tabs, so switching back doesn't reload it - each reload
+  // opened a new one-time link and flashed the placeholder.
+  const [openedTabs, setOpenedTabs] = useState<Set<'seed' | 'key'>>(new Set())
+  useEffect(() => {
+    if (revealed) setOpenedTabs(prev => prev.has(activeTab) ? prev : new Set(prev).add(activeTab))
+  }, [revealed, activeTab])
 
   return (
     <div className="flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto">
@@ -695,8 +702,8 @@ function BackupRecoveryPhrasePage() {
             )}
 
             {/* Seed Phrase section */}
-            {activeTab === 'seed' && (
-              <Card className="p-5 space-y-4">
+            {openedTabs.has('seed') && (
+              <Card className={`p-5 space-y-4 ${activeTab === 'seed' ? '' : 'hidden'}`}>
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-text-primary">Recovery Phrase</h3>
                   <button onClick={hide} className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
@@ -708,8 +715,8 @@ function BackupRecoveryPhrasePage() {
             )}
 
             {/* Private Key section - hidden for seed-imported wallets */}
-            {showPrivateKeyTab && activeTab === 'key' && (
-              <Card className="p-5 space-y-4">
+            {showPrivateKeyTab && openedTabs.has('key') && (
+              <Card className={`p-5 space-y-4 ${activeTab === 'key' ? '' : 'hidden'}`}>
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-text-primary">Private Key</h3>
                   <button onClick={hide} className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
