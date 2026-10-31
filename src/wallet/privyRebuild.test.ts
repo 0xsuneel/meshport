@@ -33,4 +33,18 @@ describe('Privy restarts on a weak connection', () => {
     expect(heard).toHaveBeenCalledTimes(1)
     window.removeEventListener(privy.PRIVY_NEEDED_EVENT, heard)
   })
+
+  it('a Privy that is up but signed out (sync failed after re-tries) is rebuilt, and a wallet needed then asks for it', async () => {
+    const base = { ready: true, authenticated: false, wallets: [], linked: [] } as any
+    privy.setPrivyBridge({ ...base, syncFailed: false })
+    expect(privy.privyNeedsRebuild()).toBe(false)
+    privy.setPrivyBridge({ ...base, syncFailed: true })
+    expect(privy.privyNeedsRebuild()).toBe(true)
+    const heard = vi.fn()
+    window.addEventListener(privy.PRIVY_NEEDED_EVENT, heard)
+    await privy.restorePrivyAccount('0xa', 10, 10)
+    expect(heard).toHaveBeenCalledTimes(1)
+    window.removeEventListener(privy.PRIVY_NEEDED_EVENT, heard)
+    privy.setPrivyBridge(null)
+  })
 })

@@ -130,8 +130,18 @@ export function checkQuote(q: BridgeQuote, amount: bigint): { fee: bigint; maxFe
 
 const toUnits = (usdc: number) => BigInt(Math.round(usdc * 1e6))
 
+// The quote Review showed is reused when the user confirms a moment later
+// (same chain and amount): the second fetch cost a round trip on every Bring
+// and could show one fee on Review and sign a different one. The relayer still
+// re-prices at submit time and refuses a fee that has fallen too far behind.
+const QUOTE_REUSE_MS = 20_000
+const recentQuotes = new Map<string, { at: number; value: { quote: BridgeQuote; fee: bigint; maxFee: bigint } }>()
+
 /** Fetches the relayer's quote for moving `total` units and checks it against the app's limits. */
 async function fetchCheckedQuote(chainId: string, total: bigint): Promise<{ quote: BridgeQuote; fee: bigint; maxFee: bigint }> {
+  const key = `${chainId}|${total}`
+  const hit = recentQuotes.get(key)
+  if (hit && Date.now() - hit.at < QUOTE_REUSE_MS) return hit.value
   const { authApiHeaders } = await import('@/lib/supabase')
   const qr = await fetch(`/api/bridge-relay?action=quote&chain=${encodeURIComponent(chainId)}&amount=${total}`, { headers: await authApiHeaders() })
   const quote = await qr.json().catch(() => null) as (BridgeQuote & { error?: string }) | null
@@ -139,8 +149,14 @@ async function fetchCheckedQuote(chainId: string, total: bigint): Promise<{ quot
   const { fee, maxFee } = checkQuote(quote, total)
   if (fee >= total) throw new Error('Amount too small to cover the network fee')
   if (maxFee >= total - fee) throw new Error('Amount too small to cover the bridge fee')
-  return { quote, fee, maxFee }
+  const value = { quote, fee, maxFee }
+  recentQuotes.set(key, { at: Date.now(), value })
+  if (recentQuotes.size > 20) recentQuotes.delete(recentQuotes.keys().next().value as string)
+  return value
 }
+
+/** Drops the remembered quotes (a failed relay: the next try prices afresh). */
+export function forgetBridgeQuotes(): void { recentQuotes.clear() }
 
 /**
  * The fees a gasless bridge of `amountUsdc` will charge, in USDC: `networkFee`
@@ -214,7 +230,7 @@ export async function bringFundsGasless(p: {
     }),
   })
   const out = await rr.json().catch(() => null) as { txHash?: Hex; error?: string; pending?: boolean } | null
-  if (!rr.ok || !out?.txHash) throw new Error(out?.error || 'Relayer did not accept the transfer')
+  if (!rr.ok || !out?.txHash) { recentQuotes.clear(); throw new Error(out?.error || 'Relayer did not accept the transfer') }
   // The relayer gave up waiting for the receipt (slow chain) - wait for it
   // here, so "Burned" is only shown once the burn has really confirmed.
   if (out.pending) {

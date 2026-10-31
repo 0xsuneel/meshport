@@ -38,3 +38,12 @@ off (their two `VITE_CIRCLE_*` settings are removed).
 
 `@privy-io/react-auth` is pinned at 3.48.1, which pins viem 2.56.5 for the
 whole app.
+
+## Staying signed in to Privy
+
+Privy's JWT sync signs Privy out on any failure and does not retry by itself;
+`src/wallet/privyJwt.ts` and `PrivyRoot.tsx` keep it signed in (the token getter
+never says "no token" while the MeshPort session exists, a failed sync is
+started again, a Privy that stays signed out is rebuilt). Details and the
+reasoning: `docs/PRIVY_DISCONNECT_COLD_START_REPORT.md`.
+

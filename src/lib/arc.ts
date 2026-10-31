@@ -39,6 +39,56 @@ function noteRpcAnswered() {
   try { window.dispatchEvent(new Event('meshport:arc-rpc-ok')) } catch { /* no window (tests, server) */ }
 }
 
+// ─── Direct read lane ────────────────────────────────────────────────────────
+// Every Arc call used to go browser → /api/arc-rpc (a Vercel function) → Arc,
+// which added roughly 350 ms to each one (about 410 ms through the proxy
+// against 60-70 ms straight to Circle's own Arc endpoint). A transfer makes
+// several reads in a row and every balance poll makes one, so that is seconds
+// per move. Circle's primary Arc Testnet endpoint is public, keyless and sends
+// CORS headers for this app, so plain READS try it first and fall back to the
+// proxy on anything unusual (CORS refused on a preview origin, a 429, a node
+// error): the proxy stays the one path for sends, relays and everything with
+// a credential. A direct failure parks the lane briefly instead of costing
+// every call a failed attempt.
+const DIRECT_READ_URL = ARC.rpcUrl
+const DIRECT_READ_METHODS: ReadonlySet<string> = new Set([
+  'eth_call', 'eth_estimateGas', 'eth_gasPrice', 'eth_maxPriorityFeePerGas',
+  'eth_getBalance', 'eth_blockNumber', 'eth_getTransactionReceipt',
+  // Not eth_getTransactionCount: a nonce is read right after a send, and the
+  // proxy is the path that knows about that send.
+])
+const DIRECT_PARK_MS = 60_000
+const DIRECT_BLOCKED_PARK_MS = 10 * 60_000 // network / CORS: this origin can't use it
+let directParkedUntil = 0
+
+/** True for a single JSON-RPC read the direct lane may serve. Pure. */
+export function isDirectReadable(body: unknown): body is { method: string } {
+  return !!body && typeof body === 'object' && !Array.isArray(body)
+    && typeof (body as { method?: unknown }).method === 'string'
+    && DIRECT_READ_METHODS.has((body as { method: string }).method)
+}
+
+async function directRead(body: unknown, timeoutMs: number): Promise<any | null> {
+  if (directParkedUntil > Date.now()) return null
+  try {
+    const res = await fetch(DIRECT_READ_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(Math.min(timeoutMs, 4000)),
+    })
+    if (!res.ok) { if (res.status === 429 || res.status >= 500) directParkedUntil = Date.now() + DIRECT_PARK_MS; return null }
+    const json = await res.json()
+    if (json?.error) return null // the proxy gives the authoritative answer (reverts, head lag)
+    noteRpcAnswered()
+    return json
+  } catch (e) {
+    // fetch rejects with a TypeError for network failures and CORS refusals; a timeout only parks briefly.
+    directParkedUntil = Date.now() + (e instanceof TypeError ? DIRECT_BLOCKED_PARK_MS : DIRECT_PARK_MS)
+    return null
+  }
+}
+
 // ─── Raw JSON-RPC POST with fallback across ARC_RPCS ───────────────────────
 // Drop-in replacement for `fetch(ARC_TESTNET.rpcUrl, {...}).then(r => r.json())`
 // for call sites that don't go through viem (eth_call / eth_getBalance reads).
@@ -51,6 +101,10 @@ function noteRpcAnswered() {
 // backing off in place doesn't help a genuinely down endpoint.
 export async function arcRpcJson(body: unknown, timeoutMs = 10000): Promise<any> {
   let lastErr: unknown = null
+  if (isDirectReadable(body)) {
+    const fast = await directRead(body, timeoutMs)
+    if (fast) return fast
+  }
   for (const url of ARC_RPCS) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
