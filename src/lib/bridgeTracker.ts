@@ -23,13 +23,15 @@
  * ever regain) any competing notion of "done".
  */
 import { useNotificationStore } from '@/store'
-import { formatAmount } from './utils'
+import { formatAmount, trimTrailingZeros } from './utils'
 import { isMerchantClaim } from './merchant'
 
 // ── Push notification helpers ─────────────────────────────────────────────────
-export function notifyClaimArrived(amount: number, sourceChain: string, timeTakenMs?: number, createdAt?: string, claimId?: string) {
+export function notifyClaimArrived(amount: number, sourceChain: string, timeTakenMs?: number, createdAt?: string, claimId?: string, token = 'USDC') {
   const chainLabel = sourceChain.replace(/_Sepolia|_Testnet|_Fuji/g, '').replace(/_/g, ' ')
   const timeStr = timeTakenMs ? ` in ${Math.round(timeTakenMs / 1000)}s` : ''
+  // USDC (default), or EURC / cirBTC brought in over Circle CCTPx.
+  const amountText = token === 'cirBTC' ? `${trimTrailingZeros(amount.toFixed(8))} cirBTC` : `${formatAmount(amount)} ${token}`
   useNotificationStore.getState().addNotification({
     // Stable, claim-derived id - same convention notifyPaymentReceived
     // already uses. addNotification dedupes by id (both against the live
@@ -47,7 +49,7 @@ export function notifyClaimArrived(amount: number, sourceChain: string, timeTake
       ? { title: 'Settled to Arc',
           body:  `$${formatAmount(amount)} USDC from ${chainLabel} is in your Arc balance` }
       : { title: `Claimed from ${chainLabel}`,
-          body:  `${formatAmount(amount)} USDC arrived on Arc from ${chainLabel}${timeStr}` }),
+          body:  `${amountText} arrived on Arc from ${chainLabel}${timeStr}` }),
     isRead:  false,
     timestamp: createdAt,
   })

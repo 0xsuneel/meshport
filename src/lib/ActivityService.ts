@@ -468,6 +468,10 @@ export const Activity = {
     amount: number; sourceChain?: string; explorerUrl?: string
     /** EURC / cirBTC brought in through CCTPx (lib/tokenBridge); USDC when absent. */
     tokenSymbol?: string
+    /** CCTPx bring: 'pending' when sent, then updateActivityStatus → 'completed' on arrival. */
+    status?: ActivityStatus
+    /** CCTPx bring: MeshPort's fee, in the token (taken before the send). */
+    meshportFee?: number
   }) => {
     // Normalize chain names - 'Optimism Sepolia' and 'Optimism_Sepolia' → same key
     const normalizeChain = (c?: string) => c?.replace(/ /g, '_') ?? c
@@ -481,7 +485,12 @@ export const Activity = {
       destinationChain: ARC_CHAIN_KEY,
       explorerUrl:      p.explorerUrl || explorerUrl(p.txHash, normalizeChain(p.sourceChain)),
       tokenSymbol:      p.tokenSymbol,
-      metadata:         p.tokenSymbol && p.tokenSymbol !== 'USDC' ? { route: 'cctpx' } : {},
+      status:           p.status,
+      // CCTPx: what was sent across (= what arrives) and MeshPort's fee, for
+      // the "You claimed / You received / Fees" rows (lib/moveFees).
+      metadata:         p.tokenSymbol && p.tokenSymbol !== 'USDC'
+        ? { route: 'cctpx', claimed_amount: p.amount, ...(p.meshportFee ? { meshport_fee: p.meshportFee } : {}) }
+        : {},
     })
   },
 

@@ -650,14 +650,18 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     : isTransfer
     ? explorerTxUrl(destinationChain ?? '', destinationTxHash)
     : null
+  // EURC / cirBTC over Circle CCTPx are sent and delivered, not burned and minted.
+  const isCctpx = (isClaim || isTransfer) && !!tokenSymbol && tokenSymbol !== 'USDC'
+  const sendWord = isCctpx ? 'Send' : 'Burn'
+  const arriveWord = isCctpx ? 'Delivery' : 'Mint'
   const sourceLinkLabel = isClaim
-    ? `View Burn on ${chainLabel(sourceChain) || 'Source'} ↗`
+    ? `View ${sendWord} on ${chainLabel(sourceChain) || 'Source'} ↗`
     : isTransfer
-    ? 'View Burn on Arc ↗'
+    ? `View ${sendWord} on Arc ↗`
     : 'View on Explorer ↗'
   const destinationLinkLabel = isClaim
-    ? 'View Mint on Arc ↗'
-    : `View Mint on ${chainLabel(destinationChain) || 'Destination'} ↗`
+    ? `View ${arriveWord} on Arc ↗`
+    : `View ${arriveWord} on ${chainLabel(destinationChain) || 'Destination'} ↗`
 
   // Row labels for the plain copyable hash text (distinct from the button
   // labels above) - same source/destination split as the Hub page, so a
@@ -666,13 +670,18 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   // to collapse everything into (which only ever showed the source hash -
   // the destination hash existed in the data but was never surfaced here).
   const sourceHashLabel = isClaim
-    ? `Source Tx (Burn on ${chainLabel(sourceChain) || 'Source'})`
+    ? `Source Tx (${sendWord} on ${chainLabel(sourceChain) || 'Source'})`
     : isTransfer
-    ? 'Source Tx (Arc Burn)'
+    ? `Source Tx (Arc ${sendWord})`
     : 'Tx Hash'
   const destinationHashLabel = isClaim
-    ? 'Destination Tx (Arc Mint)'
-    : `Destination Tx (${chainLabel(destinationChain) || 'Destination'} Mint)`
+    ? `Destination Tx (Arc ${arriveWord})`
+    : `Destination Tx (${chainLabel(destinationChain) || 'Destination'} ${arriveWord})`
+  // An amount of this record's coin with its symbol: "$12.5 USDC", "€12.5 EURC", "0.0005 cirBTC".
+  const coinAmount = (n: number) => {
+    const sym = tokenSymbol || 'USDC'
+    return sym === 'USDC' ? `$${formatAmt(n)} USDC` : sym === 'EURC' ? `€${formatAmt(n)} EURC` : `${formatAmt(n, sym)} ${sym}`
+  }
 
   const counterparty = (record as any).counterpartyAddress || ''
   const cpUsername = metadata?.toUsername || metadata?.fromUsername || ''
@@ -705,16 +714,17 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       { label: 'From',   value: `${metadata.amountIn || formatAmt(amount)} ${metadata.tokenIn || tokenSymbol || 'USDC'}` },
       { label: 'To',     value: isFailed ? `Not swapped${metadata.tokenOut ? ` (${metadata.tokenOut})` : ''}` : `${metadata.amountOut ? formatAmt(metadata.amountOut) : '?'} ${metadata.tokenOut || '?'}` },
     ] : [
-      { label: 'Amount', value: `$${formatAmt(amount)} ${tokenSymbol || 'USDC'}` },
+      { label: 'Amount', value: coinAmount(amount) },
     ]),
     ...(cpLabel ? [{ label: (type === 'receive' || isBulkReceived) ? 'From' : 'To', value: cpLabel, copy: counterparty || undefined }] : []),
     ...(move ? [
       { label: moveLbl.sent, value: `${formatMoveAmount(move.sent)} ${tokenSymbol || 'USDC'}` },
       { label: moveLbl.received, value: `${formatMoveAmount(move.received)} ${tokenSymbol || 'USDC'}` },
-      { label: 'Fees paid', value: formatFee(move.fees) },
+      // EURC / cirBTC: MeshPort's fee is in the token, and it paid Circle's fee.
+      { label: 'Fees paid', value: isCctpx ? coinAmount(move.fees) : formatFee(move.fees) },
       ...(move.meshportFee > 0 ? [
-        { label: 'MeshPort fee', value: formatFee(move.meshportFee) },
-        { label: networkFeeLabel(record), value: formatFee(move.networkFee) },
+        { label: 'MeshPort fee', value: isCctpx ? coinAmount(move.meshportFee) : formatFee(move.meshportFee) },
+        { label: networkFeeLabel(record), value: isCctpx ? 'Paid by MeshPort' : formatFee(move.networkFee) },
       ] : []),
     ] : []),
     { label: 'Status', value: isFailed ? 'Failed' : isSuccess ? 'Completed' : 'Processing…' },

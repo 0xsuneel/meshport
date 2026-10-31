@@ -15,7 +15,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, Check, X } from 'lucide-react'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { TrackDetails, type TrackDetailRow } from './TrackDetails'
-import { formatAmount } from '@/lib/utils'
+import { formatAmount, trimTrailingZeros } from '@/lib/utils'
 import { chainLogoByName } from '@/lib/chainLogos'
 import type { MoveKind, MoveRoute, MoveStepText } from '@/lib/moveSteps'
 
@@ -32,11 +32,13 @@ function RouteLogo({ name }: { name: string }) {
 
 export function MoveProgress({
   kind, route, fromLabel, toLabel, amount, steps, current, failed, safe, activeElapsed, txs, notes,
-  holdText, onViewHub, onBack, backIcon = 'back', loading = false, details, trackButton = true, timeSteps = false,
+  holdText, onViewHub, onBack, backIcon = 'back', loading = false, details, trackButton = true, timeSteps = false, token = 'USDC',
 }: {
   kind: MoveKind; route: MoveRoute
   fromLabel: string; toLabel: string
   amount: number
+  /** The coin moved: USDC (default), or EURC / cirBTC over Circle CCTPx. */
+  token?: string
   steps: MoveStepText[]
   /** Index of the step in progress; steps.length when all are done. */
   current: number
@@ -111,13 +113,13 @@ export function MoveProgress({
         )}
         <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</span>
         <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 999, background: 'color-mix(in srgb, var(--brand) 18%, transparent)', color: 'var(--accent-text)', whiteSpace: 'nowrap' }}>
-          {route === 'ub' ? 'Unified Balance' : 'CCTP'}
+          {route === 'ub' ? 'Unified Balance' : token !== 'USDC' ? 'CCTPx' : 'CCTP'}
         </span>
       </div>
 
       {!focus && (
         <div style={{ ...card, textAlign: 'center' }}>
-          <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(amount)} USDC</div>
+          <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{token === 'cirBTC' ? trimTrailingZeros(amount.toFixed(8)) : formatAmount(amount)} {token}</div>
           {/* Route: from-chain logo at the left edge, "From – To" in the middle,
               to-chain logo at the right edge. Plain logos, no backdrop. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
