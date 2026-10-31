@@ -25,6 +25,7 @@ import { ARC_NETWORK, arcRpcJson } from './arc'
 import type { WalletAccount } from '@/wallet'
 import { USDC_CONTRACT, EURC_CONTRACT, CIRBTC_CONTRACT } from './arcService'
 import { ARC_EXPLORER } from './chainExplorers'
+import { relayRawSend } from './arcRelaySend'
 import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 // Derive the Arc chain key from env so a mainnet build targets Arc mainnet.
@@ -204,6 +205,15 @@ function buildArcForwardProvider(JsonRpcProvider: any, Transaction: any) {
     async _send(payload: any) {
       const isBatch = Array.isArray(payload)
       noteSwapSends(isBatch ? payload : [payload], Transaction)
+      // A send goes out the way Pay's does (lib/arcRelaySend): one request,
+      // the server broadcasts to every node and waits for the receipt.
+      if (!isBatch && payload?.method === 'eth_sendRawTransaction') {
+        const relayed = await relayRawSend(payload)
+        if (relayed) {
+          reportSwapProgress([payload], [relayed], Transaction)
+          return [relayed]
+        }
+      }
       try {
         // Bounded like every other Arc call (arcRpcJson): a request stuck on a
         // dead connection used to hold the swap forever. A send that timed

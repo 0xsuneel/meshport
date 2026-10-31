@@ -43,6 +43,7 @@ import { TokenMenu } from '@/components/ui/TokenMenu'
 import { KIT_CCTPX_CHAINS, BRIDGE_TOKENS, bridgeTokenDecimals, bridgeTokenInfo, useTokenRouteChains, type BridgeToken } from '@/lib/tokenBridge'
 import { revealFlow } from '@/lib/revealFlow'
 import { startMoveTimer, type MoveTimer } from '@/lib/moveTimings'
+import { sendThroughRelay } from '@/lib/arcRelaySend'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { moveSteps, indexFromStepStates } from '@/lib/moveSteps'
@@ -159,6 +160,16 @@ function toAbsoluteRpcUrl(url: string): string {
 // plain JsonRpcProvider instead - its failures are per-call and
 // recoverable, not permanent. If ARC_RPCS ever grows to multiple entries,
 // this automatically goes back to using FallbackProvider across them.
+// One Circle App Kit for this page's estimates and transfers. A new kit per
+// call re-downloaded Circle's CCTPx token list (testnet and mainnet) each
+// time - seconds before an EURC / cirBTC approve; one kit keeps it in the
+// kit's own cache. Listeners are added per transfer and removed after it.
+let _sharedKit: any = null
+function sharedKit(AppKit: any) {
+  _sharedKit ??= new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
+  return _sharedKit
+}
+
 const _ARC_FALLBACK_KEY = '__arc_fallback__'
 function getArcFallbackProvider(JsonRpcProvider: any, FallbackProvider: any) {
   if (!_providerCache.has(_ARC_FALLBACK_KEY)) {
@@ -166,6 +177,9 @@ function getArcFallbackProvider(JsonRpcProvider: any, FallbackProvider: any) {
     // (approve, burn, UB deposit) cost ~4s on Arc's sub-second chain.
     const providers = ARC_RPCS.map(url => new JsonRpcProvider(toAbsoluteRpcUrl(url), ARC_NETWORK, { staticNetwork: true, pollingInterval: 200 }))
     // quorum: 1 - treat this purely as failover, not multi-node consensus
+    // Sends go out the way Pay's do (lib/arcRelaySend): one request, the
+    // server broadcasts to every node and waits for the receipt.
+    providers.forEach(sendThroughRelay)
     _providerCache.set(_ARC_FALLBACK_KEY, providers.length === 1
       ? providers[0]
       : new FallbackProvider(providers, undefined, { quorum: 1 }))
@@ -1312,7 +1326,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       const { AppKit, JsonRpcProvider, FallbackProvider } = await loadSdkModules()
       const { createWalletAdapter } = await import('@/wallet')
 
-      const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
+      const kit = sharedKit(AppKit)
       const adapter = await createWalletAdapter({
         account: activeKey,
         getProvider: ({ chain: sdkChain }: any) => {
@@ -1654,6 +1668,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     if (isConfirmingRef.current) return
     isConfirmingRef.current = true
     moveTimerRef.current = startMoveTimer('transfer', { route: isTokenRoute ? 'cctpx' : chain.ub ? 'ub' : 'cctp', chain: chain.sdk || chain.name, token: tokenSym })
+    // Listeners this transfer adds to the shared kit (removed in the finally below).
+    const kitListeners: Array<[string, (payload: any) => void]> = []
 
     // Show loading indicator immediately - user gets instant visual feedback
     setLoading(true)
@@ -1761,7 +1777,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       const { AppKit, KitError, JsonRpcProvider, FallbackProvider } = await loadSdkModules()
       const { createWalletAdapter } = await import('@/wallet')
 
-      const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
+      const kit = sharedKit(AppKit)
+      // This transfer's listeners on the shared kit, removed when it settles.
+      const listen = (action: string, handler: (payload: any) => void) => {
+        kit.on(action as any, handler)
+        kitListeners.push([action, handler])
+      }
       const adapter = await createWalletAdapter({
         account: activeSigner,
         getProvider: ({ chain: sdkChain }: any) => {
@@ -1828,7 +1849,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // CCTPx's steps → the screen's: transfer is the send from Arc, forward the delivery.
         const STEP_OF: Record<string, string> = { approve: 'approve', transfer: 'burn', fetchAttestation: 'attestation', forward: 'mint' }
         for (const [ev, key] of Object.entries(STEP_OF)) {
-          kit.on(`bridge.${ev}` as any, (payload: any) => {
+          listen(`bridge.${ev}`, (payload: any) => {
             const hash = realTxHash(payload?.values?.txHash || payload?.txHash || payload?.data?.txHash || '')
             if (key === 'burn' && hash) burnTxHashRef.current = hash
             markStep(key, payload?.values?.state || 'success', hash || undefined)
@@ -2428,11 +2449,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         }))
       }
 
-      kit.on('bridge.approve',          handleEvent('approve'))
-      kit.on('bridge.burn',             handleEvent('burn'))
-      kit.on('bridge.fetchAttestation', handleEvent('attestation'))
-      kit.on('bridge.attestation',      handleEvent('attestation'))
-      kit.on('bridge.mint',             handleEvent('mint'))
+      listen('bridge.approve',          handleEvent('approve'))
+      listen('bridge.burn',             handleEvent('burn'))
+      listen('bridge.fetchAttestation', handleEvent('attestation'))
+      listen('bridge.attestation',      handleEvent('attestation'))
+      listen('bridge.mint',             handleEvent('mint'))
       // Wildcard: was previously a no-op, silently discarding every payload.
       // That meant there was no way to tell, even from the console, which
       // steps had a REAL SDK event fire vs which were only ever advanced by
@@ -2448,7 +2469,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // something sensitive in a payload this code blindly forwards to the
       // console - the extraction stays correct by construction, not by
       // continuing to trust an `any`-typed third-party object every release.
-      kit.on('*', (payload: any) => {
+      listen('*', (payload: any) => {
         const eventName = payload?.type || payload?.event || payload?.name || '(unknown)'
         const hash = payload?.values?.txHash || payload?.txHash || payload?.data?.txHash || undefined
         console.log('[Bridge event]', eventName, hash ? { txHash: hash } : '(no hash)')
@@ -2976,6 +2997,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // failed, or unclear) - this is what actually closes the double-submit
       // window described above, rather than the early setLoading(false).
       isConfirmingRef.current = false
+      for (const [action, handler] of kitListeners.splice(0)) { try { _sharedKit?.off(action, handler) } catch { /* already gone */ } }
     }
   }
 

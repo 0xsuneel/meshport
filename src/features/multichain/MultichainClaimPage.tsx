@@ -64,6 +64,8 @@ import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { claimFeeSummary, type SignedClaimFee } from '@/lib/claimFees'
 import { startMoveTimer, type MoveTimer } from '@/lib/moveTimings'
+import { sendThroughRelay } from '@/lib/arcRelaySend'
+import { ARC_NETWORK } from '@/blockchain/chains'
 import { bridgeTokenDecimals, bridgeTokenInfo, type CctpxToken } from '@/lib/tokenBridge'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { moveSteps, indexFromBringStage, indexFromClaimStatus, indexFromCctpStage } from '@/lib/moveSteps'
@@ -236,6 +238,8 @@ const UB_HIGH_FEE_USD = 0.5
 const UB_FEE_TOO_HIGH = 'Fee is more than this amount'
 
 const _arcProviderCache = new Map<string, any>()
+/** '/api/arc-rpc' → absolute (ethers' fetch needs a full URL for a static network). */
+const toAbsoluteUrl = (url: string) => /^[a-z]+:\/\//i.test(url) || typeof window === 'undefined' ? url : window.location.origin + (url.startsWith('/') ? url : '/' + url)
 
 /** The claim adapter - for merchant auto-collect. */
 export async function buildClaimAdapter(signer: WalletAccount) {
@@ -256,7 +260,10 @@ async function buildAdapter(signer: WalletAccount) {
       const key = rpcList.join('|')
       if (!_arcProviderCache.has(key)) {
         const { JsonRpcProvider, FallbackProvider } = await import('ethers')
-        const ps = rpcList.map((url: string) => new JsonRpcProvider(url))
+        // pollingInterval 200: ethers' 4000 ms default cost up to 4 s per
+        // receipt on Arc's sub-second chain. Sends go out the way Pay's do
+        // (lib/arcRelaySend): the server broadcasts and waits for the receipt.
+        const ps = rpcList.map((url: string) => sendThroughRelay(new JsonRpcProvider(toAbsoluteUrl(url), ARC_NETWORK, { staticNetwork: true, pollingInterval: 200 })))
         _arcProviderCache.set(key, ps.length > 1
           ? new FallbackProvider(ps.map((p: any, i: number) => ({ provider: p, priority: i, weight: 1, stallTimeout: 2000 })), undefined, { quorum: 1 })
           : ps[0])
