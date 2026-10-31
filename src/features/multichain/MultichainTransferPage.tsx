@@ -172,6 +172,10 @@ function sharedKit(AppKit: any) {
 }
 
 const _ARC_FALLBACK_KEY = '__arc_fallback__'
+
+// The Gateway quote before a Unified Balance deposit: past this, nothing has moved - fail cleanly.
+const UB_PRE_DEPOSIT_QUOTE_MS = 25_000
+
 function getArcFallbackProvider(JsonRpcProvider: any, FallbackProvider: any) {
   if (!_providerCache.has(_ARC_FALLBACK_KEY)) {
     // pollingInterval 200: ethers' 4000ms default made each SDK receipt wait
@@ -1701,6 +1705,24 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     moveTimerRef.current = startMoveTimer('transfer', { route: isTokenRoute ? 'cctpx' : chain.ub ? 'ub' : 'cctp', chain: chain.sdk || chain.name, token: tokenSym })
     // Listeners this transfer adds to the shared kit (removed in the finally below).
     const kitListeners: Array<[string, (payload: any) => void]> = []
+    // Which step this transfer is on, reported to client_errors when one takes
+    // over 20 s / 60 s (field 31 Oct: a Unified Balance send to Base sat 95 s
+    // before its deposit with nothing logged to say where).
+    let stage = 'start'
+    let stageAt = Date.now()
+    const setStage = (name: string) => { stage = name; stageAt = Date.now() }
+    const stageReported = new Set<string>()
+    const stageWatch = setInterval(() => {
+      const secs = (Date.now() - stageAt) / 1000
+      for (const limit of [20, 60]) {
+        const key = `${stage}@${limit}`
+        if (secs < limit || stageReported.has(key)) continue
+        stageReported.add(key)
+        void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
+          `[transfer stage] ${chain.ub ? 'ub' : 'cctp'} ${chain.sdk}: still on "${stage}" after ${limit} s`,
+        ))).catch(() => {})
+      }
+    }, 5_000)
 
     // Show loading indicator immediately - user gets instant visual feedback
     setLoading(true)
@@ -1975,13 +1997,20 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // A live quote for exactly this send from the last 45 s already
           // proves that; the spend is re-quoted after the deposit anyway.
           const recent = lastUbQuoteRef.current
+          setStage('pre-deposit quote')
+          // Circle's Gateway quote, capped: nothing has moved yet, so a quote
+          // that hangs fails cleanly instead of holding the screen.
           const preDeposit = recent && recent.key === feeRequestKey && Date.now() - recent.at < 45_000
             ? recent.est
-            : await fetchFeeEstimate(true)
+            : await Promise.race([
+                fetchFeeEstimate(true),
+                new Promise<null>(resolve => setTimeout(() => resolve(null), UB_PRE_DEPOSIT_QUOTE_MS)),
+              ])
           if (!preDeposit || preDeposit.approx || preDeposit.receiverGets <= 0) {
             throw new Error(`Couldn't get a live fee for ${chain.name} right now - nothing was moved. Try again in a moment.`)
           }
 
+          setStage('deposit')
           const depositResult: any = await kit.unifiedBalance.deposit({
             from: { adapter, chain: ARC_CHAIN_KEY as any },
             amount: targetDepositAmount.toFixed(6),
@@ -2014,6 +2043,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // already landed, so a transient estimate hiccup here must NOT
         // immediately dump the user on the failed screen - a plain retry of
         // just this call usually clears it.
+        setStage('spend quote')
         let freshEstimate = await fetchFeeEstimate(true)
         // A stand-in estimate (approx) is never spent against - wait for a live one.
         const notLive = (e: FeeEstimate | null) => !e || e.receiverGets <= 0 || !!e.approx
@@ -2247,6 +2277,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         } catch { /* progress events are best effort */ }
 
         let spendResult: any
+        setStage('spend')
         const spendAttemptStartedAt = Date.now()
         try {
           spendResult = await kit.unifiedBalance.spend(spendParams)
@@ -3066,6 +3097,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // failed, or unclear) - this is what actually closes the double-submit
       // window described above, rather than the early setLoading(false).
       isConfirmingRef.current = false
+      clearInterval(stageWatch)
       for (const [action, handler] of kitListeners.splice(0)) { try { _sharedKit?.off(action, handler) } catch { /* already gone */ } }
     }
   }

@@ -21,7 +21,7 @@ import { supabase } from '@/lib/supabase'
 import { arcTestnet } from '@/lib/chain'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 import { useAuthStore } from '@/store'
-import { privyAccount, privyAppId, recheckPrivySigners, setPrivyBridge, privyNeedsRebuild, PRIVY_NEEDED_EVENT } from './privy'
+import { privyAccount, privyAppId, recheckPrivySigners, setPrivyBridge, privyNeedsRebuild, PRIVY_NEEDED_EVENT, PRIVY_DEAD_EVENT } from './privy'
 import { useSupabaseSession } from './PrivyGate'
 import { whenPrivyQuiet, rebuildGapMs } from './privyActivity'
 import { createJwtProvider, browserWait, browserWake, needsResync, resyncDelayMs, RESYNC_BEFORE_REBUILD } from './privyJwt'
@@ -309,13 +309,17 @@ let lastRebuildAt = 0
 export default function PrivyRoot() {
   const [generation, setGeneration] = useState(0)
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const onWalletStuckRef = useRef<(why: string) => void>(() => {})
-  const onWalletStuck = (why: string) => {
+  const onWalletStuckRef = useRef<(why: string, urgent?: boolean) => void>(() => {})
+  // `urgent`: a signature is waiting on a dead iframe - at most 10 s after the previous rebuild.
+  const onWalletStuck = (why: string, urgent = false) => {
     if (!privyNeedsRebuild()) return
-    const wait = lastRebuildAt + rebuildGapMs(privyRebuilds) - performance.now()
+    const gap = urgent ? Math.min(rebuildGapMs(privyRebuilds), 10_000) : rebuildGapMs(privyRebuilds)
+    const wait = lastRebuildAt + gap - performance.now()
     if (wait > 0) {
       // Too soon after the last one: try again once the gap has passed (if still needed).
-      if (!retryTimer.current) retryTimer.current = setTimeout(() => { retryTimer.current = null; onWalletStuckRef.current(why) }, wait)
+      // An urgent one replaces a slower retry already scheduled.
+      if (retryTimer.current && urgent) { clearTimeout(retryTimer.current); retryTimer.current = null }
+      if (!retryTimer.current) retryTimer.current = setTimeout(() => { retryTimer.current = null; onWalletStuckRef.current(why, urgent) }, wait)
       return
     }
     const sinceHidden = lastHiddenAt ? `${((performance.now() - lastHiddenAt) / 1000).toFixed(0)} s after the app was last in the background` : 'no background since page load'
@@ -339,10 +343,15 @@ export default function PrivyRoot() {
     const online = again('connection back, Privy not up')
     const needed = again('wallet needed, Privy not up')
     const visible = () => { if (document.visibilityState === 'visible') again('back on screen, Privy not up')() }
+    // Privy's iframe aborted a signature (privy.ts replaceDeadPrivy): replace it
+    // now - a signature is waiting on it - within the usual pacing.
+    const dead = () => onWalletStuckRef.current('signing aborted, wallet iframe dead', true)
+    window.addEventListener(PRIVY_DEAD_EVENT, dead)
     window.addEventListener('online', online)
     window.addEventListener(PRIVY_NEEDED_EVENT, needed)
     document.addEventListener('visibilitychange', visible)
     return () => {
+      window.removeEventListener(PRIVY_DEAD_EVENT, dead)
       window.removeEventListener('online', online)
       window.removeEventListener(PRIVY_NEEDED_EVENT, needed)
       document.removeEventListener('visibilitychange', visible)

@@ -191,10 +191,16 @@ describe('chat key for a Privy wallet', () => {
 })
 
 describe("Privy giving up on its own request", () => {
-  it('shows as "nothing was sent", not "signal is aborted without reason"', async () => {
-    setPrivyBridge(fakeBridge({ signTransaction: async () => { throw new DOMException('signal is aborted without reason', 'AbortError') } }))
-    await expect(privyAccount(ADDR).signTransaction({ to: ADDR, value: 1n, gas: 21000n, nonce: 1, chainId: 5042002, maxFeePerGas: 1n, maxPriorityFeePerGas: 1n, type: 'eip1559' } as any))
-      .rejects.toThrow(privy.PRIVY_NO_ANSWER)
+  it('shows as "nothing was sent", not "signal is aborted without reason" (when Privy could not be replaced)', async () => {
+    vi.useFakeTimers()
+    try {
+      setPrivyBridge(fakeBridge({ signTransaction: async () => { throw new DOMException('signal is aborted without reason', 'AbortError') } }))
+      const out = expect(privyAccount(ADDR).signTransaction({ to: ADDR, value: 1n, gas: 21000n, nonce: 1, chainId: 5042002, maxFeePerGas: 1n, maxPriorityFeePerGas: 1n, type: 'eip1559' } as any))
+        .rejects.toThrow(privy.PRIVY_NO_ANSWER)
+      // Nobody replaced the dead Privy within its wait.
+      await vi.advanceTimersByTimeAsync(31_000)
+      await out
+    } finally { vi.useRealTimers() }
   })
 })
 

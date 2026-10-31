@@ -50,8 +50,20 @@ let bridge: PrivyBridge | null = null
 const waiters = new Set<() => void>()
 const listeners = new Set<() => void>()
 
+// Privy's wallet iframe aborted a signature on its own (it looked signed in,
+// but stopped answering): the next Privy must be a fresh one. Cleared when
+// PrivyRoot replaces Privy (the bridge goes to null on its unmount).
+let iframeDead = false
+const replacedWaiters = new Set<() => void>()
+/** Window event: Privy's iframe is dead - PrivyRoot rebuilds it (paced). */
+export const PRIVY_DEAD_EVENT = 'meshport:privy-dead'
+
 export function setPrivyBridge(b: PrivyBridge | null): void {
   bridge = b
+  if (!b) {
+    iframeDead = false
+    for (const w of [...replacedWaiters]) w()
+  }
   // A new Privy (PrivyRoot rebuilt it - a new iframe) has to authenticate
   // its wallets again: their warm-up starts over.
   if (!b) { warmed.clear(); warming.clear(); clearWarmRetries() }
@@ -61,7 +73,10 @@ export function setPrivyBridge(b: PrivyBridge | null): void {
   for (const l of [...listeners]) l()
   // Wallet readiness (lib/walletReadiness): "Privy lists it" vs "it can sign".
   void import('@/lib/walletReadiness').then(m => m.recompute()).catch(() => {})
-  if (b?.ready && b.authenticated) for (const w of b.wallets) void warmPrivySigner(w)
+  if (b?.ready && b.authenticated) {
+    for (const w of b.wallets) void warmPrivySigner(w)
+    if (b.wallets.length) startHeartbeat()
+  }
 }
 
 // ── Warm-up: authenticate the wallet with Privy before the first payment ───
@@ -103,6 +118,7 @@ function scheduleWarmRetry(a: string, address: string): void {
 }
 /** A real signature succeeded: the wallet is authenticated with Privy - as warm as the warm-up makes it. */
 function noteSigned(address: string): void {
+  lastSignedAt = Date.now()
   const a = address.toLowerCase()
   if (warmed.has(a) || !bridge?.wallets.some(w => w.toLowerCase() === a)) return
   warmed.add(a)
@@ -110,6 +126,53 @@ function noteSigned(address: string): void {
   if (t) { clearTimeout(t); warmRetryTimers.delete(a) }
   warmAttempts.delete(a)
   void import('@/lib/walletReadiness').then(m => m.recompute()).catch(() => {})
+}
+
+// ── Heartbeat: the wallet stays warm for the whole session ──────────────────
+// Privy's wallet iframe can stop answering while the app is in use and still
+// look signed in (field 31 Oct: ready, authenticated, wallet listed - and the
+// Transfer's signature aborted after 20 s). Nothing noticed until the person
+// pressed Pay. So while the app is on screen the wallet is proven alive in
+// the background: the same silent warm-up signature (a fixed statement, never
+// a transaction) when no signature has succeeded for HEARTBEAT_MS, and when a
+// payment screen opens (checkPrivyAlive). One that fails replaces Privy right
+// away - in the background, before the person needs it - and the new one is
+// warmed as usual. A payment then never meets a dead or cold wallet.
+export const PRIVY_HEARTBEAT_MS = 120_000
+let lastSignedAt = 0
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+let heartbeatRunning: Promise<boolean> | null = null
+
+/**
+ * Proves the wallet still signs (when no signature succeeded in `freshMs`).
+ * Not awaited by screens. A dead wallet is replaced at once (background).
+ */
+export function checkPrivyAlive(freshMs = PRIVY_HEARTBEAT_MS): Promise<boolean> {
+  if (heartbeatRunning) return heartbeatRunning
+  const b = bridge
+  if (!b?.ready || !b.authenticated || !b.wallets.length) return Promise.resolve(false)
+  if (Date.now() - lastSignedAt < freshMs) return Promise.resolve(true)
+  const address = b.wallets[0]
+  heartbeatRunning = timed('heartbeat', async () => b, x => x.signMessage(PRIVY_WARM_MESSAGE, address), address, false)
+    .then(() => { noteSigned(address); return true })
+    .catch(() => {
+      // Still the same Privy and it didn't answer: replace it now, while nobody is waiting on it.
+      // Offline is not a dead wallet: a new Privy couldn't load either.
+      const online = typeof navigator === 'undefined' || navigator.onLine !== false
+      if (online && bridge && bridge.wallets.some(w => w.toLowerCase() === address.toLowerCase())) void replaceDeadPrivy(PRIVY_REPLACE_WAIT_MS)
+      return false
+    })
+    .finally(() => { heartbeatRunning = null })
+  return heartbeatRunning
+}
+
+function startHeartbeat(): void {
+  if (heartbeatTimer || typeof document === 'undefined') return
+  heartbeatTimer = setInterval(() => {
+    // Only while the app is on screen (a phone in the background gets the
+    // existing re-check on return, PrivyRoot).
+    if (document.visibilityState === 'visible') void checkPrivyAlive()
+  }, 30_000)
 }
 
 export function warmPrivySigner(address: string): Promise<boolean> {
@@ -122,7 +185,7 @@ export function warmPrivySigner(address: string): Promise<boolean> {
   const p = timed('warm-up', async () => b, x => x.signMessage(PRIVY_WARM_MESSAGE, address), address)
     .then(() => {
       // Only if it's still the same Privy (not rebuilt meanwhile).
-      if (bridge === b || (bridge && bridge.wallets.some(w => w.toLowerCase() === a))) { warmed.add(a); warmAttempts.delete(a) }
+      if (bridge === b || (bridge && bridge.wallets.some(w => w.toLowerCase() === a))) { warmed.add(a); warmAttempts.delete(a); lastSignedAt = Date.now() }
       return true
     })
     .catch(() => {
@@ -220,6 +283,7 @@ export const PRIVY_NEEDED_EVENT = 'meshport:privy-needed'
  * signed in with a wallet on the account that its iframe never connected.
  */
 export function privyNeedsRebuild(): boolean {
+  if (iframeDead) return true
   if (!bridge || !bridge.ready) return true
   if (bridge.syncFailed) return true
   return bridge.authenticated && bridge.linked.length > 0 && bridge.wallets.length === 0
@@ -286,7 +350,26 @@ export const PRIVY_STILL_WAITING_MS = 20_000
 export const PRIVY_GIVE_UP_MS = 90_000
 export const PRIVY_NO_ANSWER = "Your wallet didn't respond - nothing was sent. Try again."
 
-async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b: PrivyBridge) => Promise<T>, address?: string): Promise<T> {
+/** Privy aborted its own request ("signal is aborted without reason"): its iframe stopped answering. */
+const isPrivyAbort = (e: unknown) => e instanceof Error && (e.name === 'AbortError' || /signal is aborted|aborted/i.test(e.message))
+
+/**
+ * Asks PrivyRoot for a fresh Privy (new iframe) and waits until the old one
+ * is gone. True when it was replaced within `ms`.
+ */
+export function replaceDeadPrivy(ms: number): Promise<boolean> {
+  iframeDead = true
+  return new Promise(resolve => {
+    const done = (ok: boolean) => { clearTimeout(timer); replacedWaiters.delete(onReplaced); resolve(ok) }
+    const onReplaced = () => done(true)
+    const timer = setTimeout(() => done(false), ms)
+    replacedWaiters.add(onReplaced)
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(PRIVY_DEAD_EVENT))
+  })
+}
+const PRIVY_REPLACE_WAIT_MS = 30_000
+
+async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b: PrivyBridge) => Promise<T>, address?: string, retryOnDead = true): Promise<T> {
   const started = performance.now()
   let opened = 0
   const s = (ms: number) => (ms / 1000).toFixed(1)
@@ -314,7 +397,17 @@ async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b
     report(`failed after ${s(performance.now() - started)} s (${parts()}): ${e instanceof Error ? e.message : String(e)}`)
     // Privy gives up on its own request with an AbortError ("signal is
     // aborted without reason") - nothing was signed, so nothing was sent.
-    if (e instanceof Error && (e.name === 'AbortError' || /signal is aborted|aborted/i.test(e.message))) throw new Error(PRIVY_NO_ANSWER)
+    // Field 31 Oct: Privy looked signed in with the wallet listed, yet its
+    // iframe aborted the signature at 20 s - a dead iframe. Replace Privy and
+    // sign once more: safe, the aborted request returned no signature and
+    // nothing is broadcast without one.
+    if (isPrivyAbort(e)) {
+      if (retryOnDead && await replaceDeadPrivy(PRIVY_REPLACE_WAIT_MS)) {
+        report('iframe dead - Privy replaced, signing again')
+        return timed(what, open, sign, address, false)
+      }
+      throw new Error(PRIVY_NO_ANSWER)
+    }
     throw e
   } finally {
     clearTimeout(watchdog)
