@@ -44,6 +44,7 @@ export function StaffModePage() {
     void get()
     const t = setInterval(get, 15_000)
     return () => clearInterval(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [active?.id])
 
   const payments: Payment[] = useMemo(() => raw.map(p => ({ id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain),

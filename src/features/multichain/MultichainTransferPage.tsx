@@ -517,7 +517,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // Embedded in the Multichain Hub's bottom sheet: anything that would go
   // "back to the Hub" closes the sheet instead of changing page.
   const routerNavigate = useNavigate()
-  const navigate = useCallback(((to: any, opts?: any) => {
+  const navigate = useCallback((to: any, opts?: any) => {
     if (embedded && typeof to === 'string' && to.startsWith('/multichain') && !to.startsWith('/multichain-')) {
       onClose?.()
       // A tab switch inside the Hub (e.g. → Recover) is passed on as router state.
@@ -525,7 +525,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       return
     }
     return routerNavigate(to, opts)
-  }) as ReturnType<typeof useNavigate>, [embedded, onClose, routerNavigate])
+  }, [embedded, onClose, routerNavigate]) as ReturnType<typeof useNavigate>
   const [searchParams] = useSearchParams()
 
   // Desktop: the QR scanner open over the Transfer panel (PanelScanner).
@@ -535,6 +535,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   useEffect(() => {
     const scanned = searchParams.get('scannedAddress')
     if (scanned) { handleAddressChange(scanned); if (sheetMode) setFormSheet(1) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [])
   const { balance } = useWalletStore()
   const storedPasscode = useAuthStore(s => s.passcode)
@@ -727,6 +728,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // effect runs again → setState again → infinite loop (React error #185,
   // "Maximum update depth exceeded"). Gating on [successPhase, isDesktopMq]
   // makes it fire once per entry into the flash phase instead.
+  const onSuccessStep = step === 'success'
   useLayoutEffect(() => {
     if (successPhase !== 'flash' || !isDesktopMq) return
     // In the Hub on desktop: cover just the Hub's own screen (its
@@ -735,7 +737,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     if (target) setFlashColumnRect(target.getBoundingClientRect())
   // Re-measured on reaching success: before that the flow isn't the
   // right-hand panel yet, so it would measure the Hub column instead.
-  }, [successPhase, isDesktopMq, step === 'success'])
+  }, [successPhase, isDesktopMq, onSuccessStep])
 
   // Measured in a layout effect (before paint) so the traveling checkmark is
   // already on screen in the receipt's very first frame - no frame where
@@ -1014,6 +1016,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     }
     tankRafRef.current = requestAnimationFrame(tick)
     return () => { if (tankRafRef.current) cancelAnimationFrame(tankRafRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [step])
 
   // ── Pre-warm SDK imports as soon as confirm screen appears ───────────────────
@@ -1056,6 +1059,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     if (!settingsLoaded) return
     if (ENABLED_CHAINS.length === 0) return
     if (!ENABLED_CHAINS.find(c => c.id === selectedChain)) setSelectedChain(ENABLED_CHAINS[0].id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [settingsLoaded, settingsMap])
 
   // ── Route picker (UB vs CCTP v2) - shown below the amount box ──────────────
@@ -1071,10 +1075,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // route chosen for one chain shouldn't silently carry over to another),
   // and whenever the admin flips a toggle out from under an already-picked
   // route (e.g. user picked CCTP, admin then turns CCTP off).
+  const mechanismsKey = availableMechanisms.join(',')
   useEffect(() => {
     setShowRouteOptions(false)
     setSelectedRoute(prev => (prev && availableMechanisms.includes(prev) ? prev : null))
-  }, [selectedChain, availableMechanisms.join(',')])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
+  }, [selectedChain, mechanismsKey])
 
   // Final mechanism actually used for this transfer: the user's pick when
   // both routes are available, otherwise whichever single route the admin

@@ -224,8 +224,10 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   const view = useLiveRequest(intent?.code ?? null)
   const paid = view?.status === 'paid'
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { if (paid && !owner) speakPayment(view!.received) }, [paid])
   const reset = () => { setTab(shopQr ? 'qr' : 'charge'); setCustomerQuery(''); setPicked(null); setExpiry('15'); setIntent(null); sender.reset() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { if (!open) reset() }, [open])
   const newPayment = () => { setIntent(null); sender.reset() }
 
@@ -411,6 +413,7 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
   const { copy } = useShare()
 
   const load = () => (staff ? staffIntents(staff.owner) : listMyIntents(500)).then(setList).catch(() => setList([]))
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { if (active) { setList(null); void load() } }, [active])
 
   const inStore = (list ?? []).filter(i => isAskedOrder(i) && (!storeId || (i.storeId ?? mainStoreId) === storeId))
@@ -556,6 +559,8 @@ function InsightsBody({ payments, waiting, period, scope, compare }: {
   scope?: string | null
 }) {
   const t = useBizTerms()
+  const periodFromMs = period.from.getTime()
+  const periodToMs = period.to.getTime()
   const data = useMemo(() => {
     const from = period.from.getTime(), to = period.to.getTime()
     const list = payments.filter(p => { const t = Date.parse(p.createdAt); return t >= from && t < to })
@@ -598,7 +603,8 @@ function InsightsBody({ payments, waiting, period, scope, compare }: {
         .map(([name, v]) => ({ id: name, left: name, sub: `${v.count} payment${v.count === 1 ? '' : 's'}`, right: money(v.total) })),
       chains: rank(p => p.chain).map(([id, v]) => ({ id, left: chainLabel(id), logo: chainLogoSrc(id), sub: `${Math.round((v.total / (total || 1)) * 100)}% of sales`, right: money(v.total) })),
     }
-  }, [payments, period.from.getTime(), period.to.getTime()])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
+  }, [payments, periodFromMs, periodToMs])
 
   const label = scope ? `${period.label} · ${scope}` : period.label
   return (
@@ -691,6 +697,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
   useEffect(() => {
     if (!open) return
     setContact(application?.contact || ''); setBizType(toCategory(application?.businessType))
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [open, application?.id])
   const appliedName = application?.businessName && !/\.arc$/i.test(application.businessName) ? application.businessName : ''
   const [busy, setBusy] = useState(false)
@@ -1023,6 +1030,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
   const currentKhata = current ? khata.get(current.key) : undefined
   const openBills = useMemo(() => !current?.username ? [] : orders
     .filter(i => i.customerUsername && customerKey(i.customerUsername) === current.key && isOutstanding(toKhataOrder(i)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
     .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || Date.parse(a.createdAt) - Date.parse(b.createdAt)), [orders, current?.key])
 
   const remindOne = async (i: MerchantIntent) => {

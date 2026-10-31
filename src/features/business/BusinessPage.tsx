@@ -229,8 +229,10 @@ function OwnerBusinessPage() {
       : p.chain !== 'Arc_Testnet' && p.status !== 'collected' && waitingOn.has(p.chain) ? 'to_settle' as const : 'received' as const,
     partlyRefunded: !refundedIds.has(p.id) && refundedOf(p.id) > 0 ? money(refundedOf(p.id)) : undefined,
   })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   const payments: Payment[] = useMemo(() => periodRaw.map(toRow), [periodRaw, chains, refundedOf, refundedIds])
   // Payments screen: every payment, grouped by day (Today, Yesterday… headers).
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   const payList: Payment[] = useMemo(() => storeRaw.map(toRow), [storeRaw, chains, refundedOf, refundedIds])
 
   const today = useMemo(() => {
@@ -444,6 +446,7 @@ function OwnerBusinessPage() {
     setSender({ id: p.id, check: null })
     checkRefundableSender(p.chain, p.from).then(check => { if (live) setSender({ id: p.id, check }) })
     return () => { live = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [detail?.id])
 
   // ── Labels ────────────────────────────────────────────────────────────
@@ -491,11 +494,13 @@ function OwnerBusinessPage() {
     const live = intents.filter(i => isAskedOrder(i) && (i.status === 'pending' || i.status === 'partially_paid')
       && (!i.expiresAt || Date.parse(i.expiresAt) > now) && (!activeStore || inStore(i, activeStore.id)))
     return { count: live.length, due: live.reduce((t, i) => t + Math.max(0, i.amount - i.received), 0) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [intents, activeStore, mainStoreId])
   const openOrders = () => { setPayView('requests'); setTab('payments') }
   // Still owed by named customers (credit ledger), for the Customers row.
   const pendingCredit = useMemo(() => (intents ?? []).filter(i => i.customerUsername && (i.status === 'pending' || i.status === 'partially_paid')
     && (!i.expiresAt || Date.parse(i.expiresAt) > Date.now()) && (!activeStore || inStore(i, activeStore.id)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
     .reduce((t, i) => t + Math.max(0, i.amount - i.received), 0), [intents, activeStore, mainStoreId])
 
   // Order → its payments (badges and refunds on Manage orders).

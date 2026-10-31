@@ -460,6 +460,7 @@ export function GoogleAuthPage() {
       setUser(makeUser(supaUser.id, supaUser.email || ''))
       navigate('/auth/passcode', { replace: true })
     })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [])
 
   if (notice) return notice
@@ -1245,6 +1246,7 @@ export function ClaimUsernamePage() {
         setChecking(false)
       }
     }).catch(() => setChecking(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [walletAddress])
 
   // While checking whether this wallet already has a username, show a

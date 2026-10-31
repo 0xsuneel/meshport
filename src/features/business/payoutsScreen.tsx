@@ -107,7 +107,7 @@ export function PayoutsScreen({ open, onBack }: { open: boolean; onBack: () => v
     }
     void poll()
     return () => { live = false }
-  }, [open])
+  }, [open, toast])
 
   // Each run / draft opened gets its own screen (fresh state); the last one
   // stays rendered while it slides off.
@@ -444,6 +444,7 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
       })
     })
     return () => { live = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [draft.id])
   const setDraftRows = (f: (rows: DraftRow[]) => DraftRow[]) => setDraft({ ...draft, rows: f(draft.rows) })
 
@@ -454,6 +455,7 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
     setSearching(true)
     const h = setTimeout(() => { searchUsersDb(t, me).then(setFound).catch(() => setFound([])).finally(() => setSearching(false)) }, 250)
     return () => clearTimeout(h)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [q])
 
   const has = (to: string) => draft.rows.some(r => r.to.toLowerCase() === to.toLowerCase())
@@ -480,6 +482,7 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
     setBusy(false)
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   const results = useMemo(() => found.filter(u => !has(u.username)).slice(0, 5), [found, draft.rows])
 
   return (

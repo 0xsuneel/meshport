@@ -11,11 +11,14 @@ export function MaintenancePage() {
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { load() }, [])
+  const maintenanceMessage = settings['maintenance_message']?.value
   useEffect(() => {
     const v = settings['maintenance_message']?.value
     if (v !== undefined && v !== null) setMessage(v)
-  }, [settings['maintenance_message']?.value])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
+  }, [maintenanceMessage])
 
   const enabled = settings['maintenance_mode']?.enabled ?? false
 

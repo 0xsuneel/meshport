@@ -101,6 +101,7 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
     }
     window.addEventListener(BILL_UPDATED_EVENT, onUpdated)
     return () => window.removeEventListener(BILL_UPDATED_EVENT, onUpdated)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [code])
   if (!v) return null
 

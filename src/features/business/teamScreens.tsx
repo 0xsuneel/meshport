@@ -29,6 +29,7 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
   const [edit, setEdit] = useState<{ id?: string; name: string; type: string; address: string; taxId: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const load = () => listStores().then(s => { setStores(s); onChanged(s) }).catch(() => setStores([]))
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { if (open) void load(); else setEdit(null) }, [open])
   // Opening / closing a form tells the screen in the same render, so its
   // title and the form change together and the step push pictures the list

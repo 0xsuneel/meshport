@@ -209,6 +209,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
         setChecked(true)
       }).catch(() => { setChecking(false); setChecked(true) })
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [walletAddress, username])
 
   if (!isAuthenticated) return <Navigate to="/auth" replace state={{ from: location }} />
@@ -782,6 +783,9 @@ export default function App() {
     return unsub
   }, [])
 
+  // The signed-in account: the two effects below re-run when it changes.
+  const signedInUserId = useAuthStore(s => s.user?.id)
+
   // ── Sync admin broadcast announcements into the in-app Notifications list ──
   // Runs independently of OS push permission/subscription state, so every
   // user sees announcements the next time they open the app, even if push
@@ -797,7 +801,7 @@ export default function App() {
       clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [useAuthStore(s => s.user?.id)])
+  }, [signedInUserId])
 
   // ── Push notifications: on by default for every account ───────────────────
   // Notifications should never require a manual "enable" step from the user -
@@ -818,7 +822,7 @@ export default function App() {
         if (r.ok && fresh) { try { localStorage.setItem('mp_push_fresh_at', String(Date.now())) } catch { /* ignore */ } }
       }).catch(() => {})
     }) })
-  }, [useAuthStore(s => s.user?.id)])
+  }, [signedInUserId])
 
   // ── Wait for Zustand auth store to rehydrate from localStorage ────────────
   // Without this, the router renders immediately with empty state and causes

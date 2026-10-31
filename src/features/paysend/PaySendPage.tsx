@@ -166,7 +166,7 @@ export function PaySendPage() {
       const fallback = (['USDC', 'EURC', 'cirBTC'] as Token[]).find(t => isCoinEnabled(settingsMap, t))
       if (fallback) setToken(fallback)
     }
-  }, [settingsLoadedFlag, settingsMap])
+  }, [settingsLoadedFlag, settingsMap, token])
   const [eurcBalance, setEurcBalance] = useState(0)
   const [cirbtcBalance, setCirbtcBalance] = useState<number | null>(null)
   const [showTokenPicker, setShowTokenPicker] = useState(false)
@@ -242,6 +242,7 @@ export function PaySendPage() {
       }
     })
     return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [merchantPayCode])
   // Link/QR recipients ("username|wallet|name|avatar"): the username must own
   // that wallet. A forged link showing a real user's name with someone
@@ -264,6 +265,7 @@ export function PaySendPage() {
       }
     }).catch(() => { /* stays unverified - sending stays blocked */ })
     return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [recipient?.walletAddress, recipient?.verified, merchantPayCode])
   const recipientUnverified = recipient?.verified === false
   // Chat privacy: the recipient may only accept payments from their contacts.
@@ -286,6 +288,7 @@ export function PaySendPage() {
     recipientAccountId().then(rid => rid ? reachCheck(rid) : null)
       .then(r => { if (!cancelled && r) { setPayBlocked(!r.canPay); setBlockedMe(r.blocked) } })
     return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [recipient?.id, recipient?.walletAddress, merchantPayCode])
   const payBlockedMessage = blockedMe
     ? BLOCKED_YOU(recipient?.display || 'This person')
@@ -1167,6 +1170,7 @@ export function PaySendPage() {
   const [payHistoryLoaded, setPayHistoryLoaded] = useState(false)
   const [payHistDetail, setPayHistDetail] = useState<ActivityRecord | null>(null)
   const payFlash = useReturnFlash()
+  const delivered = processStage === 'delivered'
   useEffect(() => {
     if (!isDesktop || !senderStoredAddress) return
     let cancelled = false
@@ -1174,7 +1178,7 @@ export function PaySendPage() {
       .then(records => { if (!cancelled) setPayHistory(records) })
       .finally(() => { if (!cancelled) setPayHistoryLoaded(true) })
     return () => { cancelled = true }
-  }, [isDesktop, senderStoredAddress, processStage === 'delivered'])
+  }, [isDesktop, senderStoredAddress, delivered])
 
 
 

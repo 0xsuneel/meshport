@@ -131,7 +131,7 @@ export function BottomNav() {
       window.removeEventListener('meshport:session-bound', fetchUnread)
       window.removeEventListener('meshport:chat-count-changed', fetchUnread)
     }
-  }, [user?.id])
+  }, [user?.id, setUnreadChats])
 
   // Tab root paths - back button on any of these goes to Home (or exits if already Home)
   const TAB_ROOTS = ['/', '/chat', '/scanner', '/rewards', '/business', '/activity']
@@ -158,6 +158,7 @@ export function BottomNav() {
 
     window.addEventListener('popstate', handlePop)
     return () => window.removeEventListener('popstate', handlePop)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [location.pathname])
 
   const activeTab = getActiveTabId(location.pathname, tabList)

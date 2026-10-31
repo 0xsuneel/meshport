@@ -995,6 +995,7 @@ export function ActivityPage() {
     // Reload only when it added rows - reloading every visit swapped the
     // list a second time (and dropped any pages already scrolled in).
     backfillP2PActivity(userId, walletAddress).then(wrote => { if (wrote) refresh() })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [userId, walletAddress])
 
   const handleTabChange = useCallback((tab: ActivityTab) => {

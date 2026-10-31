@@ -24,6 +24,7 @@ export function CategoryTogglePage({ sections }: CategoryTogglePageProps) {
   const [reasonDraft, setReasonDraft] = useState<Record<string, string>>({})
   const [savingReason, setSavingReason] = useState<Record<string, boolean>>({})
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { load() }, [])
 
   const handleToggle = async (row: AppSetting, next: boolean) => {

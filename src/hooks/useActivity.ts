@@ -350,6 +350,7 @@ export function useActivity(walletAddress: string | null, initialFilter?: Activi
   }, [walletAddress, filter, search])
 
   // Reset and reload when filter/search/wallet changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { load(true) }, [walletAddress, filter, search])
 
   // The saved first page follows what's on screen (live inserts, updates,
