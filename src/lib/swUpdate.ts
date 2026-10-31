@@ -247,6 +247,9 @@ function showReadyPill(): void {
   } catch { /* cosmetic only */ }
 }
 
+/** A new version is switched to in the background only after the app has been away this long. */
+export const QUIET_SWITCH_AFTER_HIDDEN_MS = 15 * 60_000
+
 /** Keep looking for new versions while the app stays open / in memory, and switch as soon as it's safe. */
 export function watchForUpdates(): () => void {
   if (typeof document === 'undefined' || !('serviceWorker' in navigator)) return () => {}
@@ -266,17 +269,23 @@ export function watchForUpdates(): () => void {
   // goes to the background on a resting screen (or on the next open, see
   // applyWaitingUpdate). While it's on screen, the "Update ready" pill lets
   // them update right away if they want to.
+  // Only after a LONG time away (field 31 Oct: with several deploys a day the
+  // app reloaded every time the person switched to another app for a moment
+  // - a screenshot, a message - and came back to a cold wallet each time).
+  // Away this long, the phone has usually frozen the page and Privy's session
+  // anyway; a short trip away keeps the warm wallet.
+  let hiddenSince = document.visibilityState === 'hidden' ? Date.now() : 0
   const tryApply = async () => {
     if (!newerBuild) return
     if (document.visibilityState === 'hidden') {
-      if (onRestingScreen()) void switchQuietly()
+      if (hiddenSince && Date.now() - hiddenSince >= QUIET_SWITCH_AFTER_HIDDEN_MS && onRestingScreen()) void switchQuietly()
     } else {
       showReadyPill()
     }
   }
   const onVisibility = () => {
-    if (document.visibilityState === 'visible') maybeCheck()
-    else void tryApply() // going to the background: switch now if it's safe
+    if (document.visibilityState === 'visible') { hiddenSince = 0; maybeCheck() }
+    else { hiddenSince = Date.now(); void tryApply() }
   }
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('online', maybeCheck)
