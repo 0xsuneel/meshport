@@ -117,27 +117,53 @@ export async function tokenDeployments(token: CctpxToken): Promise<Map<string, s
   return deploymentsFromRegistry(reg.tokens ?? [], token, id => resolveToKnownTokenSymbol(id, 'testnet'), domains)
 }
 
+// The last routes looked up per token: a screen opening again (or a chip
+// switched back) shows them at once and refreshes in the background, like
+// USDC's chain list - no "Finding chains…" every time.
+const lastRoutes = new Map<CctpxToken, { chains: string[]; deployments: Map<string, string> }>()
+const lookups = new Map<CctpxToken, Promise<{ chains: string[]; deployments: Map<string, string> }>>()
+
+function lookupRoutes(token: CctpxToken) {
+  let p = lookups.get(token)
+  if (!p) {
+    p = tokenDeployments(token)
+      .then(dep => { const r = { chains: routeChains(dep), deployments: dep }; lastRoutes.set(token, r); return r })
+      .finally(() => lookups.delete(token))
+    lookups.set(token, p)
+  }
+  return p
+}
+
+/** Look up EURC's and cirBTC's routes in the background (a payment screen opening). */
+export function prewarmTokenRoutes(): void {
+  for (const t of ['EURC', 'cirBTC'] as const) if (!lastRoutes.has(t)) lookupRoutes(t).catch(() => {})
+}
+
 /**
  * The chains `token` can travel between with Arc right now, for a screen.
  * USDC: null (the screen keeps its own chain list). `error`: the registry
- * couldn't be read - no chain is offered rather than one that may not work.
+ * couldn't be read and nothing was known before - no chain is offered rather
+ * than one that may not work.
  */
 export function useTokenRouteChains(token: BridgeToken): { chains: string[] | null; deployments: Map<string, string> | null; loading: boolean; error: boolean } {
+  const known = token === 'USDC' ? undefined : lastRoutes.get(token)
   const [state, setState] = useState<{ token: BridgeToken; chains: string[] | null; deployments: Map<string, string> | null; error: boolean }>(
-    { token: 'USDC', chains: null, deployments: null, error: false })
+    () => ({ token, chains: known?.chains ?? null, deployments: known?.deployments ?? null, error: false }))
   useEffect(() => {
     if (token === 'USDC') { setState({ token, chains: null, deployments: null, error: false }); return }
     let cancelled = false
-    tokenDeployments(token)
-      .then(dep => { if (!cancelled) setState({ token, chains: routeChains(dep), deployments: dep, error: false }) })
-      .catch(() => { if (!cancelled) setState({ token, chains: [], deployments: null, error: true }) })
+    const cached = lastRoutes.get(token)
+    if (cached) setState({ token, chains: cached.chains, deployments: cached.deployments, error: false })
+    lookupRoutes(token)
+      .then(r => { if (!cancelled) setState({ token, chains: r.chains, deployments: r.deployments, error: false }) })
+      .catch(() => { if (!cancelled && !lastRoutes.has(token)) setState({ token, chains: [], deployments: null, error: true }) })
     return () => { cancelled = true }
   }, [token])
-  const current = state.token === token
+  const current = state.token === token && (state.chains !== null || token === 'USDC' || state.error)
   return {
-    chains: token === 'USDC' ? null : current ? state.chains : null,
-    deployments: current ? state.deployments : null,
-    loading: token !== 'USDC' && !current,
-    error: current && state.error,
+    chains: token === 'USDC' ? null : current ? state.chains : (known?.chains ?? null),
+    deployments: current ? state.deployments : (known?.deployments ?? null),
+    loading: token !== 'USDC' && !current && !known,
+    error: state.token === token && state.error,
   }
 }

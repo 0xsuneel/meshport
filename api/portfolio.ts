@@ -1,7 +1,12 @@
 // api/portfolio.ts - one request for every balance a wallet shows.
 //
 // GET /api/portfolio?address=0x…
-//   → { arc: { USDC, EURC, cirBTC }, chains: { <chainId>: number|null }, at }
+//   → { arc: { USDC, EURC, cirBTC }, chains: { <chainId>: number|null },
+//       tokens: { EURC: { <chainId>: { balance, address } }, cirBTC: {…} } | null, at }
+//
+// tokens: EURC / cirBTC on the chains Circle's CCTPx registry lists them on
+// (and on Arc - a route needs both ends), read in the same pass as USDC so
+// Bring's coin chips show their chains at once instead of scanning again.
 //
 // What OKX-style wallets do on a weak connection: the phone asks the server
 // once and the server reads the chains. Before this, the app made one request
@@ -16,7 +21,7 @@
 //   keeps its last known value) - never a fake 0.
 // - Cached per address for a few seconds so a burst of screens shares one read.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { EXTERNAL_CHAINS, ARC_TOKENS } from '../src/blockchain/chains'
+import { EXTERNAL_CHAINS, ARC_TOKENS, CCTP_DOMAINS } from '../src/blockchain/chains'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { forward: arcForward } = require('./arc-rpc.js') as { forward: (body: unknown) => Promise<any> }
 
@@ -26,7 +31,81 @@ const CACHE_MS = 8000
 const MAX_CACHE = 500
 const BALANCE_OF = '0x70a08231'
 
-type Portfolio = { arc: Record<string, number | null>; chains: Record<string, number | null>; at: number }
+type TokenChains = Record<string, { balance: number | null; address: string }>
+type Portfolio = {
+  arc: Record<string, number | null>
+  chains: Record<string, number | null>
+  tokens: { EURC: TokenChains; cirBTC: TokenChains } | null
+  at: number
+}
+
+// ── EURC / cirBTC (Circle CCTPx) ─────────────────────────────────────────────
+// Circle's token registry (IRIS sandbox - testnet chains), cached here for 5
+// minutes: which chain (by CCTP domain) each token is deployed and switched on.
+const CCTPX_IRIS = (process.env.CCTPX_IRIS || 'https://iris-api-sandbox.circle.com').replace(/\/+$/, '')
+const REGISTRY_TTL_MS = 5 * 60_000
+const CCTPX_TOKENS = {
+  EURC:   { id: '0x2587821a0ee7daa174b95436b5dab1731cfa1844775b010217d3c0dd02a4eecd', decimals: 6 },
+  cirBTC: { id: '0x7c27b7b6485f3ea49b7d1a439e288d3c3116f533302afabb7e372dfc0770cc7d', decimals: 8 },
+} as const
+type RegistryToken = { tokenId: string; deployments: Array<{ domainId: number; tokenAddress: string; enabled?: boolean }> }
+let registry: { at: number; tokens: RegistryToken[] } | null = null
+let registryLoad: Promise<RegistryToken[]> | null = null
+
+async function cctpxRegistry(): Promise<RegistryToken[]> {
+  if (registry && Date.now() - registry.at < REGISTRY_TTL_MS) return registry.tokens
+  registryLoad ??= (async () => {
+    const tokens: RegistryToken[] = []
+    let after = ''
+    for (let page = 0; page < 20; page++) {
+      const r = await fetch(`${CCTPX_IRIS}/v2/cctpx/tokens${after ? `?pageAfter=${encodeURIComponent(after)}` : ''}`, { signal: AbortSignal.timeout(5000) })
+      if (!r.ok) throw new Error('registry http ' + r.status)
+      const j = await r.json() as { data?: RegistryToken[]; nextPageAfter?: string | null }
+      tokens.push(...(j.data ?? []))
+      if (!j.nextPageAfter) break
+      after = j.nextPageAfter
+    }
+    registry = { at: Date.now(), tokens }
+    return tokens
+  })().finally(() => { registryLoad = null })
+  return registryLoad
+}
+
+/** chainId → token address where `tokenId` is on and Arc has it too (pure). */
+export function tokenChains(tokens: RegistryToken[], tokenId: string): Record<string, string> {
+  const byDomain = new Map(Object.entries(CCTP_DOMAINS).map(([id, d]) => [d, id]))
+  const t = tokens.find(x => String(x.tokenId).toLowerCase() === tokenId)
+  const on = (t?.deployments ?? []).filter(d => d.enabled !== false && /^0x[0-9a-fA-F]{40}$/.test(d.tokenAddress))
+  if (!on.some(d => d.domainId === CCTP_DOMAINS.Arc_Testnet)) return {}
+  const out: Record<string, string> = {}
+  for (const d of on) {
+    const id = byDomain.get(d.domainId)
+    if (id && id !== 'Arc_Testnet' && EXTERNAL_CHAINS[id]) out[id] = d.tokenAddress
+  }
+  return out
+}
+
+async function readTokens(address: string): Promise<Portfolio['tokens']> {
+  let tokens: RegistryToken[]
+  try { tokens = await cctpxRegistry() } catch { return null }
+  const read = async (symbol: keyof typeof CCTPX_TOKENS): Promise<TokenChains> => {
+    const out: TokenChains = {}
+    await Promise.all(Object.entries(tokenChains(tokens, CCTPX_TOKENS[symbol].id)).map(async ([id, token]) => {
+      const rpcs = (EXTERNAL_CHAINS[id]?.rpcs || []).filter(Boolean)
+      let balance: number | null = null
+      if (rpcs.length) {
+        try {
+          const hex = await hedged(rpcs, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: token, data: balanceOfData(address) }, 'latest'] })
+          balance = hexToUnits(hex, CCTPX_TOKENS[symbol].decimals)
+        } catch { /* null: couldn't read it right now */ }
+      }
+      out[id] = { balance, address: token }
+    }))
+    return out
+  }
+  const [EURC, cirBTC] = await Promise.all([read('EURC'), read('cirBTC')])
+  return { EURC, cirBTC }
+}
 const cache = new Map<string, { at: number; data: Portfolio }>()
 const inflight = new Map<string, Promise<Portfolio>>()
 
@@ -108,8 +187,8 @@ async function readChains(address: string): Promise<Portfolio['chains']> {
 }
 
 async function load(address: string): Promise<Portfolio> {
-  const [arc, chains] = await Promise.all([readArc(address), readChains(address)])
-  return { arc, chains, at: Date.now() }
+  const [arc, chains, tokens] = await Promise.all([readArc(address), readChains(address), readTokens(address)])
+  return { arc, chains, tokens, at: Date.now() }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
