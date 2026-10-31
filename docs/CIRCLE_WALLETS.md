@@ -1,10 +1,14 @@
 # Circle user-controlled wallets
 
-New MeshPort accounts made with Google get a Circle user-controlled wallet as
-their MeshPort wallet: a generic EVM EOA (`EVM-TESTNET`, the same address on
-every EVM chain, Arc included). Circle signs; MeshPort broadcasts through its
-own relay, exactly like the app's other wallets. Existing accounts keep their
-wallet until they are moved over (a separate, approved plan).
+**Status: off for new accounts.** New Google / email accounts get a Privy
+wallet (`src/features/auth/AutoWalletPage.tsx`). MeshPort's Google sign-in
+goes through Circle only with `VITE_CIRCLE_WALLETS_ENABLED=true`
+(`circleSignInForNewAccounts`), whatever other Circle variables are set.
+Accounts whose wallet already is a Circle wallet keep working.
+
+A Circle wallet is a user-controlled, generic EVM EOA (`EVM-TESTNET`, the same
+address on every EVM chain, Arc included). Circle signs; MeshPort broadcasts
+through its own relay, exactly like the app's other wallets.
 
 | | |
 |---|---|
@@ -45,12 +49,10 @@ Circle fails, the MeshPort sign-in still goes on and the wallet asks again.
 
 ## App
 
-- `src/wallet/circle.ts` - sign-in, the Circle session per MeshPort account
-  (refreshed once on expiry), `ensureCircleWallet`, and `circleAccount`: a
-  `WalletAccount` whose signatures are Circle challenges run headless in the
-  SDK. Pay, Swap, Bridge, P2P use it like any wallet.
-- `src/features/auth/AutoWalletPage.tsx` - new Google accounts get the Circle
-  wallet (`walletSource: 'circle'`).
+- `src/wallet/circle.ts` - sign-in, the Circle session per MeshPort account,
+  and `circleAccount`: a `WalletAccount` whose signatures are Circle
+  challenges run headless in the SDK. Pay, Swap, Bridge, P2P use it like any
+  wallet (through `lib/paymentReadiness.ts`).
 - `src/features/auth/AuthPages.tsx` - returning accounts whose wallet is their
   Circle wallet open with the Circle signer.
 - `src/lib/restoreWallet.ts` - after a reload a Circle wallet reopens from the
@@ -59,11 +61,42 @@ Circle fails, the MeshPort sign-in still goes on and the wallet asks again.
   Circle sign-in on this device, sign out; and the Google return page.
 - `vercel.json` CSP allows Circle's frame, `https://pw-auth.circle.com`.
 
+## Session, readiness and speed
+
+- **Session:** Circle's userToken lasts 60 minutes, and one that expires
+  unrefreshed logs the user out. It is refreshed when under 10 minutes are
+  left (`freshCircleSession`): before every call, every 5 minutes while the
+  app is open, and on return to the app. The expiry comes from the token's
+  JWT `exp`, else from when it was issued (`obtainedAt`). A refresh that fails
+  for a network reason keeps a still-valid session; Circle refusing it ends
+  the session.
+- **Readiness:** like Privy's. A Circle signer is `wallet_discovered` until
+  `warmCircleSigner` has refreshed the session if due, asked the backend for
+  the wallet (session + link check, wakes the function) and loaded the SDK and
+  Circle's frame; then `signer_ready` (`lib/walletReadiness.ts`).
+- **Per signature:** the endpoint remembers a Supabase-confirmed caller for
+  60 s and the service the account's link for 5 min, per warm instance, so a
+  signature is one call to MeshPort's function and one to Circle, then the
+  SDK. A session error from the SDK (155103/155104/155105) refreshes and signs
+  again once with a new challenge; requests time out (20 s backend, 30 s
+  challenge) instead of holding a payment screen.
+
+What can't be made Privy-fast on the web: a new device (or cleared storage)
+needs its own Circle sign-in - Circle's user wallets can't use MeshPort's
+sign-in the way Privy does - and the SDK reloads Circle's page
+(`pw-auth.circle.com`) for every signature (`execute` → `appendIframe` sets
+`iframe.src`). The session tokens are in `localStorage`, readable by any
+script running in the page.
+
+The sign-in writes the SDK's private `localStorage` keys; the SDK is pinned to
+1.1.11 and `src/wallet/circleSdkContract.test.ts` fails if an upgrade changes
+what it reads.
+
 ## Configuration
 
 | Where | What |
 |---|---|
 | Circle Console (Testnet) | Standard API key; App ID; Google Client ID under Social Logins; Confirmation UIs **off**; SMTP when email accounts move over |
-| Vercel (app) | `CIRCLE_API_KEY` (set by the owner, never shared in chat); `VITE_CIRCLE_APP_ID`; `VITE_CIRCLE_GOOGLE_CLIENT_ID` |
+| Vercel (app) | `CIRCLE_API_KEY` (set by the owner, never shared in chat); `VITE_CIRCLE_APP_ID`; `VITE_CIRCLE_GOOGLE_CLIENT_ID`; `VITE_CIRCLE_WALLETS_ENABLED=true` only to switch Circle sign-in on for new accounts (unset = off) |
 | Google OAuth client | The Supabase client; redirect URI `https://meshport.xyz/wallet/circle-login` |
 | Supabase | Google provider with that client ID (ID-token sign-in); both migrations above |

@@ -45,6 +45,8 @@ let lastError: string | null = null
 let hadSigner = false
 // Privy: is the wallet's signing iframe connected? Set once Privy's module is loaded.
 let privyConnected: ((address: string) => boolean) | null = null
+// Circle: is the session valid, confirmed and Circle's SDK loaded? Set once circle.ts is loaded.
+let circleReady: ((address: string) => boolean) | null = null
 
 /** Changes on logout / account switch - see the file comment. */
 export function walletGeneration(): number { return generation }
@@ -65,6 +67,12 @@ export function noteNetworkReady(): void {
   useWalletReadiness.setState({ networkReady: true })
 }
 
+/** circle.ts: lets readiness tell "a Circle session is stored" from "can sign now". */
+export function setCircleReadyProbe(probe: (address: string) => boolean): void {
+  circleReady = probe
+  recompute()
+}
+
 /** privy.ts: lets readiness tell "listed" from "can sign". */
 export function setPrivyConnectedProbe(probe: (address: string) => boolean): void {
   privyConnected = probe
@@ -77,7 +85,8 @@ export function recompute(): void {
   if (!walletAddress) phase = isAuthenticated ? 'authenticated' : 'idle'
   else if (signer) {
     const privyWaiting = walletSource === 'privy' && (!privyConnected || !privyConnected(walletAddress))
-    phase = privyWaiting ? 'wallet_discovered' : 'signer_ready'
+    const circleWaiting = walletSource === 'circle' && (!circleReady || !circleReady(walletAddress))
+    phase = privyWaiting || circleWaiting ? 'wallet_discovered' : 'signer_ready'
   } else if (restoring) phase = hadSigner ? 'recovering' : 'initializing'
   else if (lastError) phase = 'error'
   else phase = 'locked'
@@ -162,5 +171,5 @@ export function untilSignerReady(timeoutMs = 60_000): Promise<boolean> {
 
 /** Test hook. */
 export function resetWalletReadiness(): void {
-  generation = 0; restoring = false; lastError = null; hadSigner = false; privyConnected = null; resumeStartedAt = null
+  generation = 0; restoring = false; lastError = null; hadSigner = false; privyConnected = null; circleReady = null; resumeStartedAt = null
 }

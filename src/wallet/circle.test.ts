@@ -65,14 +65,14 @@ beforeEach(() => {
 
 describe('circleCall', () => {
   it('sends the stored Circle session with the call', async () => {
-    saveCircleSession('uid-alice', { userToken: 'ut-1', encryptionKey: 'ek', refreshToken: 'rt' })
+    saveCircleSession('uid-alice', { userToken: 'ut-1', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() })
     replies = [() => [200, { address: '0xa' }]]
     expect(await circleCall('uid-alice', 'wallet')).toEqual({ address: '0xa' })
     expect(sent[0]).toEqual({ action: 'wallet', userToken: 'ut-1' })
   })
 
   it('an expired session is refreshed once and the call retried with the new token', async () => {
-    saveCircleSession('uid-alice', { userToken: 'ut-old', encryptionKey: 'ek', refreshToken: 'rt' })
+    saveCircleSession('uid-alice', { userToken: 'ut-old', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() })
     store.set('mp.circle.deviceId', JSON.stringify('device-1'))
     replies = [
       () => [401, { code: 'session', error: 'expired' }],
@@ -82,17 +82,17 @@ describe('circleCall', () => {
     expect(await circleCall('uid-alice', 'wallet')).toEqual({ ok: true })
     expect(sent.map(b => b.action)).toEqual(['wallet', 'refresh', 'wallet'])
     expect(sent[2].userToken).toBe('ut-new')
-    expect(loadCircleSession('uid-alice')).toEqual({ userToken: 'ut-new', encryptionKey: 'ek2', refreshToken: 'rt2' })
+    expect(loadCircleSession('uid-alice')).toEqual({ userToken: 'ut-new', encryptionKey: 'ek2', refreshToken: 'rt2', obtainedAt: expect.any(Number) })
   })
 
   it('a refresh that fails forgets the session; other refusals are not retried', async () => {
-    saveCircleSession('uid-alice', { userToken: 'ut-old', encryptionKey: 'ek', refreshToken: 'rt' })
+    saveCircleSession('uid-alice', { userToken: 'ut-old', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() })
     store.set('mp.circle.deviceId', JSON.stringify('device-1'))
     replies = [() => [401, { code: 'session' }], () => [401, { code: 'session' }]]
     await expect(circleCall('uid-alice', 'wallet')).rejects.toMatchObject({ code: 'session' })
     expect(loadCircleSession('uid-alice')).toBeNull()
 
-    saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt' })
+    saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() })
     sent = []; replies = [() => [409, { code: 'linked-elsewhere', error: 'different account' }]]
     await expect(circleCall('uid-alice', 'wallet')).rejects.toMatchObject({ status: 409, code: 'linked-elsewhere' })
     expect(sent).toHaveLength(1)
@@ -127,7 +127,7 @@ describe('Google sign-in for MeshPort and Circle at once', () => {
     expect(await finishGoogleSignIn()).toEqual({ returnTo: '/auth/google' })
     expect(signInWithIdToken).toHaveBeenCalledWith({ provider: 'google', token: 'google-id-token', access_token: 'google-access', nonce: raw })
     expect(sent[sent.length - 1]).toEqual({ action: 'link', userToken: 'ut-google' })
-    expect(loadCircleSession('uid-alice')).toEqual({ userToken: 'ut-google', encryptionKey: 'ek-google', refreshToken: 'rt-google' })
+    expect(loadCircleSession('uid-alice')).toEqual({ userToken: 'ut-google', encryptionKey: 'ek-google', refreshToken: 'rt-google', obtainedAt: expect.any(Number) })
   })
 
   it('a Circle hiccup does not stop the MeshPort sign-in', async () => {
@@ -164,7 +164,7 @@ describe('Google sign-in for MeshPort and Circle at once', () => {
 })
 
 describe('circleAccount (the Circle signer)', () => {
-  beforeEach(() => saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt' }))
+  beforeEach(() => saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() }))
 
   it('signs a transaction through a Circle challenge and returns the signed transaction', async () => {
     replies = [() => [200, { challengeId: 'c1' }]]
@@ -210,5 +210,118 @@ describe('circleAccount (the Circle signer)', () => {
     sdkExecute = () => ({ error: { code: 155701, message: 'User canceled' } })
     const acct = circleAccount('0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'uid-alice')
     await expect(acct.signMessage({ message: 'x' })).rejects.toThrow(/canceled/)
+  })
+})
+
+// ── Session lifetime, readiness and failure handling (Circle audit fixes) ──
+describe('Circle session is refreshed BEFORE it expires', () => {
+  beforeEach(() => store.set('mp.circle.deviceId', JSON.stringify('device-1')))
+
+  it('a session with under 10 minutes left is refreshed first, then the call uses the new token', async () => {
+    saveCircleSession('uid-alice', { userToken: 'ut-old', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() - 55 * 60_000 })
+    replies = [
+      () => [200, { userToken: 'ut-new', encryptionKey: 'ek2', refreshToken: 'rt2' }],
+      () => [200, { address: '0xa' }],
+    ]
+    expect(await circleCall('uid-alice', 'wallet')).toEqual({ address: '0xa' })
+    expect(sent.map(b => b.action)).toEqual(['refresh', 'wallet'])
+    expect(sent[0].userToken).toBe('ut-old') // the refresh carries the still-valid token, as Circle requires
+    expect(sent[1].userToken).toBe('ut-new')
+  })
+
+  it('a fresh session is not refreshed', async () => {
+    saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() - 10 * 60_000 })
+    replies = [() => [200, { address: '0xa' }]]
+    await circleCall('uid-alice', 'wallet')
+    expect(sent.map(b => b.action)).toEqual(['wallet'])
+  })
+
+  it('an early refresh that fails for a network reason keeps the still-valid session', async () => {
+    saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() - 55 * 60_000 })
+    replies = [() => [502, { code: 'circle', error: 'Circle could not be reached' }], () => [200, { address: '0xa' }]]
+    expect(await circleCall('uid-alice', 'wallet')).toEqual({ address: '0xa' })
+    expect(sent[1].userToken).toBe('ut')
+    expect(loadCircleSession('uid-alice')?.userToken).toBe('ut')
+  })
+
+  it('Circle refusing the refresh ends the session (the user signs in again)', async () => {
+    saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() - 55 * 60_000 })
+    replies = [() => [401, { code: 'session', error: 'expired' }]]
+    await expect(circleCall('uid-alice', 'wallet')).rejects.toMatchObject({ code: 'session' })
+    expect(loadCircleSession('uid-alice')).toBeNull()
+  })
+
+  it("reads the expiry from the userToken itself when it is a JWT", () => {
+    const exp = Math.floor(Date.now() / 1000) + 3600
+    const jwt = ['eyJhbGciOiJIUzI1NiJ9', btoa(JSON.stringify({ exp })).replace(/=+$/, ''), 'sig'].join('.')
+    expect(circle.circleSessionExpiry({ userToken: jwt, encryptionKey: 'ek' })).toBe(exp * 1000)
+    expect(circle.circleSessionExpiry({ userToken: 'opaque', encryptionKey: 'ek', obtainedAt: 1000 })).toBe(1000 + circle.CIRCLE_SESSION_MS)
+  })
+})
+
+describe('Circle signer readiness (like Privy)', () => {
+  beforeEach(() => saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() }))
+
+  it('not ready from a stored session alone; ready once the backend confirmed the wallet and the SDK loaded', async () => {
+    const addr = '0x00000000000000000000000000000000000000Aa'
+    expect(circle.circleSignerReady(addr)).toBe(false)
+    replies = [() => [200, { address: addr }]]
+    expect(await circle.warmCircleSigner(addr)).toBe(true)
+    expect(circle.circleSignerReady(addr)).toBe(true)
+    expect(sent.map(b => b.action)).toEqual(['wallet'])
+  })
+
+  it('a backend that names a different wallet is not ready', async () => {
+    replies = [() => [200, { address: '0x00000000000000000000000000000000000000Bb' }]]
+    expect(await circle.warmCircleSigner('0x00000000000000000000000000000000000000Cc')).toBe(false)
+    expect(circle.circleSignerReady('0x00000000000000000000000000000000000000Cc')).toBe(false)
+  })
+
+  it('an expired session stops being ready', async () => {
+    const addr = '0x00000000000000000000000000000000000000Dd'
+    replies = [() => [200, { address: addr }]]
+    await circle.warmCircleSigner(addr)
+    saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() - 2 * circle.CIRCLE_SESSION_MS })
+    expect(circle.circleSignerReady(addr)).toBe(false)
+  })
+})
+
+describe('Circle failures end instead of hanging, and session errors re-sign once', () => {
+  beforeEach(() => saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() }))
+
+  it('a backend request that never answers becomes a "nothing was sent" error', async () => {
+    const f = globalThis.fetch
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new DOMException('timed out', 'TimeoutError') }))
+    try {
+      await expect(circle.circleApi('wallet')).rejects.toMatchObject({ code: 'timeout' })
+    } finally { vi.stubGlobal('fetch', f) }
+  })
+
+  it('a challenge refused as "invalid user token" (155105) refreshes and signs again with a new challenge', async () => {
+    store.set('mp.circle.deviceId', JSON.stringify('device-1'))
+    let calls = 0
+    sdkExecute = () => (++calls === 1 ? { error: { code: 155105, message: 'invalid user token' } } : { result: { status: 'COMPLETE', data: { signature: '0xsig2' } } })
+    replies = [
+      () => [200, { challengeId: 'c1' }],
+      () => [200, { userToken: 'ut-new', encryptionKey: 'ek2', refreshToken: 'rt2' }],
+      () => [200, { challengeId: 'c2' }],
+    ]
+    const acct = circleAccount('0x00000000000000000000000000000000000000Ee', 'uid-alice')
+    expect(await acct.signMessage({ message: 'hi' })).toBe('0xsig2')
+    expect(sent.map(b => b.action)).toEqual(['sign-message', 'refresh', 'sign-message'])
+    expect(sent[2].userToken).toBe('ut-new')
+  })
+
+  it('a declined challenge is not retried', async () => {
+    sdkExecute = () => ({ error: { code: 155117, message: 'declined' } })
+    replies = [() => [200, { challengeId: 'c1' }]]
+    await expect(circleAccount('0x00000000000000000000000000000000000000Ff', 'uid-alice').signMessage({ message: 'hi' })).rejects.toMatchObject({ code: 'challenge' })
+    expect(sent).toHaveLength(1)
+  })
+})
+
+describe('Circle sign-in stays off for new accounts', () => {
+  it('MeshPort\'s Google sign-in does not go through Circle unless VITE_CIRCLE_WALLETS_ENABLED=true', () => {
+    expect(circle.circleSignInForNewAccounts()).toBe(false)
   })
 })
