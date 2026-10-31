@@ -81,20 +81,81 @@ export function maxFeeFromIris(rows: IrisFeeRow[], amount: bigint, o: { fast: bo
   return ((protocol + fwd) * headroom) / 10n + 1_000n
 }
 
+// Circle's fee table per route, kept 20 s: Review and Confirm read the same one.
+const FEE_ROWS_TTL_MS = 20_000
+const feeRows = new Map<string, { at: number; rows: Promise<IrisFeeRow[] | null> }>()
+
+/** Circle's fee table from Arc to `destination` (null: Iris unreachable). */
+export function irisFeeRows(destination: string, forward: boolean): Promise<IrisFeeRow[] | null> {
+  const dst = CCTP_DOMAINS[destination]
+  if (dst === undefined) return Promise.resolve(null)
+  const key = `${dst}|${forward}`
+  const hit = feeRows.get(key)
+  if (hit && Date.now() - hit.at < FEE_ROWS_TTL_MS) return hit.rows
+  const rows = (async () => {
+    for (const host of ['https://iris-api-sandbox.circle.com', 'https://iris-api.circle.com']) {
+      try {
+        const r = await fetch(`${host}/v2/burn/USDC/fees/${ARC_DOMAIN}/${dst}${forward ? '?forward=true' : ''}`, { signal: AbortSignal.timeout(5000) })
+        if (!r.ok) continue
+        const json = await r.json()
+        if (Array.isArray(json) && json.length) return json as IrisFeeRow[]
+      } catch { /* the other host */ }
+    }
+    return null
+  })()
+  const entry = { at: Date.now(), rows }
+  feeRows.set(key, entry)
+  void rows.then(r => { if (!r && feeRows.get(key) === entry) feeRows.delete(key) }) // a miss is never cached
+  return rows
+}
+
 /** Circle's fee cap for this route right now, in USDC (6 dp string), or null when Iris can't say. */
 export async function fastCctpMaxFee(p: { destination: string; amount: number; fast: boolean; forward: boolean; l1: boolean }): Promise<string | null> {
-  const dst = CCTP_DOMAINS[p.destination]
-  if (dst === undefined) return null
-  const amount = parseUnits(p.amount.toFixed(6), 6)
-  for (const host of ['https://iris-api-sandbox.circle.com', 'https://iris-api.circle.com']) {
-    try {
-      const r = await fetch(`${host}/v2/burn/USDC/fees/${ARC_DOMAIN}/${dst}${p.forward ? '?forward=true' : ''}`, { signal: AbortSignal.timeout(5000) })
-      if (!r.ok) continue
-      const cap = maxFeeFromIris(await r.json(), amount, p)
-      if (cap !== null) return (Number(cap) / 1e6).toFixed(6)
-    } catch { /* the other host */ }
-  }
-  return null
+  const rows = await irisFeeRows(p.destination, p.forward)
+  const cap = rows ? maxFeeFromIris(rows, parseUnits(p.amount.toFixed(6), 6), p) : null
+  return cap !== null ? (Number(cap) / 1e6).toFixed(6) : null
+}
+
+/**
+ * The fees Circle will charge (USDC), for Review - not the cap: the
+ * protocol fee (bps of the amount) and the forwarder's typical fee. Pure.
+ */
+export function expectedFeesFromIris(rows: IrisFeeRow[], amount: number, o: { fast: boolean; forward: boolean }): { bridgeFee: number; forwarderFee: number } | null {
+  const want = o.fast ? FAST_FINALITY : SLOW_FINALITY
+  const row = rows.find(r => r.finalityThreshold === want)
+    ?? (o.fast ? rows.find(r => r.finalityThreshold <= FAST_FINALITY) : rows.find(r => r.finalityThreshold >= SLOW_FINALITY))
+  if (!row || typeof row.minimumFee !== 'number') return null
+  const fwd = o.forward ? row.forwardFee?.med ?? row.forwardFee?.high : 0
+  if (o.forward && typeof fwd !== 'number') return null
+  const bridgeFee = Math.ceil(amount * 1e6 * row.minimumFee / 10_000) / 1e6
+  return { bridgeFee, forwarderFee: (fwd ?? 0) / 1e6 }
+}
+
+// Arc gas the wallet pays (in USDC): the burn, plus the approval when the allowance is short.
+const APPROVE_GAS = 60_000n
+const BURN_GAS = 200_000n
+
+/**
+ * Review's fees for a USDC transfer from Arc, straight from Circle's fee
+ * table and two Arc reads, all in parallel - instead of the SDK's estimate.
+ * Null when anything can't be read (the caller uses the SDK then).
+ */
+export async function fastCctpFees(p: { destination: string; amount: number; fast: boolean; forward: boolean; owner: string }): Promise<{ bridgeFee: number; forwarderFee: number; networkFee: number } | null> {
+  if (!canFastCctp(p.destination)) return null
+  try {
+    const [rows, gasPriceHex, allowanceHex] = await Promise.all([
+      irisFeeRows(p.destination, p.forward),
+      rpc('eth_gasPrice', []),
+      rpc('eth_call', [{ to: ARC_USDC, data: encodeFunctionData({ abi: ERC20, functionName: 'allowance', args: [p.owner as Hex, TOKEN_MESSENGER_V2] }) }, 'latest']),
+    ])
+    const fees = rows ? expectedFeesFromIris(rows, p.amount, p) : null
+    if (!fees) return null
+    const allowance = decodeFunctionResult({ abi: ERC20, functionName: 'allowance', data: allowanceHex as Hex }) as bigint
+    const gas = BURN_GAS + (allowance < parseUnits(p.amount.toFixed(6), 6) ? APPROVE_GAS : 0n)
+    // Arc gas is USDC with 18 decimals.
+    const networkFee = Number(gas * BigInt(gasPriceHex)) / 1e18
+    return { ...fees, networkFee }
+  } catch { return null }
 }
 
 // ── Arc RPC (through MeshPort's ranked proxy) ────────────────────────────────

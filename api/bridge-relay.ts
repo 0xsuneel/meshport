@@ -621,11 +621,39 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+type IrisFeeRow = { finalityThreshold: number; minimumFee: number; forwardFee?: number | { low?: number; med?: number; high?: number } }
+
+// Quote inputs that change slowly, kept per warm instance so a quote is one
+// round of parallel reads (or none) instead of four sequential ones:
+// Circle's fee table (20 s), the chain's gas price (10 s), and USDC's
+// EIP-712 name/version (fixed per contract).
+const FEE_ROWS_TTL_MS = 20_000
+const GAS_PRICE_TTL_MS = 10_000
+const feeRowsCache = new Map<number, { at: number; rows: Promise<IrisFeeRow[]> }>()
+const gasPriceCache = new Map<string, { at: number; price: Promise<bigint> }>()
+const usdcMetaCache = new Map<string, Promise<[string, string]>>()
+
+function cached<K, V>(map: Map<K, { at: number } & Record<string, any>>, key: K, field: string, ttl: number, load: () => Promise<V>): Promise<V> {
+  const hit = map.get(key)
+  if (hit && Date.now() - hit.at < ttl) return hit[field] as Promise<V>
+  const p = load()
+  const entry = { at: Date.now(), [field]: p }
+  map.set(key, entry as any)
+  p.catch(() => { if (map.get(key) === entry) map.delete(key) }) // a failure is never cached
+  return p
+}
+
+function irisFeeRows(srcDomain: number): Promise<IrisFeeRow[]> {
+  return cached(feeRowsCache, srcDomain, 'rows', FEE_ROWS_TTL_MS, async () => {
+    const r = await fetch(`${IRIS}/v2/burn/USDC/fees/${srcDomain}/${ARC_DOMAIN}?forward=true`, { signal: AbortSignal.timeout(8_000) })
+    if (!r.ok) throw new Error('Circle fee service unavailable')
+    return await r.json() as IrisFeeRow[]
+  })
+}
+
 /** Circle's CCTP fee for a burn of `burn` units to Arc via the forwarder, with margin. */
-async function cctpMaxFee(srcDomain: number, burn: bigint): Promise<bigint> {
-  const r = await fetch(`${IRIS}/v2/burn/USDC/fees/${srcDomain}/${ARC_DOMAIN}?forward=true`, { signal: AbortSignal.timeout(10_000) })
-  if (!r.ok) throw new Error('Circle fee service unavailable')
-  const rows = await r.json() as Array<{ finalityThreshold: number; minimumFee: number; forwardFee?: number | { low?: number; med?: number; high?: number } }>
+async function cctpMaxFee(srcDomain: number, burn: bigint, rowsIn?: IrisFeeRow[]): Promise<bigint> {
+  const rows = rowsIn ?? await irisFeeRows(srcDomain)
   const fast = rows.find(x => x.finalityThreshold === 1000) ?? rows[0]
   if (!fast) throw new Error('No CCTP fee for this route')
   // minimumFee is in basis points (may be fractional); forwardFee in USDC base units.
@@ -638,7 +666,7 @@ async function cctpMaxFee(srcDomain: number, burn: bigint): Promise<bigint> {
 /** MeshPort's fee: the relayer's gas for the router call, priced in USDC -
  *  what that gas costs, nothing more (no margin, no minimum). */
 async function relayFee(pub: any, chainKey: string): Promise<bigint> {
-  const gasPrice: bigint = await pub.getGasPrice()
+  const gasPrice: bigint = await cached(gasPriceCache, chainKey, 'price', GAS_PRICE_TTL_MS, () => pub.getGasPrice() as Promise<bigint>)
   const nativeUsd = Number(process.env[`BRIDGE_NATIVE_USD_${chainKey.toUpperCase()}`] || CHAINS[chainKey].gasUsd)
   // wei → USDC units: wei * usd / 1e18 * 1e6 = wei * usd / 1e12
   const units = (ROUTER_GAS * gasPrice * BigInt(Math.round(nativeUsd * 100))) / 100n / 1_000_000_000_000n
@@ -653,12 +681,18 @@ async function relayFee(pub: any, chainKey: string): Promise<bigint> {
 async function quote(chainKey: string, total: bigint) {
   const c = CHAINS[chainKey]
   const { pub } = await clients(chainKey)
-  const [fee, usdcName, usdcVersion] = await Promise.all([
-    relayFee(pub, chainKey),
-    pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'name' }) as Promise<string>,
-    pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'version' }) as Promise<string>,
-  ])
-  const maxFee = await cctpMaxFee(c.domain, total > fee ? total - fee : 0n)
+  let meta = usdcMetaCache.get(chainKey)
+  if (!meta) {
+    meta = Promise.all([
+      pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'name' }) as Promise<string>,
+      pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'version' }) as Promise<string>,
+    ])
+    usdcMetaCache.set(chainKey, meta)
+    meta.catch(() => usdcMetaCache.delete(chainKey))
+  }
+  // All at once: gas price, USDC's signing domain and Circle's fee table.
+  const [fee, [usdcName, usdcVersion], rows] = await Promise.all([relayFee(pub, chainKey), meta, irisFeeRows(c.domain)])
+  const maxFee = await cctpMaxFee(c.domain, total > fee ? total - fee : 0n, rows)
   return { fee, maxFee, usdcName, usdcVersion, pub }
 }
 
