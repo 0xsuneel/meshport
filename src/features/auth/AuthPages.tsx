@@ -173,7 +173,7 @@ export function LoginPage() {
   const [agreed, setAgreed] = useState(false)
   // Circle's SDK and this browser's device id load while the user reads the
   // screen, so "Continue with Google" leaves for Google without waiting.
-  useEffect(() => { void import('@/wallet/circle').then(c => c.warmCircle()).catch(() => {}) }, [])
+  useEffect(() => { void import('@/wallet/circle').then(c => { if (c.circleSignInForNewAccounts()) c.warmCircle() }).catch(() => {}) }, [])
   // First screen: Create account or Log in, and Personal or Business.
   const [mode, setMode] = useState<AuthMode>(() => getAuthMode())
   const [kind, setKind] = useState<AccountKind | null>(() => getChosenKind())
@@ -187,11 +187,12 @@ export function LoginPage() {
 
   const handleGoogleLogin = async () => {
     if (!agreed) return
-    // With Circle wallets on, one Google screen signs in to MeshPort and the
+    // With Circle wallets switched on (VITE_CIRCLE_WALLETS_ENABLED - off: new
+    // wallets are Privy), one Google screen signs in to MeshPort and the
     // Circle wallet together (src/wallet/circle.ts); Google sends the user to
     // /wallet/circle-login, which then continues at /auth/google below.
     const circle = await import('@/wallet/circle')
-    if (circle.circleGoogleConfigured()) {
+    if (circle.circleSignInForNewAccounts()) {
       try { await circle.startGoogleSignIn({ meshport: true }); return }
       catch (e) { console.error('[Auth] Google + Circle sign-in could not start; plain Google sign-in instead:', e) }
     }

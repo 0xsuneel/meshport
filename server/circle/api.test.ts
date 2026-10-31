@@ -108,6 +108,19 @@ describe('api/circle-wallet (handler, end to end)', () => {
     expect(circleBodies['POST /v1/w3s/user/sign/transaction'].walletId).toBe(WALLET) // the client's walletId is ignored
   })
 
+  it("a payment's signatures don't each re-check the MeshPort session with Supabase", async () => {
+    const f = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    const authChecks = () => f.mock.calls.filter(c => new URL(String(c[0])).pathname === '/auth/v1/user').length
+    const tx = { to: '0x2222222222222222222222222222222222222222', nonce: '1', gas: '21000', maxFeePerGas: '100', maxPriorityFeePerGas: '1', chainId: 5042002 }
+    await call({ action: 'sign-transaction', userToken: ALICE_CIRCLE, transaction: tx })
+    const before = authChecks()
+    await call({ action: 'sign-transaction', userToken: ALICE_CIRCLE, transaction: tx })
+    await call({ action: 'sign-transaction', userToken: ALICE_CIRCLE, transaction: tx })
+    expect(authChecks()).toBe(before)
+    // An unknown token is still refused - only a confirmed session is remembered.
+    expect((await call({ action: 'wallet', userToken: ALICE_CIRCLE }, 'tok-unknown')).status).toBe(401)
+  })
+
   it('maps refusals to HTTP codes', async () => {
     expect((await call({ action: 'link', userToken: ALICE_CIRCLE }, 'tok-mallory')).status).toBe(409) // Alice's Circle, Mallory's account
     expect((await call({ action: 'wallet', userToken: 'expired-token-' + 'z'.repeat(40) })).json.code).toBe('session')

@@ -11,7 +11,7 @@ vi.mock('@/store', () => ({ useAuthStore: { getState: () => auth, subscribe: (l:
 const reports: string[] = []
 vi.mock('./errorReport', () => ({ reportPerf: (l: string) => reports.push(l) }))
 
-import { useWalletReadiness, startWalletReadiness, noteRestoring, setPrivyConnectedProbe, walletGeneration, noteNetworkReady, recompute, untilSignerReady } from './walletReadiness'
+import { useWalletReadiness, startWalletReadiness, noteRestoring, setPrivyConnectedProbe, setCircleReadyProbe, walletGeneration, noteNetworkReady, recompute, untilSignerReady } from './walletReadiness'
 
 const W = '0x4cb2ff6492d51edfb54f0cff3b517d7f207d80a1'
 const phase = () => useWalletReadiness.getState().phase
@@ -45,6 +45,15 @@ describe('wallet readiness', () => {
     setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'privy', signer: {} })
     expect(phase()).toBe('wallet_discovered')
     connected = true; recompute()
+    expect(phase()).toBe('signer_ready')
+  })
+
+  it('Circle: a stored session is "discovered", not ready to sign, until its warm-up confirms it', () => {
+    let ready = false
+    setCircleReadyProbe(() => ready)
+    setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'circle', signer: {} })
+    expect(phase()).toBe('wallet_discovered')
+    ready = true; recompute()
     expect(phase()).toBe('signer_ready')
   })
 

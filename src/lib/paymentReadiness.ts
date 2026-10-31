@@ -32,6 +32,19 @@ function warmPrivy(address: string): void {
     .catch(() => {})
 }
 
+/** Same for a Circle wallet (session, backend, SDK - wallet/circle.ts). */
+function warmCircle(address: string): void {
+  void import('@/wallet/circle')
+    .then(m => { if (!m.circleSignerReady(address)) void m.warmCircleSigner(address) })
+    .catch(() => {})
+}
+
+/** The provider warm-up for this kind of wallet, if it has one. */
+function warmProvider(walletSource: string | null, address: string): void {
+  if (walletSource === 'privy') warmPrivy(address)
+  else if (walletSource === 'circle') warmCircle(address)
+}
+
 /**
  * Starts getting the signer ready without waiting: opens the wallet (with
  * the passcode when the person just typed it), warms a Privy wallet. Safe
@@ -42,7 +55,7 @@ export function prepareSigner(passcode?: string): void {
   const { walletAddress, walletSource, signer } = useAuthStore.getState()
   if (!walletAddress) return
   if (signer) {
-    if (walletSource === 'privy') warmPrivy(walletAddress)
+    warmProvider(walletSource, walletAddress)
     return
   }
   // Silent: a mistyped passcode here must not raise the recovery banner.
@@ -75,7 +88,7 @@ export async function getReadySigner(passcode?: string, opts?: { silent?: boolea
   const now = useAuthStore.getState()
   if (!signer || generation !== walletGeneration() || !now.walletAddress) return null
   if (signer.address.toLowerCase() !== now.walletAddress.toLowerCase()) return null
-  if (now.walletSource === 'privy') warmPrivy(now.walletAddress)
+  warmProvider(now.walletSource, now.walletAddress)
   return signer
 }
 

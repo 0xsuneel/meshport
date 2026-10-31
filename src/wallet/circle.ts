@@ -17,7 +17,19 @@
 // usual relay.
 //
 // The Circle session (userToken + encryptionKey + refreshToken) is kept per
-// MeshPort account in this browser and refreshed once when it expires.
+// MeshPort account in this browser and refreshed BEFORE it expires: Circle's
+// userToken lasts 60 minutes, and one that expires unrefreshed logs the user
+// out (Circle docs) - refreshing only after a call failed meant a Google
+// sign-in again after every idle hour.
+//
+// Readiness (like Privy's, lib/walletReadiness): a Circle signer is only
+// "ready" once its session is valid, the backend has confirmed the wallet,
+// and Circle's SDK and frame are loaded (warmCircleSigner) - so the first
+// payment doesn't pay for any of that.
+//
+// OFF for new sign-ins: MeshPort's Google sign-in goes through Circle only
+// with VITE_CIRCLE_WALLETS_ENABLED=true (new wallets are Privy). Accounts
+// whose wallet already is a Circle wallet keep working either way.
 
 import { toAccount } from 'viem/accounts'
 import { bytesToHex, getTypesForEIP712Domain, type Hex, type TypedDataDefinition } from 'viem'
@@ -34,10 +46,36 @@ const DEVICE_KEY = 'mp.circle.deviceId'
 const PENDING_KEY = 'mp.circle.pendingLogin'
 const PENDING_MAX_AGE_MS = 15 * 60_000
 
-export const circleConfigured = (): boolean => !!APP_ID
-export const circleGoogleConfigured = (): boolean => !!APP_ID && !!GOOGLE_CLIENT_ID
+const SIGN_IN_ENABLED = (import.meta.env.VITE_CIRCLE_WALLETS_ENABLED as string | undefined)?.trim() === 'true'
 
-export interface CircleSession { userToken: string; encryptionKey: string; refreshToken?: string }
+export const circleConfigured = (): boolean => !!APP_ID
+/** Circle's Google sign-in can run (an existing Circle wallet signing in again on this device). */
+export const circleGoogleConfigured = (): boolean => !!APP_ID && !!GOOGLE_CLIENT_ID
+/** MeshPort's own Google sign-in goes through Circle - off unless explicitly enabled. */
+export const circleSignInForNewAccounts = (): boolean => SIGN_IN_ENABLED && circleGoogleConfigured()
+
+/** `obtainedAt`: when Circle issued this userToken (sessions saved before it was kept have none). */
+export interface CircleSession { userToken: string; encryptionKey: string; refreshToken?: string; obtainedAt?: number }
+
+// Circle: "a 60-minute session token". Refreshed once less than this is left.
+export const CIRCLE_SESSION_MS = 60 * 60_000
+export const CIRCLE_REFRESH_AHEAD_MS = 10 * 60_000
+const API_TIMEOUT_MS = 20_000
+
+/** When this session's userToken expires: its JWT `exp` if it has one, else 60 min after it was issued. */
+export function circleSessionExpiry(s: CircleSession): number | null {
+  const parts = s.userToken.split('.')
+  if (parts.length === 3) {
+    try {
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: unknown }
+      if (typeof payload.exp === 'number') return payload.exp * 1000
+    } catch { /* not a JWT */ }
+  }
+  return s.obtainedAt ? s.obtainedAt + CIRCLE_SESSION_MS : null
+}
+const expired = (s: CircleSession, now = Date.now()) => { const e = circleSessionExpiry(s); return e !== null && now >= e }
+/** Unknown expiry (an older saved session) counts as due: one refresh settles it. */
+const dueForRefresh = (s: CircleSession, now = Date.now()) => { const e = circleSessionExpiry(s); return e === null || e - now < CIRCLE_REFRESH_AHEAD_MS }
 
 export class CircleError extends Error {
   constructor(public status: number, public code: string | null, message: string) { super(message) }
@@ -70,40 +108,89 @@ export async function meshportAccount(): Promise<{ uid: string; email: string | 
 // ── backend ─────────────────────────────────────────────────────────────────
 
 export async function circleApi<T>(action: string, body: Record<string, unknown> = {}): Promise<T> {
-  const r = await fetch('/api/circle-wallet', {
-    method: 'POST', headers: await authApiHeaders(),
-    body: JSON.stringify({ action, ...body }, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)),
-  })
+  let r: Response
+  try {
+    r = await fetch('/api/circle-wallet', {
+      method: 'POST', headers: await authApiHeaders(),
+      body: JSON.stringify({ action, ...body }, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)),
+      // A hung request used to hold a payment screen with no end.
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    })
+  } catch (e) {
+    const timedOut = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')
+    throw new CircleError(504, 'timeout', timedOut ? 'Your wallet did not answer - nothing was sent. Try again.' : 'Could not reach your wallet - check your connection and try again')
+  }
   const j = await r.json().catch(() => null) as (T & { error?: string; code?: string }) | null
   if (!r.ok) throw new CircleError(r.status, j?.code ?? null, j?.error || `Wallet service error (${r.status})`)
   return j as T
 }
 
-/** A backend call that needs the Circle session: refreshed once if it expired. */
+/** A backend call that needs the Circle session: refreshed ahead of expiry, and once more if Circle still calls it expired. */
 export async function circleCall<T>(uid: string, action: string, body: Record<string, unknown> = {}): Promise<T> {
-  const s = loadCircleSession(uid)
-  if (!s) throw new CircleError(401, 'session', 'Sign in to your Circle wallet')
+  const s = await freshCircleSession(uid)
   try {
     return await circleApi<T>(action, { ...body, userToken: s.userToken })
   } catch (e) {
     if (!(e instanceof CircleError) || e.code !== 'session') throw e
-    const fresh = await refreshSession(uid, s)
+    const fresh = await refreshSession(uid, s, false)
     return circleApi<T>(action, { ...body, userToken: fresh.userToken })
   }
 }
 
-async function refreshSession(uid: string, s: CircleSession): Promise<CircleSession> {
+const refreshing = new Map<string, Promise<CircleSession>>()
+
+/**
+ * The account's Circle session, refreshed first when less than
+ * CIRCLE_REFRESH_AHEAD_MS is left (one refresh at a time per account).
+ * A refresh that fails for a reason other than Circle refusing the session
+ * (offline, a slow backend) keeps a still-valid session.
+ */
+export async function freshCircleSession(uid: string): Promise<CircleSession> {
+  const s = loadCircleSession(uid)
+  if (!s) throw new CircleError(401, 'session', 'Sign in to your Circle wallet')
+  if (!dueForRefresh(s)) return s
+  let p = refreshing.get(uid)
+  if (!p) {
+    p = refreshSession(uid, s, true).finally(() => refreshing.delete(uid))
+    refreshing.set(uid, p)
+  }
+  try {
+    return await p
+  } catch (e) {
+    if (e instanceof CircleError && e.code === 'session') throw e
+    if (!expired(s)) return s
+    throw new CircleError(401, 'session', 'Sign in to your Circle wallet again')
+  }
+}
+
+/**
+ * Exchanges the refresh token for a new session. Circle refusing it (or no
+ * refresh token / device id) ends the session: the user signs in again. With
+ * `ahead` (the token is still valid), any other failure keeps the session.
+ */
+async function refreshSession(uid: string, s: CircleSession, ahead: boolean): Promise<CircleSession> {
   const deviceId = read<string>(DEVICE_KEY)
-  if (!s.refreshToken || !deviceId) { saveCircleSession(uid, null); throw new CircleError(401, 'session', 'Sign in to your Circle wallet again') }
+  if (!s.refreshToken || !deviceId) {
+    if (ahead && !expired(s)) throw new CircleError(503, 'refresh', 'Circle session could not be refreshed yet')
+    endSession(uid); throw new CircleError(401, 'session', 'Sign in to your Circle wallet again')
+  }
   try {
     const r = await circleApi<{ userToken: string; encryptionKey?: string; refreshToken?: string }>('refresh', { userToken: s.userToken, refreshToken: s.refreshToken, deviceId })
-    const fresh = { userToken: r.userToken, encryptionKey: r.encryptionKey ?? s.encryptionKey, refreshToken: r.refreshToken ?? s.refreshToken }
+    const fresh: CircleSession = { userToken: r.userToken, encryptionKey: r.encryptionKey ?? s.encryptionKey, refreshToken: r.refreshToken ?? s.refreshToken, obtainedAt: Date.now() }
     saveCircleSession(uid, fresh)
     return fresh
   } catch (e) {
-    saveCircleSession(uid, null)
-    throw e instanceof CircleError && e.code === 'session' ? e : new CircleError(401, 'session', 'Sign in to your Circle wallet again')
+    const refused = e instanceof CircleError && e.code === 'session'
+    if (ahead && !refused) throw e
+    endSession(uid)
+    throw refused ? e : new CircleError(401, 'session', 'Sign in to your Circle wallet again')
   }
+}
+
+function endSession(uid: string): void {
+  saveCircleSession(uid, null)
+  for (const k of [...readyAddresses.keys()]) if (readyAddresses.get(k) === uid) readyAddresses.delete(k)
+  notifyReadiness()
 }
 
 // ── Circle's Web SDK (loaded only when needed) ──────────────────────────────
@@ -144,7 +231,7 @@ function loginResult(error: unknown, result: unknown): CircleSession {
     const m = e?.message || 'Circle sign-in did not finish'
     throw new CircleError(401, 'login', e?.code ? `${m} (${e.code})` : m)
   }
-  return { userToken: r.userToken, encryptionKey: r.encryptionKey, refreshToken: r.refreshToken }
+  return { userToken: r.userToken, encryptionKey: r.encryptionKey, refreshToken: r.refreshToken, obtainedAt: Date.now() }
 }
 
 /** Link the Circle sign-in to this MeshPort account and keep the session. */
@@ -258,19 +345,6 @@ export async function finishGoogleSignIn(): Promise<{ returnTo: string; circleEr
   }
 }
 
-/** Sign in with a code Circle emails to this MeshPort account's address
- *  (the backend picks the address). Circle's screen asks for the code. */
-export async function emailLogin(uid: string, email: string): Promise<void> {
-  const id = await deviceId()
-  const t = await circleApi<{ deviceToken: string; deviceEncryptionKey: string; otpToken: string }>('email-device-token', { deviceId: id })
-  const session = await new Promise<CircleSession>((resolve, reject) => {
-    sdk({ deviceToken: t.deviceToken, deviceEncryptionKey: t.deviceEncryptionKey, otpToken: t.otpToken, email: { email } }, (error, result) => {
-      try { resolve(loginResult(error, result)) } catch (e) { reject(e) }
-    }).then(s => s.verifyOtp()).catch(reject)
-  })
-  await finishLogin(uid, session)
-}
-
 // ── challenges, wallet, signer ──────────────────────────────────────────────
 
 export interface ChallengeOutcome { status?: string; type?: string; signature?: Hex; signedTransaction?: Hex }
@@ -279,7 +353,13 @@ export interface ChallengeOutcome { status?: string; type?: string; signature?: 
 // second execute() replaces the first one's callback, which then never
 // finishes (a payment screen waiting forever). Challenges queue here.
 let challengeQueue: Promise<unknown> = Promise.resolve()
-const CHALLENGE_TIMEOUT_MS = 60_000
+// A signature normally takes a few seconds; Circle's SDK's own 10 s guard
+// stops working after its frame first answers (receivedResponseFromService
+// is never reset), so this is the limit a stuck one is held to.
+const CHALLENGE_TIMEOUT_MS = 30_000
+// Circle's SDK error codes that mean the session is gone, not "declined":
+// userTokenNotFound, userTokenExpired, invalidUserToken (SDK types.d.ts).
+const SESSION_ERRORS = new Set([155103, 155104, 155105])
 
 /** Run a challenge in Circle's SDK (no screen while Confirmation UIs are off), one at a time. */
 export function executeChallenge(uid: string, challengeId: string): Promise<ChallengeOutcome> {
@@ -290,8 +370,7 @@ export function executeChallenge(uid: string, challengeId: string): Promise<Chal
 }
 
 async function runChallenge(uid: string, challengeId: string): Promise<ChallengeOutcome> {
-  const s = loadCircleSession(uid)
-  if (!s) throw new CircleError(401, 'session', 'Sign in to your Circle wallet')
+  const s = await freshCircleSession(uid)
   const w = await sdk()
   w.setAuthentication({ userToken: s.userToken, encryptionKey: s.encryptionKey })
   return new Promise((resolve, reject) => {
@@ -300,26 +379,13 @@ async function runChallenge(uid: string, challengeId: string): Promise<Challenge
       clearTimeout(timer)
       if (error) {
         const e = error as { code?: number; message?: string }
-        reject(new CircleError(400, e.code === 155104 ? 'session' : 'challenge', e.message || 'Not approved'))
+        reject(new CircleError(400, e.code !== undefined && SESSION_ERRORS.has(e.code) ? 'session' : 'challenge', e.message || 'Not approved'))
         return
       }
       const r = result as { status?: string; type?: string; data?: { signature?: Hex; signedTransaction?: Hex } } | undefined
       resolve({ status: r?.status, type: r?.type, signature: r?.data?.signature, signedTransaction: r?.data?.signedTransaction })
     })
   })
-}
-
-/** The account's Circle wallet address, creating the wallet first if needed. */
-export async function ensureCircleWallet(uid: string): Promise<Hex> {
-  const r = await circleCall<{ challengeId?: string; ready?: true }>(uid, 'initialize')
-  if (r.challengeId) await executeChallenge(uid, r.challengeId)
-  // Circle makes the wallet right after the challenge; it shows up within seconds.
-  for (let i = 0; i < 20; i++) {
-    try { return (await circleCall<{ address: Hex }>(uid, 'wallet')).address }
-    catch (e) { if (!(e instanceof CircleError && e.code === 'no-wallet')) throw e }
-    await new Promise(res => setTimeout(res, 1000))
-  }
-  throw new CircleError(504, 'no-wallet', 'Your wallet is still being set up - try again in a minute')
 }
 
 export type CircleAccount = WalletAccount & { readonly circleWallet: true }
@@ -333,8 +399,21 @@ export function circleAccount(address: string, uid: string): CircleAccount {
   const hit = accounts.get(key)
   if (hit) return hit
   async function sign(action: string, body: Record<string, unknown>): Promise<ChallengeOutcome> {
-    const { challengeId } = await circleCall<{ challengeId: string }>(uid, action, body)
-    return executeChallenge(uid, challengeId)
+    for (let attempt = 0; ; attempt++) {
+      const { challengeId } = await circleCall<{ challengeId: string }>(uid, action, body)
+      try {
+        const out = await executeChallenge(uid, challengeId)
+        readyAddresses.set(address.toLowerCase(), uid) // it signed: as ready as the warm-up makes it
+        notifyReadiness()
+        return out
+      } catch (e) {
+        // The session ended between creating the challenge and running it:
+        // refresh once and sign again with a new challenge (nothing was signed).
+        const s = loadCircleSession(uid)
+        if (attempt > 0 || !(e instanceof CircleError) || e.code !== 'session' || !s) throw e
+        await refreshSession(uid, s, false)
+      }
+    }
   }
   const base = toAccount({
     address: address as Hex,
@@ -363,11 +442,87 @@ export function circleAccount(address: string, uid: string): CircleAccount {
   return account
 }
 
-/** The signed-in account's Circle signer for `address`, if this browser has its Circle session. */
+/**
+ * The signed-in account's Circle signer for `address`, if this browser has a
+ * Circle session that is still valid (or can be refreshed). Its warm-up starts
+ * at once; readiness reports "ready" only when that has finished.
+ */
 export async function restoreCircleAccount(address: string): Promise<CircleAccount | null> {
   const a = await meshportAccount()
   if (!a || a.anonymous || !loadCircleSession(a.uid)) return null
-  return circleAccount(address, a.uid)
+  try { await freshCircleSession(a.uid) } catch { return null }
+  const account = circleAccount(address, a.uid)
+  void warmCircleSigner(address)
+  return account
+}
+
+// ── readiness and warm-up ───────────────────────────────────────────────────
+// address (lower case) → uid, once warmCircleSigner (or a real signature)
+// proved this browser can sign for it now.
+const readyAddresses = new Map<string, string>()
+const warming = new Map<string, Promise<boolean>>()
+
+function notifyReadiness(): void {
+  void import('@/lib/walletReadiness').then(m => m.recompute()).catch(() => {})
+}
+
+/** True once this address's Circle session is valid, confirmed by the backend, and Circle's SDK is loaded. */
+export function circleSignerReady(address: string): boolean {
+  const uid = readyAddresses.get(address.toLowerCase())
+  if (!uid) return false
+  const s = loadCircleSession(uid)
+  return !!s && !expired(s)
+}
+void import('@/lib/walletReadiness').then(m => m.setCircleReadyProbe(circleSignerReady)).catch(() => {})
+
+/** Opens the connection to Circle's frame early (its page loads for every signature). */
+function preconnectCircle(): void {
+  try {
+    if (typeof document === 'undefined' || document.querySelector('link[data-circle-preconnect]')) return
+    const l = document.createElement('link')
+    l.rel = 'preconnect'; l.href = 'https://pw-auth.circle.com'; l.crossOrigin = ''
+    l.setAttribute('data-circle-preconnect', '')
+    document.head.appendChild(l)
+  } catch { /* no DOM */ }
+}
+
+/**
+ * Gets a Circle signer ready before the first payment (like Privy's
+ * warm-up): refreshes the session if it's due, asks the backend for the
+ * wallet (checks the session and the link, and wakes the wallet service),
+ * and loads Circle's SDK and frame. Ready only if all of it works.
+ */
+export function warmCircleSigner(address: string): Promise<boolean> {
+  const a = address.toLowerCase()
+  const running = warming.get(a)
+  if (running) return running
+  preconnectCircle()
+  const p = (async () => {
+    const acct = await meshportAccount()
+    if (!acct || acct.anonymous || !loadCircleSession(acct.uid)) return false
+    const [w] = await Promise.all([
+      circleCall<{ address: string }>(acct.uid, 'wallet'),
+      deviceId(), // loads the SDK and Circle's frame
+    ])
+    if (w.address.toLowerCase() !== a) return false
+    readyAddresses.set(a, acct.uid)
+    keepSessionFresh()
+    return true
+  })().catch(() => false).finally(() => { warming.delete(a); notifyReadiness() })
+  warming.set(a, p)
+  return p
+}
+
+let keeping = false
+/** While the app is open: refresh each ready session before it expires (and on return to the app). */
+function keepSessionFresh(): void {
+  if (keeping || typeof window === 'undefined') return
+  keeping = true
+  const tick = () => {
+    for (const uid of new Set(readyAddresses.values())) void freshCircleSession(uid).catch(() => notifyReadiness())
+  }
+  setInterval(tick, 5 * 60_000)
+  try { document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') tick() }) } catch { /* no DOM */ }
 }
 
 /** At sign-in: the Circle signer when `address` (the account's wallet) is this account's Circle wallet. */
@@ -375,8 +530,10 @@ export async function circleSignerFor(uid: string, address: string): Promise<Cir
   if (!circleConfigured() || !loadCircleSession(uid)) return null
   try {
     const w = await circleCall<{ address: string }>(uid, 'wallet')
-    return w.address.toLowerCase() === address.toLowerCase() ? circleAccount(w.address, uid) : null
+    if (w.address.toLowerCase() !== address.toLowerCase()) return null
+    void warmCircleSigner(w.address)
+    return circleAccount(w.address, uid)
   } catch { return null }
 }
 
-export function signOutCircle(uid: string): void { saveCircleSession(uid, null) }
+export function signOutCircle(uid: string): void { endSession(uid) }

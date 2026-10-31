@@ -66,13 +66,45 @@ function getService(): CircleWalletService {
   return service
 }
 
-async function caller(req: VercelRequest): Promise<{ uid: string; email: string | null; anonymous: boolean } | null> {
+type Caller = { uid: string; email: string | null; anonymous: boolean }
+
+// A MeshPort session Supabase has confirmed, remembered briefly per warm
+// instance (keyed by the token's hash, never the token): a payment's
+// signatures don't each wait on Supabase. Never past the token's own expiry.
+const CALLER_CACHE_MS = 60_000
+const callers = new Map<string, { who: Caller; exp: number }>()
+
+async function tokenHash(token: string): Promise<string> {
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token)))
+  return Array.from(d, b => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** The JWT's `exp` in ms, or null. */
+function jwtExpiry(token: string): number | null {
+  try {
+    const exp = (JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as { exp?: unknown }).exp
+    return typeof exp === 'number' ? exp * 1000 : null
+  } catch { return null }
+}
+
+async function caller(req: VercelRequest): Promise<Caller | null> {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
   if (!token || !SERVICE_KEY || !SUPABASE_URL) return null
+  const key = await tokenHash(token)
+  const now = Date.now()
+  const hit = callers.get(key)
+  if (hit && hit.exp > now) return hit.who
   const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` } })
   if (!r.ok) return null
   const u = await r.json().catch(() => null) as { id?: string; email?: string; is_anonymous?: boolean } | null
-  return u?.id ? { uid: u.id, email: u.email ?? null, anonymous: u.is_anonymous === true } : null
+  if (!u?.id) return null
+  const who: Caller = { uid: u.id, email: u.email ?? null, anonymous: u.is_anonymous === true }
+  const exp = Math.min(now + CALLER_CACHE_MS, jwtExpiry(token) ?? now + CALLER_CACHE_MS)
+  if (exp > now) {
+    if (callers.size > 5000) callers.delete(callers.keys().next().value!)
+    callers.set(key, { who, exp })
+  }
+  return who
 }
 
 // Per warm instance: 120 requests a minute per account; 10 sign-in starts a

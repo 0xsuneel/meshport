@@ -19,6 +19,10 @@ import { CIRCLE_ERR, CircleApiError, type CircleClient } from './client'
 
 export const CIRCLE_CHAIN = 'EVM-TESTNET'
 const SESSION_CACHE_MS = 5 * 60_000
+// The account ↔ Circle user link changes only when it is made or its wallet
+// is first found (both below update this cache), so a signature needn't look
+// it up in the database every time. Per warm instance.
+const LINK_CACHE_MS = 5 * 60_000
 
 export type CircleWalletErrorCode =
   | 'bad-request'      // malformed input
@@ -108,6 +112,19 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
   const now = opts.now ?? Date.now
   // Which Circle user a session token belongs to (keyed by the token's hash, never the token).
   const sessions = new Map<string, { circleUserId: string; exp: number }>()
+  const links = new Map<string, { link: CircleLink; exp: number }>()
+
+  /** repo.link, remembered for LINK_CACHE_MS (a missing link isn't remembered - it may be made any moment). */
+  async function linkOf(authUid: string): Promise<CircleLink | null> {
+    const hit = links.get(authUid)
+    if (hit && hit.exp > now()) return hit.link
+    const link = await repo.link(authUid)
+    if (link) {
+      if (links.size > 5000) links.delete(links.keys().next().value!)
+      links.set(authUid, { link, exp: now() + LINK_CACHE_MS })
+    }
+    return link
+  }
 
   /** Circle errors → this service's errors. */
   async function call<T>(f: () => Promise<T>): Promise<T> {
@@ -136,7 +153,7 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
   /** The signed-in account's link, after checking the Circle session belongs to it. */
   async function linked(authUid: string, userToken: unknown): Promise<CircleLink> {
     const token = needToken(userToken)
-    const [link, circleUserId] = await Promise.all([repo.link(authUid), circleUserOf(token)])
+    const [link, circleUserId] = await Promise.all([linkOf(authUid), circleUserOf(token)])
     if (!link) throw new CircleWalletError('not-linked', 'Connect your Circle wallet first')
     if (link.circleUserId !== circleUserId) throw new CircleWalletError('linked-elsewhere', 'This Circle sign-in belongs to a different MeshPort account')
     return link
@@ -159,6 +176,7 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
     if (!w) throw new CircleWalletError('no-wallet', 'Your Circle wallet is not set up yet')
     const address = getAddress(w.address)
     await repo.saveWallet(authUid, w.id, address, CIRCLE_CHAIN)
+    links.set(authUid, { link: { ...link, walletId: w.id, address, blockchain: CIRCLE_CHAIN }, exp: now() + LINK_CACHE_MS })
     return { walletId: w.id, address }
   }
 
@@ -185,7 +203,7 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
     /** Link this MeshPort account to the Circle user signed in with `userToken` (first time), or confirm it. */
     async link(authUid: string, userToken: unknown) {
       const circleUserId = await circleUserOf(needToken(userToken))
-      const existing = await repo.link(authUid)
+      const existing = await linkOf(authUid)
       if (existing) {
         if (existing.circleUserId !== circleUserId) throw new CircleWalletError('linked-elsewhere', 'This MeshPort account uses a different Circle sign-in')
         return { circleUserId }
@@ -193,6 +211,7 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
       if (await repo.saveLink(authUid, circleUserId) === 'taken') {
         throw new CircleWalletError('linked-elsewhere', 'This Circle sign-in belongs to a different MeshPort account')
       }
+      links.delete(authUid)
       return { circleUserId }
     },
 

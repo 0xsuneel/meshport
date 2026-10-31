@@ -181,3 +181,27 @@ describe('Circle wallet service', () => {
     expect(calls.filter(c => c.path === '/v1/w3s/user')).toHaveLength(0)
   })
 })
+
+describe('Circle wallet service - fewer round trips per signature', () => {
+  it("looks up the account's Circle link once, not on every signature", async () => {
+    let lookups = 0
+    const link = repo.link.bind(repo)
+    repo.link = async (uid: string) => { lookups++; return link(uid) }
+    await svc.link('uid-alice', ALICE_TOKEN)
+    await svc.initialize('uid-alice', ALICE_TOKEN)
+    await svc.wallet('uid-alice', ALICE_TOKEN)
+    const before = lookups
+    await svc.signMessage('uid-alice', ALICE_TOKEN, { message: 'one' })
+    await svc.signMessage('uid-alice', ALICE_TOKEN, { message: 'two' })
+    await svc.signTransaction('uid-alice', ALICE_TOKEN, { transaction: TX })
+    expect(lookups).toBe(before) // the remembered link (with its wallet) is used
+    expect(lastCall('/v1/w3s/user/sign/transaction').body.walletId).toBe(ALICE_WALLET)
+  })
+
+  it('an account with no link yet is looked up again (a link made a moment later is seen)', async () => {
+    await expect(svc.wallet('uid-alice', ALICE_TOKEN)).rejects.toMatchObject({ code: 'not-linked' })
+    await svc.link('uid-alice', ALICE_TOKEN)
+    await svc.initialize('uid-alice', ALICE_TOKEN)
+    expect((await svc.wallet('uid-alice', ALICE_TOKEN)).walletId).toBe(ALICE_WALLET)
+  })
+})
