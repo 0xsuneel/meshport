@@ -85,7 +85,7 @@ describe('fastCctpTransfer', () => {
     arc({ allowance: 50_000_000n })
     send.mockResolvedValue({ txHash: H(2), state: 'failed' })
     const onBurnSent = vi.fn()
-    await expect(fastCctpTransfer(base({ onBurnSent }))).rejects.toMatchObject({ reason: 'not_sent' })
+    await expect(fastCctpTransfer(base({ onBurnSent }))).rejects.toMatchObject({ kind: 'not_sent' })
     expect(onBurnSent).not.toHaveBeenCalled()
   })
 

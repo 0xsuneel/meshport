@@ -29,3 +29,13 @@ describe('fee estimates', () => {
     vi.useRealTimers()
   })
 })
+
+describe('the fee cap a send signs follows Arc', () => {
+  it('twice the gas price, never under 25 gwei; 60 gwei when the price is unknown', async () => {
+    const { feeCapFor } = await import('./arcService')
+    const gwei = (n: number) => BigInt(n) * 1_000_000_000n
+    expect(feeCapFor(gwei(5))).toBe(gwei(25))      // quiet chain: the old floor
+    expect(feeCapFor(gwei(25))).toBe(gwei(50))     // 31 Oct 17:11: 25 gwei - the old fixed cap was refused
+    expect(feeCapFor(null)).toBe(gwei(60))
+  })
+})

@@ -114,9 +114,8 @@ function arcClient(retryCount: number, timeout: number, pollingInterval?: number
   return c
 }
 
-// Gas price for FEE ESTIMATES only (Pay / Swap / Transfer screens show it on
-// open): one read per 15 s shared by every screen. Transactions themselves
-// never use it - they set their own fee caps (relaySend).
+// Gas price: one read per 15 s shared by every screen's fee estimate, and the
+// basis of the fee cap every send signs (sendFeeCap).
 const GAS_PRICE_TTL_MS = 15_000
 let gasPriceCache: { at: number; price: Promise<bigint> } | null = null
 function estimateGasPrice(): Promise<bigint> {
@@ -386,6 +385,28 @@ export function trackPendingSend(
 // Anything unclear (old server, lost answer) falls back to sending it directly
 // as before; a payment that may have gone out is reported 'pending', never
 // 'failed' (SUBMITTED_UNKNOWN - Architecture rule 5).
+// The fee cap a send signs. It was a fixed 25 gwei: when Arc's base fee rose
+// to ~25 gwei (field 31 Oct 17:11-17:14) every node refused those sends -
+// approvals and transfers failed with nothing sent. Now twice Arc's current
+// gas price, never under 25 gwei. A cap is not a charge: only base fee + tip
+// is paid. The price is the shared 15 s reading (usually already there); one
+// that doesn't come within 400 ms uses a wide 60 gwei cap rather than waiting.
+const SEND_FEE_FLOOR = parseGwei('25')
+const SEND_FEE_UNKNOWN = parseGwei('60')
+export function feeCapFor(gasPrice: bigint | null): bigint {
+  if (gasPrice == null) return SEND_FEE_UNKNOWN
+  const twice = gasPrice * 2n
+  return twice > SEND_FEE_FLOOR ? twice : SEND_FEE_FLOOR
+}
+/** The fee cap for an Arc send right now (see feeCapFor). */
+export async function sendFeeCap(): Promise<bigint> {
+  const price = await Promise.race([
+    Promise.resolve().then(estimateGasPrice).catch(() => null), // never throws: an unreadable price uses the wide cap
+    new Promise<null>(r => setTimeout(() => r(null), 400)),
+  ])
+  return feeCapFor(price)
+}
+
 const RELAY_METHOD = 'meshport_sendRawTransactionAndWait'
 const RELAY_REJECTED = -32003
 const ALREADY_SENT = /already known|known transaction|already imported|nonce too low|replacement transaction underpriced/i
@@ -420,6 +441,7 @@ async function relaySendTimed(
   onSent: (hash: `0x${string}`) => void,
   stages: typeof payStages,
 ): Promise<{ txHash: `0x${string}`; state: SendResult['state']; blockNumber?: string }> {
+  const maxFeePerGas = await sendFeeCap()
   const signed = span('pay:sign')
   const raw = await account.signTransaction({
     type: 'eip1559',
@@ -429,7 +451,7 @@ async function relaySendTimed(
     data: tx.data,
     gas: tx.gas,
     nonce: tx.nonce,
-    maxFeePerGas: parseGwei('25'),
+    maxFeePerGas,
     maxPriorityFeePerGas: parseGwei('1'),
   })
   stages.sign = signed()
