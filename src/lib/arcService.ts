@@ -406,6 +406,14 @@ export async function relaySend(
     throw e
   }
 }
+/** relaySend for a non-Pay flow (Transfer's CCTP steps): same send, not counted in Pay's timings. */
+export async function relayArcSend(
+  account: WalletAccount,
+  tx: { to: `0x${string}`; value?: bigint; data?: `0x${string}`; gas: bigint; nonce: number },
+  onSent: (hash: `0x${string}`) => void = () => {},
+): Promise<{ txHash: `0x${string}`; state: SendResult['state']; blockNumber?: string }> {
+  return relaySendTimed(account, tx, onSent, {})
+}
 async function relaySendTimed(
   account: WalletAccount,
   tx: { to: `0x${string}`; value?: bigint; data?: `0x${string}`; gas: bigint; nonce: number },

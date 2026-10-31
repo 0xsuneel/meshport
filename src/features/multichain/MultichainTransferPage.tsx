@@ -2571,7 +2571,16 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         token: 'USDC',
         config: { transferSpeed, batchTransactions: false },
       })
-      const estimatePromise: Promise<any> = (async () => {
+      // Direct path (lib/fastCctp): EVM destinations get Circle's fee table
+      // straight from Iris - one request instead of the SDK's estimate.
+      const fastCctpOn = (import.meta.env.VITE_FAST_CCTP as string | undefined) !== 'off'
+      const { canFastCctp, fastCctpMaxFee } = await import('@/lib/fastCctp')
+      const useFastCctp = fastCctpOn && canFastCctp(chain.sdk)
+      const irisMaxFee = useFastCctp
+        ? await fastCctpMaxFee({ destination: chain.sdk, amount: numAmount, fast: transferSpeed === 'FAST', forward: useForwarder, l1: isL1Destination }).catch(() => null)
+        : null
+      if (irisMaxFee) maxFee = irisMaxFee
+      const estimatePromise: Promise<any> = irisMaxFee ? Promise.resolve(null) : (async () => {
         try {
           return await runEstimate()
         } catch (estErr) {
@@ -2647,13 +2656,27 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       }
 
       let result = await Promise.race([
-        kit.bridge({
-          from: { adapter, chain: ARC_CHAIN_KEY },
-          to: destTarget,
-          amount: numAmount.toFixed(6),
-          token: 'USDC',
-          config: { transferSpeed, maxFee, batchTransactions: false },
-        }),
+        useFastCctp
+          // Circle's CCTP contracts called directly, each step sent the way
+          // Pay sends (lib/fastCctp) - same steps, same events, kit-shaped result.
+          ? import('@/lib/fastCctp').then(({ fastCctpTransfer }) => fastCctpTransfer({
+              account: activeSigner,
+              destination: chain.sdk,
+              recipient: address,
+              amount: numAmount.toFixed(6),
+              maxFee,
+              speed: transferSpeed,
+              useForwarder,
+              onStep: (step, payload) => handleEvent(step)(payload),
+              onBurnSent: h => { burnTxHashRef.current = h },
+            })) as Promise<any>
+          : kit.bridge({
+              from: { adapter, chain: ARC_CHAIN_KEY },
+              to: destTarget,
+              amount: numAmount.toFixed(6),
+              token: 'USDC',
+              config: { transferSpeed, maxFee, batchTransactions: false },
+            }),
         timeoutPromise,
       ])
       logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: `kit.bridge() → state: ${result.state}`, data: { state: result.state, steps: (result as any).steps } })

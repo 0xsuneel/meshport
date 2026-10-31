@@ -122,14 +122,14 @@ const MESSAGE_TRANSMITTER_V2 = '0xe737e5cebeeba77efe34d4aa090756590b1ce275' as c
  * Returns the mint tx hash, or null if it couldn't be finished right now.
  */
 export async function finishCctpMintViaRelayer(p: {
-  sourceChain: string; destinationChain: string; burnTxHash: string; timeoutMs?: number
+  sourceChain: string; destinationChain: string; burnTxHash: string; timeoutMs?: number; pollMs?: number
 }): Promise<{ mintTxHash: string } | null> {
   const { fetchIrisMessage } = await import('./cctpTracker')
   const deadline = Date.now() + (p.timeoutMs ?? 120_000)
   let msg = await fetchIrisMessage(p.sourceChain, p.burnTxHash)
   while (Date.now() < deadline && !(msg?.status === 'complete' && msg.message && msg.attestation && msg.attestation !== 'PENDING')) {
     if ((msg?.forwardState ?? '').toUpperCase() === 'COMPLETE' && msg?.forwardTxHash) return { mintTxHash: msg.forwardTxHash }
-    await new Promise(r => setTimeout(r, 3000))
+    await new Promise(r => setTimeout(r, p.pollMs ?? 3000))
     msg = await fetchIrisMessage(p.sourceChain, p.burnTxHash)
   }
   if ((msg?.forwardState ?? '').toUpperCase() === 'COMPLETE' && msg?.forwardTxHash) return { mintTxHash: msg.forwardTxHash }
