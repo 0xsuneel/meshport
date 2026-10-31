@@ -1952,7 +1952,24 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 quote: directTokenQuoteRef.current,
                 onStep: (step, payload) => {
                   const hash = payload.values.txHash
-                  if (step === 'burn' && hash) burnTxHashRef.current = hash
+                  if (step === 'burn' && hash) {
+                    burnTxHashRef.current = hash
+                    // It has left Arc: in Activity (pending) and resumable at once, like
+                    // USDC - not only once Circle has delivered. The row is finished
+                    // (same tx hash, no duplicate) when the transfer completes.
+                    const { walletAddress: wa, user: u } = useAuthStore.getState()
+                    if (wa) {
+                      saveResumableOperation('multichain_transfer', hash, {
+                        amount: numAmount, destinationChain: chain.sdk || chain.name || selectedChain,
+                        destinationAddress: address, walletAddress: wa,
+                      })
+                      import('@/lib/ActivityService').then(({ Activity }) => Activity.bridge({
+                        walletAddress: wa, userId: u?.id, txHash: hash, amount: numAmount, sourceChain: ARC_CHAIN_KEY,
+                        destinationChain: chain.sdk || chain.name || selectedChain, destinationAddress: address,
+                        status: 'pending', tokenSymbol: tokenSym,
+                      })).catch(() => {})
+                    }
+                  }
                   markStep(step, payload.values.state, hash)
                 },
                 onSendSent: h => { burnTxHashRef.current = h },
@@ -1987,11 +2004,17 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         })
         if (sendHash) {
           const { walletAddress: bwa, user: bu } = useAuthStore.getState()
-          import('@/lib/ActivityService').then(({ Activity }) => Activity.bridge({
-            walletAddress: bwa ?? '', userId: bu?.id, txHash: sendHash, destinationTxHash: deliverHash || undefined,
+          const row = {
+            walletAddress: bwa ?? '', txHash: sendHash, destinationTxHash: deliverHash || undefined,
             amount: numAmount, sourceChain: ARC_CHAIN_KEY, destinationChain: chain.sdk || chain.name || selectedChain,
-            destinationAddress: address, status: deliverHash ? 'completed' : 'pending', tokenSymbol: tokenSym,
-          })).catch((e: any) => console.error('[MultichainSend] token Activity.bridge failed:', e?.message))
+            destinationAddress: address,
+          }
+          import('@/lib/ActivityService').then(async ({ Activity }) => {
+            // The direct path wrote the row (pending) when it left Arc: insert it if it
+            // isn't there (a no-op if it is), then finish that same row.
+            await Activity.bridge({ ...row, userId: bu?.id, status: 'pending', tokenSymbol: tokenSym })
+            if (deliverHash) await Activity.markBridgeCompleted(row)
+          }).catch((e: any) => console.error('[MultichainSend] token Activity.bridge failed:', e?.message))
         }
         try {
           refreshBalancesAfterTx(senderAddress, { spent: 0 })
@@ -3174,7 +3197,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // Who submits the destination mint: Circle's forwarder, or MeshPort's
   // relayer on chains where the forwarder's mint fails (Ethereum Sepolia).
   const transferForwarder = !chain.ub && circleForwarderMintsTo(chain.sdk)
-  const meshportMints = chain.ub ? gatewaySelfMintsTo(chain.sdk) : !transferForwarder
+  // EURC / cirBTC: always Circle's forwarder (CCTPx), never MeshPort's relayer.
+  const meshportMints = isTokenRoute ? false : chain.ub ? gatewaySelfMintsTo(chain.sdk) : !transferForwarder
   const STEP_INFO_HINT: Record<string, string> = {
     approve:     'Waiting on your wallet to confirm the approval.',
     burn:        'Waiting on Arc to confirm the burn.',

@@ -124,3 +124,31 @@ describe('Circle quote checks', () => {
     expect(quoteMatches(quote({ at: Date.now() - 30_000 }), want)).toBe(false)
   })
 })
+
+describe('delivery read from the destination chain (Iris lags it)', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+  it("Circle's mint has a successful receipt on the destination: delivered", async () => {
+    const { deliveredOnChain } = await import('./fastCctp')
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ result: { status: '0x1' } }) })))
+    expect(await deliveredOnChain({ status: 'complete', forwardState: 'SENT', forwardTxHash: H(9) }, 'Ethereum_Sepolia')).toBe(true)
+  })
+  it('not mined yet, reverted, no hash, or failed: not delivered', async () => {
+    const { deliveredOnChain } = await import('./fastCctp')
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ result: null }) })))
+    expect(await deliveredOnChain({ forwardState: 'SENT', forwardTxHash: H(9) }, 'Ethereum_Sepolia')).toBe(false)
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ result: { status: '0x0' } }) })))
+    expect(await deliveredOnChain({ forwardState: 'SENT', forwardTxHash: H(9) }, 'Ethereum_Sepolia')).toBe(false)
+    expect(await deliveredOnChain({ forwardState: 'PENDING' }, 'Ethereum_Sepolia')).toBe(false)
+    expect(await deliveredOnChain({ forwardState: 'FAILED', forwardTxHash: H(9) }, 'Ethereum_Sepolia')).toBe(false)
+  })
+  it('the transfer finishes on the chain receipt before Iris says COMPLETE', async () => {
+    arc({ allowance: 10_000_000n })
+    send.mockResolvedValue({ txHash: H(2), state: 'success' })
+    iris.mockResolvedValue({ status: 'complete', message: '0x01', attestation: '0x02', forwardState: 'SENT', forwardTxHash: H(3) })
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ result: { status: '0x1' } }) })))
+    const onStep = vi.fn()
+    const r = await fastCctpxTransfer(base({ onStep, destination: 'Ethereum_Sepolia', quote: quote({ destination: 'Ethereum_Sepolia' }) }))
+    expect(r.steps.find(s => s.name === 'forward')?.txHash).toBe(H(3))
+    expect(onStep.mock.calls.map(c => c[0])).toEqual(['approve', 'burn', 'attestation', 'mint'])
+  })
+})

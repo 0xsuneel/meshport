@@ -224,6 +224,35 @@ export async function sendStep(account: WalletAccount, tx: { to: Hex; data: Hex;
   throw Object.assign(new FastCctpError(`${what} is still confirming on Arc.`, 'settling'), { txHash: sent.txHash })
 }
 
+/**
+ * Circle's forwarder has submitted the mint (forwardTxHash) but Iris hasn't
+ * said COMPLETE yet - it lags the chain (field 31 Oct: EURC minted on Ethereum
+ * 11 s after leaving Arc, the screen still waiting 38 s later). The
+ * destination chain's own receipt settles it: a successful receipt for the
+ * mint Circle reported is the delivery. Unsure (no RPC answer, not mined yet)
+ * is "not yet", never a failure.
+ */
+export async function deliveredOnChain(msg: IrisMessage | null, destination: string, timeoutMs = 4000): Promise<boolean> {
+  const hash = msg?.forwardTxHash
+  if (!hash || !/^0x[0-9a-fA-F]{64}$/.test(hash) || forwardFailed(msg)) return false
+  const { EXTERNAL_CHAINS } = await import('@/blockchain/chains')
+  const rpcs = EXTERNAL_CHAINS[destination === 'Polygon_Amoy_Testnet' ? 'Polygon_Sepolia' : destination]?.rpcs ?? []
+  for (const url of rpcs.slice(0, 3)) {
+    try {
+      const r = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionReceipt', params: [hash] }),
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+      if (!r.ok) continue
+      const j = await r.json()
+      if (j?.result?.status === '0x1') return true
+      if (j?.result) return false // mined and reverted: Circle retries or reports it
+    } catch { /* next RPC */ }
+  }
+  return false
+}
+
 export const attested = (m: IrisMessage | null) => !!m && m.status === 'complete' && !!m.message && !!m.attestation && m.attestation !== 'PENDING'
 export const forwarded = (m: IrisMessage | null) => (m?.forwardState ?? '').toUpperCase() === 'COMPLETE' && !!m?.forwardTxHash
 export const forwardFailed = (m: IrisMessage | null) => (m?.forwardState ?? '').toUpperCase() === 'FAILED'
@@ -293,7 +322,7 @@ export async function fastCctpTransfer(p: FastCctpParams): Promise<FastCctpResul
     while (!mintHash && Date.now() < fwdDeadline && !forwardFailed(msg)) {
       await sleep(pollMs)
       msg = await fetchIrisMessage(ARC_KEY, burnHash).catch(() => msg)
-      if (forwarded(msg)) mintHash = msg!.forwardTxHash!
+      if (forwarded(msg) || await deliveredOnChain(msg, p.destination)) mintHash = msg!.forwardTxHash!
     }
   }
   if (!mintHash) {
