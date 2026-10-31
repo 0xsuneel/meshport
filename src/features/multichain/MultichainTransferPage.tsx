@@ -40,10 +40,11 @@ import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLo
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountField, quickAmounts, percentAmounts } from '@/components/ui/AmountField'
 import { TokenMenu } from '@/components/ui/TokenMenu'
-import { KIT_CCTPX_CHAINS, BRIDGE_TOKENS, bridgeTokenDecimals, bridgeTokenInfo, useTokenRouteChains, type BridgeToken } from '@/lib/tokenBridge'
+import { prewarmTokenRoutes, type CctpxToken, KIT_CCTPX_CHAINS, BRIDGE_TOKENS, bridgeTokenDecimals, bridgeTokenInfo, useTokenRouteChains, type BridgeToken } from '@/lib/tokenBridge'
 import { revealFlow } from '@/lib/revealFlow'
 import { startMoveTimer, type MoveTimer } from '@/lib/moveTimings'
 import { sendThroughRelay } from '@/lib/arcRelaySend'
+import { peekTokenSnapshot } from '@/lib/tokenSnapshot'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { moveSteps, indexFromStepStates } from '@/lib/moveSteps'
@@ -1154,15 +1155,20 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [isTokenRoute, offeredKey])
   useEffect(() => {
-    setTokenBalance(null)
+    // The Hub's scan already read Arc's EURC / cirBTC (lib/tokenSnapshot):
+    // show that at once, then the live figure.
+    const scanned = isTokenRoute ? peekTokenSnapshot(senderAddress)?.arc[bridgeToken as CctpxToken] : null
+    setTokenBalance(typeof scanned === 'number' ? scanned : null)
     if (!isTokenRoute || !senderAddress) return
     let cancelled = false
     import('@/lib/arcService')
       .then(m => (bridgeToken === 'EURC' ? m.getEURCBalance(senderAddress) : m.getCirBtcBalance(senderAddress)))
       .then(b => { if (!cancelled) setTokenBalance(b) })
-      .catch(() => { if (!cancelled) setTokenBalance(0) })
+      .catch(() => { if (!cancelled) setTokenBalance(prev => prev ?? 0) })
     return () => { cancelled = true }
   }, [bridgeToken, isTokenRoute, senderAddress])
+  // EURC / cirBTC routes looked up while the form opens, not when the chip is tapped.
+  useEffect(() => { prewarmTokenRoutes() }, [])
 
   const chain = { ...baseChain, ub: effectiveUb }
 

@@ -31,7 +31,7 @@ import { UB_CLAIM_CHAINS } from '@/lib/ubClaim'
 import { canBringOverCctp } from '@/lib/gaslessBridge'
 import { useMerchant, useBusinessTab, isMerchantClaim, useAccountKind } from '@/lib/merchant'
 import { isChainEnabledForBring, isChainEnabledForSettle, isCoinEnabled } from '@/lib/featureFilters'
-import { BRIDGE_TOKENS, type BridgeToken, type CctpxToken } from '@/lib/tokenBridge'
+import { BRIDGE_TOKENS, prewarmTokenRoutes, type BridgeToken, type CctpxToken } from '@/lib/tokenBridge'
 import { TokenBringList, type TokenBringChain } from './TokenBring'
 import { BusinessMoney } from '@/features/merchant/BusinessMoney'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -441,6 +441,8 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   // Bring's coin: USDC, or EURC / cirBTC over Circle CCTPx (lib/tokenBridge) -
   // personal accounts only; business Bring and Settle stay USDC.
   const [bringCoin, setBringCoin] = useState<BridgeToken>('USDC')
+  // EURC / cirBTC routes looked up as the Hub opens, so the coin chips are ready.
+  useEffect(() => { prewarmTokenRoutes() }, [])
   const [tokenBring, setTokenBring] = useState<TokenBringChain | null>(null)
   const lastTokenBring = useRef<TokenBringChain | null>(null)
   if (tokenBring) lastTokenBring.current = tokenBring

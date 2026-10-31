@@ -462,6 +462,18 @@ export const SDK_CHAIN_RPCS: Record<string, string[]> = {
   'Injective Testnet':   ['https://k8s.testnet.json-rpc.injective.network'],
 }
 
+// ─── CCTP domains ───────────────────────────────────────────────────────────
+// Circle's domain number per chain (the same numbers as api/bridge-relay
+// CHAINS). Circle's CCTPx token registry lists where EURC / cirBTC live by
+// domain; this maps them back to MeshPort's chain ids (api/portfolio).
+export const CCTP_DOMAINS: Readonly<Record<string, number>> = {
+  Ethereum_Sepolia: 0, Avalanche_Fuji: 1, Optimism_Sepolia: 2, Arbitrum_Sepolia: 3, Base_Sepolia: 6,
+  Polygon_Sepolia: 7, Unichain_Sepolia: 10, Linea_Sepolia: 11, Codex_Testnet: 12, Sonic_Testnet: 13,
+  World_Chain_Sepolia: 14, Monad_Testnet: 15, Sei_Testnet: 16, XDC_Apothem: 18, HyperEVM_Testnet: 19,
+  Ink_Testnet: 21, Plume_Testnet: 22, Arc_Testnet: 26, Edge_Testnet: 28, Injective_Testnet: 29,
+  Morph_Testnet: 30, Pharos_Testnet: 31,
+}
+
 // ─── Circle Forwarding Service support ──────────────────────────────────────
 // Source: https://developers.circle.com/cctp/concepts/supported-chains-and-domains
 // ("Forwarding Service" column). Keep in sync with Circle's docs as they roll

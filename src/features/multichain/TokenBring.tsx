@@ -15,6 +15,7 @@ import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 import { formatAmount, trimTrailingZeros } from '@/lib/utils'
 import { bridgeTokenDecimals, useTokenRouteChains, type CctpxToken } from '@/lib/tokenBridge'
 import { hasTokenRouter } from '@/lib/gaslessToken'
+import { useTokenSnapshot } from '@/lib/tokenSnapshot'
 
 /** A CCTPx chain (kit id) → MeshPort's chain id and name. */
 const CHAIN_INFO: Record<string, { id: string; label: string }> = {
@@ -27,6 +28,12 @@ const CHAIN_INFO: Record<string, { id: string; label: string }> = {
   World_Chain_Sepolia:  { id: 'World_Chain_Sepolia', label: 'World Chain' },
 }
 const chainInfo = (sdk: string) => CHAIN_INFO[sdk] ?? { id: sdk, label: sdk.replace(/_/g, ' ') }
+/** A MeshPort chain id's name (the scan's snapshot is keyed by these). */
+const labelOf = (id: string) => Object.values(CHAIN_INFO).find(c => c.id === id)?.label
+  ?? id.replace(/_(Sepolia|Testnet|Fuji|Apothem)$/, '').replace(/_/g, ' ')
+/** Snapshot rows in the usual chain order, then any others. */
+const ORDER = Object.values(CHAIN_INFO).map(c => c.id)
+const byOrder = (a: string, b: string) => ((ORDER.indexOf(a) + 1 || 99) - (ORDER.indexOf(b) + 1 || 99)) || a.localeCompare(b)
 
 /** A chain picked in the list: MeshPort's chain id, its token balance and the token's contract there. */
 export type TokenBringChain = { chainId: string; label: string; balance: number; tokenAddress: string }
@@ -74,6 +81,54 @@ export async function waitForArc(token: CctpxToken, owner: string, before: numbe
 // ── The chain list ──────────────────────────────────────────────────────────
 export function TokenBringList({ token, onPick }: { token: CctpxToken; onPick: (c: TokenBringChain) => void }) {
   const walletAddress = useAuthStore(s => s.walletAddress)
+  // The Hub's USDC scan already brought EURC / cirBTC on every chain (one
+  // /api/portfolio call - lib/tokenSnapshot): show those at once.
+  const snapshot = useTokenSnapshot(walletAddress)?.tokens?.[token] ?? null
+  if (snapshot) return <SnapshotRows token={token} rows={snapshot} onPick={onPick} />
+  return <LookupRows token={token} walletAddress={walletAddress} onPick={onPick} />
+}
+
+function TokenRow({ token, label, balance, onPick }: { token: CctpxToken; label: string; balance: number | null | undefined; onPick?: () => void }) {
+  const has = (balance ?? 0) > 0
+  return (
+    <button disabled={!has} onClick={onPick}
+      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 16, textAlign: 'left',
+        cursor: has ? 'pointer' : 'default', opacity: has ? 1 : 0.55,
+        background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
+        border: has ? '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' : '1px solid var(--border)' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 'min(15px, 4.1vw)', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.25, overflowWrap: 'normal' }}>{label}</div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+            color: 'var(--success-text)', background: 'color-mix(in srgb, var(--success) 14%, transparent)' }}>CCTPx</span>
+        </div>
+      </div>
+      {/* Same as a USDC row: the number never breaks; the coin drops under it when needed. */}
+      <span style={{ fontSize: 'min(16px, 4.2vw)', fontWeight: 800, color: has ? 'var(--text-primary)' : 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', flexShrink: 1, minWidth: 0, maxWidth: '58%', textAlign: 'right' }}>
+        <span style={{ whiteSpace: 'nowrap' }}>{balance === undefined ? '…' : balance === null ? '-' : has ? fmtToken(token, balance) : '0'}</span> <span style={{ whiteSpace: 'nowrap' }}>{token}</span>
+      </span>
+    </button>
+  )
+}
+
+const listNote = (text: string) => <div style={{ padding: 18, textAlign: 'center', fontSize: 13, color: 'var(--text-secondary)' }}>{text}</div>
+
+/** From the scan's snapshot: chains, balances and addresses already known. */
+function SnapshotRows({ token, rows, onPick }: { token: CctpxToken; rows: Record<string, { balance: number | null; address: string }>; onPick: (c: TokenBringChain) => void }) {
+  const ids = Object.keys(rows).filter(hasTokenRouter).sort(byOrder)
+  if (!ids.length) return listNote(`${token} can't be brought to Arc from any chain right now.`)
+  return (
+    <>
+      {ids.map(id => (
+        <TokenRow key={id} token={token} label={labelOf(id)} balance={rows[id].balance}
+          onPick={() => onPick({ chainId: id, label: labelOf(id), balance: rows[id].balance ?? 0, tokenAddress: rows[id].address })} />
+      ))}
+    </>
+  )
+}
+
+/** No scan yet (or an older server): Circle's registry, then each chain read here. */
+function LookupRows({ token, walletAddress, onPick }: { token: CctpxToken; walletAddress: string | null; onPick: (c: TokenBringChain) => void }) {
   const routes = useTokenRouteChains(token)
   const [balances, setBalances] = useState<Record<string, number | null>>({})
   const decimals = bridgeTokenDecimals(token)
@@ -94,36 +149,18 @@ export function TokenBringList({ token, onPick }: { token: CctpxToken; onPick: (
     return () => { cancelled = true }
   }, [walletAddress, routes.chains, routes.deployments, decimals])
 
-  const note = (text: string) => <div style={{ padding: 18, textAlign: 'center', fontSize: 13, color: 'var(--text-secondary)' }}>{text}</div>
-  if (routes.loading) return note(`Finding chains that carry ${token}…`)
-  if (routes.error) return note(`Couldn't load ${token} routes from Circle. Try again in a moment.`)
-  if (!chains?.length) return note(`${token} can't be brought to Arc from any chain right now.`)
+  if (routes.loading) return listNote(`Finding chains that carry ${token}…`)
+  if (routes.error) return listNote(`Couldn't load ${token} routes from Circle. Try again in a moment.`)
+  if (!chains?.length) return listNote(`${token} can't be brought to Arc from any chain right now.`)
 
   return (
     <>
       {chains.map(sdk => {
         const info = chainInfo(sdk)
         const bal = balances[sdk]
-        const has = (bal ?? 0) > 0
         return (
-          <button key={sdk} disabled={!has}
-            onClick={() => onPick({ chainId: info.id, label: info.label, balance: bal ?? 0, tokenAddress: routes.deployments!.get(sdk)! })}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 16, textAlign: 'left',
-              cursor: has ? 'pointer' : 'default', opacity: has ? 1 : 0.55,
-              background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-              border: has ? '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' : '1px solid var(--border)' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 'min(15px, 4.1vw)', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.25, overflowWrap: 'normal' }}>{info.label}</div>
-              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
-                  color: 'var(--success-text)', background: 'color-mix(in srgb, var(--success) 14%, transparent)' }}>CCTPx</span>
-              </div>
-            </div>
-            {/* Same as a USDC row: the number never breaks; the coin drops under it when needed. */}
-            <span style={{ fontSize: 'min(16px, 4.2vw)', fontWeight: 800, color: has ? 'var(--text-primary)' : 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', flexShrink: 1, minWidth: 0, maxWidth: '58%', textAlign: 'right' }}>
-              <span style={{ whiteSpace: 'nowrap' }}>{bal === undefined ? '…' : bal === null ? '-' : has ? fmtToken(token, bal) : '0'}</span> <span style={{ whiteSpace: 'nowrap' }}>{token}</span>
-            </span>
-          </button>
+          <TokenRow key={sdk} token={token} label={info.label} balance={bal}
+            onPick={() => onPick({ chainId: info.id, label: info.label, balance: bal ?? 0, tokenAddress: routes.deployments!.get(sdk)! })} />
         )
       })}
     </>

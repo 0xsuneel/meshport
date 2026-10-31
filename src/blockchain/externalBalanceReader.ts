@@ -41,6 +41,7 @@ import { normalizeAddress } from './types'
 import { dedupe, peek, put } from './cache'
 import { countRequest, countError, countDedupeHit } from './rpcMetrics'
 import { isSlowNetwork } from '@/lib/connectivity'
+import { notePortfolio } from '@/lib/tokenSnapshot'
 
 export interface ChainBalanceResult {
   chainId: string
@@ -243,6 +244,8 @@ export async function readPortfolioChains(address: string): Promise<Record<strin
     })
     if (!res.ok) throw new Error('http ' + res.status)
     const json = await res.json()
+    // EURC / cirBTC came in the same answer: keep them for the coin chips.
+    notePortfolio(address, json)
     return json && typeof json.chains === 'object' ? json.chains : null
   } catch {
     countError()
