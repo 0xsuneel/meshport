@@ -56,7 +56,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForBring, bringRoutes, bringKeys } from '@/lib/featureFilters'
 import { useAccountKind } from '@/lib/merchant'
 import { readExternalBalances, refreshScope, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
-import { fetchCctpProgress, useCctpProgress } from '@/lib/cctpTracker'
+import { mintedOnArc as isMintedOnArc, useCctpProgress } from '@/lib/cctpTracker'
 import { ARC_RPCS } from '@/lib/arc'
 import { UB_CLAIM_CHAINS, runUbClaim, ubBringTime, ubClaimEta, estimateUbClaimFee } from '@/lib/ubClaim'
 import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
@@ -832,18 +832,22 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       .filter((c): c is ServerClaim => !!c && !!c.txHash && c.status !== 'completed' && c.status !== 'failed' && !mintedOnArc[c.id])
     if (pending.length === 0) return
     let stop = false
+    // Arc's own record of the mint (lib/cctpTracker isMintedOnArc) once Circle
+    // has attested - seconds before Iris reports the forwarder done.
     const check = () => {
       for (const c of pending) {
-        fetchCctpProgress(c.sourceChain, c.txHash!).then(p => {
-          if (stop || p?.stage !== 'done') return
+        isMintedOnArc(c.sourceChain, c.txHash!).then(minted => {
+          if (stop || !minted) return
           setMintedOnArc(prev => prev[c.id] ? prev : { ...prev, [c.id]: true })
           kickClaimWorker(c.id)
-        })
+        }).catch(() => {})
       }
     }
     check()
-    const iv = setInterval(check, 3_000)
-    return () => { stop = true; clearInterval(iv) }
+    const iv = setInterval(check, 1_500)
+    // A deposit just landed on Arc: look at once.
+    window.addEventListener('meshport:arc-deposit', check)
+    return () => { stop = true; clearInterval(iv); window.removeEventListener('meshport:arc-deposit', check) }
   }, [claimRecords, claimsByStatus, mintedOnArc])
 
   // Auto-advance the UI once the server-side state machine finishes -
