@@ -453,6 +453,8 @@ export async function claimPointsAsUSDC(params: {
         // Arc docs pattern: gas estimate + 20% buffer, maxFeePerGas >= 20 Gwei, chain inline
         const nonce = await publicClient.getTransactionCount({ address: account.address, blockTag: 'pending' })
         const gasEst = await publicClient.estimateGas({ account: account.address, to: REWARDS_CONTRACT, data: callData })
+        // Follows Arc's gas price (a fixed 25 gwei was refused when the base fee reached it).
+        const maxFeePerGas = await import('./arcService').then(m => m.sendFeeCap()).catch(() => parseGwei('60'))
         // Cast: viem's sendTransaction overload resolution (in the installed
         // viem/typescript combination) spuriously demands an EIP-4844 `kzg`
         // field for this plain EIP-1559 transaction. Runtime behavior is
@@ -461,7 +463,7 @@ export async function claimPointsAsUSDC(params: {
           to: REWARDS_CONTRACT,
           data: callData,
           gas: (gasEst * 120n) / 100n,
-          maxFeePerGas: parseGwei('25'),
+          maxFeePerGas,
           maxPriorityFeePerGas: parseGwei('1'),
           chain: ARC_CHAIN_INLINE,
           nonce,

@@ -104,7 +104,7 @@ describe('fastCctpxTransfer (EURC / cirBTC straight to Circle)', () => {
     arc({ allowance: 10_000_000n })
     send.mockResolvedValue({ txHash: H(2), state: 'success' })
     iris.mockResolvedValue({ status: 'complete', message: '0x01', attestation: '0x02', forwardState: 'FAILED' })
-    await expect(fastCctpxTransfer(base())).rejects.toMatchObject({ reason: 'settling' })
+    await expect(fastCctpxTransfer(base())).rejects.toMatchObject({ kind: 'settling' })
   })
 })
 

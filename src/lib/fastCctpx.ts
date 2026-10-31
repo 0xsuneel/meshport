@@ -215,7 +215,7 @@ export async function fastCctpxTransfer(p: FastCctpxParams): Promise<FastCctpxRe
   try {
     sendHash = await sendStep(p.account, { to: CCTPX_SERVICE, data, gas, nonce, value: quote.nativeFee }, 'The transfer')
   } catch (e: any) {
-    if (e instanceof FastCctpError && e.reason === 'settling' && (e as any).txHash) p.onSendSent?.((e as any).txHash)
+    if (e instanceof FastCctpError && e.kind === 'settling' && (e as any).txHash) p.onSendSent?.((e as any).txHash)
     throw e
   }
   p.onStep('burn', { values: { state: 'success', txHash: sendHash } })

@@ -174,7 +174,7 @@ export async function estimate(from: string, to: Hex, data: Hex, value = 0n): Pr
 }
 
 export class FastCctpError extends Error {
-  constructor(message: string, readonly reason: 'rejected' | 'not_sent' | 'settling') { super(message) }
+  constructor(message: string, readonly kind: 'rejected' | 'not_sent' | 'settling') { super(message) }
 }
 
 // ── The transfer ─────────────────────────────────────────────────────────────
@@ -297,7 +297,7 @@ export async function fastCctpTransfer(p: FastCctpParams): Promise<FastCctpResul
   try {
     burnHash = await sendStep(p.account, { to: TOKEN_MESSENGER_V2, data: burnData, gas: burnGas, nonce }, 'The transfer')
   } catch (e: any) {
-    if (e instanceof FastCctpError && e.reason === 'settling' && (e as any).txHash) p.onBurnSent?.((e as any).txHash)
+    if (e instanceof FastCctpError && e.kind === 'settling' && (e as any).txHash) p.onBurnSent?.((e as any).txHash)
     throw e
   }
   p.onStep('burn', { values: { state: 'success', txHash: burnHash } })
