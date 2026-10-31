@@ -370,9 +370,9 @@ export function biometricLabel(): string {
 /**
  * iPhone, iPad and Mac: a website can only reach Face ID / Touch ID through
  * Apple's passkeys - turning it on shows Apple's own "Save a passkey for
- * meshport.xyz?" sheet before Face ID, whatever options are passed
- * (residentKey 'discouraged' is ignored there). There is no web API for the
- * plain lock-screen prompt; only a native app gets that. The app explains
+ * meshport.xyz?" sheet before Face ID, whatever options are passed. There
+ * is no web API for the plain lock-screen prompt; only a native app gets
+ * that. The app explains
  * the sheet up front so it doesn't look like something went wrong.
  * Android (screen lock) and Windows (Windows Hello) show their normal
  * device prompt.
@@ -464,6 +464,35 @@ export type BiometricRegisterResult =
 const failed = (reason: BiometricFailureReason): BiometricRegisterResult => ({ status: 'failed', reason })
 
 /**
+ * Which kind of credential to ask for. A passkey (discoverable) everywhere
+ * but Windows: on Android only passkeys are kept in Google Password Manager,
+ * which supports PRF - a non-discoverable credential goes through Play
+ * Services' older FIDO path, which has no PRF, so registration always ended
+ * "unsupported" on Android phones with a fingerprint. Apple always makes a
+ * passkey anyway. Windows keeps 'discouraged': asking for a passkey there
+ * made Edge / Windows try to sync it to Microsoft Password Manager and stall
+ * when that service was unreachable. Unlock always names the exact
+ * credential, so either kind works the same afterwards.
+ */
+export function residentKeyFor(ua: string = typeof navigator !== 'undefined' ? navigator.userAgent : ''): ResidentKeyRequirement {
+  return /Windows/.test(ua) ? 'discouraged' : 'required'
+}
+
+/**
+ * Why a registration didn't finish, for client_errors: which step, the
+ * outcome, the platform and what the browser said it supports. No keys,
+ * passcode, credential id or address.
+ */
+function reportRegistration(stage: string, reason: BiometricFailureReason, detail = ''): void {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  const platform = /Android/.test(ua) ? 'android' : /iPhone|iPad|iPod/.test(ua) || isIPadOS(ua) ? 'ios' : /Macintosh/.test(ua) ? 'mac' : /Windows/.test(ua) ? 'windows' : 'other'
+  const browser = (ua.match(/(EdgA?|SamsungBrowser|Firefox|CriOS|Chrome|Version)\/(\d+)/) ?? [])[0] ?? 'unknown'
+  void checkPrfCapability().then(prf => import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
+    `[biometric register] ${stage}: ${reason} (${platform} ${browser}, prf capability=${prf ?? 'unknown'}, residentKey=${residentKeyFor(ua)}${detail ? `, ${detail}` : ''})`,
+  )))).catch(() => {})
+}
+
+/**
  * Registers a platform credential and stores the passcode sealed under its
  * PRF output - see "Registration sequence" at the top. Never throws. On
  * anything but 'ok' nothing is stored (a 'needs-confirm' credential exists
@@ -472,7 +501,7 @@ const failed = (reason: BiometricFailureReason): BiometricRegisterResult => ({ s
  */
 export async function registerBiometric(walletAddress: string, rawPasscode: string, userLabel: string): Promise<BiometricRegisterResult> {
   if (!walletAddress || !rawPasscode) return failed('error')
-  if (!(await isBiometricSupported())) return failed('unsupported')
+  if (!(await isBiometricSupported())) { reportRegistration('capability check', 'unsupported'); return failed('unsupported') }
   // Re-enabling replaces whatever this device had for the wallet.
   removeBiometric(walletAddress)
 
@@ -488,11 +517,9 @@ export async function registerBiometric(walletAddress: string, rawPasscode: stri
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
           userVerification: 'required',
-          // 'discouraged': unlock always names the exact credential, so a
-          // discoverable one isn't needed - and asking for one is what made
-          // Windows/Edge try to sync it to Microsoft Password Manager and
-          // stall when that service was unreachable.
-          residentKey: 'discouraged',
+          // A passkey except on Windows - see residentKeyFor (Android needs it for PRF).
+          residentKey: residentKeyFor(),
+          requireResidentKey: residentKeyFor() === 'required',
         },
         timeout: PROMPT_TIMEOUT_MS,
         attestation: 'none', // no relying-party server - device-local model
@@ -504,7 +531,7 @@ export async function registerBiometric(walletAddress: string, rawPasscode: stri
 
     const ext = prfExtension(credential)
     // Explicitly no PRF on this authenticator - never store a weaker copy.
-    if (ext?.enabled === false) { discardCredential(credId); return failed('unsupported') }
+    if (ext?.enabled === false) { discardCredential(credId); reportRegistration('create', 'unsupported', 'prf.enabled=false'); return failed('unsupported') }
 
     const pending: PendingBiometricRegistration = { walletAddress, passcode: rawPasscode, credId, salt: toB64(salt), fromCreate: prfOutput(ext) }
     credId = null // finishRegistration owns it from here
@@ -513,6 +540,7 @@ export async function registerBiometric(walletAddress: string, rawPasscode: stri
     if (credId) discardCredential(credId)
     const reason = classifyWebAuthnError(e)
     console.warn('[biometric] registration failed:', reason, e instanceof Error ? `${e.name}: ${e.message}` : e)
+    if (reason !== 'cancelled') reportRegistration('create', reason, e instanceof Error ? e.name : 'unknown error')
     return failed(reason)
   }
 }
@@ -538,14 +566,15 @@ async function finishRegistration(p: PendingBiometricRegistration, firstAttempt:
     if (reason === 'cancelled' && firstAttempt) return { status: 'needs-confirm', pending: p }
     discardCredential(p.credId)
     console.warn('[biometric] verification test failed:', reason, e instanceof Error ? `${e.name}: ${e.message}` : e)
+    if (reason !== 'cancelled') reportRegistration('verify', reason, e instanceof Error ? e.name : 'unknown error')
     return failed(reason)
   }
   try {
     if (!assertion) { discardCredential(p.credId); return failed('cancelled') }
     if (toB64Url(new Uint8Array(assertion.rawId)) !== p.credId) { discardCredential(p.credId); return failed('mismatch') }
     const prf = prfOutput(prfExtension(assertion))
-    if (!prf) { discardCredential(p.credId); return failed('unsupported') }
-    if (p.fromCreate && !sameBytes(p.fromCreate, prf)) { discardCredential(p.credId); return failed('mismatch') }
+    if (!prf) { discardCredential(p.credId); reportRegistration('verify', 'unsupported', 'no prf result on assertion'); return failed('unsupported') }
+    if (p.fromCreate && !sameBytes(p.fromCreate, prf)) { discardCredential(p.credId); reportRegistration('verify', 'mismatch', 'create and get prf differ'); return failed('mismatch') }
     const rec = await sealVerified(prf, p.passcode, p.salt)
     if (!rec) { discardCredential(p.credId); return failed('mismatch') }
     if (!saveRecord(p.walletAddress, p.credId, rec)) { discardCredential(p.credId); return failed('storage') }
