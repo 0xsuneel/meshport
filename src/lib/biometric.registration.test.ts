@@ -17,6 +17,8 @@ const store = vi.hoisted(() => {
   return { auth, ui, useAuthStore: { getState: () => auth }, useUIStore: { getState: () => ui } }
 })
 vi.mock('@/store', () => ({ useAuthStore: store.useAuthStore, useUIStore: store.useUIStore }))
+const reports = vi.hoisted(() => ({ reportClientError: vi.fn() }))
+vi.mock('@/lib/errorReport', () => reports)
 
 type Lib = typeof import('./biometric')
 const WALLET = '0xAbC0000000000000000000000000000000000001'
@@ -239,6 +241,44 @@ describe('registerBiometric - PRF registration sequence', () => {
     const lib = await load()
     delete PKC.getClientCapabilities
     expect(await lib.isBiometricSupported()).toBe(true)
+  })
+})
+
+describe('registerBiometric - credential kind per platform', () => {
+  it('Android asks for a passkey (only those get PRF, via Google Password Manager)', async () => {
+    const lib = await load()
+    expect(await lib.registerBiometric(WALLET, PASSCODE, 'Sunil')).toEqual({ status: 'ok' })
+    expect(auth.createCalls[0].publicKey!.authenticatorSelection).toMatchObject({ residentKey: 'required', requireResidentKey: true })
+  })
+
+  it('Windows keeps a device-only credential (a passkey stalled on Microsoft Password Manager sync)', async () => {
+    const lib = await load()
+    expect(lib.residentKeyFor('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36')).toBe('discouraged')
+    expect(lib.residentKeyFor('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')).toBe('required')
+    expect(lib.residentKeyFor('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36')).toBe('required')
+  })
+
+  it('an unsupported result says which step failed and on what platform - nothing secret', async () => {
+    const lib = await load()
+    reports.reportClientError.mockClear()
+    auth.createMode = 'disabled'
+    await lib.registerBiometric(WALLET, PASSCODE, 'Sunil')
+    await vi.waitFor(() => expect(reports.reportClientError).toHaveBeenCalled())
+    const msg = (reports.reportClientError.mock.calls[0][1] as Error).message
+    expect(msg).toContain('create: unsupported')
+    expect(msg).toContain('android Chrome/130')
+    expect(msg).toContain('prf.enabled=false')
+    expect(msg).not.toContain(PASSCODE)
+    expect(msg.toLowerCase()).not.toContain(WALLET.toLowerCase())
+  })
+
+  it('a cancel is not reported (it is the person choosing)', async () => {
+    const lib = await load()
+    reports.reportClientError.mockClear()
+    auth.createError = new DOMException('x', 'NotAllowedError')
+    await lib.registerBiometric(WALLET, PASSCODE, 'Sunil')
+    await new Promise(r => setTimeout(r, 10))
+    expect(reports.reportClientError).not.toHaveBeenCalled()
   })
 })
 
