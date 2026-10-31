@@ -37,7 +37,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
       setChecking(false)
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [clearAdminSession, setAdminRole, setAdminSession])
 
   if (checking) return null
   if (status === 'not-admin') return <Navigate to="/" replace />

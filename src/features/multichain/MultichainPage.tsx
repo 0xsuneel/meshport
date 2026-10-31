@@ -405,6 +405,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   // Business → Settlements, keeping ?claim= / ?chain= so tracking still opens.
   useEffect(() => {
     if (merchantTransfer && hubTab === 'bring') navigate('/business' + location.search, { replace: true, state: { btab: 'settlements' } })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [merchantTransfer, hubTab])
   const [showRecovery, setShowRecovery]   = useState(false)
   // Tab requests arriving while already on the Hub (e.g. the inline transfer
@@ -415,6 +416,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
       setHubTab(t)
       if (t === 'recovery') setShowRecovery(true)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [location.key])
   // Inline forms under the tabs (Arc Bridge style - no page change, no pop-up).
   const [claimChain, setClaimChain] = useState<string | null>(() => initialQuery.get('chain'))
@@ -524,6 +526,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   // one case Realtime can't see: funds arriving on an external chain
   // completely outside MeshPort's own claim/transfer flow.
   const chainBalancesMapRef = useRef<Record<string, number>>({})
+  const processingClaimsKey = processingClaims.map(c => `${c.id}:${c.status}`).join(',')
   useEffect(() => {
     if (!walletAddress) { setScanning(false); return }
     let cancelled = false
@@ -608,10 +611,11 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
     })
 
     return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal) }
-  }, [walletAddress, processingClaims.map(c => `${c.id}:${c.status}`).join(','), settingsMap, settingsLoaded, scanNonce])
+  }, [walletAddress, processingClaimsKey, settingsMap, settingsLoaded, scanNonce])
 
   const reloadActivityRef = useRef<(() => void) | null>(null)
   // Load completed activity from DB - shared across all devices via Supabase
+  const serverClaimsKey = serverClaims.map(c => `${c.id}:${c.status}`).join(',')
   useEffect(() => {
     if (!walletAddress) { setLoadingActivity(false); return }
 
@@ -857,7 +861,8 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
     })
 
     return () => { disposed = true; clearInterval(interval); clearTimeout(soon); channel?.unsubscribe(); reloadActivityRef.current = null }
-  }, [walletAddress, serverClaims.map(c => `${c.id}:${c.status}`).join(',')])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
+  }, [walletAddress, serverClaimsKey])
 
   // Opening the Activity tab always shows the latest.
   useEffect(() => { if (hubTab === 'activity') reloadActivityRef.current?.() }, [hubTab])

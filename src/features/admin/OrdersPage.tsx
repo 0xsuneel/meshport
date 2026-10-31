@@ -80,6 +80,7 @@ export function OrdersPage() {
 
   const shown = useMemo(
     () => orders.filter(o => ofKind(o, kind) && (status === 'all' || requestBucket(o) === status) && matches(o)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
     [orders, kind, status, q],
   )
   const kindCount = (k: KindTab) => orders.filter(o => ofKind(o, k)).length

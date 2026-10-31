@@ -427,7 +427,7 @@ export function SwapPage() {
     if (enabled.length < 2) return // not enough coins to swap - page itself stays gated by FeatureGate
     if (!enabled.find(t => t.id === tokenIn.id))  setTokenIn(enabled[0])
     if (!enabled.find(t => t.id === tokenOut.id)) setTokenOut(enabled.find(t => t.id !== tokenIn.id) ?? enabled[1])
-  }, [settingsLoaded, settingsMap])
+  }, [settingsLoaded, settingsMap, tokenIn.id, tokenOut.id])
   const [amountIn,     setAmountIn]     = useState('')
   const [showAmountPad, setShowAmountPad] = useState(false)
   const amountBoxRef = useRef<HTMLDivElement>(null)

@@ -131,6 +131,7 @@ export function PayPage() {
       .then(u => { if (u) { recipientCache.set(clean, u); setRecipient(u) } else setNotFound(true) })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [clean, storeParam])
 
   const handlePay = () => {

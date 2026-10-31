@@ -84,6 +84,7 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
       stopCamera()
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [])
 
   const startCamera = async (isCancelled: () => boolean = () => false) => {
@@ -240,6 +241,7 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [])
 
   // ── Resolve scanned value → user profile ──

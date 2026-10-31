@@ -152,6 +152,7 @@ export function MerchantQrPanel() {
     drawMeshportQr(canvasRef.current, uri, 220).catch(() => {})
   }, [uri])
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => (order ? watchPayment(order.code, setLive, 5000) : undefined), [order?.code])
 
   const create = async () => {

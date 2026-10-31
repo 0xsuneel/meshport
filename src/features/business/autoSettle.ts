@@ -50,6 +50,7 @@ export function useAutoSettle(waitingTotal: number) {
     check()
     const t = setInterval(check, 60_000)
     return () => clearInterval(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [settings.schedule, settings.time, settings.lastPrompt, waitingTotal])
 
   const at = nextDue(settings)

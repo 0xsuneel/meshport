@@ -665,6 +665,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     )
 
     return unsubscribe
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [user?.id])
 
   const loadConversations = useCallback(async () => {
@@ -754,6 +755,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
       })
     )
     return unsubscribe
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [user?.id])
 
   // Chats search: a full username.arc also looks the person up.
@@ -814,6 +816,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         setContactsLoading(false)
       })
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [user?.id, conversations])
 
   // "Merchant" tag on chats with approved merchant accounts.
@@ -2938,6 +2941,7 @@ export function ChatConversationPage() {
   useEffect(() => {
     if (!user?.id || !id) return
     setupConversation()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [id, user?.id])
   // Session just linked to the account - reload what the database hid before.
   useEffect(() => {
@@ -2945,6 +2949,7 @@ export function ChatConversationPage() {
     const on = () => setupConversation()
     window.addEventListener('meshport:session-bound', on)
     return () => window.removeEventListener('meshport:session-bound', on)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [id, user?.id])
 
   // Positions the view once the fresh fetch resolves, for conversations
@@ -3250,6 +3255,7 @@ export function ChatConversationPage() {
         markRead(conversationId, user.id)
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [conversationId, user?.id])
 
   // Stats card: hide on keyboard open, show on keyboard close
@@ -3771,7 +3777,7 @@ export function ChatConversationPage() {
     }
     window.addEventListener(BILL_PAY_EVENT, onBillPay)
     return () => window.removeEventListener(BILL_PAY_EVENT, onBillPay)
-  }, [otherUser?.wallet_address, navigate])
+  }, [otherUser?.wallet_address, navigate, showToastMessage])
 
   // A personal payment link card in this chat: when the link is the chat
   // partner's, pay in-chat (amount prefilled and fixed if the link has one).
@@ -3858,6 +3864,7 @@ export function ChatConversationPage() {
   // Drop the one-time "open info" flag so a refresh shows the chat.
   useEffect(() => {
     if ((location.state as any)?.openInfo) navigate(location.pathname, { replace: true, state: {} })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [])
   useEffect(() => {
     if (!showProfile) return

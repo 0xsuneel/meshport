@@ -221,12 +221,11 @@ export function InsightsPage() {
   // Phones narrower than ~400px: slimmer period pills so all three fit on one line.
   const narrow = useMediaQuery('(max-width: 399px)')
   const navigate = useNavigate()
-  const user = useAuthStore(s => s.user)
   const [transactions, setTransactions] = useState<ActivityRecord[]>([])
   // Until Activity has loaded, every figure would read $0 and then jump: show
   // the page's shape instead, and fade the real figures in once.
   const [loaded, setLoaded] = useState(false)
-  const [balance, setBalance] = useState(0)
+  const [, setBalance] = useState(0)
   const walletAddress = useAuthStore(s => s.walletAddress) ?? ''
 
   const [period, setPeriod] = useState<'month' | 'week' | 'year'>('month')
@@ -405,7 +404,7 @@ export function InsightsPage() {
       totalTxCount: curr.length,
       all, curr,
     }
-  }, [transactions, balance, period, user, walletAddress])
+  }, [transactions, period])
 
   // ── Activity chart data ───────────────────────────────────────────────────
   const chartData = useMemo(() => {

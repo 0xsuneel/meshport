@@ -155,6 +155,7 @@ export function DesktopHeader() {
       setSavedContacts([...merged.values()])
     }
     loadKnownPeople()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [open, user?.id, walletAddress])
 
   useEffect(() => {

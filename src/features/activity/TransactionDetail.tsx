@@ -21,6 +21,7 @@ export function TransactionDetailPage() {
     fetchActivityById(id)
       .then(found => { if (found) setRecord(found) })
       .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [id])
 
   // Opened from a link: the Activity list sits behind, and the receipt opens

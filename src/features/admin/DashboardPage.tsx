@@ -10,6 +10,7 @@ export function DashboardPage() {
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null)
   const [treasuryBalance, setTreasuryBalance] = useState<number | null>(null)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { load() }, [])
   useEffect(() => { fetchAdminAnalytics().then(setAnalytics) }, [])
   useEffect(() => {

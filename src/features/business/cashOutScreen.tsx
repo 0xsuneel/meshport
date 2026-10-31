@@ -71,6 +71,7 @@ export function CashOutScreen({ open, onBack }: { open: boolean; onBack: () => v
       fetchCounterpartyProfiles(t, user.id).then(m => setNames(new Map([...m].map(([id, p]) => [id, p.displayName || (p.username ? `${p.username}.arc` : 'Buyer')])))).catch(() => {})
     }).catch(() => {})
   }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { if (open) { setView('main'); load() } }, [open, user?.id])
 
   const value = Number(amount) || 0
@@ -268,6 +269,7 @@ function CashOutTradeScreen({ tradeId, accounts, buyerNames, onBack, gate }: {
     const b = subscribeToTradeMessages(tradeId, m => { if (!live || seen.current.has(m.id)) return; seen.current.add(m.id); setMessages(x => [...x, m]) })
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => { live = false; a(); b(); clearInterval(t) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [tradeId, attempt])
 
   const act = async (name: string, fn: () => Promise<{ success: boolean; message: string }>) => {

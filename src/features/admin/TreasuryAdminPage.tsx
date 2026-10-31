@@ -12,6 +12,7 @@ export function TreasuryAdminPage() {
   const [balance, setBalance] = useState<number | null>(null)
   const [loadingBalance, setLoadingBalance] = useState(true)
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { load() }, [])
   useEffect(() => {
     getTreasuryBalance()

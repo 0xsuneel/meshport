@@ -196,6 +196,7 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
     }
     cleanup.current = finish
     Promise.all(anims.map(a => a.finished)).then(finish, finish)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [locationKey])
 
   // First page of a new frame reached by a navigation (landing → sign-in,

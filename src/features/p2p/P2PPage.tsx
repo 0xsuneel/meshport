@@ -1307,6 +1307,7 @@ export function P2PTradePage() {
       if (!cancelled && !already) setShowRating(true)
     })
     return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [trade?.status, trade?.id, user?.id])
 
   // New chat lines follow the conversation only when you're already at the

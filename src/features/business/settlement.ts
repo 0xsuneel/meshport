@@ -142,6 +142,7 @@ export function useSettlement() {
     const stops = run.rows.filter(r => r.claimId).map(r =>
       subscribeToClaim(r.claimId!, c => dispatch({ type: 'row', id: r.id, patch: { stage: claimStage(c.status), message: c.status === 'failed' ? c.error ?? undefined : undefined } })))
     return () => stops.forEach(s => s())
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [claimKey])
 
   const settle = async (passcode?: string, only?: string[]) => {

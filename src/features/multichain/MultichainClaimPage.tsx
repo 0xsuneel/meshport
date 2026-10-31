@@ -322,7 +322,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // Embedded in the Multichain Hub's bottom sheet: anything that would go
   // "back to the Hub" closes the sheet instead of changing page.
   const routerNavigate = useNavigate()
-  const navigate = useCallback(((to: any, opts?: any) => {
+  const navigate = useCallback((to: any, opts?: any) => {
     if (embedded && typeof to === 'string' && to.startsWith('/multichain') && !to.startsWith('/multichain-')) {
       onClose?.()
       // A tab switch inside the Hub (e.g. "View in Hub" → Activity) is passed on as router state.
@@ -330,7 +330,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       return
     }
     return routerNavigate(to, opts)
-  }) as ReturnType<typeof useNavigate>, [embedded, onClose, routerNavigate])
+  }, [embedded, onClose, routerNavigate]) as ReturnType<typeof useNavigate>
   const location      = useLocation()
   const walletAddress = useAuthStore(s => s.walletAddress)
   const storedPasscode = useAuthStore(s => s.passcode)
@@ -1100,6 +1100,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       }
     }
     loadTxRecords()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [scan])
 
   const selectedTotal = useMemo(() => {
@@ -1377,7 +1378,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       setChainProgress(prev => prev.map(p => p.stage !== 'done' ? { ...p, stage: 'error', msg: 'Failed', pct: 0 } : p))
       setStep('failed')
     }
-  }, [selectedTotal, chains, selected, claimAmounts, getKey, loadSdk, claimRoute, merchantMode])
+  }, [walletAddress, selectedTotal, chains, selected, claimAmounts, getKey, loadSdk, claimRoute, merchantMode])
 
   const handleClaimTap = useCallback(async () => {
     if (selectedTotal <= 0) return

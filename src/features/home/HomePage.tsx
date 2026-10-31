@@ -1636,6 +1636,7 @@ function BowedShapeCard({
     ro.observe(el)
     return () => ro.disconnect()
   }, [flat])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   const path = useMemo(() => (size ? cardPath(size.w, size.h) : ''), [size?.w, size?.h])
   // iOS Safari can briefly report a zero-sized SVG during a reload/layout
   // restore. Keep a normalized fallback path mounted so the card background
@@ -1827,6 +1828,7 @@ function AnimatedBalanceText({ target, children }: { target: number; children: (
     }
     const controls = animate(motionVal, target, { duration: 0.6, ease: 'easeOut', onUpdate: setDisplayed })
     return () => controls.stop()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [target])
   return <>{children(displayed)}</>
 }
@@ -2029,6 +2031,7 @@ function MobileHeroCarousel({
   useLayoutEffect(() => {
     if (heroGestureActive.current) return
     heroRowX.set(HERO_REST_X)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [HERO_REST_X])
   // Both cards render at this EXACT same fixed height, measured off
   // whichever instance of the Balance card is currently in the DOM (it's
@@ -2403,6 +2406,9 @@ function BusinessApprovalBanner() {
   )
 }
 
+// Days in each Insights period (a constant - outside the component, so hooks need not list it).
+const PERIOD_DAYS: Record<'week' | 'month' | 'year', number> = { week: 7, month: 30, year: 365 }
+
 export function HomePage() {
   const navigate = useNavigate()
   const businessAccount = useBusinessTab()
@@ -2491,11 +2497,13 @@ export function HomePage() {
     const { data } = await supabase.from('p2p_trades').select('id, status, buyer_id, seller_id, amount_usdc, amount_fiat, currency').in('id', ids)
     if (data) setTradeLiveById(prev => ({ ...prev, ...Object.fromEntries(data.map(t => [t.id, toLive(t)])) }))
   }, [])
+  const p2pNotificationTradeKey = p2pNotificationTradeIds.join(',')
   useEffect(() => {
     void loadTradeLive(p2pNotificationTradeIds)
     // Keyed on the ids themselves (via the memo above): this only needs to
     // run again when the SET of trades being tracked changes.
-  }, [p2pNotificationTradeIds.join(','), loadTradeLive])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
+  }, [p2pNotificationTradeKey, loadTradeLive])
   // Live: every update to one of this user's trades. A unique channel per
   // mount, removed on unmount even if it was still being created - a fixed
   // name left over from the last visit made supabase-js refuse the new
@@ -2526,11 +2534,13 @@ export function HomePage() {
     const st = tradeStatusById[id]
     return !st || !P2P_TERMINAL_STATUSES.has(st)
   }), [p2pNotificationTradeIds, tradeStatusById, P2P_TERMINAL_STATUSES])
+  const openTradeKey = openTradeIds.join(',')
   useEffect(() => {
     if (!openTradeIds.length) return
     const iv = setInterval(() => { if (document.visibilityState === 'visible') void loadTradeLive(openTradeIds) }, 8000)
     return () => clearInterval(iv)
-  }, [openTradeIds.join(','), loadTradeLive])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
+  }, [openTradeKey, loadTradeLive])
 
   const allP2PPopups = useMemo(() => {
     const latestPerTrade = new Map<string, typeof notifications[number]>()
@@ -2690,10 +2700,11 @@ export function HomePage() {
   // Clear any pending debounced refresh on unmount / wallet change so it
   // never fires setState against a stale or gone wallet.
   useEffect(() => {
+    const pendingTokens = pendingRefreshTokensRef.current // one Set for the component's life
     return () => {
       if (refreshDebounceTimerRef.current) clearTimeout(refreshDebounceTimerRef.current)
       refreshDebounceTimerRef.current = null
-      pendingRefreshTokensRef.current.clear()
+      pendingTokens.clear()
     }
   }, [walletAddress])
 
@@ -2803,6 +2814,7 @@ export function HomePage() {
       setSavedContactsCache([...merged.values()])
     }
     loadKnownPeople()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [searchOpen, user?.id, walletAddress])
 
   useEffect(() => {
@@ -3074,6 +3086,7 @@ export function HomePage() {
         }).subscribe()
     })
     return () => { stoppedRecv = true; if (channel) recvClient?.removeChannel(channel) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [walletAddress, user?.id])
 
   // ── Catch-up: incoming payments received while we weren't listening ───────
@@ -3189,6 +3202,7 @@ export function HomePage() {
     }
     const cancelWait = whenNetworkOk(() => { if (!stopped) void run() })
     return () => { stopped = true; cancelWait() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [walletAddress, user?.id])
 
   // ── Incoming bulk-payout notifications ──────────────────────────────────────
@@ -3461,6 +3475,7 @@ export function HomePage() {
       })()
     })
     return () => { unsub?.() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [walletAddress])
 
   // ── Instant balance on a real-time external deposit ───────────────────────
@@ -3481,6 +3496,7 @@ export function HomePage() {
     }
     window.addEventListener('meshport:arc-deposit', onArcDeposit)
     return () => window.removeEventListener('meshport:arc-deposit', onArcDeposit)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [walletAddress])
 
 
@@ -3499,6 +3515,7 @@ export function HomePage() {
       // restoreWallet.ts for the current, local-only recovery paths.
     }
     run()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [walletAddress])
 
   // ── Register the username for the open wallet ────────────────────────────
@@ -3509,6 +3526,7 @@ export function HomePage() {
     import('@/lib/usernameRegistry').then(({ registerUsername }) => {
       registerUsername({ username, walletAddress: signer.address, displayName: user?.displayName || username, email: user?.email })
     }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [signer, walletAddress])
 
   // ── Live balance polling ──────────────────────────────────────────────────
@@ -3693,6 +3711,7 @@ export function HomePage() {
       if (pi) clearInterval(pi)
       if (piStartTimer) clearTimeout(piStartTimer)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [walletAddress])
 
   // ── Scan external chain balances ──────────────────────────────────────────
@@ -3816,7 +3835,6 @@ export function HomePage() {
   // BOTH the selected Insights period AND the prior equal-length period in
   // one query (since = start of the prior period), so every "vs last
   // period" percentage below is a real comparison, never a guess.
-  const PERIOD_DAYS: Record<'week' | 'month' | 'year', number> = { week: 7, month: 30, year: 365 }
   const [insightsPeriod, setInsightsPeriod] = useState<'week' | 'month' | 'year'>('month')
   const [activityGranularity, setActivityGranularity] = useState<InsightsGranularity>('daily')
   const [homeRecentActivity, setHomeRecentActivity] = useState<ActivityRecord[]>([])
@@ -3848,7 +3866,6 @@ export function HomePage() {
       if (!cancelled) unsub = subscribeToActivity(walletAddress, reload, reload)
     }).catch(() => {})
     return () => { cancelled = true; if (t) clearTimeout(t); unsub?.() }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDesktop, walletAddress, insightsPeriod])
 
   // Mobile hero 7-day change: the portfolio at the end of each of the last 7 days -
@@ -3957,6 +3974,7 @@ export function HomePage() {
 
   const activityBuckets = useMemo(
     () => aggregateBuckets(insightsData.current, PERIOD_DAYS[insightsPeriod], activityGranularity, new Date()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
     [insightsData.current, insightsPeriod, activityGranularity],
   )
 
