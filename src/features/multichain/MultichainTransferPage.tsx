@@ -42,6 +42,7 @@ import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { KIT_CCTPX_CHAINS, BRIDGE_TOKENS, bridgeTokenDecimals, bridgeTokenInfo, useTokenRouteChains, type BridgeToken } from '@/lib/tokenBridge'
 import { revealFlow } from '@/lib/revealFlow'
+import { startMoveTimer, type MoveTimer } from '@/lib/moveTimings'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { moveSteps, indexFromStepStates } from '@/lib/moveSteps'
@@ -893,6 +894,20 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // Arc gas kept back for the Unified Balance deposit (see estimateUbDepositGas).
   const ubDepositGasRef = useRef(0.05)
   const [bridgeSteps, setBridgeSteps] = useState<BridgeStepState[]>(makeDefaultSteps('Destination'))
+  // Step timings for this transfer (lib/moveTimings → Supabase move_timings).
+  const moveTimerRef = useRef<MoveTimer | null>(null)
+  useEffect(() => {
+    const t = moveTimerRef.current
+    if (!t || t.finished) return
+    for (const s of bridgeSteps) if (s.status === 'done') t.mark(s.name)
+  }, [bridgeSteps])
+  useEffect(() => {
+    const t = moveTimerRef.current
+    if (!t || t.finished) return
+    if (step === 'success') t.finish({ ok: true, txHash: burnTxHashRef.current || undefined })
+    else if (txError) t.finish({ ok: false, error: txError, txHash: burnTxHashRef.current || undefined })
+  }, [step, txError])
+  useEffect(() => () => { moveTimerRef.current?.finish({ ok: false, error: 'screen closed before the end' }) }, [])
   const [feeEstimate, setFeeEstimate] = useState<FeeEstimate>({ bridgeFee: 0, kitFee: 0, networkFee: 0, forwarderFee: 0, totalFee: 0, onTop: 0, spendOverhead: 0, receiverGets: 0, loading: false, error: '' })
   // Which (address, amount, chain, speed) combination `feeEstimate` above
   // was actually fetched for - lets canContinue tell a fresh fee apart from
@@ -1638,6 +1653,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     if (isAccountLockedNow()) { showToastMessage(ACCOUNT_LOCKED_MESSAGE, 'error'); return }
     if (isConfirmingRef.current) return
     isConfirmingRef.current = true
+    moveTimerRef.current = startMoveTimer('transfer', { route: isTokenRoute ? 'cctpx' : chain.ub ? 'ub' : 'cctp', chain: chain.sdk || chain.name, token: tokenSym })
 
     // Show loading indicator immediately - user gets instant visual feedback
     setLoading(true)
@@ -1665,8 +1681,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     if (storedPasscode) {
       const { verifyPasscode } = await import('@/lib/security')
       const ok = await verifyPasscode(passEntry, storedPasscode)
-      if (!ok) { setLoading(false); setPassError('Incorrect passcode. Try again.'); setPassEntry(''); return }
+      if (!ok) { setLoading(false); setPassError('Incorrect passcode. Try again.'); setPassEntry(''); moveTimerRef.current = null; return }
     }
+    moveTimerRef.current?.mark('passcode')
     setLoading(false)
 
     // Fees are never (re-)calculated at this point. The forwarder service
@@ -1728,6 +1745,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // with the passcode above, and refuses a signer that isn't this account's.
       const restoreStarted = Date.now()
       const activeSigner = await getReadySigner(storedPasscode ? passEntry : undefined)
+      if (activeSigner) moveTimerRef.current?.mark('wallet_open')
       if (!activeSigner) {
         // Logged with what's needed to tell why (client_errors): which kind of
         // wallet, how long opening it took, and whether Privy was up.
