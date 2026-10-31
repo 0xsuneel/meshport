@@ -210,7 +210,9 @@ async function attemptRestore(generation: number, rawPasscode?: string): Promise
     const { restorePrivyAccount, privyState } = await import('@/wallet/privy')
     const started = Date.now()
     // A known Privy account: wait for Privy to sign in and list the wallet.
-    const account = await restorePrivyAccount(walletAddress, 30_000, 20_000)
+    // 45 s: on a weak connection Privy may need a fresh start (PrivyRoot, on
+    // this request) and still open in time - failing at 30 s lost it.
+    const account = await restorePrivyAccount(walletAddress, 45_000, 20_000)
     if (account) return commit(generation, walletAddress, account, 'privy') ? OK : fail('account changed')
     else {
       // Why it didn't open (client_errors): loaded? signed in? listed?

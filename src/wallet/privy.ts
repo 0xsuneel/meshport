@@ -210,6 +210,18 @@ export function privyState(address?: string): string {
   return `ready=${bridge.ready} authenticated=${bridge.authenticated} wallets=${bridge.wallets.length} listed=${mine} linked=${linked}`
 }
 
+/** Window event: something needs the wallet now (PrivyRoot restarts a Privy that isn't up). */
+export const PRIVY_NEEDED_EVENT = 'meshport:privy-needed'
+
+/**
+ * Privy isn't usable and a fresh start could help: not loaded, not ready, or
+ * signed in with a wallet on the account that its iframe never connected.
+ */
+export function privyNeedsRebuild(): boolean {
+  if (!bridge || !bridge.ready) return true
+  return bridge.authenticated && bridge.linked.length > 0 && bridge.wallets.length === 0
+}
+
 /**
  * Open `address` as a Privy wallet: as soon as Privy has signed in and the
  * account's record lists it - not when the wallet iframe has connected it,
@@ -224,6 +236,8 @@ export async function restorePrivyAccount(address: string, timeoutMs = 15_000, l
   if (!privyConfigured()) return null
   const a = address.toLowerCase()
   const mine = (b: PrivyBridge) => b.linked.some(w => w.toLowerCase() === a) || b.wallets.some(w => w.toLowerCase() === a)
+  // The wallet is needed now: a Privy that isn't up gets started again (PrivyRoot decides if it's time).
+  if ((!bridge || !bridge.ready) && typeof window !== 'undefined') window.dispatchEvent(new Event(PRIVY_NEEDED_EVENT))
   try { await whenBridge(() => true, timeoutMs) } catch { return null }
   try { await whenBridge(mine, listWaitMs) } catch { return null }
   return privyAccount(address)

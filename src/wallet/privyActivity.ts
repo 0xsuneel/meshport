@@ -42,5 +42,15 @@ export function whenPrivyQuiet(since: number, quietMs: number, stuck: () => void
   return () => { done = true; clearTimeout(timer); onHeard.delete(check) }
 }
 
+// Privy rebuilds (PrivyRoot): the first two at once, then 20 s, 40 s, and
+// every 60 s after the previous one - never given up for the session.
+const QUICK_REBUILDS = 2
+const LATER_REBUILD_GAP_MS = [20_000, 40_000, 60_000]
+/** How long after the previous rebuild the next may start, given how many were done. Pure. */
+export function rebuildGapMs(done: number): number {
+  if (done < QUICK_REBUILDS) return 0
+  return LATER_REBUILD_GAP_MS[Math.min(done - QUICK_REBUILDS, LATER_REBUILD_GAP_MS.length - 1)]
+}
+
 /** Test hook. */
 export function resetPrivyActivity(): void { heard.privy = 0; heard.other = 0; onHeard.clear() }
