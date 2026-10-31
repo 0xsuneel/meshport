@@ -1328,6 +1328,26 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const fetchFeeEstimate = async (silent = false): Promise<FeeEstimate | null> => {
     if (!numAmount || !address || !senderAddress) return null
     const requestKey = feeRequestKey
+    // USDC over CCTP (the direct path, lib/fastCctp): Circle's fee table and
+    // two Arc reads in parallel - no wallet, no SDK. The SDK below only if
+    // those can't be read.
+    if (!isTokenRoute && !chain.ub && (import.meta.env.VITE_FAST_CCTP as string | undefined) !== 'off') {
+      if (!silent) setFeeEstimate(f => ({ ...f, loading: true, error: '' }))
+      const { fastCctpFees } = await import('@/lib/fastCctp')
+      const f = await fastCctpFees({ destination: chain.sdk, amount: numAmount, fast: selectedSpeed === 'fast', forward: circleForwarderMintsTo(chain.sdk), owner: senderAddress })
+      if (f) {
+        const { bridgeFee, forwarderFee, networkFee } = f
+        const totalFee = bridgeFee + forwarderFee + networkFee
+        // Circle's fees come out of the amount at mint; Arc gas is paid on top.
+        const fresh: FeeEstimate = { bridgeFee, kitFee: 0, networkFee, forwarderFee, totalFee, onTop: networkFee, spendOverhead: 0,
+          receiverGets: Math.max(0, numAmount - bridgeFee - forwarderFee), loading: false, error: '' }
+        notifyIfFeeChanged(fresh, silent)
+        setFeeEstimate(fresh)
+        setFeeEstimateKey(requestKey)
+        lastTotalFeeRef.current = totalFee
+        return fresh
+      }
+    }
     // The open wallet if there is one, otherwise ask the wallet frame to open it
     const activeKey = await getReadySigner()
     if (!activeKey) return null

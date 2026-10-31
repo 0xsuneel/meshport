@@ -131,3 +131,36 @@ describe('canFastCctp', () => {
     expect(canFastCctp('Nowhere')).toBe(false)
   })
 })
+
+describe('Review fees (no SDK)', () => {
+  const rows = [
+    { finalityThreshold: 1000, minimumFee: 1.3, forwardFee: { low: 50_000, med: 60_000, high: 80_000 } },
+    { finalityThreshold: 2000, minimumFee: 0, forwardFee: { low: 50_000, med: 60_000, high: 80_000 } },
+  ]
+  it('expected fees: protocol bps of the amount plus the typical forwarder fee', async () => {
+    const { expectedFeesFromIris } = await import('./fastCctp')
+    expect(expectedFeesFromIris(rows, 100, { fast: true, forward: true })).toEqual({ bridgeFee: 0.013, forwarderFee: 0.06 })
+    expect(expectedFeesFromIris(rows, 100, { fast: false, forward: false })).toEqual({ bridgeFee: 0, forwarderFee: 0 })
+  })
+
+  it('fastCctpFees: Circle table + Arc gas price + allowance, in parallel', async () => {
+    const { fastCctpFees } = await import('./fastCctp')
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => rows })))
+    rpc.mockReset()
+    rpc.mockImplementation(async ({ method }: any) => {
+      if (method === 'eth_gasPrice') return { result: '0x' + (20_000_000_000n).toString(16) } // 20 gwei
+      if (method === 'eth_call') return { result: encodeAbiParameters([{ type: 'uint256' }], [0n]) }
+      throw new Error(method)
+    })
+    const f = await fastCctpFees({ destination: 'Arbitrum_Sepolia', amount: 100, fast: true, forward: true, owner: ME })
+    expect(f?.bridgeFee).toBe(0.013)
+    expect(f?.forwarderFee).toBe(0.06)
+    expect(f?.networkFee).toBeCloseTo(260_000 * 20e9 / 1e18) // approve + burn
+    vi.unstubAllGlobals()
+  })
+
+  it('anything unreadable: null, so the caller uses the SDK', async () => {
+    const { fastCctpFees } = await import('./fastCctp')
+    expect(await fastCctpFees({ destination: 'Solana_Devnet', amount: 1, fast: true, forward: true, owner: ME })).toBeNull()
+  })
+})
