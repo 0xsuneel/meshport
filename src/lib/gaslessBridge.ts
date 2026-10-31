@@ -1,7 +1,7 @@
 // src/lib/gaslessBridge.ts
 //
 // Gasless "Bring Funds" (CCTP, any supported chain → Arc) through
-// MeshPortBridgeRouter (contracts/MeshPortBridgeRouter.sol):
+// MeshPortRouter (contracts/MeshPortRouter.sol):
 //
 //   1. ask /api/bridge-relay for a quote (MeshPort fee + CCTP maxFee)
 //   2. sign ONE USDC ReceiveWithAuthorization locally - the wallet key never
@@ -100,7 +100,7 @@ export interface BridgeParams {
   salt: Hex
 }
 
-/** Same hash as MeshPortBridgeRouter.bridgeNonce() - the EIP-3009 nonce the user signs. */
+/** Same hash as MeshPortRouter.bridgeNonce() - the EIP-3009 nonce the user signs. */
 export function bridgeNonce(p: BridgeParams, chainId: number, router: Hex): Hex {
   return keccak256(encodeAbiParameters(
     [

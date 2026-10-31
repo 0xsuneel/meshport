@@ -23,7 +23,7 @@ module.exports = {
       chainId: 5042002,
       accounts: ADMIN_PRIVATE_KEY ? [ADMIN_PRIVATE_KEY] : [],
     },
-    // Source chains for MeshPortBridgeRouter (contracts/deploy-bridge-router.cjs).
+    // Source chains for MeshPortRouter (contracts/deploy-router-all.cjs).
     ethereumSepolia: {
       url: process.env.SEPOLIA_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com',
       chainId: 11155111,

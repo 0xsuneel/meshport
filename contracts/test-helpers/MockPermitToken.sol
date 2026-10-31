@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 /**
  * @notice Test-only ERC-20 with EIP-2612 permit (real EIP-712 check, nonces,
  * deadline) and no EIP-3009 - stands in for a CCTPx token that only supports
- * permit, for the MeshPortTokenRouter tests.
+ * permit, for the MeshPortRouter tests.
  */
 contract MockPermitToken {
     string public constant name = "Circle Bitcoin";

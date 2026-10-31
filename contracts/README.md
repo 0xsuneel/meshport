@@ -125,29 +125,31 @@ https://testnet.arcscan.app/address/YOUR_CONTRACT_ADDRESS
 
 ---
 
-# MeshPortTokenRouter (EURC / cirBTC Bring through the relayer)
+# MeshPortRouter (gasless Bring: USDC, EURC, cirBTC)
 
-The CCTPx counterpart of MeshPortBridgeRouter: the user signs once (EIP-3009,
-or EIP-2612 permit + a bridge signature), MeshPort's relayer submits it and
-pays the source-chain gas **and Circle's CCTPx fee** (native coin, sent as
-`msg.value`), and MeshPort's fee is taken in the token. Same address on every
-chain (CREATE2), no owner.
+One contract, one address on every chain (CREATE2), no owner. The user signs
+once; MeshPort's relayer submits it and pays the source-chain gas; MeshPort's
+fee is taken in the coin being moved, in the same transaction.
+
+- **USDC** — EIP-3009 → Circle CCTP V2 `depositForBurnWithHook` (Circle's
+  forwarder mints on Arc; Circle's fee comes out of the burn).
+- **EURC / cirBTC** — EIP-3009, or EIP-2612 permit + a bridge signature →
+  Circle CCTPx `crossChainTransfer`. Circle's fee is native coin, paid by the
+  relayer as `msg.value`. On a chain without CCTPx only USDC works.
 
 1. Deploy (uses `ADMIN_PRIVATE_KEY`, `FEE_RECIPIENT` from `.env`):
 
-       node contracts/deploy-token-router-all.cjs --dry-run
-       node contracts/deploy-token-router-all.cjs
+       node contracts/deploy-router-all.cjs --dry-run
+       node contracts/deploy-router-all.cjs
 
-2. Set the printed JSON in Vercel (Production + Preview) and redeploy:
-   `VITE_TOKEN_ROUTERS` and `TOKEN_ROUTERS`.
-3. Keep the relayer wallet (`BRIDGE_RELAYER_PRIVATE_KEY`) funded with the
-   native coin on those chains — it now also pays Circle's CCTPx fee.
+   Each line says whether that chain gets USDC only or USDC + EURC/cirBTC.
+2. Set the printed JSON in Vercel (Production + Preview) as **both**
+   `VITE_BRIDGE_ROUTERS` and `BRIDGE_ROUTERS`, then redeploy. This replaces the
+   old USDC-only router address.
+3. Keep the relayer wallet (`BRIDGE_RELAYER_PRIVATE_KEY`) funded with native
+   gas on those chains — it also pays Circle's CCTPx fee for EURC / cirBTC.
 4. Optional server env: `CCTPX_IRIS` (default Circle's sandbox),
    `BRIDGE_EURC_USD`, `BRIDGE_CIRBTC_USD` (rough prices used to turn the
-   native cost into the token fee), `BRIDGE_TOKEN_MAX_FEE_USD` (fee cap,
-   default 0.50).
+   native cost into the token fee), `BRIDGE_TOKEN_MAX_FEE_USD` (cap, default 0.50).
 
-Chains without a token router keep working: the app falls back to a bring the
-wallet pays itself (it then needs that chain's native coin).
-
-Tests: `npx hardhat test test/MeshPortTokenRouter.test.js`.
+Tests: `npx hardhat test test/MeshPortRouter.test.js test/MeshPortRouter.tokens.test.js`.

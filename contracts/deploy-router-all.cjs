@@ -1,9 +1,10 @@
-// Deploy MeshPortBridgeRouter to every supported chain in one run — at the
-// SAME address on all of them (CREATE2, see bridge-router-create2.cjs).
+// Deploy MeshPortRouter (USDC, EURC and cirBTC Bring) to every supported
+// chain in one run — at the SAME address on all of them (CREATE2, see
+// router-create2.cjs).
 //
-//   node contracts/deploy-bridge-router-all.cjs            check + deploy
-//   node contracts/deploy-bridge-router-all.cjs --dry-run  checks only, no transactions
-//   node contracts/deploy-bridge-router-all.cjs --chains=Base_Sepolia,Ethereum_Sepolia
+//   node contracts/deploy-router-all.cjs            check + deploy
+//   node contracts/deploy-router-all.cjs --dry-run  checks only, no transactions
+//   node contracts/deploy-router-all.cjs --chains=Base_Sepolia,Ethereum_Sepolia
 //
 // Reads from .env (or the environment):
 //   ADMIN_PRIVATE_KEY   wallet that pays the deploy gas on each chain
@@ -15,13 +16,14 @@
 // CREATE2 deployer exists, and the deploy wallet has gas. A chain that fails a
 // check is skipped with the reason; the rest still deploy. Already-deployed
 // chains are detected and left alone, so it is safe to run again (e.g. after
-// funding a skipped chain). At the end it prints the value for
-// VITE_BRIDGE_ROUTERS and BRIDGE_ROUTERS (Vercel).
+// funding a skipped chain). It also reports whether Circle's CCTPx service is
+// on the chain (EURC / cirBTC work only there; USDC works either way). At the
+// end it prints the value for VITE_BRIDGE_ROUTERS and BRIDGE_ROUTERS (Vercel).
 
 require('dotenv').config()
 const { createPublicClient, createWalletClient, http, defineChain, concat, getAddress, formatEther } = require('viem')
 const { privateKeyToAccount } = require('viem/accounts')
-const { CREATE2_DEPLOYER, SALT, TOKEN_MESSENGER_V2_TESTNET, initCode, predictRouterAddress } = require('./bridge-router-create2.cjs')
+const { CREATE2_DEPLOYER, SALT, TOKEN_MESSENGER_V2_TESTNET, CCTPX_SERVICE_TESTNET, initCode, predictRouterAddress } = require('./router-create2.cjs')
 
 // Chain ids and USDC addresses as verified in src/blockchain/chains.ts
 // (EXTERNAL_CHAINS); only chains with a verified chain id are listed.
@@ -53,6 +55,7 @@ const CHAINS = {
 const ROUTER_ABI = [
   { type: 'function', name: 'feeRecipient', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
   { type: 'function', name: 'tokenMessenger', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'service', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
 ]
 const USDC_ABI = [
   { type: 'function', name: 'name', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
@@ -69,7 +72,9 @@ async function deployOn(key, cfg, account, feeRecipient, router, dryRun) {
 
   const id = await pub.getChainId()
   if (id !== cfg.chainId) return { ok: false, reason: `RPC is chain ${id}, expected ${cfg.chainId}` }
-  if (hasCode(await pub.getCode({ address: router }))) return { ok: true, status: 'already deployed' }
+  // EURC / cirBTC only where Circle's CCTPx service is; USDC everywhere.
+  const tokens = hasCode(await pub.getCode({ address: CCTPX_SERVICE_TESTNET })) ? 'USDC + EURC/cirBTC' : 'USDC only (no CCTPx here)'
+  if (hasCode(await pub.getCode({ address: router }))) return { ok: true, status: `already deployed · ${tokens}` }
   if (!hasCode(await pub.getCode({ address: TOKEN_MESSENGER_V2_TESTNET }))) return { ok: false, reason: 'no CCTP V2 TokenMessenger on this chain' }
   try {
     await pub.readContract({ address: cfg.usdc, abi: USDC_ABI, functionName: 'authorizationState', args: [account.address, SALT] })
@@ -77,23 +82,25 @@ async function deployOn(key, cfg, account, feeRecipient, router, dryRun) {
   if (!hasCode(await pub.getCode({ address: CREATE2_DEPLOYER }))) return { ok: false, reason: 'CREATE2 deployer not present on this chain' }
   const balance = await pub.getBalance({ address: account.address })
   if (balance === 0n) return { ok: false, reason: `deploy wallet has no gas on this chain (${account.address})` }
-  if (dryRun) return { ok: true, status: `ready (balance ${formatEther(balance)})`, dry: true }
+  if (dryRun) return { ok: true, status: `ready (balance ${formatEther(balance)}) · ${tokens}`, dry: true }
 
   const wallet = createWalletClient({ chain, transport: http(rpc, { timeout: 20_000 }), account })
-  const hash = await wallet.sendTransaction({ to: CREATE2_DEPLOYER, data: concat([SALT, initCode(TOKEN_MESSENGER_V2_TESTNET, feeRecipient)]) })
+  const hash = await wallet.sendTransaction({ to: CREATE2_DEPLOYER, data: concat([SALT, initCode(TOKEN_MESSENGER_V2_TESTNET, CCTPX_SERVICE_TESTNET, feeRecipient)]) })
   const receipt = await pub.waitForTransactionReceipt({ hash, timeout: 180_000 })
   if (receipt.status !== 'success') return { ok: false, reason: `deploy transaction reverted (${hash})` }
   if (!hasCode(await pub.getCode({ address: router }))) return { ok: false, reason: `no code at ${router} after deploy (${hash})` }
 
   // Verify before anyone relies on it.
-  const [fee, messenger] = await Promise.all([
+  const [fee, messenger, service] = await Promise.all([
     pub.readContract({ address: router, abi: ROUTER_ABI, functionName: 'feeRecipient' }),
     pub.readContract({ address: router, abi: ROUTER_ABI, functionName: 'tokenMessenger' }),
+    pub.readContract({ address: router, abi: ROUTER_ABI, functionName: 'service' }),
   ])
-  if (getAddress(fee) !== getAddress(feeRecipient) || getAddress(messenger) !== getAddress(TOKEN_MESSENGER_V2_TESTNET)) {
+  if (getAddress(fee) !== getAddress(feeRecipient) || getAddress(messenger) !== getAddress(TOKEN_MESSENGER_V2_TESTNET)
+    || getAddress(service) !== getAddress(CCTPX_SERVICE_TESTNET)) {
     return { ok: false, reason: 'deployed contract has unexpected settings' }
   }
-  return { ok: true, status: `deployed (${hash})` }
+  return { ok: true, status: `deployed (${hash}) · ${tokens}` }
 }
 
 async function main() {
@@ -124,7 +131,7 @@ async function main() {
   console.log(`\n${Object.keys(enabled).length} chain(s) ready. Set BOTH in Vercel (Production + Preview), then redeploy:`)
   console.log(`  VITE_BRIDGE_ROUTERS=${json}`)
   console.log(`  BRIDGE_ROUTERS=${json}`)
-  console.log('The relayer wallet also needs gas on each of these chains.')
+  console.log('The relayer wallet (BRIDGE_RELAYER_PRIVATE_KEY) needs native gas on each of these chains - it also pays Circle\'s CCTPx fee for EURC / cirBTC.')
 }
 
 if (require.main === module) main().catch(e => { console.error(e.message || e); process.exit(1) })

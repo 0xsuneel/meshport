@@ -1324,7 +1324,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             return { chainId: chain.chainId, amount: claimAmount }
           }
 
-          // ── Gasless route (MeshPortBridgeRouter) ──
+          // ── Gasless route (MeshPortRouter) ──
           // One signature, no gas on the source chain: the relayer submits it,
           // MeshPort's fee is taken in the same transaction, and Circle's
           // forwarder mints on Arc. The only CCTP route - chains without a

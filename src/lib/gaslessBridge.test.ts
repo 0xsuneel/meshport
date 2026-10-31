@@ -3,9 +3,9 @@ import { createRequire } from 'module'
 import { bridgeNonce, checkQuote, isGaslessBridgeAvailable, gaslessRouter, FORWARD_HOOK, ARC_DOMAIN, GASLESS_CHAINS, type BridgeParams } from './gaslessBridge'
 import { CHAINS as RELAYER_CHAINS, checkRelayable } from '../../api/bridge-relay'
 import { CCTP_DOMAINS } from './cctpTracker'
-const DEPLOY_CHAINS = createRequire(import.meta.url)('../../contracts/deploy-bridge-router-all.cjs').CHAINS as Record<string, { chainId: number; usdc: string }>
+const DEPLOY_CHAINS = createRequire(import.meta.url)('../../contracts/deploy-router-all.cjs').CHAINS as Record<string, { chainId: number; usdc: string }>
 
-// Vector produced by the real MeshPortBridgeRouter.bridgeNonce() on Hardhat
+// Vector produced by the real MeshPortRouter.bridgeNonce() on Hardhat
 // (chainId 31337, router deployed at the first deployment address).
 const VECTOR = {
   chainId: 31337,
