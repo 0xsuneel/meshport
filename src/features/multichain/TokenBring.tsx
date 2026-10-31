@@ -8,7 +8,7 @@
 // MeshPort's fee comes out of the token - no ETH / AVAX / POL needed. Circle's
 // forwarder delivers on Arc; the screen follows the Arc balance until it lands.
 //
-// A chain without MeshPortTokenRouter yet (VITE_TOKEN_ROUTERS) falls back to
+// A chain without MeshPortRouter yet (VITE_BRIDGE_ROUTERS) falls back to
 // a kit.bridge() the wallet pays itself, in that chain's native coin -
 // checked before anything is signed.
 

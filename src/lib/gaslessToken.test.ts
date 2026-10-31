@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { tokenBridgeNonce, checkTokenQuote, CCTPX_TOKEN_IDS, type TokenQuote } from './gaslessToken'
 
 describe('tokenBridgeNonce', () => {
-  it('matches MeshPortTokenRouter.bridgeNonce (test/MeshPortTokenRouter.test.js)', () => {
+  it('matches MeshPortRouter.tokenBridgeNonce (test/MeshPortRouter.tokens.test.js)', () => {
     expect(tokenBridgeNonce({
       token: '0x1111111111111111111111111111111111111111', tokenId: CCTPX_TOKEN_IDS.EURC, destinationDomain: 26,
       recipient: '0x2222222222222222222222222222222222222222', fee: 300000n, minFinalityThreshold: 1000,

@@ -534,7 +534,7 @@ async function waitForBridge(supabase: SupabaseClient, claim: Claim) {
 async function settleClaim(supabase: SupabaseClient, claim: Claim) {
   await updateClaim(supabase, claim.id, { status: 'settling', settling_at: new Date().toISOString() })
 }
-// Gasless bridges (MeshPortBridgeRouter) burn with Circle's Forwarding
+// Gasless bridges (MeshPortRouter) burn with Circle's Forwarding
 // Service hook, so Circle itself mints on Arc and Iris reports that mint as
 // forwardTxHash. That is the exact destination tx for THIS message - no log
 // scanning or amount matching needed - so it is checked first.

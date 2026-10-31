@@ -9,14 +9,14 @@
 //        maxFee = CCTP V2 maxFee (protocol fee + Circle forwarding fee, + margin)
 //
 //   POST { action:'relay', chain, bridge, authorization }
-//        Checks the request, simulates MeshPortBridgeRouter.bridgeWithAuthorization,
+//        Checks the request, simulates MeshPortRouter.bridgeWithAuthorization,
 //        submits it with the relayer key (paying source-chain gas) and returns
 //        { txHash } - the CCTP burn. Idempotent: an authorization that was
 //        already used returns the transaction that used it.
 //
 //   GET  ?action=token_quote / POST { action:'token_relay' }
-//        The same for EURC and cirBTC over Circle CCTPx, through
-//        MeshPortTokenRouter - see the block above the handler.
+//        The same for EURC and cirBTC over Circle CCTPx, through the same
+//        MeshPortRouter - see the block above the handler.
 //
 //   POST { action:'call', chain, to, data }
 //        Submits, from the relayer wallet, one of a few calls whose outcome
@@ -33,7 +33,7 @@
 //        The recipient is fixed by the user's signature or Circle's
 //        attestation, so the relayer can't redirect anything. → { txHash }
 //
-// The router (contracts/MeshPortBridgeRouter.sol) makes the relayer unable to
+// The router (contracts/MeshPortRouter.sol) makes the relayer unable to
 // change anything the user signed; this endpoint additionally only relays
 // self-bridges to Arc through Circle's forwarder, for signed-in users, at a
 // fee that covers its gas.
@@ -660,7 +660,7 @@ async function quote(chainKey: string, total: bigint) {
   return { fee, maxFee, usdcName, usdcVersion, pub }
 }
 
-// ── EURC / cirBTC (Circle CCTPx) through MeshPortTokenRouter ───────────────
+// ── EURC / cirBTC (Circle CCTPx) through MeshPortRouter ────────────────────
 // The same relayer, the CCTPx counterpart of the USDC flow above:
 //
 //   GET  ?action=token_quote&chain=Base_Sepolia&token=EURC&amount=<token units>[&recipient=0x…]
@@ -671,10 +671,10 @@ async function quote(chainKey: string, total: bigint) {
 //
 //   POST { action:'token_relay', chain, symbol, bridge, authorization | permit }
 //        Checks it, gets a fresh signed quote from Circle, simulates and submits
-//        MeshPortTokenRouter.bridgeWith{Authorization,Permit} paying Circle's fee
+//        MeshPortRouter.tokenBridgeWith{Authorization,Permit} paying Circle's fee
 //        as msg.value → { txHash }. Idempotent like 'relay'.
 //
-// Env: TOKEN_ROUTERS {"Base_Sepolia":"0x…"}, optional CCTPX_IRIS (default
+// The same router as USDC (BRIDGE_ROUTERS). Env: optional CCTPX_IRIS (default
 // sandbox - CCTPx testnet chains), BRIDGE_EURC_USD / BRIDGE_CIRBTC_USD (rough
 // token prices, to turn the native cost into the token), BRIDGE_TOKEN_MAX_FEE_USD
 // (cap, default 0.50).
@@ -696,7 +696,7 @@ const TOKEN_BRIDGE_COMPONENTS = [
 ] as const
 const TOKEN_ROUTER_ABI = [
   {
-    type: 'function', name: 'bridgeWithAuthorization', stateMutability: 'payable',
+    type: 'function', name: 'tokenBridgeWithAuthorization', stateMutability: 'payable',
     inputs: [
       { name: 'b', type: 'tuple', components: TOKEN_BRIDGE_COMPONENTS },
       { name: 'a', type: 'tuple', components: [
@@ -709,7 +709,7 @@ const TOKEN_ROUTER_ABI = [
     outputs: [{ name: 'nonce', type: 'bytes32' }],
   },
   {
-    type: 'function', name: 'bridgeWithPermit', stateMutability: 'payable',
+    type: 'function', name: 'tokenBridgeWithPermit', stateMutability: 'payable',
     inputs: [
       { name: 'b', type: 'tuple', components: TOKEN_BRIDGE_COMPONENTS },
       { name: 'p', type: 'tuple', components: [
@@ -721,7 +721,7 @@ const TOKEN_ROUTER_ABI = [
     ],
     outputs: [{ name: 'nonce', type: 'bytes32' }],
   },
-  { type: 'function', name: 'bridgeNonce', stateMutability: 'view', inputs: [{ name: 'b', type: 'tuple', components: TOKEN_BRIDGE_COMPONENTS }], outputs: [{ type: 'bytes32' }] },
+  { type: 'function', name: 'tokenBridgeNonce', stateMutability: 'view', inputs: [{ name: 'b', type: 'tuple', components: TOKEN_BRIDGE_COMPONENTS }], outputs: [{ type: 'bytes32' }] },
   { type: 'function', name: 'usedNonce', stateMutability: 'view', inputs: [{ type: 'address' }, { type: 'bytes32' }], outputs: [{ type: 'bool' }] },
   {
     type: 'event', name: 'TokenBridged', inputs: [
@@ -740,14 +740,6 @@ const TOKEN_ABI = [
   ] },
 ] as const
 
-function tokenRouters(): Record<string, `0x${string}`> {
-  try {
-    const parsed = JSON.parse(process.env.TOKEN_ROUTERS || '{}') as Record<string, string>
-    const out: Record<string, `0x${string}`> = {}
-    for (const [k, v] of Object.entries(parsed)) if (CHAINS[k] && isHex(v, 20)) out[k] = v
-    return out
-  } catch { return {} }
-}
 
 // Circle's CCTPx token registry: where each token is deployed (by CCTP domain), cached 5 min.
 let _registry: { at: number; tokens: Array<{ tokenId: string; deployments: Array<{ domainId: number; tokenAddress: string; enabled?: boolean }> }> } | null = null
@@ -837,7 +829,7 @@ async function tokenQuote(req: VercelRequest, res: VercelResponse) {
   const symbol = String(req.query.token || '')
   const amount = String(req.query.amount || '')
   const recipient = isHex(req.query.recipient, 20) ? String(req.query.recipient) : '0x0000000000000000000000000000000000000001'
-  if (!CHAINS[chainKey] || !tokenRouters()[chainKey]) return res.status(400).json({ error: 'Gasless bringing is not available for this chain' })
+  if (!CHAINS[chainKey] || !routers()[chainKey]) return res.status(400).json({ error: 'Gasless bringing is not available for this chain' })
   if (!CCTPX_TOKENS[symbol]) return res.status(400).json({ error: 'Unsupported token' })
   if (!isUint(amount) || BigInt(amount) < CCTPX_TOKENS[symbol].min) return res.status(400).json({ error: 'Amount too small' })
   const c = CHAINS[chainKey]
@@ -855,7 +847,7 @@ async function tokenQuote(req: VercelRequest, res: VercelResponse) {
 
 async function tokenRelay(req: VercelRequest, res: VercelResponse) {
   const { chain: chainKey, symbol, bridge: b, authorization: a, permit: p } = (req.body ?? {}) as any
-  const router = tokenRouters()[chainKey]
+  const router = routers()[chainKey]
   if (!CHAINS[chainKey] || !router) return res.status(400).json({ error: 'Gasless bringing is not available for this chain' })
   if (!CCTPX_TOKENS[symbol]) return res.status(400).json({ error: 'Unsupported token' })
   if (!b || (!a === !p)) return res.status(400).json({ error: 'Missing bridge or authorization' })
@@ -894,7 +886,7 @@ async function tokenRelay(req: VercelRequest, res: VercelResponse) {
     token: token as `0x${string}`, tokenId: t.id, destinationDomain: ARC_DOMAIN, recipient: b.recipient as `0x${string}`,
     fee, minFinalityThreshold: Number(b.minFinalityThreshold), salt: b.salt as `0x${string}`,
   }
-  const nonce = await pub.readContract({ address: router, abi: TOKEN_ROUTER_ABI, functionName: 'bridgeNonce', args: [bridgeArgs] }) as `0x${string}`
+  const nonce = await pub.readContract({ address: router, abi: TOKEN_ROUTER_ABI, functionName: 'tokenBridgeNonce', args: [bridgeArgs] }) as `0x${string}`
   const used = a
     ? await pub.readContract({ address: token, abi: TOKEN_ABI, functionName: 'authorizationState', args: [auth.from, nonce] })
     : await pub.readContract({ address: router, abi: TOKEN_ROUTER_ABI, functionName: 'usedNonce', args: [auth.from, nonce] })
@@ -918,9 +910,9 @@ async function tokenRelay(req: VercelRequest, res: VercelResponse) {
   const { parseSignature } = await import('viem')
   const vrs = (sig: `0x${string}`) => { const s = parseSignature(sig); return { v: s.v !== undefined ? Number(s.v) : 27 + (s.yParity ?? 0), r: s.r, s: s.s } }
   const call = a
-    ? (() => { const s = vrs(a.signature); return { functionName: 'bridgeWithAuthorization' as const,
+    ? (() => { const s = vrs(a.signature); return { functionName: 'tokenBridgeWithAuthorization' as const,
         args: [bridgeArgs, { from: a.from, value, validAfter: BigInt(a.validAfter), validBefore: BigInt(a.validBefore), ...s }, q.signedQuote] } })()
-    : (() => { const s = vrs(p.signature), bs = vrs(p.bridgeSignature); return { functionName: 'bridgeWithPermit' as const,
+    : (() => { const s = vrs(p.signature), bs = vrs(p.bridgeSignature); return { functionName: 'tokenBridgeWithPermit' as const,
         args: [bridgeArgs, { from: p.from, value, deadline: BigInt(p.deadline), ...s, bv: bs.v, br: bs.r, bs: bs.s }, q.signedQuote] } })()
 
   // Simulate first: a bad signature or changed parameter never costs gas.

@@ -16,7 +16,7 @@
     "contract:compile": "hardhat compile",
     "contract:deploy": "hardhat run contracts/deploy-hardhat.cjs --network arcTestnet",
     "contract:deploy:p2p-escrow-v3": "hardhat run contracts/deploy-p2p-meshport-escrow-v3.cjs --network arcTestnet",
-    "contract:deploy:bridge-router": "node contracts/deploy-bridge-router-all.cjs",
+    "contract:deploy:router": "node contracts/deploy-router-all.cjs",
     "treasury:fund": "node contracts/fund-treasury.cjs",
     "treasury:balance": "node contracts/check-treasury.cjs",
     "install:win": "npm install --ignore-scripts"

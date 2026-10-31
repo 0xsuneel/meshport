@@ -1,8 +1,8 @@
 // src/lib/gaslessToken.ts
 //
-// Gasless Bring for EURC and cirBTC (any CCTPx chain → Arc), through
-// MeshPortTokenRouter (contracts/MeshPortTokenRouter.sol) and the same
-// relayer as USDC (/api/bridge-relay, token_quote / token_relay):
+// Gasless Bring for EURC and cirBTC (any CCTPx chain → Arc), through the
+// same router and relayer as USDC - MeshPortRouter (contracts/MeshPortRouter.sol,
+// VITE_BRIDGE_ROUTERS) and /api/bridge-relay (token_quote / token_relay):
 //
 //   1. the relayer quotes MeshPort's fee, in the token - it covers the
 //      relayer's gas and Circle's CCTPx fee, which the relayer pays in the
@@ -22,6 +22,7 @@ import { encodeAbiParameters, keccak256, toHex, getAddress, type Hex } from 'vie
 import type { WalletAccount } from '@/wallet'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 import { assertAccountUnlocked } from '@/lib/accountLockRule'
+import { gaslessRouter } from './gaslessBridge'
 import type { CctpxToken } from './tokenBridge'
 
 const ARC_DOMAIN = 26
@@ -42,15 +43,8 @@ export const TOKEN_BRIDGE_TYPEHASH = keccak256(toHex(
   'MeshPortTokenBridge(uint256 chainId,address router,address token,bytes32 tokenId,uint32 destinationDomain,address recipient,uint256 fee,uint32 minFinalityThreshold,bytes32 salt)',
 ))
 
-/** VITE_TOKEN_ROUTERS: { "Base_Sepolia": "0x…" } - chains MeshPortTokenRouter is deployed on. */
-export function tokenRouter(chainId: string): Hex | null {
-  try {
-    const raw = import.meta.env.VITE_TOKEN_ROUTERS as string | undefined
-    if (!raw) return null
-    const v = (JSON.parse(raw) as Record<string, string>)[chainId]
-    return typeof EXTERNAL_CHAINS[chainId]?.chainId === 'number' && v && /^0x[0-9a-fA-F]{40}$/.test(v) ? getAddress(v) : null
-  } catch { return null }
-}
+/** MeshPortRouter on this chain - the same one USDC uses (VITE_BRIDGE_ROUTERS). */
+export const tokenRouter = (chainId: string): Hex | null => gaslessRouter(chainId)
 export const hasTokenRouter = (chainId: string) => !!tokenRouter(chainId)
 
 export interface TokenBridgeParams {
@@ -63,7 +57,7 @@ export interface TokenBridgeParams {
   salt: Hex
 }
 
-/** Same hash as MeshPortTokenRouter.bridgeNonce(). */
+/** Same hash as MeshPortRouter.tokenBridgeNonce(). */
 export function tokenBridgeNonce(p: TokenBridgeParams, chainId: number, router: Hex): Hex {
   return keccak256(encodeAbiParameters(
     [
@@ -185,7 +179,7 @@ export async function bringTokenGasless(p: {
       message: { owner: account.address, spender: router, value: total, nonce: permitNonce, deadline: until },
     })
     const bridgeSignature = await account.signTypedData({
-      domain: { name: 'MeshPortTokenRouter', version: '1', chainId: chainNum, verifyingContract: router },
+      domain: { name: 'MeshPortRouter', version: '1', chainId: chainNum, verifyingContract: router },
       types: { BridgePermit: [
         { name: 'from', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'deadline', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
       ] },

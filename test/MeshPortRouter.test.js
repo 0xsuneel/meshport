@@ -1,6 +1,6 @@
-// test/MeshPortBridgeRouter.test.js
+// test/MeshPortRouter.test.js
 //
-// MeshPortBridgeRouter: one signature from the user → pull, fee and CCTP burn
+// MeshPortRouter, USDC (CCTP): one signature from the user → pull, fee and CCTP burn
 // in a single transaction. The core property under test: whoever submits the
 // transaction (normally MeshPort's relayer) can execute exactly what the user
 // signed and nothing else — any changed parameter fails USDC's real EIP-712
@@ -15,15 +15,16 @@ const FORWARD_HOOK = '0x636374702d666f727761726400000000000000000000000000000000
 const usdc6 = (n) => ethers.parseUnits(String(n), 6)
 const pad32 = (addr) => ethers.zeroPadValue(addr, 32)
 
-describe('MeshPortBridgeRouter', () => {
-  let usdc, messenger, router, user, relayer, feeWallet, stranger
+describe('MeshPortRouter: USDC', () => {
+  let usdc, messenger, service, router, user, relayer, feeWallet, stranger
 
   beforeEach(async () => {
     ;[user, relayer, feeWallet, stranger] = await ethers.getSigners()
     usdc = await (await ethers.getContractFactory('MockUSDC3009')).deploy()
     messenger = await (await ethers.getContractFactory('MockTokenMessengerV2')).deploy()
-    router = await (await ethers.getContractFactory('MeshPortBridgeRouter'))
-      .deploy(await messenger.getAddress(), feeWallet.address)
+    service = await (await ethers.getContractFactory('MockCrossChainTokenService')).deploy()
+    router = await (await ethers.getContractFactory('MeshPortRouter'))
+      .deploy(await messenger.getAddress(), await service.getAddress(), feeWallet.address)
     await usdc.mint(user.address, usdc6(1000))
   })
 
@@ -201,9 +202,11 @@ describe('MeshPortBridgeRouter', () => {
       await expect(router.bridgeWithAuthorization(b, await sign(b))).to.be.revertedWithCustomError(router, 'ZeroRecipient')
     })
     it('constructor rejects zero addresses', async () => {
-      const F = await ethers.getContractFactory('MeshPortBridgeRouter')
-      await expect(F.deploy(ethers.ZeroAddress, feeWallet.address)).to.be.revertedWithCustomError(router, 'ZeroAddress')
-      await expect(F.deploy(await messenger.getAddress(), ethers.ZeroAddress)).to.be.revertedWithCustomError(router, 'ZeroAddress')
+      const F = await ethers.getContractFactory('MeshPortRouter')
+      const m = await messenger.getAddress(), sv = await service.getAddress()
+      await expect(F.deploy(ethers.ZeroAddress, sv, feeWallet.address)).to.be.revertedWithCustomError(router, 'ZeroAddress')
+      await expect(F.deploy(m, ethers.ZeroAddress, feeWallet.address)).to.be.revertedWithCustomError(router, 'ZeroAddress')
+      await expect(F.deploy(m, sv, ethers.ZeroAddress)).to.be.revertedWithCustomError(router, 'ZeroAddress')
     })
   })
 
@@ -234,25 +237,27 @@ describe('MeshPortBridgeRouter', () => {
   })
 
   describe('same address on every chain (CREATE2)', () => {
-    const { CREATE2_DEPLOYER, SALT, initCode, predictRouterAddress } = require('../contracts/bridge-router-create2.cjs')
+    const { CREATE2_DEPLOYER, SALT, initCode, predictRouterAddress } = require('../contracts/router-create2.cjs')
     // Runtime code of the standard deterministic deployment proxy (Arachnid's CREATE2 deployer).
     const DEPLOYER_RUNTIME = '0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3'
 
     it('the committed bytecode is exactly what this source compiles to', async () => {
-      const artifact = await hre.artifacts.readArtifact('MeshPortBridgeRouter')
-      expect(require('../contracts/MeshPortBridgeRouter.bytecode.json').bytecode).to.equal(artifact.bytecode)
+      const artifact = await hre.artifacts.readArtifact('MeshPortRouter')
+      expect(require('../contracts/MeshPortRouter.bytecode.json').bytecode).to.equal(artifact.bytecode)
     })
 
     it('deploying the committed bytecode through the CREATE2 deployer lands on the predicted address', async () => {
       await ethers.provider.send('hardhat_setCode', [CREATE2_DEPLOYER, DEPLOYER_RUNTIME])
       const messengerAddr = await messenger.getAddress()
-      const predicted = predictRouterAddress(feeWallet.address, messengerAddr)
+      const serviceAddr = await service.getAddress()
+      const predicted = predictRouterAddress(feeWallet.address, messengerAddr, serviceAddr)
       expect(await ethers.provider.getCode(predicted)).to.equal('0x')
-      await (await relayer.sendTransaction({ to: CREATE2_DEPLOYER, data: ethers.concat([SALT, initCode(messengerAddr, feeWallet.address)]) })).wait()
+      await (await relayer.sendTransaction({ to: CREATE2_DEPLOYER, data: ethers.concat([SALT, initCode(messengerAddr, serviceAddr, feeWallet.address)]) })).wait()
       expect(await ethers.provider.getCode(predicted)).to.not.equal('0x')
-      const deployed = await ethers.getContractAt('MeshPortBridgeRouter', predicted)
+      const deployed = await ethers.getContractAt('MeshPortRouter', predicted)
       expect(await deployed.feeRecipient()).to.equal(feeWallet.address)
       expect(await deployed.tokenMessenger()).to.equal(messengerAddr)
+      expect(await deployed.service()).to.equal(serviceAddr)
       // And it works: a real bridge through the CREATE2-deployed router.
       router = deployed
       const b = bridgeFor()

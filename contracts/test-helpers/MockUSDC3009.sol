@@ -6,7 +6,7 @@ pragma solidity ^0.8.20;
  * Circle's FiatTokenV2 rules: real EIP-712 signature check, the caller must
  * be the payee (`to == msg.sender`), each nonce usable once per signer, and
  * the validAfter/validBefore window enforced. Used by the
- * MeshPortBridgeRouter tests so the "relayer can't change what the user
+ * MeshPortRouter tests so the "relayer can't change what the user
  * signed" property is exercised against real signatures.
  */
 contract MockUSDC3009 {

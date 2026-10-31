@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
  * @notice Test-only stand-in for Circle's CCTPx CrossChainTokenService: one
  * TokenManager (this contract) per token id, which pulls the amount from the
  * caller during crossChainTransfer, takes msg.value as the native fee (at
- * least `nativeFee`) and records the call. Used by the MeshPortTokenRouter tests.
+ * least `nativeFee`) and records the call. Used by the MeshPortRouter tests.
  */
 interface IPull { function transferFrom(address f, address t, uint256 v) external returns (bool); }
 
