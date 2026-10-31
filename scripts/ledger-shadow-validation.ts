@@ -8,7 +8,7 @@
 // synthetic fixtures.
 import { interpretConfirmedChainEvent } from '../server/ledger/interpreter'
 import type { LedgerRepository } from '../server/ledger/repository'
-import type { ChainEventInput, AttemptContext, IntentContext, LedgerEventDraft, InsertOutcome } from '../server/ledger/types'
+import type { ChainEventInput, LedgerEventDraft, InsertOutcome } from '../server/ledger/types'
 
 function makeReadOnlyRepo(chainEvents: ChainEventInput[]) {
   const chainEventMap = new Map(chainEvents.map(e => [e.id, e]))

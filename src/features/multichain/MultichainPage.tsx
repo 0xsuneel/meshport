@@ -377,7 +377,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   // could include disabled chains' balances indefinitely if this page is
   // the first one opened in a session.
   useEffect(() => { loadSettings() }, [loadSettings])
-  const [chainBalances, setChainBalances] = useState<Array<{ id: string; label: string; balance: number }>>([])
+  const [, setChainBalances] = useState<Array<{ id: string; label: string; balance: number }>>([])
   const [totalExternal, setTotalExternal] = useState(0)
   const [scanning, setScanning]           = useState(true)
   // Logo of the chain being checked, shown in the spinner next to Available To Bring.

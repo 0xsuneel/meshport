@@ -19,9 +19,8 @@ import { handBiometricPasscode, handBiometricPending } from '@/lib/biometricHand
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import {
-  ArrowLeft, Shield, ShieldAlert, Fingerprint, Lock, KeyRound, ChevronRight,
-  Bell, BellOff, CheckCircle, Mail, Plus, Trash2,
-  Copy, Eye, EyeOff, Upload, Key, FileText,
+  ArrowLeft, Shield, Fingerprint, Lock, KeyRound, ChevronRight,
+  Bell, BellOff, CheckCircle, EyeOff, Key, FileText,
   ShoppingCart, Tag, Wallet, Ban, Clock as ClockIcon, Scale, RefreshCw,
   Check, Sun, Moon, Monitor, X, Palette,
   Store,
@@ -34,11 +33,10 @@ import { useFeatureEnabled } from '@/store/settingsStore'
 import { useThemeStore, resolveTheme, type ThemeMode } from '@/store/themeStore'
 import { switchTheme } from '@/lib/themeTransition'
 import { Avatar } from '@/components/ui/Avatar'
-import { copySensitiveToClipboard, timeAgo } from '@/lib/utils'
+import { timeAgo } from '@/lib/utils'
 import { biometricLabel, removeBiometric, type PendingBiometricRegistration } from '@/lib/biometric'
 import { markP2PNotificationRead, markAllP2PNotificationsReadOnServer, P2P_TYPES } from '@/lib/p2pNotifications'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { WalletSecretFrame } from '@/components/wallet/WalletSecretFrame'
 
 /** Small uppercase heading above a Security page card. */
@@ -360,7 +358,7 @@ export function ChangePasscodePage() {
   const [newPass,     setNewPass]     = useState('')
   const [confirmPass, setConfirmPass] = useState('')
   const [error,       setError]       = useState('')
-  const [saving,      setSaving]      = useState(false)
+  const [,            setSaving]      = useState(false)
 
   const handleChange = async () => {
     setError('')
@@ -618,7 +616,7 @@ function BackupRecoveryPhrasePage() {
   // frame needs it to open the passcode-encrypted recovery phrase.
   const [revealPasscode, setRevealPasscode] = useState('')
   const [passcodeError, setPasscodeError] = useState('')
-  const [verifying, setVerifying] = useState(false)
+  const [, setVerifying] = useState(false)
   // Both 'create' and 'import-seed' wallets expose both Seed + Private Key tabs.
   // The router already guarantees this component only renders for non-import-privkey wallets.
   const showPrivateKeyTab = true

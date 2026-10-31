@@ -23,7 +23,6 @@ import { supabase } from '@/lib/supabase'
 import { mapChainEventRow, latencyStats, type ShadowEvent } from './shadowEventMap'
 import { createSyncCoordinator } from './SyncCoordinator'
 import { refreshScope, notifyExternalBalanceChanged } from './BlockchainManager'
-import type { ChainId } from './types'
 import { externalChainKey, EXTERNAL_CHAINS } from './chains'
 
 /** Arc chain id literal - duplicated here to keep the import surface small. */

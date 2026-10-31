@@ -31,7 +31,7 @@ function toMeshPortUser(u: DbUser): MeshPortUser {
 }
 
 // ─── Register (called after username claim - actual save is in upsertUserProfile)
-export async function registerUsername(params: {
+export async function registerUsername(_params: {
   username: string
   walletAddress: string
   displayName: string

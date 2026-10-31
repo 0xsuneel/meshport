@@ -1,6 +1,6 @@
 // The fee payer and the app's own Solana → Arc burn (src/lib/solanaCctp.ts):
 // the burn the app builds is accepted; burns MeshPort must not pay for are not.
-import { describe, it, expect, beforeAll, vi } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import { generateKeyPairSync } from 'node:crypto'
 import {
   createKeyPairFromBytes, getAddressFromPublicKey, getTransactionDecoder, getTransactionEncoder, partiallySignTransaction, type Address,

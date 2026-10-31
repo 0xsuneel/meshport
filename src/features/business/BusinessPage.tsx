@@ -241,7 +241,6 @@ function OwnerBusinessPage() {
   }, [periodRaw, netOf])
   const trend = useMemo(() => periodTrend(today.total,
     netOf(storeRaw.filter(p => inPrevious(p.createdAt, period))).reduce((s, p) => s + p.amount, 0)), [today.total, storeRaw, period, netOf])
-  const refundedInPeriod = refunds.filter(r => inPeriod(r.createdAt, period) && (!activeStore || storeRaw.some(p => p.id === r.paymentId)))
   const arcBalance = useWalletStore(s => s.balance)
   // The Arc balance is read here too (on open, when the app is back in front,
   // after a settle arrives, a refund, or leaving Cash out / Payouts) - not only

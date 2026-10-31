@@ -63,7 +63,6 @@ export async function fetchRecentContacts(
   if (cached && Date.now() - cached.ts < RECENT_CACHE_TTL_MS) return cached.data
 
   const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
-  const SUPA_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
   const myAddr = walletAddress.toLowerCase()
 
   // App start: both lists come from the one startup call (lib/homeBootstrap.ts,

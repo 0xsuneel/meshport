@@ -123,8 +123,10 @@ export function useSettlement() {
   useLeaveGuard(run.running, 'Settle')
 
   // Wait between settlements (Admin → Features "merchant_claim_all_cooldown").
+  // Both read on every render (a hook can't sit behind the condition).
   const waitOn = useSettingsStore(s => s.isEnabled('merchant_claim_all_cooldown', true))
-  const waitHours = waitOn ? (Number(useSettingsStore(s => s.getValue('merchant_claim_all_cooldown'))) || CLAIM_ALL_COOLDOWN_MS / 3_600_000) : 0
+  const waitSetting = useSettingsStore(s => s.getValue('merchant_claim_all_cooldown'))
+  const waitHours = waitOn ? (Number(waitSetting) || CLAIM_ALL_COOLDOWN_MS / 3_600_000) : 0
   const [lastAt, setLastAt] = useState<number | null>(null)
   const [now, setNow] = useState(Date.now())
   useEffect(() => { if (wallet) lastClaimAllAt(wallet).then(setLastAt, () => setLastAt(0)) }, [wallet])

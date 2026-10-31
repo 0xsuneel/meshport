@@ -85,12 +85,6 @@ function addSeenId(addr: string | null, id: string) {
   } catch {}
 }
 
-function clearSeenIds(addr: string | null) {
-  const k = seenKey(addr)
-  if (!k) return
-  try { localStorage.removeItem(k) } catch {}
-}
-
 // ─── Auth Store ────────────────────────────────────────────────────────────────
 interface AuthStore {
   user: User | null

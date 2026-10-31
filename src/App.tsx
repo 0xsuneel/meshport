@@ -172,8 +172,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const username = useAuthStore(s => s.username)
   const passcode = useAuthStore(s => s.passcode)
   const setUsername = useAuthStore(s => s.setUsername)
-  const setUser = useAuthStore(s => s.setUser)
-  const user = useAuthStore(s => s.user)
   const location = useLocation()
   const [checking, setChecking] = useState(false)
   // If username already in store from previous session, mark as checked immediately
@@ -647,7 +645,7 @@ export default function App() {
     const tryRestore = (walletAddress: string | null, signer: unknown) => {
       if (walletAddress && !signer && !useAuthStore.getState().isLocked) {
         import('./lib/restoreWallet').then(({ restorePrivateKey }) => {
-          restorePrivateKey().then(ok => {
+          restorePrivateKey().then(() => {
           }).catch(() => {})
         })
       }

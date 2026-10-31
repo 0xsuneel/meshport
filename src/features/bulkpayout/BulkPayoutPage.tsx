@@ -31,7 +31,6 @@ import { useKeyboardOpen } from '@/hooks/useKeyboardOpen'
 
 import { ARC_EXPLORER } from '@/lib/chainExplorers'
 import { useLeaveGuard } from '@/lib/leaveGuard'
-const USDC_DECIMALS   = 6
 
 
 type Step = 'setup' | 'review' | 'processing' | 'results'
@@ -78,10 +77,8 @@ function downloadCSVTemplate() {
 export function BulkPayoutPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
-  const senderAddress = useAuthStore(s => s.walletAddress)
-  const user = useAuthStore(s => s.user)
   const storedPasscode = useAuthStore(s => s.passcode)
-  const { balance, setBalance } = useWalletStore()
+  const { balance } = useWalletStore()
   const { showToastMessage } = useUIStore()
 
   const [step, setStep] = useState<Step>('setup')

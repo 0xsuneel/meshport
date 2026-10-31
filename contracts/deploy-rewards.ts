@@ -44,9 +44,7 @@ async function deploy() {
   const walletClient = createWalletClient({ account, chain: ARC_CHAIN, transport: http() })
 
   // Encode constructor args: address _usdcToken
-  const { encodeDeployData } = await import('viem')
   const ABI = [{ type: 'constructor', inputs: [{ name: '_usdcToken', type: 'address' }] }]
-  const data = encodeDeployData({ abi: ABI, bytecode: BYTECODE as `0x${string}`, args: [USDC_CONTRACT] })
 
   const hash = await walletClient.deployContract({ abi: ABI, bytecode: BYTECODE as `0x${string}`, args: [USDC_CONTRACT] })
   console.log('Deploy txHash:', hash)

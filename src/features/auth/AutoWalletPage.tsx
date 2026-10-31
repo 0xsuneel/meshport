@@ -8,7 +8,6 @@ import { useAuthStore, useWalletStore } from '@/store'
 
 export function AutoWalletPage() {
   const navigate = useNavigate()
-  const user = useAuthStore(s => s.user)
   const username = useAuthStore(s => s.username)
   const loginType = useAuthStore(s => s.loginType)
   const setWallet = useAuthStore(s => s.setWallet)

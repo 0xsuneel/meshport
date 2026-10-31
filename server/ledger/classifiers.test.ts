@@ -41,13 +41,6 @@ function nativeEvent(overrides: Partial<ChainEventInput> = {}): ChainEventInput 
   }
 }
 
-function payIntent(overrides: Partial<IntentContext> = {}): IntentContext {
-  return {
-    id: 'intent-pay-1', wallet_address: '0xSender', feature: 'pay',
-    amount_atomic: '10000000', decimals: 6, token_address: '0xTokenContract',
-    token_symbol: 'EURC', is_native: false, ...overrides,
-  }
-}
 function swapIntent(overrides: Partial<IntentContext> = {}): IntentContext {
   return {
     id: 'intent-swap-1', wallet_address: '0xUser', feature: 'swap',

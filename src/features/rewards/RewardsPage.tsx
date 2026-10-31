@@ -266,7 +266,6 @@ export function RewardsPage() {
   const user = useAuthStore(s => s.user)
   const username = useAuthStore(s => s.username)
   const walletAddress = useAuthStore(s => s.walletAddress)
-  const signer = useAuthStore(s => s.signer)
   const navigate = useNavigate()
 
   const [totalPoints, setTotalPoints]       = useState(0)
@@ -282,8 +281,8 @@ export function RewardsPage() {
   const [loading, setLoading]               = useState(true)
   const [claiming, setClaiming]             = useState(false)
   const [claimError, setClaimError]         = useState<string | null>(null)
-  // claimPoints: how many points user wants to claim - defaults to all
-  const [claimPoints, setClaimPoints]       = useState<number>(0)
+  // How many points the user wants to claim - defaults to all
+  const [, setClaimPoints]       = useState<number>(0)
   const [claimInput, setClaimInput]         = useState('')
   const [showClaimSheet, setShowClaimSheet] = useState(false)
   const [progress, setProgress]             = useState<ClaimProgress | null>(null)
@@ -344,8 +343,6 @@ export function RewardsPage() {
 
   const dailyRemaining = Math.max(0, MAX_DAILY_POINTS - dailyClaimedPoints)
   const maxClaimable = Math.min(totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
-  const effectiveClaimPoints = Math.max(0, Math.min(claimPoints, maxClaimable))
-  const claimableUSDC = pointsToUSDC(effectiveClaimPoints)
   const dailyCapHit = totalPoints >= MIN_CLAIM_POINTS && dailyRemaining < MIN_CLAIM_POINTS && dailyClaimedPoints > 0
   const canOpenClaim = !!userId && !!walletAddress && maxClaimable >= MIN_CLAIM_POINTS && !loading
   const typedPoints = parseInt(claimInput || '0', 10) || 0

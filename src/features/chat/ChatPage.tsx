@@ -12,7 +12,7 @@ import { visibleFrame } from '@/hooks/useVisibleViewportHeight'
 import { virtualKeyboard } from '@/lib/keyboardOverlay'
 import { SHEET_BACKDROP, SHEET_DIM, LIGHT_DIM, DIALOG_CARD, SNACKBAR_MOTION, DIALOG_BACKDROP, MENU_MOTION, PAGE_TRANSITION, PUSH_BACK_MS, DESKTOP_FADE_TRANSITION } from '@/lib/motion'
 import { _plainByContent, plainTextOf, messagePreview, parseMedia, isDecryptFailure, splitCaption } from './chatMessageText'
-import { ARC_EXPLORER, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
+import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { ChatForwardSheet, chatPushMotion } from './ChatForwardSheet'
 import { ChatImage, ChatFile, QuoteThumb, FileTypeTile, MediaPreview, ChatImageViewer, type PreviewItem, type ViewerItem } from './ChatMedia'
 import { preparePhoto, uploadWithProgress, withMeta, metaOf, putCachedMedia, mimeOf } from './chatMediaStore'
@@ -24,7 +24,7 @@ import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { SearchField } from '@/components/ui/SearchField'
 import { readPeople, writePeople } from '@/lib/peopleCache'
-import { Search, ArrowLeft, CheckCheck, Paperclip, Image, FileText, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, Trash2, Archive, ArchiveRestore, MessageCirclePlus, Users, UserPlus, Globe, Clock, Receipt } from 'lucide-react'
+import { Search, ArrowLeft, Paperclip, Image, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, Trash2, Archive, ArchiveRestore, MessageCirclePlus, Users, UserPlus, Receipt } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Avatar } from '@/components/ui/Avatar'
@@ -58,7 +58,7 @@ import {
   subscribeWithRetry,
   type ChatMessage,
 } from '@/lib/chatService'
-import { codeFromLink, paymentLink, billCardMessage, orderLabel, orderKindOf, orderTitle, displayOrderNumber, paymentOrderTag, parsePaymentOrderTag, paidTitleFromTag, orderCardPreview, BILL_PAY_EVENT, type PaymentView, type OrderKind } from '@/lib/merchantPay'
+import { codeFromLink, billCardMessage, orderLabel, orderKindOf, orderTitle, displayOrderNumber, paymentOrderTag, parsePaymentOrderTag, paidTitleFromTag, orderCardPreview, BILL_PAY_EVENT, type PaymentView, type OrderKind } from '@/lib/merchantPay'
 import { useMerchant } from '@/lib/merchant'
 import { ChatBillSheet } from '@/features/merchant/InvoiceComposer'
 import { ChatRequestSheet } from './ChatRequestSheet'
@@ -885,7 +885,6 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
       return next
     })
   }
-  const isArchived = (conv: DbConversation) => archivedConvs.some(c => c.id === conv.id)
 
   // Message requests: chats from people you don't know (server decides).
   const requestsOn = privacy.msgPrivacy === 'contacts' && !isMerchantList
@@ -897,7 +896,6 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     return () => { cancelled = true }
   }, [requestsOn, convKey])
   useEffect(() => { if (!requestsOn && listTab === 'requests') setListTab('all') }, [requestsOn, listTab])
-  const isRequest = (conv: DbConversation) => requestIds.has(conv.id)
   // People I blocked: out of every list (they're in Chat privacy → Blocked).
   const [blockedIds, setBlockedIds] = useState<Set<string>>(() => new Set())
   useEffect(() => {
@@ -1219,7 +1217,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
           {searchQ && filtered.length > 0 && (
             <p className="px-4 pt-3 pb-1 text-[12px] font-semibold text-text-secondary">Chats</p>
           )}
-          {filtered.map((conv, idx) => {
+          {filtered.map((conv) => {
             // A self-conversation (paying/messaging your own username) has
             // conv.other_user resolved to your OWN user record - see
             // fetchConversations's otherIdByConv in supabase.ts, which
@@ -1263,11 +1261,11 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                   navigate(`/chat/${conv.id}`)
                 }}
                 onMouseEnter={() => prefetchChat(conv)}
-                onTouchStart={(e) => {
+                onTouchStart={() => {
                   prefetchChat(conv)
                   startLongPress(conv)
                 }}
-                onTouchEnd={(e) => { cancelLongPress() }}
+                onTouchEnd={() => { cancelLongPress() }}
                 onTouchCancel={cancelLongPress}
                 // Touch: long-press (above). Mouse: right-click opens the same menu.
                 onContextMenu={e => { e.preventDefault(); if (!('ontouchstart' in window)) toggleSelect(conv.id) }}
@@ -1392,58 +1390,6 @@ function WaitingTag({ light }: { light?: boolean }) {
       </svg>
       Waiting for them
     </span>
-  )
-}
-
-function EncryptedImage({ url, ivBase64, convKey, isLastInGroup, isMine, onTap }: {
-  url: string; ivBase64: string; convKey: any; isLastInGroup: boolean; isMine: boolean
-  onTap: (objectUrl: string) => void
-}) {
-  const [objectUrl, setObjectUrl] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
-  useEffect(() => {
-    let cancelled = false
-    let createdUrl: string | null = null
-    ;(async () => {
-      try {
-        const { decryptBlob } = await import('@/lib/chatCrypto')
-        const res = await fetch(url)
-        const encryptedBytes = await res.arrayBuffer()
-        const plainBlob = await decryptBlob(encryptedBytes, ivBase64, convKey)
-        if (cancelled) return
-        createdUrl = URL.createObjectURL(plainBlob)
-        setObjectUrl(createdUrl)
-      } catch (e) {
-        console.error('[Chat] failed to decrypt image:', e)
-        if (!cancelled) setFailed(true)
-      }
-    })()
-    return () => { cancelled = true; if (createdUrl) URL.revokeObjectURL(createdUrl) }
-  }, [url, ivBase64, convKey])
-
-  if (failed) {
-    return (
-      <div style={{ width: 200, height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', color: isMine ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)', fontSize: 13 }}>
-        Couldn't decrypt this image
-      </div>
-    )
-  }
-  if (!objectUrl) {
-    return (
-      <div style={{ width: 200, height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Loader2 className="w-5 h-5 animate-spin" style={{ color: isMine ? '#fff' : 'var(--brand)' }} />
-      </div>
-    )
-  }
-  return (
-    <img decoding="async"
-      src={objectUrl} alt="attachment" onClick={() => onTap(objectUrl)}
-      style={{
-        display: 'block', width: '100%', minWidth: 140, maxWidth: 260, maxHeight: 320,
-        objectFit: 'cover', cursor: 'pointer',
-        borderRadius: isLastInGroup ? (isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px') : '18px',
-      }}
-    />
   )
 }
 
@@ -2294,7 +2240,6 @@ export function ChatConversationPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const user = useAuthStore(s => s.user)
-  const signer = useAuthStore(s => s.signer)
   const storedPasscode = useAuthStore(s => s.passcode)
   const { showToastMessage } = useUIStore()
   const { balance, setBalance } = useWalletStore()
@@ -2487,7 +2432,7 @@ export function ChatConversationPage() {
     return typeof draft === 'string' ? draft.slice(0, 2000) : ''
   })
   const [sending, setSending] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
   const [showAttach, setShowAttach] = useState(false)
   // + → Request: ask them for an amount (a payment-link card they can pay in-chat).
   const [showRequest, setShowRequest] = useState(false)
@@ -2506,8 +2451,6 @@ export function ChatConversationPage() {
     }).catch(() => {})
   }, [merchant.isMerchant])
   const storePick = bizStores.length > 1 ? { list: bizStores, value: bizStoreId, onChange: setBizStoreId } : undefined
-  const [showBill, setShowBill] = useState(false)
-  const [deleteMsg, setDeleteMsg] = useState<any | null>(null)
   const [deleting, setDeleting] = useState(false)
   const msgLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // WhatsApp-style selection: long-press selects, taps add/remove, the header
@@ -2884,7 +2827,7 @@ export function ChatConversationPage() {
 
   // ── Pending attachments (staged, uploaded only on Send) ──────────────────
   const [pendingFiles, setPendingFiles] = useState<{ id: string; file: File; previewUrl: string | null; isImage: boolean }[]>([])
-  const [uploadProgress, setUploadProgress] = useState(false)
+  const [uploadProgress] = useState(false)
 
   const messageInputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -2948,7 +2891,7 @@ export function ChatConversationPage() {
           .from('messages')
           .delete()
           .in('id', oldest100)
-          .then(({ error: delErr }) => {
+          .then(() => {
           })
       }
 
@@ -3406,33 +3349,6 @@ export function ChatConversationPage() {
     })
   }
 
-  // ── Message delete handlers ──────────────────────────────────────────────
-  const handleDeleteForMe = (msg: any) => {
-    // Persist so it survives refresh (and any way the chat is opened)
-    addDeletedForMe([msg.id])
-    setMessages(prev => prev.filter(m => m.id !== msg.id))
-    setDeleteMsg(null)
-  }
-
-  const handleDeleteForEveryone = async (msg: any) => {
-    setDeleting(true)
-    try {
-      const { supabase } = await import('@/lib/supabase')
-      const { error } = await supabase.from('messages')
-        .update({ content: '[deleted]', type: 'text' })
-        .eq('id', msg.id)
-      if (error) throw new Error(/2 days/.test(error.message) ? 'Messages can only be deleted for everyone within 2 days' : 'Could not delete - try again')
-      // Replace locally with deleted placeholder
-      setMessages(prev => prev.map(m =>
-        m.id === msg.id ? { ...m, content: '[deleted]', type: 'text', deleted_at: new Date().toISOString() } : m
-      ))
-    } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Could not delete - try again', 'error')
-    }
-    setDeleting(false)
-    setDeleteMsg(null)
-  }
-
   const startMsgLongPress = useCallback((msg: any, isMine: boolean) => {
     // Only text, image and file messages are deletable - never payment cards
     const isText  = msg.type === 'text' && !msg.content?.startsWith('[IMAGE](') && !msg.content?.startsWith('[FILE:')
@@ -3776,42 +3692,6 @@ export function ChatConversationPage() {
     })
   }
 
-  const uploadOneFile = async (file: File): Promise<string | null> => {
-    try {
-      const { supabase } = await import('@/lib/supabase')
-      const { encryptBlob, encryptText } = await import('@/lib/chatCrypto')
-      const ext = file.name.split('.').pop()
-      const fileName = `chat/${conversationId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
-
-      // Encrypt the file's own bytes with the conversation key BEFORE
-      // upload - the storage bucket serves public URLs (see the comment on
-      // getPublicUrl below), so without this step anyone with the link
-      // could view the raw file, not just the two people in this chat.
-      // Never uploaded readable - keyForSend fails without a chat key.
-      const sendKey = await keyForSend()
-      const { blob: uploadBlob, ivBase64, encrypted } = await encryptBlob(file, sendKey)
-
-      const { error: uploadErr } = await supabase.storage.from('attachments').upload(fileName, uploadBlob, { cacheControl: '3600', upsert: false, contentType: encrypted ? 'application/octet-stream' : file.type })
-      if (uploadErr) { console.error('[Chat] Upload error:', uploadErr.message); return null }
-      const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(fileName)
-      const fileUrl = urlData.publicUrl
-
-      // Inner marker carries the FILE's own IV (needed to decrypt the blob
-      // at that URL) - separate from the message-level e2e:v1: wrapper
-      // encryptText adds next, which also hides the filename/URL itself
-      // from the server, not just the file content.
-      const isImage = file.type.startsWith('image/')
-      // File names are URI-encoded so ':', ']' or '(' can't break parsing.
-      const safeName = encodeURIComponent(file.name)
-      const marker = encrypted
-        ? (isImage ? `[IMAGE-E:${ivBase64}](${fileUrl})` : `[FILE-E:${safeName}:${ivBase64}](${fileUrl})`)
-        : (isImage ? `[IMAGE](${fileUrl})` : `[FILE:${safeName}](${fileUrl})`)
-      const out = await encryptText(marker, sendKey)
-      _plainByContent.set(out, marker)
-      return out
-    } catch (e: any) { console.error('[Chat] File upload failed:', e?.message); return null }
-  }
-
   const handlePay = () => {
     if (chatGate === 'blockedMe') { showToastMessage(BLOCKED_YOU(otherHandle), 'error'); return }
     if (chatGate === 'iBlocked') { showToastMessage(`You blocked ${otherHandle} - unblock to pay them`, 'error'); return }
@@ -3860,7 +3740,7 @@ export function ChatConversationPage() {
     // Refresh USDC + EURC + cirBTC balances live when sheet opens
     const addr = useAuthStore.getState().walletAddress || ''
     if (addr) {
-      import('@/lib/arcService').then(({ getEURCBalance, getUSDCBalance, getCirBtcBalance }) => {
+      import('@/lib/arcService').then(({ getEURCBalance, getCirBtcBalance }) => {
         // Throwing read: a failed one used to save $0 as the balance.
         import('@/lib/arcService').then(({ readUSDCBalanceOrThrow }) => readUSDCBalanceOrThrow(addr).then(b => setBalance(b)).catch(() => {}))
         getEURCBalance(addr).then(b => setEurcBalance(b)).catch(() => {})
@@ -4059,7 +3939,7 @@ export function ChatConversationPage() {
     if (!activeSigner) { const { walletUnavailableMessage } = await import('@/lib/restoreWallet'); setPayError(walletUnavailableMessage()); setPayStep('confirm'); chatPayInFlightRef.current = false; return }
 
     try {
-      const { sendUSDC, sendEURC, sendCirBTC, getUSDCBalance, getEURCBalance, getCirBtcBalance } = await import('@/lib/arcService')
+      const { sendUSDC, sendEURC, sendCirBTC, getEURCBalance, getCirBtcBalance } = await import('@/lib/arcService')
 
       // Send the correct token - mirrors PaySendPage's own token-routing
       // A definite failure (refused, or reverted) is noted for Pay → Recent;

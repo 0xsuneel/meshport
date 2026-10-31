@@ -21,8 +21,7 @@ import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { notifyClaimArrived, requestPushPermission } from '@/lib/bridgeTracker'
 import {
   ArrowLeft, RefreshCw, XCircle,
-  Activity as ActivityIcon,
-} from 'lucide-react'
+  } from 'lucide-react'
 import { ActionIcon } from '@/components/ui/ActionIcon'
 import { PinSheet } from '@/components/ui/PinSheet'
 import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
@@ -32,9 +31,8 @@ import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { ChainScanner } from '@/components/ui/ChainScanner'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { HubPush } from '@/components/multichain/HubPage'
-import { MeshLoader } from '@/components/ui/MeshLoader'
 import { EASE_OUT, MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION, type NavDirection } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
@@ -190,11 +188,6 @@ const RPC_BY_CHAIN_NAME: Record<string, string[]> = {
   'Arc Testnet': ARC_RPCS,
 }
 
-async function getWorkingRpc(chainName: string): Promise<string> {
-  const rpcs = RPC_BY_CHAIN_NAME[chainName] ?? ARC_RPCS
-  return rpcs[0]
-}
-
 
 const CIRCLE_SDK_CHAIN_ID: Record<string, string> = {
   Ethereum_Sepolia:    'Ethereum_Sepolia',
@@ -339,10 +332,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     return routerNavigate(to, opts)
   }) as ReturnType<typeof useNavigate>, [embedded, onClose, routerNavigate])
   const location      = useLocation()
-  const signer = useAuthStore(s => s.signer)
   const walletAddress = useAuthStore(s => s.walletAddress)
   const storedPasscode = useAuthStore(s => s.passcode)
-  const { balance, setBalance } = useWalletStore()
+  const { setBalance } = useWalletStore()
   // Admin Panel → Chains toggles. Each chain here is checked against its own
   // toggle so a disabled chain disappears from the claim list immediately
   // (this is a live subscription, so no rescan/reload is needed) and a
@@ -472,7 +464,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     const t = setTimeout(() => actionsRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 380)
     return () => clearTimeout(t)
   }, [keypadOpen, showPasscodeSheet])
-  const [isSubmitted,    setIsSubmitted]   = useState(false)
+  const [,               setIsSubmitted]   = useState(false)
   const [chains,         setChains]        = useState<ChainEntry[]>(() => prefilledFromHub
     ? [{ chainId: initialChain!, claimable: Math.floor((initialBalance ?? 0) * 100) / 100, pending: 0 }] : [])
   const [claimableTotal, setClaimableTotal] = useState(0)
@@ -481,9 +473,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // every navigation between the two so back mirrors forward instead of
   // always animating the same direction regardless of which way you went.
   const [direction,      setDirection]     = useState<NavDirection>('forward')
-  // Same useReducedMotion() pattern already used in PageTransition.tsx/
-  // AuthShell.tsx, applied here to the chain-select <-> amount-entry slide.
-  const reduceMotion = useReducedMotion()
   const [claimAmounts,   setClaimAmounts]  = useState<Record<string, string>>({})
   // Route for the claim: CCTP (burn → mint) or Unified Balance (Gateway deposit → spend).
   // Merchants: CCTP only (gasless - MeshPort's relayer pays the gas).
@@ -513,7 +502,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const [passEntry,      setPassEntry]     = useState('')
   const [passError,      setPassError]     = useState('')
   const [error,          setError]         = useState('')
-  const [txRecords,      setTxRecords]     = useState<ActivityRecord[]>([])
+  const [,               setTxRecords]     = useState<ActivityRecord[]>([])
   const [chainProgress,  setChainProgress] = useState<ChainProgress[]>([])
   // Per chain, what each gasless bring signed: MeshPort's fee and the cap
   // on Circle's CCTP fee - see lib/claimFees for how the success screen
@@ -1762,7 +1751,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
             {(chainsWithFunds.length > 0 || disabledClaimChains.length > 0) ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: SPACING.md }}>
-                {chainsWithFunds.map((c, i) => {
+                {chainsWithFunds.map((c) => {
                   const m = getMeta(c.chainId)
                   const isSelectable = c.claimable > 0
                   return (
@@ -1808,7 +1797,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     shown in place of a balance. Sorted after every enabled
                     chain (funded or not) so they never push real, actionable
                     balances further down the list. */}
-                {disabledClaimChains.map((c, i) => {
+                {disabledClaimChains.map((c) => {
                   const m = getMeta(c.chainId)
                   return (
                     <motion.div

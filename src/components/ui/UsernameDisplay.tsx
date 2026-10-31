@@ -26,7 +26,6 @@ export function UsernameDisplay({
   size = 'md',
   className,
   textClassName,
-  badgeClassName,
 }: UsernameDisplayProps) {
   if (!username || username === 'Unknown' || username === 'unknown') return null
 

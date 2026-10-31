@@ -254,7 +254,7 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
   const {
     conversationId, senderId, content,
     type = 'text', paymentAmount, paymentTxHash, tokenSymbol = 'USDC',
-    senderWalletAddress, recipientWalletAddress, toUsername,
+    toUsername,
     forwarded, replyToId,
   } = req.body || {}
 

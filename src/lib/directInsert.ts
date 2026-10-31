@@ -55,7 +55,6 @@ export async function directInsertMessage(p: MsgPayload): Promise<{ id: string |
       const id = json?.data?.id ?? null
       return { id, error: null }
     }
-    const errText = await res.text().catch(() => '')
   } catch (e: any) {
   }
 
@@ -77,7 +76,6 @@ export async function directInsertMessage(p: MsgPayload): Promise<{ id: string |
       const msg  = Array.isArray(json) ? json[0] : json
       return { id: msg?.id ?? null, error: null }
     }
-    const errText = await res.text().catch(() => '')
   } catch (e: any) {
   }
 
@@ -110,8 +108,7 @@ export async function directInsertMessage(p: MsgPayload): Promise<{ id: string |
         const msg  = Array.isArray(json) ? json[0] : json
         return { id: msg?.id ?? null, error: null }
       }
-      const errText = await res.text().catch(() => '')
-    }
+      }
   } catch (e: any) {
   }
 
