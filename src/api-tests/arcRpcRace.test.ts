@@ -45,3 +45,38 @@ describe('arc-rpc race', () => {
     expect(errors.mock.calls.some(c => /failed: HTTP 503/.test(String(c[0])))).toBe(true)
   })
 })
+
+describe('arc-rpc ranking', () => {
+  beforeEach(() => { vi.resetModules(); vi.unstubAllEnvs() })
+
+  async function load() {
+    vi.stubEnv('DRPC_KEY', 'k1')
+    vi.stubEnv('ALCHEMY_ARC_KEY', 'k2')
+    const mod: any = await import('../../api/arc-rpc.js')
+    const { ARC_RPCS, recordSuccess, orderEndpoints, healthScore } = mod._ranking
+    const drpc = ARC_RPCS.find((u: string) => u.includes('drpc.live'))
+    const alchemy = ARC_RPCS.find((u: string) => u.includes('alchemy'))
+    return { drpc, alchemy, recordSuccess, orderEndpoints, healthScore }
+  }
+
+  it('a faster, equally reliable endpoint ranks first', async () => {
+    const { drpc, alchemy, recordSuccess, healthScore } = await load()
+    for (let i = 0; i < 20; i++) { recordSuccess(drpc, 175); recordSuccess(alchemy, 115) }
+    expect(healthScore(alchemy)).toBeGreaterThan(healthScore(drpc))
+  })
+
+  it('an authenticated endpoint still ranks above a faster public one', async () => {
+    const { alchemy, recordSuccess, healthScore } = await load()
+    for (let i = 0; i < 20; i++) { recordSuccess(alchemy, 115); recordSuccess('https://rpc.testnet.arc.io', 95) }
+    expect(healthScore(alchemy)).toBeGreaterThan(healthScore('https://rpc.testnet.arc.io'))
+  })
+
+  it('every 8th order puts the runner-up first, so its speed gets measured', async () => {
+    const { orderEndpoints } = await load()
+    const firsts = Array.from({ length: 16 }, () => orderEndpoints()[0])
+    const top = firsts[0]
+    expect(firsts.filter(u => u !== top)).toHaveLength(2)
+    expect(firsts[7]).not.toBe(top)
+    expect(firsts[15]).not.toBe(top)
+  })
+})

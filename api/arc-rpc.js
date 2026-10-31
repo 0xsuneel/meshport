@@ -237,10 +237,19 @@ function avgLatencyMs(s) {
 // itself) so a genuinely struggling authenticated endpoint can still be
 // correctly outranked by a public one with a proven track record - this
 // is a thumb on the scale, not an override.
+//
+// SPEED FIX (2026-10-31): latency used to cost avg/4000 * 0.25 - 60 ms
+// between two healthy endpoints moved the score by ~0.004, so in practice
+// it never reordered anything, and dRPC (~175 ms) stayed ahead of Alchemy
+// (~115 ms). Circle's SDK makes ~30 calls one after another per Arc step
+// (approve / burn / deposit / swap), so that 60 ms was ~2 s per step. Now
+// avg/1000 * 0.5: 60 ms is ~0.03 - it decides between equally reliable
+// endpoints, and still can't outweigh a real reliability gap or the
+// authenticated bonus.
 function healthScore(url) {
   const s = getStats(url)
   const rate = successRate(s)
-  const latencyPenalty = Math.min(avgLatencyMs(s) / 4000, 1) * 0.25
+  const latencyPenalty = Math.min(avgLatencyMs(s) / 1000, 1) * 0.5
   const authBonus = isAuthenticated(url) ? 0.15 : 0
   return rate - latencyPenalty + authBonus
 }
@@ -249,10 +258,19 @@ function healthScore(url) {
 // score, quarantined ones excluded - unless EVERY endpoint is quarantined,
 // in which case fail open and try them all anyway (ranked the same way)
 // rather than erroring out on a stale quarantine.
+// Every EXPLORE_EVERY-th call the runner-up goes first. The race starts the
+// top pick STAGGER_MS ahead of the next and cancels the losers without timing
+// them, so a faster endpoint ranked second would otherwise never win, never
+// get a latency, and never move up. This lets it be measured.
+const EXPLORE_EVERY = 8
+let orderCalls = 0
+
 function orderEndpoints() {
   const live = ARC_RPCS.filter((u) => !isQuarantined(u))
   const pool = live.length ? live : ARC_RPCS
-  return [...pool].sort((a, b) => healthScore(b) - healthScore(a))
+  const ranked = [...pool].sort((a, b) => healthScore(b) - healthScore(a))
+  if (++orderCalls % EXPLORE_EVERY === 0 && ranked.length > 1) [ranked[0], ranked[1]] = [ranked[1], ranked[0]]
+  return ranked
 }
 
 async function raceOnce(body) {
@@ -602,4 +620,6 @@ module.exports = async function handler(req, res) {
 // logic directly - a same-process function call, not an extra HTTP hop -
 // instead of maintaining their own separate, simpler RPC failover.
 module.exports.forward = forward
+// For tests: the ranking and the stats it learns from.
+module.exports._ranking = { healthScore, orderEndpoints, recordSuccess, ARC_RPCS }
 module.exports.sendAndWait = sendAndWait
