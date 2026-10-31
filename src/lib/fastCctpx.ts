@@ -27,7 +27,7 @@ import type { WalletAccount } from '@/wallet'
 import { CCTP_DOMAINS, IRIS_SANDBOX, fetchIrisMessage, type IrisMessage } from './cctpTracker'
 import { ARC_DOMAIN } from './gaslessBridge'
 import { CCTPX_TOKEN_IDS } from './gaslessToken'
-import { FastCctpError, estimate, sendStep, rpc, sleep, attested, forwarded, forwardFailed, canFastCctp, type FastCctpStep } from './fastCctp'
+import { FastCctpError, estimate, sendStep, rpc, sleep, attested, forwarded, forwardFailed, deliveredOnChain, canFastCctp, type FastCctpStep } from './fastCctp'
 import type { CctpxToken } from './tokenBridge'
 
 /** Circle's CrossChainTokenService (testnet; the same address on every testnet chain). */
@@ -228,15 +228,18 @@ export async function fastCctpxTransfer(p: FastCctpxParams): Promise<FastCctpxRe
     msg = await fetchIrisMessage('Arc_Testnet', sendHash).catch(() => msg)
     if (!sawAttestation && (attested(msg) || forwarded(msg))) { sawAttestation = true; p.onStep('attestation', { values: { state: 'success' } }) }
     if (forwarded(msg)) break
+    // Iris lags the chain: the destination's receipt for Circle's mint settles it sooner.
+    if (await deliveredOnChain(msg, p.destination)) break
     if (forwardFailed(msg)) {
       throw new FastCctpError(`Circle couldn't deliver this ${p.token} automatically. It is safe - finish it from Multichain Hub → Recover.`, 'settling')
     }
     await sleep(pollMs)
   }
-  if (!forwarded(msg)) {
+  if (!forwarded(msg) && !(msg?.forwardTxHash && await deliveredOnChain(msg, p.destination))) {
     throw new FastCctpError(`Circle is still delivering this ${p.token}. It will arrive on its own - check ${p.destination.replace(/_/g, ' ')} in a few minutes.`, 'settling')
   }
   const mintHash = msg!.forwardTxHash!
+  if (!sawAttestation) p.onStep('attestation', { values: { state: 'success' } })
   p.onStep('mint', { values: { state: 'success', txHash: mintHash } })
   return {
     state: 'success',
