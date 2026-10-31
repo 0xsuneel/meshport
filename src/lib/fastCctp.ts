@@ -159,11 +159,12 @@ export async function fastCctpFees(p: { destination: string; amount: number; fas
 }
 
 // ── Arc RPC (through MeshPort's ranked proxy) ────────────────────────────────
-const rpc = async (method: string, params: unknown[]) => (await arcRpcJson({ jsonrpc: '2.0', id: 1, method, params }))?.result
+export const rpc = async (method: string, params: unknown[]) => (await arcRpcJson({ jsonrpc: '2.0', id: 1, method, params }))?.result
 
-async function estimate(from: string, to: Hex, data: Hex): Promise<bigint> {
+/** Gas for a call (30% headroom). A call the node says reverts throws: nothing is sent. */
+export async function estimate(from: string, to: Hex, data: Hex, value = 0n): Promise<bigint> {
   try {
-    const g = await rpc('eth_estimateGas', [{ from, to, data }])
+    const g = await rpc('eth_estimateGas', [{ from, to, data, ...(value > 0n ? { value: '0x' + value.toString(16) } : {}) }])
     return (BigInt(g) * 13n) / 10n
   } catch (e: any) {
     // The node simulated it and it reverts: nothing is sent.
@@ -204,10 +205,10 @@ export interface FastCctpParams {
 type KitStep = { name: string; state: 'success' | 'error'; txHash?: string }
 export interface FastCctpResult { state: 'success'; steps: KitStep[] }
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 /** Sends one Arc transaction; returns its hash once it has succeeded. */
-async function sendStep(account: WalletAccount, tx: { to: Hex; data: Hex; gas: bigint; nonce: number }, what: string, onSent?: (h: string) => void): Promise<Hex> {
+export async function sendStep(account: WalletAccount, tx: { to: Hex; data: Hex; gas: bigint; nonce: number; value?: bigint }, what: string, onSent?: (h: string) => void): Promise<Hex> {
   const { relayArcSend, waitForConfirmation } = await import('./arcService')
   let sent: Awaited<ReturnType<typeof relayArcSend>>
   try {
@@ -223,9 +224,9 @@ async function sendStep(account: WalletAccount, tx: { to: Hex; data: Hex; gas: b
   throw Object.assign(new FastCctpError(`${what} is still confirming on Arc.`, 'settling'), { txHash: sent.txHash })
 }
 
-const attested = (m: IrisMessage | null) => !!m && m.status === 'complete' && !!m.message && !!m.attestation && m.attestation !== 'PENDING'
-const forwarded = (m: IrisMessage | null) => (m?.forwardState ?? '').toUpperCase() === 'COMPLETE' && !!m?.forwardTxHash
-const forwardFailed = (m: IrisMessage | null) => (m?.forwardState ?? '').toUpperCase() === 'FAILED'
+export const attested = (m: IrisMessage | null) => !!m && m.status === 'complete' && !!m.message && !!m.attestation && m.attestation !== 'PENDING'
+export const forwarded = (m: IrisMessage | null) => (m?.forwardState ?? '').toUpperCase() === 'COMPLETE' && !!m?.forwardTxHash
+export const forwardFailed = (m: IrisMessage | null) => (m?.forwardState ?? '').toUpperCase() === 'FAILED'
 
 export async function fastCctpTransfer(p: FastCctpParams): Promise<FastCctpResult> {
   const dst = CCTP_DOMAINS[p.destination]

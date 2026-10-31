@@ -99,6 +99,8 @@ export function classifyFailure(err: unknown, opts: { reverted?: boolean } = {})
   if (has(s, 'transaction rejected', 'rejected')) return fail('rejected')
   if (has(s, 'unavailable', 'quota', 'rate limit', 'request limit', '429')) return fail('service_unavailable')
   const text = cleanErrorText(raw)
+  // A message that already says nothing was sent (e.g. PRIVY_NO_ANSWER) is kept as it is.
+  if (text && /nothing was (sent|moved)/i.test(text)) return fail('unknown', true, text)
   return fail('unknown', true, text ? `${text.replace(/[.\s]+$/, '')} - nothing was sent.` : FAILURE_MESSAGES.unknown)
 }
 

@@ -41,6 +41,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountField, quickAmounts, percentAmounts } from '@/components/ui/AmountField'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { prewarmTokenRoutes, type CctpxToken, KIT_CCTPX_CHAINS, BRIDGE_TOKENS, bridgeTokenDecimals, bridgeTokenInfo, useTokenRouteChains, type BridgeToken } from '@/lib/tokenBridge'
+import { ARC_TOKENS } from '@/blockchain/chains'
 import { revealFlow } from '@/lib/revealFlow'
 import { startMoveTimer, type MoveTimer } from '@/lib/moveTimings'
 import { sendThroughRelay } from '@/lib/arcRelaySend'
@@ -940,6 +941,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // The last live Gateway quote (Review screen): reused before the deposit
   // while it's fresh, instead of asking Circle again (that call alone took
   // ~20 s once - move_timings 2026-10-31).
+  // EURC / cirBTC: Circle's signed quote from Review, reused at Confirm while fresh (lib/fastCctpx).
+  const directTokenQuoteRef = useRef<import('@/lib/fastCctpx').CctpxQuote | null>(null)
   const lastUbQuoteRef = useRef<{ key: string; at: number; est: FeeEstimate } | null>(null)
   const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null)
   const [gasWarning, setGasWarning] = useState('')
@@ -1345,6 +1348,29 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // Circle's fees come out of the amount at mint; Arc gas is paid on top.
         const fresh: FeeEstimate = { bridgeFee, kitFee: 0, networkFee, forwarderFee, totalFee, onTop: networkFee, spendOverhead: 0,
           receiverGets: Math.max(0, numAmount - bridgeFee - forwarderFee), loading: false, error: '' }
+        notifyIfFeeChanged(fresh, silent)
+        setFeeEstimate(fresh)
+        setFeeEstimateKey(requestKey)
+        lastTotalFeeRef.current = totalFee
+        return fresh
+      }
+    }
+    // EURC / cirBTC (the direct path, lib/fastCctpx): Circle's signed quote and
+    // two Arc reads in parallel - no wallet, no SDK. The quote is kept for
+    // Confirm. The SDK below only if those can't be read.
+    if (isTokenRoute && (import.meta.env.VITE_FAST_CCTP as string | undefined) !== 'off') {
+      if (!silent) setFeeEstimate(f => ({ ...f, loading: true, error: '' }))
+      const f = await import('@/lib/fastCctpx').then(m => m.fastCctpxFees({
+        token: bridgeToken as CctpxToken, tokenAddress: ARC_TOKENS[bridgeToken as CctpxToken].contract as `0x${string}`,
+        destination: chain.sdk, recipient: address, owner: senderAddress,
+        amount: BigInt(Math.round(numAmount * 10 ** bridgeTokenDecimals(bridgeToken))),
+      })).catch(() => null)
+      if (f) {
+        directTokenQuoteRef.current = f.quote
+        tokenQuoteRef.current = null
+        const totalFee = f.circleFee + f.networkFee
+        // Circle's fee and Arc gas are paid in USDC on top; the recipient gets the whole amount of the token.
+        const fresh: FeeEstimate = { bridgeFee: f.circleFee, kitFee: 0, networkFee: f.networkFee, forwarderFee: 0, totalFee, onTop: totalFee, spendOverhead: 0, receiverGets: numAmount, loading: false, error: '' }
         notifyIfFeeChanged(fresh, silent)
         setFeeEstimate(fresh)
         setFeeEstimateKey(requestKey)
@@ -1910,14 +1936,34 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             markStep(key, payload?.values?.state || 'success', hash || undefined)
           })
         }
+        const { canFastCctp } = await import('@/lib/fastCctp')
+        const directToken = (import.meta.env.VITE_FAST_CCTP as string | undefined) !== 'off' && canFastCctp(chain.sdk)
         const result: any = await Promise.race([
-          kit.bridge({
-            from: { adapter, chain: ARC_CHAIN_KEY },
-            to: { chain: chain.sdk as any, recipientAddress: address, useForwarder: true },
-            amount: numAmount.toFixed(decimals),
-            token: bridgeToken,
-            ...(tokenQuoteRef.current ? { quote: tokenQuoteRef.current } : {}),
-          } as any),
+          directToken
+            // Circle's CCTPx contracts called directly, each step sent the way
+            // Pay sends (lib/fastCctpx) - same steps, kit-shaped result.
+            ? import('@/lib/fastCctpx').then(({ fastCctpxTransfer }) => fastCctpxTransfer({
+                account: activeSigner,
+                token: bridgeToken as CctpxToken,
+                tokenAddress: ARC_TOKENS[bridgeToken as CctpxToken].contract as `0x${string}`,
+                destination: chain.sdk,
+                recipient: address,
+                amount: BigInt(Math.round(numAmount * 10 ** decimals)),
+                quote: directTokenQuoteRef.current,
+                onStep: (step, payload) => {
+                  const hash = payload.values.txHash
+                  if (step === 'burn' && hash) burnTxHashRef.current = hash
+                  markStep(step, payload.values.state, hash)
+                },
+                onSendSent: h => { burnTxHashRef.current = h },
+              }))
+            : kit.bridge({
+                from: { adapter, chain: ARC_CHAIN_KEY },
+                to: { chain: chain.sdk as any, recipientAddress: address, useForwarder: true },
+                amount: numAmount.toFixed(decimals),
+                token: bridgeToken,
+                ...(tokenQuoteRef.current ? { quote: tokenQuoteRef.current } : {}),
+              } as any),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error(
             `This transfer is taking longer than expected. If it left Arc, your ${tokenSym} will still arrive - check ${chain.name} before trying again.`,
           )), 12 * 60_000)),
