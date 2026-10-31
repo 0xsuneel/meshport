@@ -8,7 +8,10 @@
 //     with one quick reload as soon as it's safe (watchForUpdates below).
 //   • The service worker's new offline copy downloads in the background and
 //     takes over quietly once the page is on the new version (no reload).
-// Never in the middle of something, so an update can't break it.
+//     While the app is in use that download is only a thin bar at the top.
+// Never in the middle of something, so an update can't break it - and the
+// "Updating MeshPort…" screen only on the opening screen or after the person
+// taps "Update ready", never over the app being used.
 
 import { meshLoaderSvgMarkup } from '@/components/ui/MeshLoader'
 
@@ -89,7 +92,41 @@ async function untilWaiting(reg: ServiceWorkerRegistration, ms: number): Promise
   }
 }
 
-/** Reload onto the live version, with "Updating MeshPort…" on screen. */
+/**
+ * The app is in the background on a resting screen: switch without any
+ * screen of its own - only once the new version is fully on the device (the
+ * thin bar showed its download while the app was in use), and only while the
+ * app is still in the background. Coming back first: no switch now (next
+ * time, or the next open). Nothing is ever shown over the app being used.
+ */
+async function switchQuietly(): Promise<boolean> {
+  if (document.visibilityState !== 'hidden') return false
+  try { if (Date.now() - Number(sessionStorage.getItem(GUARD_KEY) || 0) < 30_000) return false } catch { /* private mode */ }
+  const reg = await registration()
+  if (reg && navigator.serviceWorker.controller) {
+    if (!reg.waiting) { void reg.update().catch(() => undefined); return false } // still downloading
+    if (document.visibilityState !== 'hidden') return false
+    const waiting = reg.waiting
+    await new Promise<void>(resolve => {
+      navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })
+      waiting.postMessage({ type: 'SKIP_WAITING' })
+      setTimeout(resolve, 3000)
+    })
+    // The new copy is in charge now: this (old) page's files are gone from
+    // it, so it reloads even if the person came back in this moment.
+  } else if (document.visibilityState !== 'hidden') return false
+  try {
+    sessionStorage.setItem(GUARD_KEY, String(Date.now()))
+    if (newerBuild) sessionStorage.setItem(TARGET_KEY, newerBuild)
+  } catch { /* private mode */ }
+  removeUpdateBar()
+  const url = new URL(window.location.href)
+  url.searchParams.set('_v', String(Date.now()))
+  window.location.replace(url.toString())
+  return true
+}
+
+/** Reload onto the live version, with "Updating MeshPort…" on screen (app opening, or the person tapped "Update ready"). */
 async function switchToNewVersion(): Promise<boolean> {
   // Never loop: at most one update reload every 30s.
   try {
@@ -173,9 +210,11 @@ export async function applyWaitingUpdate(opts: { checkMs?: number } = {}): Promi
 // ── Updates while the app is open ──────────────────────────────────────────
 // A new deploy is noticed within a minute (/version.json, ~50 bytes). The app
 // never reloads while it's on screen:
-//   • it switches the moment the app goes to the background, on a "resting"
+//   • it switches quietly while the app is in the background on a "resting"
 //     screen (Home, Chats list, Activity, News, P2P lists, Profile, lock
-//     screen…) - or on the next open (applyWaitingUpdate);
+//     screen…) once the new version is fully downloaded - no screen of its
+//     own, and not if the person comes back first (switchQuietly) - or on the
+//     next open (applyWaitingUpdate);
 //   • meanwhile a small "Update ready" pill lets the person update right away.
 // Never on screens where money can be moving (Pay, Swap, Bulk, Transfer /
 // Bring, Receive request, Rewards claim, a chat, a P2P trade).
@@ -230,10 +269,7 @@ export function watchForUpdates(): () => void {
   const tryApply = async () => {
     if (!newerBuild) return
     if (document.visibilityState === 'hidden') {
-      if (onRestingScreen()) {
-        document.getElementById('mp-update-ready')?.remove()
-        void switchToNewVersion()
-      }
+      if (onRestingScreen()) void switchQuietly()
     } else {
       showReadyPill()
     }
@@ -302,6 +338,9 @@ export function showUpdating(): void {
  */
 function renderProgress(fraction: number): void {
   try {
+    // In use (no opening screen, no update screen): only the thin bar.
+    const splashUp = (() => { const sp = document.getElementById('splash'); return !!sp && !sp.classList.contains('splash-hide') })()
+    if (!splashUp && !document.documentElement.classList.contains('mp-updating')) { renderUpdateBar(fraction); return }
     const pct = Math.max(0, Math.min(100, Math.round(fraction * 100)))
     const splash = document.getElementById('splash')
     if (splash && !splash.classList.contains('splash-hide')) splash.setAttribute('data-update-pct', ` ${pct}%`)
@@ -329,4 +368,40 @@ function renderProgress(fraction: number): void {
     bar.setAttribute('aria-valuenow', String(pct))
     ;(bar.firstElementChild as HTMLElement).style.width = `${pct}%`
   } catch { /* cosmetic only */ }
+}
+
+// ── The thin bar: a new version downloading while the app is in use ────────
+// 3 px across the very top, over everything but taking no space and no taps;
+// gone when the download is done. The switch itself happens later, never
+// over the app being used (switchQuietly / the next open).
+let barDone: ReturnType<typeof setTimeout> | undefined
+function renderUpdateBar(fraction: number): void {
+  try {
+    let bar = document.getElementById('mp-update-bar')
+    if (!bar) {
+      bar = document.createElement('div')
+      bar.id = 'mp-update-bar'
+      bar.setAttribute('role', 'progressbar')
+      bar.setAttribute('aria-label', 'Downloading the new version of MeshPort')
+      bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', '100')
+      Object.assign(bar.style, {
+        position: 'fixed', top: '0', left: '0', right: '0', height: '3px', zIndex: '10000', pointerEvents: 'none',
+        background: 'color-mix(in srgb, var(--brand, #12665F) 18%, transparent)',
+      })
+      const fill = document.createElement('div')
+      Object.assign(fill.style, { height: '100%', width: '0%', background: 'var(--brand, #12665F)', transition: 'width .3s ease' })
+      bar.appendChild(fill)
+      document.body.appendChild(bar)
+    }
+    const pct = Math.max(0, Math.min(100, Math.round(fraction * 100)))
+    bar.setAttribute('aria-valuenow', String(pct))
+    ;(bar.firstElementChild as HTMLElement).style.width = `${pct}%`
+    clearTimeout(barDone)
+    // Done - or no word for a while (the download stopped): it goes.
+    barDone = setTimeout(removeUpdateBar, pct >= 100 ? 600 : 15_000)
+  } catch { /* cosmetic only */ }
+}
+
+function removeUpdateBar(): void {
+  try { document.getElementById('mp-update-bar')?.remove() } catch { /* cosmetic only */ }
 }
