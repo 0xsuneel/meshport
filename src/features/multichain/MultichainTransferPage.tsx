@@ -933,6 +933,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // review-step effect) can compare "did the live fee just change" without
   // reading from a stale closure.
   const lastTotalFeeRef = useRef(0)
+  // The last live Gateway quote (Review screen): reused before the deposit
+  // while it's fresh, instead of asking Circle again (that call alone took
+  // ~20 s once - move_timings 2026-10-31).
+  const lastUbQuoteRef = useRef<{ key: string; at: number; est: FeeEstimate } | null>(null)
   const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null)
   const [gasWarning, setGasWarning] = useState('')
   const [, setTicker] = useState(0)
@@ -1454,6 +1458,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         setFeeEstimate(fresh)
         setFeeEstimateKey(requestKey)
         lastTotalFeeRef.current = totalFee
+        lastUbQuoteRef.current = { key: requestKey, at: Date.now(), est: fresh }
         return fresh
       }
 
@@ -1945,7 +1950,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // The send leg must be priceable BEFORE anything moves: a deposit
           // whose spend can't be quoted (e.g. a recipient Circle rejects)
           // would sit in Unified Balance until recovered by hand.
-          const preDeposit = await fetchFeeEstimate(true)
+          // A live quote for exactly this send from the last 45 s already
+          // proves that; the spend is re-quoted after the deposit anyway.
+          const recent = lastUbQuoteRef.current
+          const preDeposit = recent && recent.key === feeRequestKey && Date.now() - recent.at < 45_000
+            ? recent.est
+            : await fetchFeeEstimate(true)
           if (!preDeposit || preDeposit.approx || preDeposit.receiverGets <= 0) {
             throw new Error(`Couldn't get a live fee for ${chain.name} right now - nothing was moved. Try again in a moment.`)
           }

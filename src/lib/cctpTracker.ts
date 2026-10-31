@@ -141,3 +141,32 @@ export function useCctpProgress(srcChain: string | undefined, burnTxHash: string
   }, [srcChain, burnTxHash, knownMintTx, intervalMs])
   return progress
 }
+
+// ── Arrival on Arc, read from Arc itself ─────────────────────────────────────
+// Iris flips forwardState to COMPLETE some seconds after the forwarder's mint
+// lands. Once Circle has attested, the message's nonce is known, and Arc's
+// MessageTransmitterV2 marks it used the moment the mint executes - so Bring
+// can show "arrived" from chain truth without waiting for Iris to catch up.
+const ARC_MESSAGE_TRANSMITTER_V2 = '0xe737e5cebeeba77efe34d4aa090756590b1ce275'
+const USED_NONCES_SELECTOR = '0xfeb61724' // usedNonces(bytes32)
+
+/** A CCTP v2 message's nonce (bytes32 after version, source and destination domains). Pure. */
+export function messageNonce(message: string | null | undefined): string | null {
+  if (!message || !/^0x[0-9a-fA-F]*$/.test(message) || message.length < 2 + 88) return null
+  const nonce = message.slice(2 + 24, 2 + 88)
+  return /^0+$/.test(nonce) ? null : '0x' + nonce
+}
+
+/** Has this burn (to Arc) been minted on Arc? Chain truth once attested; false while unsure. */
+export async function mintedOnArc(srcChain: string, burnTxHash: string): Promise<boolean> {
+  const msg = await fetchIrisMessage(srcChain, burnTxHash)
+  if (!msg) return false
+  if (progressFromIris(msg).stage === 'done') return true
+  const nonce = messageNonce(msg.status === 'complete' ? msg.message : null)
+  if (!nonce) return false
+  try {
+    const { arcRpcJson } = await import('./arc')
+    const j = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: ARC_MESSAGE_TRANSMITTER_V2, data: USED_NONCES_SELECTOR + nonce.slice(2) }, 'latest'] })
+    return typeof j?.result === 'string' && /[1-9a-fA-F]/.test(j.result.slice(2))
+  } catch { return false }
+}
