@@ -10,6 +10,9 @@
 //   ADMIN_PRIVATE_KEY   wallet that pays the deploy gas on each chain
 //   FEE_RECIPIENT       MeshPort's fee wallet (part of the address — keep it fixed)
 //   BRIDGE_RPC_<CHAIN>  optional RPC override, e.g. BRIDGE_RPC_BASE_SEPOLIA
+//   DEPLOY_GAS_GWEI     optional: pay this gas price (gwei) and reuse the next
+//                       CONFIRMED nonce - replaces a deploy stuck as "Pending"
+//                       (too low a fee) instead of queueing behind it
 //
 // Before spending gas on a chain it checks that: the RPC really is that chain,
 // Circle's TokenMessengerV2 exists there, its USDC supports EIP-3009, the
@@ -21,7 +24,7 @@
 // end it prints the value for VITE_BRIDGE_ROUTERS and BRIDGE_ROUTERS (Vercel).
 
 require('dotenv').config()
-const { createPublicClient, createWalletClient, http, defineChain, concat, getAddress, formatEther } = require('viem')
+const { createPublicClient, createWalletClient, http, defineChain, concat, getAddress, formatEther, parseGwei } = require('viem')
 const { privateKeyToAccount } = require('viem/accounts')
 const { CREATE2_DEPLOYER, SALT, TOKEN_MESSENGER_V2_TESTNET, CCTPX_SERVICE_TESTNET, initCode, predictRouterAddress } = require('./router-create2.cjs')
 
@@ -85,7 +88,13 @@ async function deployOn(key, cfg, account, feeRecipient, router, dryRun) {
   if (dryRun) return { ok: true, status: `ready (balance ${formatEther(balance)}) · ${tokens}`, dry: true }
 
   const wallet = createWalletClient({ chain, transport: http(rpc, { timeout: 20_000 }), account })
-  const hash = await wallet.sendTransaction({ to: CREATE2_DEPLOYER, data: concat([SALT, initCode(TOKEN_MESSENGER_V2_TESTNET, CCTPX_SERVICE_TESTNET, feeRecipient)]) })
+  // DEPLOY_GAS_GWEI: a higher fee on the confirmed nonce replaces a stuck pending deploy.
+  const gwei = Number(process.env.DEPLOY_GAS_GWEI || 0)
+  const fees = gwei > 0 ? {
+    nonce: await pub.getTransactionCount({ address: account.address, blockTag: 'latest' }),
+    maxFeePerGas: parseGwei(String(gwei)), maxPriorityFeePerGas: parseGwei(String(gwei)),
+  } : {}
+  const hash = await wallet.sendTransaction({ to: CREATE2_DEPLOYER, data: concat([SALT, initCode(TOKEN_MESSENGER_V2_TESTNET, CCTPX_SERVICE_TESTNET, feeRecipient)]), ...fees })
   const receipt = await pub.waitForTransactionReceipt({ hash, timeout: 180_000 })
   if (receipt.status !== 'success') return { ok: false, reason: `deploy transaction reverted (${hash})` }
   if (!hasCode(await pub.getCode({ address: router }))) return { ok: false, reason: `no code at ${router} after deploy (${hash})` }
