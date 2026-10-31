@@ -246,10 +246,12 @@ function pollMsFor(chainId: number): number {
 // Sepolia's RPCs suggest a tip of ~12 wei (its base fee is ~16 wei), but many
 // proposers there only include tips of at least 0.001 gwei - so a mint sent
 // with the suggested tip waited 1-2 minutes for a proposer that would take
-// it, while the median tip in those blocks was ~1 gwei. The floor costs about
-// 0.0001 Sepolia ETH per mint.
+// it, while the median tip in those blocks was ~1 gwei. 0.5 gwei (below that
+// median) still left Arc → Ethereum mints waiting 40 s or more for a builder
+// (transfers there took 57-162 s on 2026-10-31, the mint step most of it), so
+// the floor is above the median: about 0.0006 Sepolia ETH per mint.
 const MIN_PRIORITY_FEE: Record<number, bigint> = {
-  11155111: 500_000_000n, // 0.5 gwei
+  11155111: 2_000_000_000n, // 2 gwei
 }
 
 /** EIP-1559 fees for a relayed transaction on a chain with a tip floor: the
