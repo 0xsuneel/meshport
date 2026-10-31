@@ -25,8 +25,17 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return n
 }
 
+// Tells the app embedding this page that it has drawn (the secret or an
+// error), so it can fade the frame in instead of showing it half-drawn. No
+// secret in it - only that something is on screen. frame-ancestors limits who
+// can embed this page.
+function drawn() {
+  requestAnimationFrame(() => { try { parent.postMessage({ type: 'mp-reveal' }, '*') } catch { /* not embedded */ } })
+}
+
 function showError(message: string) {
   root.replaceChildren(el('p', 'error', message))
+  drawn()
 }
 
 function copyButton(secret: string, label: string) {
@@ -58,6 +67,7 @@ function render(what: 'mnemonic' | 'privateKey', secret: string) {
   } else {
     root.replaceChildren(el('code', 'key', secret), copyButton(secret, 'Copy key'))
   }
+  drawn()
 }
 
 if (!/^0x[0-9a-f]{32}$/.test(ticket)) {
