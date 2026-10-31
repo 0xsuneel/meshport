@@ -235,6 +235,17 @@ export function gatewaySelfMintsTo(sdk: string): boolean {
   return GATEWAY_SELF_MINT_CHAINS.has(sdk) || forwarderMintFailing(sdk)
 }
 
+/**
+ * A Gateway mint refused because its transfer spec was already used: that
+ * exact attested transfer was minted on the destination (Circle's signature
+ * fixes recipient and amount), so it arrived - nothing is lost or pending.
+ */
+export function gatewaySpecAlreadyMinted(err: any): boolean {
+  const text = [err?.message, err?.cause?.message, err?.shortMessage, err?.cause?.shortMessage, err?.reason, err?.data?.errorName]
+    .filter(Boolean).join(' ')
+  return /TransferSpecHashUsed/i.test(text)
+}
+
 /** true when a Gateway spend failed at the forwarder's destination mint and can be minted by us. */
 export function forwarderMintRetry(err: any): { attestation: string; signature: string } | null {
   const trace = err?.cause?.trace
@@ -295,10 +306,16 @@ export async function spendUnifiedTo(params: {
     const retry = forwarderMintRetry(err)
     if (!retry) throw err
     noteForwarderMintFailed(toChain)
-    const r: any = await kit.unifiedBalance.spend({
-      from: alloc(send), to: selfMintTo, token: 'USDC', amount: send.toFixed(6), config: { retry },
-    })
-    return { txHash: hashOf(r), received: send }
+    try {
+      const r: any = await kit.unifiedBalance.spend({
+        from: alloc(send), to: selfMintTo, token: 'USDC', amount: send.toFixed(6), config: { retry },
+      })
+      return { txHash: hashOf(r), received: send }
+    } catch (e) {
+      // The first mint landed after all: this transfer is already on the destination.
+      if (gatewaySpecAlreadyMinted(e)) return { txHash: undefined, received: send }
+      throw e
+    }
   }
 }
 
