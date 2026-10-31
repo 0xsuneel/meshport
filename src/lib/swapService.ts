@@ -64,7 +64,7 @@ async function getSdkModules() {
 let _kit: any = null
 function getKit(AppKit: any) {
   routeSwapServiceThroughServer()
-  if (!_kit) _kit = new AppKit({ disableErrorReporting: true } as any)
+  if (!_kit) _kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
   return _kit
 }
 

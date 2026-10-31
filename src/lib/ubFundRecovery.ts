@@ -174,7 +174,7 @@ function landedNow(createdAt: string | null | undefined, metadata: Record<string
 async function getKitAndAdapter(signer: WalletAccount, chain: string = ARC_CHAIN_KEY) {
   const { AppKit } = await loadSdk()
   const { createWalletAdapter } = await import('@/wallet')
-  const kit = new AppKit({ disableErrorReporting: true } as any)
+  const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
   // Arc: pinned to MeshPort's Arc RPC list. Any other chain (a withdrawal of
   // Unified Balance held on e.g. Base): the SDK's own RPCs for that chain.
   const adapter = chain === ARC_CHAIN_KEY

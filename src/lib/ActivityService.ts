@@ -390,6 +390,8 @@ export const Activity = {
     walletAddress: string; userId?: string; txHash: string; destinationTxHash?: string
     amount: number; sourceChain: string; destinationChain: string; destinationAddress?: string
     status?: ActivityStatus
+    /** EURC / cirBTC moved through CCTPx (lib/tokenBridge); USDC when absent. */
+    tokenSymbol?: string
   }) => saveActivity({
     walletAddress:        p.walletAddress,
     userId:                p.userId,
@@ -402,7 +404,8 @@ export const Activity = {
     counterpartyAddress:   p.destinationAddress,
     status:                p.status,
     explorerUrl:           explorerUrl(p.txHash, p.sourceChain),
-    metadata:              {},
+    tokenSymbol:           p.tokenSymbol,
+    metadata:              p.tokenSymbol && p.tokenSymbol !== 'USDC' ? { route: 'cctpx' } : {},
   }),
 
   // Finalizes a bridge row that was already written early (as 'pending',
@@ -463,6 +466,8 @@ export const Activity = {
   claim: (p: {
     walletAddress: string; userId?: string; txHash: string
     amount: number; sourceChain?: string; explorerUrl?: string
+    /** EURC / cirBTC brought in through CCTPx (lib/tokenBridge); USDC when absent. */
+    tokenSymbol?: string
   }) => {
     // Normalize chain names - 'Optimism Sepolia' and 'Optimism_Sepolia' → same key
     const normalizeChain = (c?: string) => c?.replace(/ /g, '_') ?? c
@@ -475,7 +480,8 @@ export const Activity = {
       sourceChain:      normalizeChain(p.sourceChain),
       destinationChain: ARC_CHAIN_KEY,
       explorerUrl:      p.explorerUrl || explorerUrl(p.txHash, normalizeChain(p.sourceChain)),
-      metadata:         {},
+      tokenSymbol:      p.tokenSymbol,
+      metadata:         p.tokenSymbol && p.tokenSymbol !== 'USDC' ? { route: 'cctpx' } : {},
     })
   },
 

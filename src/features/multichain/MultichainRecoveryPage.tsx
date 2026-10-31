@@ -102,7 +102,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
       if (walletAddress) {
         try {
           const [{ AppKit }, { getUnifiedBalances, UB_MIN_SWEEP }] = await Promise.all([import('@circle-fin/app-kit'), import('@/lib/ubClaim')])
-          const kit = new AppKit({ disableErrorReporting: true } as any)
+          const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
           const rows = await getUnifiedBalances(kit, walletAddress)
           // Dust (below UB_MIN_SWEEP per chain) isn't listed - moving it alone
           // costs a whole fee; the next Bring from that chain sends it along.
@@ -180,7 +180,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
       const [{ AppKit }, { createWalletAdapter }, { estimateUbClaimFee, finishHeldUbToArc }] = await Promise.all([
         import('@circle-fin/app-kit'), import('@/wallet'), import('@/lib/ubClaim'),
       ])
-      const kit = new AppKit({ disableErrorReporting: true } as any)
+      const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
       const adapter = await createWalletAdapter({ account: await getSigner() })
       // Say what Circle's fee takes before anything moves.
       const fee = await estimateUbClaimFee({ kit, adapter, walletAddr: walletAddress!, fromChain: chain, amount })
@@ -207,7 +207,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
       const [{ AppKit }, { createWalletAdapter }, { spendUnifiedTo, recordUbClaim }] = await Promise.all([
         import('@circle-fin/app-kit'), import('@/wallet'), import('@/lib/ubClaim'),
       ])
-      const kit = new AppKit({ disableErrorReporting: true } as any)
+      const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
       const adapter = await createWalletAdapter({ account: await getSigner() })
       const out = await spendUnifiedTo({ kit, adapter, fromChain: ARC_CHAIN_KEY, amount: ubArc, toChain: ARC_CHAIN_KEY, recipient: walletAddress!, selfMint: true })
       // History: "Recovered via UB · Arc"
@@ -227,7 +227,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
       const [{ AppKit }, { createWalletAdapter }, { spendDustToArc, recordUbClaim }] = await Promise.all([
         import('@circle-fin/app-kit'), import('@/wallet'), import('@/lib/ubClaim'),
       ])
-      const kit = new AppKit({ disableErrorReporting: true } as any)
+      const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
       const adapter = await createWalletAdapter({ account: await getSigner() })
       const total = ubDust.reduce((s, d) => s + d.amount, 0)
       const out = await spendDustToArc({ kit, adapter, walletAddr: walletAddress!, dust: ubDust })

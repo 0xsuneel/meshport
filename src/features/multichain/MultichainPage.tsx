@@ -30,7 +30,9 @@ function InlineSpinner() {
 import { UB_CLAIM_CHAINS } from '@/lib/ubClaim'
 import { canBringOverCctp } from '@/lib/gaslessBridge'
 import { useMerchant, useBusinessTab, isMerchantClaim, useAccountKind } from '@/lib/merchant'
-import { isChainEnabledForBring, isChainEnabledForSettle } from '@/lib/featureFilters'
+import { isChainEnabledForBring, isChainEnabledForSettle, isCoinEnabled } from '@/lib/featureFilters'
+import { BRIDGE_TOKENS, type BridgeToken, type CctpxToken } from '@/lib/tokenBridge'
+import { TokenBringList, TokenBringFlow, type TokenBringChain } from './TokenBring'
 import { BusinessMoney } from '@/features/merchant/BusinessMoney'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
@@ -420,6 +422,12 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   }, [location.key])
   // Inline forms under the tabs (Arc Bridge style - no page change, no pop-up).
   const [claimChain, setClaimChain] = useState<string | null>(() => initialQuery.get('chain'))
+  // Bring's coin: USDC, or EURC / cirBTC over Circle CCTPx (lib/tokenBridge) -
+  // personal accounts only; business Bring and Settle stay USDC.
+  const [bringCoin, setBringCoin] = useState<BridgeToken>('USDC')
+  const [tokenBring, setTokenBring] = useState<TokenBringChain | null>(null)
+  const lastTokenBring = useRef<TokenBringChain | null>(null)
+  if (tokenBring) lastTokenBring.current = tokenBring
   // A claim being followed in Track Progress, shown inline under Bring Funds.
   // ?claim= in the URL (mirrored by the claim form) lets a refresh resume it.
   const [trackClaim, setTrackClaim] = useState<string | null>(() => initialQuery.get('claim') || (location.state as any)?.trackClaimId || null)
@@ -1110,6 +1118,9 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   const lastClaimChain = useRef(claimChain)
   if (claimChain) lastClaimChain.current = claimChain
   const sheetClaimChain = claimChain ?? lastClaimChain.current
+  const bringCoins = isMerchant || accountKind !== 'personal' ? [] : BRIDGE_TOKENS.filter(t => t.id === 'USDC' || isCoinEnabled(settingsMap, t.id))
+  const bringToken: BridgeToken = bringCoins.some(t => t.id === bringCoin) ? bringCoin : 'USDC'
+  const sheetTokenBring = tokenBring ?? lastTokenBring.current
   const page = (
     <div data-flow-scroller className={isDesktop ? undefined : 'lg:max-w-[900px]'} style={{ flex: 1, overflowY: flowFocus === 'processing' ? 'hidden' : 'auto', overscrollBehavior: flowFocus === 'processing' ? 'none' : undefined, background: 'var(--bg)', paddingBottom: isDesktop ? 90 : 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
       {/* Header */}
@@ -1246,6 +1257,20 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
           </HubPage>
         )}
 
+        {/* EURC / cirBTC: its own page over the chain list, like a USDC chain's. */}
+        <HubPage open={hubTab === 'bring' && bringToken !== 'USDC' && !!tokenBring}
+          header={(
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 4px' }}>
+              <HubPageBack onClick={() => setTokenBring(null)} />
+              <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Bring {bringToken}</span>
+            </div>
+          )}>
+          {sheetTokenBring && bringToken !== 'USDC' && (
+            <TokenBringFlow key={`${bringToken}-${sheetTokenBring.sdk}`} token={bringToken as CctpxToken} chain={sheetTokenBring}
+              onClose={() => setTokenBring(null)} onDone={() => refreshBalancesAfterTx(walletAddress)} />
+          )}
+        </HubPage>
+
         {hubTab === 'bring' && (() => {
           const chainCard = (
           // Merchants: shown inside Manage money's "Chains" tab (already a card).
@@ -1258,7 +1283,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>{isMerchant ? 'Collect from chains' : 'Bring Funds to Arc'}</div>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{isMerchant ? 'Tap a chain to claim it, or use Claim All' : 'Move USDC from any chain to Arc'}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{isMerchant ? 'Tap a chain to claim it, or use Claim All' : bringToken === 'USDC' ? 'Move USDC from any chain to Arc' : `Move ${bringToken} from supported chains to Arc`}</div>
               </div>
               <button onClick={() => { setScanning(true); setScanNonce(n => n + 1) }} disabled={scanning} aria-label="Refresh"
                 style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 12, cursor: scanning ? 'default' : 'pointer',
@@ -1271,8 +1296,28 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
               </button>
             </div>
 
+            {/* The coin to bring - Swap's token pills, one per coin. */}
+            {bringCoins.length > 1 && (
+              <div role="radiogroup" aria-label="Coin to bring" style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+                {bringCoins.map(t => {
+                  const on = t.id === bringToken
+                  return (
+                    <button key={t.id} role="radio" aria-checked={on} onClick={() => { setBringCoin(t.id); setTokenBring(null) }}
+                      className="flex items-center gap-2 rounded-full active:opacity-70 transition-opacity"
+                      style={{ height: 36, padding: '0 12px 0 5px', cursor: 'pointer',
+                        background: on ? 'color-mix(in srgb, var(--brand) 16%, transparent)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)',
+                        border: on ? '1px solid color-mix(in srgb, var(--brand) 45%, transparent)' : '1px solid transparent' }}>
+                      <img decoding="async" src={t.logo} alt="" width={26} height={26} style={{ borderRadius: '50%' }} />
+                      <span className="text-[14px] font-bold text-text-primary">{t.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
             {/* Chain list - every chain, balance on the right; empty ones dimmed */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+              {bringToken !== 'USDC' ? <TokenBringList token={bringToken as CctpxToken} onPick={setTokenBring} /> : <>
               {/* Visible scan: the full scanner while nothing is listed yet,
                   a slim strip above the list while it refreshes. */}
               {scanning && bringRows.length > 0 && (
@@ -1317,6 +1362,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                   </button>
                 )
               })}
+              </>}
             </div>
 
           </div>

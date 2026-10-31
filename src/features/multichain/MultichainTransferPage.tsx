@@ -9,7 +9,7 @@ import { EASE_OUT, PUSH_OPEN_MS, PUSH_EASE_CSS, DESKTOP_FADE_KEYFRAMES, DESKTOP_
 import { pushLook } from '@/lib/pushLook'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PinSheet } from '@/components/ui/PinSheet'
-import { AmountKeypad, sanitizeAmountInput, tokenDecimals } from '@/components/ui/AmountKeypad'
+import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { HubPage, HubPageBack, HUB_PANEL_BOX } from '@/components/multichain/HubPage'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
@@ -27,7 +27,7 @@ import { notifyRewardMultichain } from '@/lib/notifications'
 import { formatAmount, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { useSettingsStore } from '@/store/settingsStore'
-import { transferRoutes } from '@/lib/featureFilters'
+import { transferRoutes, isCoinEnabled } from '@/lib/featureFilters'
 import { useAccountKind } from '@/lib/merchant'
 import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ARC_RPCS, ARC_NETWORK } from '@/lib/arc'
@@ -39,6 +39,8 @@ import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
+import { TokenMenu } from '@/components/ui/TokenMenu'
+import { BRIDGE_TOKENS, bridgeTokenDecimals, bridgeTokenInfo, useTokenRouteChains, type BridgeToken } from '@/lib/tokenBridge'
 import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -53,12 +55,6 @@ import { refreshScope, notifyExternalBalanceChanged } from '@/blockchain/Blockch
 const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
   ? 'Arc'
   : 'Arc_Testnet'
-
-// Decimal places an amount can be typed with - the same cap for the typed
-// (desktop) input and the phone keypad: USDC's on-chain 6, which is also
-// what Max fills in (the typed box used to stop at 2 while the keypad and
-// Max allowed 6).
-const USDC_DECIMALS = tokenDecimals('USDC')
 
 /** Speed tag on a route button. Out of Arc both routes are Fast: Arc is final
  *  in under a second, so neither waits for source finality. */
@@ -460,6 +456,19 @@ const STEP_DEFS = [
   { key: 'mint',        label: 'Mint',          pendingMsg: 'Waiting for mint…',                activeMsg: 'Minting on destination…' },
 ]
 
+// EURC / cirBTC (Circle CCTPx): the same four steps, in its own words -
+// approve the token, send it from Arc, Circle attests, Circle's forwarder
+// delivers it on the destination.
+function makeTokenSteps(token: string, destName: string): BridgeStepState[] {
+  const labels: Record<string, [string, string]> = {
+    approve:     [`Approve ${token}`, `Waiting to approve ${token}…`],
+    burn:        ['Send from Arc', `Waiting to send ${token}…`],
+    attestation: ['Attestation', 'Waiting for Circle to attest…'],
+    mint:        [`Deliver on ${destName}`, `Waiting for delivery…`],
+  }
+  return STEP_DEFS.map(d => ({ name: d.key, label: labels[d.key][0], status: 'pending' as BridgeStepStatus, message: labels[d.key][1] }))
+}
+
 function makeDefaultSteps(destName: string): BridgeStepState[] {
   return STEP_DEFS.map((d, i) => ({
     name: d.key,
@@ -786,6 +795,18 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     return () => { const cic = (window as any).cancelIdleCallback; if (ric && cic) cic(id); else clearTimeout(id) }
   }, [formSheet])
   const [selectedChain, setSelectedChain] = useState<ChainId>('eth')
+  // What is sent: USDC (CCTP / Unified Balance, as before) or EURC / cirBTC
+  // through Circle's CCTPx (lib/tokenBridge) - only to the chains Circle's
+  // registry has the token on, with Arc; its fee is paid in USDC on Arc.
+  const [bridgeToken, setBridgeToken] = useState<BridgeToken>('USDC')
+  const [tokenPickerOpen, setTokenPickerOpen] = useState(false)
+  const isTokenRoute = bridgeToken !== 'USDC'
+  const tokenSym = bridgeToken
+  const tokenRoutes = useTokenRouteChains(bridgeToken)
+  // The token's balance on Arc (USDC uses the wallet store's `balance`).
+  const [tokenBalance, setTokenBalance] = useState<number | null>(null)
+  // The quote Review showed: passed back to bridge() so the fee paid is the fee shown.
+  const tokenQuoteRef = useRef<unknown>(null)
   // Editing the address, amount or chain while the inline review is showing
   // hides it again - the fees shown must always match what's in the fields.
   useEffect(() => {
@@ -1086,9 +1107,31 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // both routes are available, otherwise whichever single route the admin
   // left enabled. Defaults to UB (today's existing default) until the user
   // opens the picker and chooses CCTP v2 instead.
-  const effectiveUb = availableMechanisms.length > 1
+  const effectiveUb = isTokenRoute ? false // EURC / cirBTC: CCTPx only
+    : availableMechanisms.length > 1
     ? (selectedRoute ?? 'ub') === 'ub'
     : availableMechanisms[0] === 'ub'
+  // The destination chips: every enabled chain for USDC; for EURC / cirBTC
+  // only the enabled chains Circle supports that token on (with Arc).
+  const OFFERED_CHAINS = isTokenRoute
+    ? ENABLED_CHAINS.filter(c => tokenRoutes.chains?.includes(c.sdk))
+    : ENABLED_CHAINS
+  const offeredKey = OFFERED_CHAINS.map(c => c.id).join(',')
+  useEffect(() => {
+    if (!isTokenRoute || !OFFERED_CHAINS.length) return
+    if (!OFFERED_CHAINS.some(c => c.id === selectedChain)) setSelectedChain(OFFERED_CHAINS[0].id as ChainId)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
+  }, [isTokenRoute, offeredKey])
+  useEffect(() => {
+    setTokenBalance(null)
+    if (!isTokenRoute || !senderAddress) return
+    let cancelled = false
+    import('@/lib/arcService')
+      .then(m => (bridgeToken === 'EURC' ? m.getEURCBalance(senderAddress) : m.getCirBtcBalance(senderAddress)))
+      .then(b => { if (!cancelled) setTokenBalance(b) })
+      .catch(() => { if (!cancelled) setTokenBalance(0) })
+    return () => { cancelled = true }
+  }, [bridgeToken, isTokenRoute, senderAddress])
 
   const chain = { ...baseChain, ub: effectiveUb }
 
@@ -1201,7 +1244,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // Basic form validity. Deliberately does NOT depend on any fee estimate -
   // fees are no longer fetched while the user is on the amount-entry form at
   // all, so Continue only needs to know the typed amount/address are sane.
-  const formValid = addressFitsChain(address, chain.sdk) && numAmount >= MIN_AMOUNT && numAmount <= balance
+  // The amount comes out of the token's own balance; EURC / cirBTC can go
+  // only to a chain offered for it (OFFERED_CHAINS) and only to EVM.
+  const sendBalance = isTokenRoute ? (tokenBalance ?? 0) : balance
+  const formValid = isTokenRoute
+    ? addressFitsChain(address, chain.sdk) && chain.sdk !== 'Solana_Devnet' && OFFERED_CHAINS.some(c => c.id === chain.id)
+      && numAmount > 0 && numAmount <= sendBalance
+    : addressFitsChain(address, chain.sdk) && numAmount >= MIN_AMOUNT && numAmount <= balance
   const canContinue = formValid
   // Confirm only against a usable quote. Unified Balance deposits first and
   // can only send against a live quote - a stand-in (approx) one, or none,
@@ -1234,7 +1283,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // refresh while Review is open, so numbers update in place instead of
   // flashing "Fetching fees…" every poll.
   // The transfer a fee estimate is for (stored in feeEstimateKey when fetched).
-  const feeRequestKey = `${address}|${numAmount}|${selectedChain}|${selectedSpeed}`
+  const feeRequestKey = `${address}|${numAmount}|${selectedChain}|${selectedSpeed}|${bridgeToken}`
   const fetchFeeEstimate = async (silent = false): Promise<FeeEstimate | null> => {
     if (!numAmount || !address || !senderAddress) return null
     const requestKey = feeRequestKey
@@ -1246,7 +1295,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       const { AppKit, JsonRpcProvider, FallbackProvider } = await loadSdkModules()
       const { createWalletAdapter } = await import('@/wallet')
 
-      const kit = new AppKit({ disableErrorReporting: true } as any)
+      const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
       const adapter = await createWalletAdapter({
         account: activeKey,
         getProvider: ({ chain: sdkChain }: any) => {
@@ -1263,6 +1312,35 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           return relayedProviderFor(sdkChain)
         },
       })
+
+      // ── EURC / cirBTC (CCTPx) ───────────────────────────────────────────
+      // Circle's fee comes as a signed quote, paid in Arc's native currency
+      // (USDC) on top of the amount, with Arc gas; the recipient gets the
+      // whole amount of the token. The quote is kept for bridge().
+      if (isTokenRoute) {
+        const est: any = await kit.estimateBridge({
+          from: { adapter, chain: ARC_CHAIN_KEY },
+          to: { chain: chain.sdk as any, recipientAddress: address, useForwarder: true },
+          amount: numAmount.toFixed(bridgeTokenDecimals(bridgeToken)),
+          token: bridgeToken,
+        } as any)
+        const feeRows: any[] = est?.fees ?? []
+        if (feeRows.some(f => f.amount === null || f.error)) throw new Error('Circle fee unavailable for this route')
+        const sum = (type: string) => feeRows.filter(f => f.type === type).reduce((t, f) => t + (parseFloat(f.amount) || 0), 0)
+        const bridgeFee = sum('provider')
+        const forwarderFee = sum('forwarder')
+        const kitFee = sum('kit')
+        let networkFee = 0
+        for (const g of est?.gasFees ?? []) if (g?.token === 'USDC') networkFee += parseFloat(g?.fees?.fee ?? g?.amount) || 0
+        const totalFee = bridgeFee + forwarderFee + kitFee + networkFee
+        tokenQuoteRef.current = est?.quote ?? null
+        const fresh: FeeEstimate = { bridgeFee, kitFee, networkFee, forwarderFee, totalFee, onTop: totalFee, spendOverhead: 0, receiverGets: numAmount, loading: false, error: '' }
+        notifyIfFeeChanged(fresh, silent)
+        setFeeEstimate(fresh)
+        setFeeEstimateKey(requestKey)
+        lastTotalFeeRef.current = totalFee
+        return fresh
+      }
 
       // ── Gateway (unified balance) path ──────────────────────────────────
       // This used to fall through to kit.estimateBridge() below regardless
@@ -1408,6 +1486,16 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // than silently falling back to static fees here and letting the
       // real bridge attempt inherit the same wedged instance later.
       if (/no runners/i.test(e?.message || '')) resetArcFallbackProvider()
+      // EURC / cirBTC: no stand-in - Review says the fee couldn't be loaded
+      // and Confirm stays off (quoteUsable) until a live quote arrives.
+      if (isTokenRoute) {
+        tokenQuoteRef.current = null
+        const failed: FeeEstimate = { bridgeFee: 0, kitFee: 0, networkFee: 0, forwarderFee: 0, totalFee: 0, onTop: 0, spendOverhead: 0, receiverGets: 0, loading: false,
+          error: "Couldn't get Circle's fee for this transfer - try again in a moment" }
+        setFeeEstimate(failed)
+        setFeeEstimateKey(requestKey)
+        return failed
+      }
       // The live fee couldn't be fetched: rough stand-in numbers so Review
       // isn't empty, marked approx - Review says so and retries in a few
       // seconds, and a Unified Balance send never spends against them (it
@@ -1443,6 +1531,16 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // SDK-fetched forwarder service fee and is used instead.
   const validateGasBalance = () => {
     const feeForCheck = (step === 'form') ? feeReserveEstimate : feeEstimate.onTop
+    if (isTokenRoute) {
+      // EURC / cirBTC: the token covers the amount; USDC covers Circle's fee + Arc gas.
+      if (numAmount > sendBalance) { setGasWarning(`Insufficient ${tokenSym} balance.`); return false }
+      if (balance < feeForCheck) {
+        setGasWarning(`Not enough USDC for the fee. You need about ${trimTrailingZeros(feeForCheck.toFixed(4))} USDC (Circle's fee + network gas) but have ${trimTrailingZeros(balance.toFixed(4))} USDC.`)
+        return false
+      }
+      setGasWarning('')
+      return true
+    }
     const required = numAmount + feeForCheck
     if (balance < required) {
       setGasWarning(`Insufficient USDC balance. You need approximately ${trimTrailingZeros(required.toFixed(4))} USDC (amount + fees) but have ${trimTrailingZeros(balance.toFixed(4))} USDC.`)
@@ -1584,7 +1682,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // anything" symptom. Surface the same message through `passError`,
       // which this screen already renders, and clear the passcode so they
       // can back out and adjust the amount.
-      setPassError(`Insufficient balance for amount + fees. Need ${trimTrailingZeros((numAmount + feeEstimate.onTop).toFixed(4))} USDC, have ${trimTrailingZeros(balance.toFixed(4))} USDC.`)
+      setPassError(isTokenRoute
+        ? (numAmount > sendBalance ? `Not enough ${tokenSym}: you have ${trimTrailingZeros(sendBalance.toFixed(bridgeTokenDecimals(bridgeToken)))} ${tokenSym}.`
+          : `Not enough USDC for the fee: need ${trimTrailingZeros(feeEstimate.onTop.toFixed(4))} USDC, have ${trimTrailingZeros(balance.toFixed(4))} USDC.`)
+        : `Insufficient balance for amount + fees. Need ${trimTrailingZeros((numAmount + feeEstimate.onTop).toFixed(4))} USDC, have ${trimTrailingZeros(balance.toFixed(4))} USDC.`)
       setPassEntry('')
       return
     }
@@ -1592,7 +1693,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     // ── 2. Transition to broadcasting screen IMMEDIATELY ─────────────────────
     // All remaining work (key restore, SDK init, signing) happens AFTER the
     // user is already on the broadcasting screen seeing step 1 active.
-    const freshSteps = chain.ub ? makeUBSteps(chain.name) : makeDefaultSteps(chain.name)
+    const freshSteps = isTokenRoute ? makeTokenSteps(tokenSym, chain.name) : chain.ub ? makeUBSteps(chain.name) : makeDefaultSteps(chain.name)
     setBridgeSteps(freshSteps)
     setTxHash(''); setTxError(''); setTxErrorDetail('')
     setSuccessInfo(null)
@@ -1640,7 +1741,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       const { AppKit, KitError, JsonRpcProvider, FallbackProvider } = await loadSdkModules()
       const { createWalletAdapter } = await import('@/wallet')
 
-      const kit = new AppKit({ disableErrorReporting: true } as any)
+      const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
       const adapter = await createWalletAdapter({
         account: activeSigner,
         getProvider: ({ chain: sdkChain }: any) => {
@@ -1683,6 +1784,82 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           || r?.steps?.find((s: any) => s.name === 'mint')?.txHash
           || r?.steps?.find((s: any) => s.state === 'success' && s.txHash)?.txHash
           || '')
+
+      // ── EURC / cirBTC through Circle CCTPx ───────────────────────────────
+      // One kit.bridge(): approve the token, send it from Arc (Circle's fee
+      // is paid with it, in USDC), Circle attests, and Circle's forwarder
+      // delivers it on the destination - nothing to sign there. The quote
+      // Review showed goes back in, so the fee charged is the fee shown.
+      if (isTokenRoute) {
+        const decimals = bridgeTokenDecimals(bridgeToken)
+        const ORDER = ['approve', 'burn', 'attestation', 'mint']
+        const markStep = (key: string, state: string, hash?: string) => setBridgeSteps(prev => prev.map(s => {
+          const i = ORDER.indexOf(s.name), k = ORDER.indexOf(key)
+          if (s.name === key) {
+            if (state === 'error') return { ...s, status: 'error', message: 'Step failed', txHash: hash || s.txHash }
+            if (state === 'pending') return { ...s, status: 'active', txHash: hash || s.txHash, startedAt: s.startedAt || Date.now() }
+            return { ...s, status: 'done', verified: true, message: 'Done', txHash: hash || s.txHash, completedAt: s.completedAt || Date.now() }
+          }
+          if (state !== 'success') return s
+          if (i >= 0 && i < k && s.status !== 'done') return { ...s, status: 'done', verified: true, completedAt: s.completedAt || Date.now() }
+          if (i === k + 1 && s.status === 'pending') return { ...s, status: 'active', message: 'Processing…', startedAt: Date.now() }
+          return s
+        }))
+        // CCTPx's steps → the screen's: transfer is the send from Arc, forward the delivery.
+        const STEP_OF: Record<string, string> = { approve: 'approve', transfer: 'burn', fetchAttestation: 'attestation', forward: 'mint' }
+        for (const [ev, key] of Object.entries(STEP_OF)) {
+          kit.on(`bridge.${ev}` as any, (payload: any) => {
+            const hash = realTxHash(payload?.values?.txHash || payload?.txHash || payload?.data?.txHash || '')
+            if (key === 'burn' && hash) burnTxHashRef.current = hash
+            markStep(key, payload?.values?.state || 'success', hash || undefined)
+          })
+        }
+        const result: any = await Promise.race([
+          kit.bridge({
+            from: { adapter, chain: ARC_CHAIN_KEY },
+            to: { chain: chain.sdk as any, recipientAddress: address, useForwarder: true },
+            amount: numAmount.toFixed(decimals),
+            token: bridgeToken,
+            ...(tokenQuoteRef.current ? { quote: tokenQuoteRef.current } : {}),
+          } as any),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error(
+            `This transfer is taking longer than expected. If it left Arc, your ${tokenSym} will still arrive - check ${chain.name} before trying again.`,
+          )), 12 * 60_000)),
+        ])
+        logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: `kit.bridge(${tokenSym}) → state: ${result?.state}`, data: { state: result?.state, steps: result?.steps } })
+        const stepHash = (name: string) => realTxHash(result?.steps?.find((x: any) => x.name === name)?.txHash || '')
+        const sendHash = stepHash('transfer') || burnTxHashRef.current
+        if (sendHash) burnTxHashRef.current = sendHash
+        if (result?.state === 'error') {
+          const failed = result?.steps?.find((x: any) => x.state === 'error')
+          throw new Error(failed?.errorMessage || failed?.error?.message || `The ${tokenSym} transfer didn't complete.`)
+        }
+        const deliverHash = stepHash('forward')
+        setBridgeSteps(prev => prev.map(x => ({ ...x, status: 'done' as BridgeStepStatus, verified: true, message: 'Done', completedAt: x.completedAt || Date.now() })))
+        const finalHash = deliverHash || sendHash
+        if (finalHash) setTxHash(finalHash)
+        setSuccessInfo({
+          sentAmount: numAmount, receiverGets: numAmount, totalFees: feeEstimate.totalFee,
+          completionTime: Math.round((Date.now() - bridgeStartRef.current) / 1000),
+          txHash: finalHash, mintTxHash: deliverHash, burnTxHash: sendHash,
+        })
+        if (sendHash) {
+          const { walletAddress: bwa, user: bu } = useAuthStore.getState()
+          import('@/lib/ActivityService').then(({ Activity }) => Activity.bridge({
+            walletAddress: bwa ?? '', userId: bu?.id, txHash: sendHash, destinationTxHash: deliverHash || undefined,
+            amount: numAmount, sourceChain: ARC_CHAIN_KEY, destinationChain: chain.sdk || chain.name || selectedChain,
+            destinationAddress: address, status: deliverHash ? 'completed' : 'pending', tokenSymbol: tokenSym,
+          })).catch((e: any) => console.error('[MultichainSend] token Activity.bridge failed:', e?.message))
+        }
+        try {
+          refreshBalancesAfterTx(senderAddress, { spent: 0 })
+          import('@/lib/arcService').then(m => (bridgeToken === 'EURC' ? m.getEURCBalance(senderAddress) : m.getCirBtcBalance(senderAddress))).then(setTokenBalance).catch(() => {})
+        } catch {}
+        stopTicker()
+        setStep('success')
+        clearResumableOperation('multichain_transfer')
+        return
+      }
 
       if (chain.ub) {
         // Resume path: a prior attempt already deposited into Unified Balance
@@ -2861,7 +3038,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 19, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>Cross-Chain Transfer</div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Send USDC from Arc to any chain</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Send {bridgeToken === 'USDC' ? 'USDC' : bridgeToken} from Arc to {bridgeToken === 'USDC' ? 'any chain' : 'supported chains'}</div>
       </div>
     </div>
   )
@@ -2870,11 +3047,20 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
       <span style={{ minWidth: 0, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Arc Balance</span>
       {/* Amount + unit never split across lines on narrow phones. */}
-      <span style={{ flexShrink: 0, whiteSpace: 'nowrap', fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(balance)} USDC</span>
+      <span style={{ flexShrink: 0, whiteSpace: 'nowrap', fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{bridgeToken === 'USDC' ? formatAmount(balance) : bridgeToken === 'cirBTC' ? trimTrailingZeros((tokenBalance ?? 0).toFixed(8)) : formatAmount(tokenBalance ?? 0)} {bridgeToken}</span>
     </div>
   )
   const chainNetwork = chain.testnet.startsWith(chain.name) ? (chain.testnet.slice(chain.name.length).trim() || 'Testnet') : chain.testnet
   // From → To: two compact cards (logo beside the text) with an arrow between.
+  // Amounts in the token being sent (cirBTC keeps its 8 decimals).
+  const fmtTok = (n: number) => bridgeToken === 'cirBTC' ? trimTrailingZeros(n.toFixed(8)) : formatAmount(n)
+  const tokenChar = bridgeToken === 'USDC' ? '$' : bridgeToken === 'EURC' ? '€' : ''
+  const coinOptions = BRIDGE_TOKENS.filter(t => t.id === 'USDC' || isCoinEnabled(settingsMap, t.id))
+  const pickToken = (t: BridgeToken) => {
+    setTokenPickerOpen(false)
+    if (t === bridgeToken) return
+    setBridgeToken(t); setAmount(''); setFeeChangedNotice('')
+  }
   const formDestination = (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 28px minmax(0, 1fr)', alignItems: 'center', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px', borderRadius: 16, minWidth: 0,
@@ -2883,7 +3069,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
           <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>From</span>
           <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Arc</span>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatAmount(balance)} USDC</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isTokenRoute ? (tokenBalance === null ? '…' : fmtTok(tokenBalance)) : formatAmount(balance)} {tokenSym}</span>
         </span>
       </div>
       <div aria-hidden="true" style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2917,7 +3103,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       </div>
       <div ref={chipRowRef} role="radiogroup" aria-label="Destination chain"
         style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none', ...(sheetMode ? { margin: '0 -20px', padding: '0 20px 2px' } : { paddingBottom: 2 }) }}>
-        {ENABLED_CHAINS.map(c => {
+        {isTokenRoute && (tokenRoutes.loading || !OFFERED_CHAINS.length) && (
+          <span style={{ fontSize: 13, color: tokenRoutes.error || !tokenRoutes.loading ? 'var(--warning-text)' : 'var(--text-secondary)', padding: '12px 2px' }}>
+            {tokenRoutes.loading ? `Checking which chains take ${tokenSym}…`
+              : tokenRoutes.error ? `Couldn't check where ${tokenSym} can go - try again in a moment`
+              : `No chain takes ${tokenSym} from Arc right now`}
+          </span>
+        )}
+        {OFFERED_CHAINS.map(c => {
           const on = c.id === chain.id
           return (
             <button key={c.id} role="radio" aria-checked={on} onClick={() => pickChain(c.id as ChainId)}
@@ -2960,7 +3153,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         </svg>
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: 'var(--text-secondary)' }}>
           {/* One short line, same style as Bring Funds. */}
-          {effectiveUb
+          {isTokenRoute
+            ? <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Via Circle CCTPx</b> · 20–90s · native {tokenSym}</>
+            : effectiveUb
             ? <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Via Circle Gateway</b> · ~60s · native USDC</>
             : <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Burn & mint</b> · 20–90s · native USDC</>}
         </p>
@@ -3006,23 +3201,25 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             {/* A valid wallet address: say where the money lands, always
                 naming the chain currently picked above. */}
             {addrHint.type === 'ok' && <CheckCircle className="w-3 h-3 flex-shrink-0"/>}
-            {addrHint.type === 'ok' && isEVMAddress(address) ? `Receives USDC on ${chain.testnet}` : addrHint.text}
+            {addrHint.type === 'ok' && isEVMAddress(address) ? `Receives ${tokenSym} on ${chain.testnet}` : addrHint.text}
           </span>
         )}
       </div>
     </div>
   )
   const setMaxAmount = () => {
+    // EURC / cirBTC: all of it - the fee is paid in USDC, not from the token.
+    if (isTokenRoute) { const d = bridgeTokenDecimals(bridgeToken); setAmount(trimTrailingZeros((Math.floor(sendBalance * 10 ** d) / 10 ** d).toFixed(d))); return }
     // Static reserve: no live fee fetch until Review.
     const maxAmount = Math.max(0, balance - feeReserveEstimate)
     setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
   }
-  const belowMin = numAmount > 0 && numAmount < MIN_AMOUNT
+  const belowMin = !isTokenRoute && numAmount > 0 && numAmount < MIN_AMOUNT
   // More than the Arc balance: say so (Review is already off - formValid).
-  const overBalance = numAmount > balance
+  const overBalance = numAmount > sendBalance
   const amountBad = belowMin || overBalance
   const feeLine = overBalance
-    ? <span style={{ fontWeight: 700, color: 'var(--danger-text)' }}>Max {formatAmount(Math.max(0, balance - feeReserveEstimate))} USDC</span>
+    ? <span style={{ fontWeight: 700, color: 'var(--danger-text)' }}>Max {isTokenRoute ? fmtTok(sendBalance) : formatAmount(Math.max(0, balance - feeReserveEstimate))} {tokenSym}</span>
     : belowMin
     ? <span style={{ fontWeight: 700, color: 'var(--danger-text)' }}>Minimum ${MIN_AMOUNT}</span>
     // feeReserveEstimate is only Max's safety margin, not a fee - real fees
@@ -3031,24 +3228,45 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const formAmount = (
     <div style={{ padding: '16px 18px', borderRadius: 22, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
       border: `1.5px solid ${amountBad ? 'var(--danger)' : 'var(--border)'}` }}>
-      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Amount (USDC)</span>
+      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Amount ({tokenSym})</span>
       {/* Same field on desktop (typed in) and mobile (opens the keypad). */}
       <div style={{ marginTop: 8 }}>
         <AmountField
           value={amount}
-          onChange={v => setAmount(sanitizeAmountInput(v, USDC_DECIMALS))}
+          onChange={v => setAmount(sanitizeAmountInput(v, bridgeTokenDecimals(bridgeToken)))}
           onTap={desktopInput ? undefined : () => setShowAmountPad(true)}
           editing={amountFocus}
           boxRef={amountBoxRef}
           onMax={setMaxAmount}
           invalid={amountBad}
-          ariaLabel="Amount in USDC"
-          token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
-          quick={quickAmounts([10, 50, 100], '$', setAmount, Math.max(0, balance - feeReserveEstimate))}
+          ariaLabel={`Amount in ${tokenSym}`}
+          symbol={tokenChar}
+          // The coin: USDC, or EURC / cirBTC (Circle CCTPx) - the same pill and list as Swap.
+          tokenPicker={coinOptions.length > 1 ? (
+            <div className="flex-shrink-0" style={{ position: 'relative', zIndex: tokenPickerOpen ? 41 : undefined }}>
+              <button onClick={() => setTokenPickerOpen(v => !v)} aria-expanded={tokenPickerOpen} aria-label={`Coin: ${tokenSym}`}
+                className="flex items-center gap-2 rounded-full active:opacity-70 transition-opacity"
+                style={{ height: 40, padding: '0 10px 0 6px', background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', border: 'none', cursor: 'pointer' }}>
+                <img decoding="async" src={bridgeTokenInfo(bridgeToken).logo} alt="" width={26} height={26} style={{ borderRadius: '50%' }} />
+                <span className="text-[15px] font-bold text-text-primary">{tokenSym}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ transform: tokenPickerOpen ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }}><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <AnimatePresence>
+                {tokenPickerOpen && (
+                  <TokenMenu selected={bridgeToken} onClose={() => setTokenPickerOpen(false)} ariaLabel="Choose coin"
+                    options={coinOptions.map(t => ({ id: t.id, label: t.id, icon: <img decoding="async" src={t.logo} alt="" width={26} height={26} style={{ borderRadius: '50%' }} /> }))}
+                    onSelect={id => pickToken(id as BridgeToken)} />
+                )}
+              </AnimatePresence>
+            </div>
+          ) : undefined}
+          token={{ label: tokenSym, logo: bridgeTokenInfo(bridgeToken).logo }}
+          quick={isTokenRoute ? [] : quickAmounts([10, 50, 100], '$', setAmount, Math.max(0, balance - feeReserveEstimate))}
         />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
           {/* One line each: short labels, no wrapping (they used to break onto two lines). */}
-          <span style={{ whiteSpace: 'nowrap' }}>Balance: {formatAmount(balance)} USDC</span>
+          <span style={{ whiteSpace: 'nowrap' }}>Balance: {isTokenRoute ? (tokenBalance === null ? '…' : fmtTok(tokenBalance)) : formatAmount(balance)} {tokenSym}</span>
           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, textAlign: 'right' }}>{feeLine}</span>
         </div>
       </div>
@@ -3059,16 +3277,16 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       open={showAmountPad}
       value={amount}
       onChange={v => setAmount(v)}
-      balance={balance}
-      token="USDC"
-      decimals={USDC_DECIMALS}
+      balance={sendBalance}
+      token={tokenSym}
+      decimals={bridgeTokenDecimals(bridgeToken)}
       // Same reserve as the inline Max button below - this sheet
       // has its own separate Max button and was filling in the
       // full balance too. No live fee estimate is fetched here
       // (that only happens on Review now) - this is a static,
       // conservative reserve just to leave enough USDC for the
       // transaction to actually execute.
-      feeReserve={feeReserveEstimate}
+      feeReserve={isTokenRoute ? 0 : feeReserveEstimate}
       // Removed - this page already has its own inline Max
       // button in the balance row just below (see the comment
       // above), so the sheet's copy was a duplicate. Dropping
@@ -3076,7 +3294,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // above stays partially visible instead of being fully
       // covered when the keypad opens.
       showMax={false}
-      error={numAmount > balance ? 'Insufficient balance' : undefined}
+      error={numAmount > sendBalance ? 'Insufficient balance' : undefined}
       onClose={() => setShowAmountPad(false)}
       onDone={() => setShowAmountPad(false)}
     />
@@ -3113,7 +3331,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       className="active:scale-[.98] transition"
       style={{ width: '100%', height: 56, borderRadius: 18, fontSize: 16, fontWeight: 700, border: 'none', color: '#fff',
         background: 'var(--brand)', cursor: canContinue ? 'pointer' : 'not-allowed', opacity: canContinue ? 1 : 0.45 }}>
-      {numAmount >= MIN_AMOUNT ? `Review ${formatAmount(numAmount)} USDC transfer` : 'Review'}
+      {(isTokenRoute ? numAmount > 0 : numAmount >= MIN_AMOUNT) ? `Review ${fmtTok(numAmount)} ${tokenSym} transfer` : 'Review'}
     </button>
   )
   const flow = (
@@ -3237,7 +3455,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             const timeLabel = new Date().toLocaleString('en-US', {
               month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
             })
-            const fmtAmount = `${formatAmount(successInfo?.sentAmount || numAmount)} USDC`
+            const fmtAmount = `${fmtTok(successInfo?.sentAmount || numAmount)} ${tokenSym}`
             const sourceHref = arcExplorerTxUrl(sourceHash)
             // Only build the destination-explorer link from a REAL destination
             // mint/spend hash - never from `txHash`, which for forwarder
@@ -3285,7 +3503,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   pill={`Completed in ${transferElapsedSeconds} Seconds`}
                   rows={[
                     { label: 'You Sent', value: fmtAmount },
-                    { label: 'Recipient Received', value: `${formatAmount(successInfo?.receiverGets || 0)} USDC`, positive: true },
+                    { label: 'Recipient Received', value: `${fmtTok(successInfo?.receiverGets || 0)} ${tokenSym}`, positive: true },
                     ...(address ? [{ label: 'Recipient', value: `${address.slice(0, 6)}…${address.slice(-4)}` }] : []),
                     ...(txHash ? [{ label: 'Transaction Hash', value: shortHash, onCopy: () => copyTransferHash(txHash), copied: hashCopied }] : []),
                     { label: 'Time', value: timeLabel },
@@ -3300,7 +3518,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     ...(destHref ? [{ title: chain.ub ? `View on ${chain.name}` : `View Mint on ${chain.name}`, explorer: chain.name, hash: destMintHash, href: destHref }] : []),
                   ]}
                   linksNote={forwarderMint && sourceHref
-                    ? `${formatAmount(successInfo?.receiverGets || 0)} USDC was delivered on ${chain.name} by Circle's Forwarding Service - there's no separate destination transaction hash to view.`
+                    ? `${fmtTok(successInfo?.receiverGets || 0)} ${tokenSym} was delivered on ${chain.name} by Circle's Forwarding Service - there's no separate destination transaction hash to view.`
                     : undefined}
                   onPrimary={() => navigate('/multichain')}
                   checkRef={heroCheckCallback}
@@ -3578,7 +3796,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
                 <ChainLogoImg id={chain.id} size={38}/>
                 <div>
-                  <p className="text-2xl font-bold text-text-primary">{formatAmount(numAmount)} USDC</p>
+                  <p className="text-2xl font-bold text-text-primary">{fmtTok(numAmount)} {tokenSym}</p>
                   <p className="text-sm mt-1" style={{color:'var(--text-secondary)'}}>{chain.name}</p>
                   <p className="text-[13px] mt-1.5 font-mono font-semibold text-text-primary px-2" style={{wordBreak:'break-all', lineHeight:1.45}}>{address}</p>
                   <p className="text-[11px] mt-1.5" style={{color:'var(--warning-text)'}}>Check the address carefully. Transfers can't be reversed.</p>
@@ -3611,16 +3829,16 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   // The same rows while loading and after: decided by the route,
                   // not by the fee values, so the card never changes height.
                   const usd = (n: number) => n > 0 ? `${trimTrailingZeros(n.toFixed(4))} USDC` : 'Free'
-                  const forwarderRow = chain.ub || circleForwarderMintsTo(chain.sdk) || feeEstimate.forwarderFee > 0
+                  const forwarderRow = isTokenRoute || chain.ub || circleForwarderMintsTo(chain.sdk) || feeEstimate.forwarderFee > 0
                   const rows: Array<[string, string | null, string]> = [
-                    ['You Send', `${formatAmount(numAmount)} USDC`, 'var(--text-primary)'],
+                    ['You Send', `${fmtTok(numAmount)} ${tokenSym}`, 'var(--text-primary)'],
                     // UB/Gateway doesn't bridge (no lock-and-mint) - this
                     // field holds the Gateway protocol fee there, not a
                     // bridge fee, so it needs its own label or it
                     // contradicts the "Circle Gateway" caption right below
                     // this list. CCTP keeps its original "Bridge Fee" label
                     // and value untouched.
-                    [chain.ub ? 'Protocol Fee' : 'Bridge Fee', loading ? null : usd(feeEstimate.bridgeFee), feeEstimate.bridgeFee > 0 ? 'var(--warning)' : 'var(--success)'],
+                    [isTokenRoute ? 'Circle Fee' : chain.ub ? 'Protocol Fee' : 'Bridge Fee', loading ? null : usd(feeEstimate.bridgeFee), feeEstimate.bridgeFee > 0 ? 'var(--warning)' : 'var(--success)'],
                     // The custom ('kit') fee - normally 0, so normally no row.
                     ...((!loading && feeEstimate.kitFee > 0) ? [['Service Fee', `${trimTrailingZeros(feeEstimate.kitFee.toFixed(4))} USDC`, 'var(--warning)'] as [string, string | null, string]] : []),
                     ...(forwarderRow ? [['Forwarder Fee', loading ? null : usd(feeEstimate.forwarderFee), feeEstimate.forwarderFee > 0 ? 'var(--warning)' : 'var(--success)'] as [string, string | null, string]] : []),
@@ -3638,7 +3856,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                       <div className="flex justify-between items-center px-3 py-2.5 mt-1"
                         style={{background:'color-mix(in srgb, var(--brand) 8%, transparent)', borderRadius: 14}}>
                         <span className="text-sm font-bold text-text-primary">Receiver Gets</span>
-                        {loading ? bar(92) : <span className="text-sm font-bold" style={{color:'var(--success-text)'}}>{feeEstimate.approx ? '≈ ' : ''}{trimTrailingZeros(feeEstimate.receiverGets.toFixed(4))} USDC</span>}
+                        {loading ? bar(92) : <span className="text-sm font-bold" style={{color:'var(--success-text)'}}>{feeEstimate.approx ? '≈ ' : ''}{isTokenRoute ? `${fmtTok(feeEstimate.receiverGets)} ${tokenSym}` : `${trimTrailingZeros(feeEstimate.receiverGets.toFixed(4))} USDC`}</span>}
                       </div>
                       {/* Stand-in numbers (the live fee couldn't be fetched): say so - they're retried every few seconds. */}
                       {!loading && feeEstimate.approx && (
@@ -3651,7 +3869,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 })()}
               </div>
 
-              <p className="text-xs text-center px-4" style={{color:'var(--text-secondary)'}}>{chain.ub ? 'Circle Gateway · recipient receives native USDC' : 'Circle CCTP v2 · recipient receives native USDC'}</p>
+              <p className="text-xs text-center px-4" style={{color:'var(--text-secondary)'}}>{isTokenRoute ? `Circle CCTPx · recipient receives native ${tokenSym} · fees are paid in USDC` : chain.ub ? 'Circle Gateway · recipient receives native USDC' : 'Circle CCTP v2 · recipient receives native USDC'}</p>
 
               {/* Two equal buttons, same size as the form's Cancel / Review. */}
               <div className="flex" style={{ gap: 10, paddingTop: 12, ...(isDesktopMq ? {} : { marginTop: 'auto' }) }}>
@@ -3682,9 +3900,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       <PinSheet open={step === 'confirm'} id="mt-pass"
         onClose={() => { setStep('review'); setPassEntry(''); setPassError('') }}
         title={desktopInput ? 'Authorize Transfer' : 'Confirm transfer'}
-        subtitle={desktopInput ? `To ${chain.name}` : `Authorise $${formatAmount(numAmount)} USDC to ${chain.name}`}
-        amountLabel={`$${formatAmount(numAmount)} USDC`} placement="panel"
-        card={{ label: 'Sending to', name: chain.name, amount: `$${formatAmount(numAmount)}`, unit: 'USDC' }} bioVerb="Transfer"
+        subtitle={desktopInput ? `To ${chain.name}` : `Authorise ${tokenChar}${fmtTok(numAmount)} ${tokenSym} to ${chain.name}`}
+        amountLabel={`${tokenChar}${fmtTok(numAmount)} ${tokenSym}`} placement="panel"
+        card={{ label: 'Sending to', name: chain.name, amount: `${tokenChar}${fmtTok(numAmount)}`, unit: tokenSym }} bioVerb="Transfer"
         value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }} error={passError || undefined}
         onComplete={(_, viaBiometric) => { if (!loading) { setPaidViaBiometric(!!viaBiometric); handleConfirm() } }}
         // Right passcode → the processing page comes in over the sheet.
