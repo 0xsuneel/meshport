@@ -49,7 +49,7 @@ import { loadPayContacts } from '@/lib/payPeople'
 import { SearchField } from '@/components/ui/SearchField'
 import { useUserSearch } from '@/hooks/useUserSearch'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
-import { reachCheck, STRANGER_PAY_BLOCKED, BLOCKED_YOU } from '@/lib/privacy'
+import { reachCheck, STRANGER_PAY_BLOCKED, BLOCKED_YOU, PAYMENT_REACH_WAIT_MS } from '@/lib/privacy'
 import { payStep, payStepStart } from '@/lib/perfTrace'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 
@@ -858,7 +858,7 @@ export function PaySendPage() {
       // used to run only after the passcode check (PBKDF2) finished - run
       // the two side by side; runProcessing awaits this same promise.
       reachPromiseRef.current = merchantPayCode ? Promise.resolve(null)
-        : recipientAccountId().then(id => (id ? reachCheck(id) : null)).catch(() => null)
+        : recipientAccountId().then(id => (id ? reachCheck(id, { maxWaitMs: PAYMENT_REACH_WAIT_MS }) : null)).catch(() => null)
       if (storedPasscode) {
         const { verifyPasscode } = await import('@/lib/security')
         const correct = await verifyPasscode(pin, storedPasscode)
@@ -887,7 +887,7 @@ export function PaySendPage() {
     reachPromiseRef.current = null
     const reach = early ? await early
       : merchantPayCode ? null
-      : await recipientAccountId().then(id => (id ? reachCheck(id) : null))
+      : await recipientAccountId().then(id => (id ? reachCheck(id, { maxWaitMs: PAYMENT_REACH_WAIT_MS }) : null))
     payStep('recipient')
     if (reach) {
       if (!reach.canPay) {

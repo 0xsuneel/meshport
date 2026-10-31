@@ -125,14 +125,14 @@ export type PreparedBatch = ReturnType<typeof prepareBatch>
  * whole batch would fail on-chain. Returns recipient id → why.
  */
 export async function findUnpayable(resolved: BatchRecipient[]): Promise<Map<string, string>> {
-  const { reachCheck, BLOCKED_YOU, STRANGER_PAY_BLOCKED } = await import('@/lib/privacy')
+  const { reachCheck, BLOCKED_YOU, STRANGER_PAY_BLOCKED, PAYMENT_REACH_WAIT_MS } = await import('@/lib/privacy')
   const { blockedAmong, BLOCKED_TEXT } = await import('@/lib/usdcBlocklist')
   const blockedLookup = blockedAmong(resolved.map(r => r.walletAddress).filter(Boolean)).catch(() => new Set<string>())
   const refused = new Map<string, string>()
   await Promise.all(resolved.map(async r => {
     const userId = r.arcUserId || (r.walletAddress ? (await getUserByWalletAddress(r.walletAddress).catch(() => null))?.id : null)
     if (!userId) return
-    const reach = await reachCheck(userId)
+    const reach = await reachCheck(userId, { maxWaitMs: PAYMENT_REACH_WAIT_MS })
     if (reach.canPay) return
     const name = `${String(r.username || '').replace(/\.arc$/, '')}.arc`
     refused.set(r.id, reach.blocked ? BLOCKED_YOU(name) : STRANGER_PAY_BLOCKED(name))

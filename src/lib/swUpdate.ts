@@ -18,6 +18,17 @@ const MY_BUILD: string = typeof __MP_BUILD__ === 'string' ? __MP_BUILD__ : ''
 let newerBuild: string | null = null
 let upToDate = false // the server confirmed this page is the live version
 
+// Has the person started using this page (a tap, key, scroll)? From then on
+// a newly found version waits (watchForUpdates) - it is never switched to
+// under their hands. A switch that landed ~20 s after opening, mid-payment,
+// made that payment run during the new version's whole start-up (16 s).
+let used = false
+if (typeof window !== 'undefined') {
+  const mark = () => { used = true; for (const e of USE_EVENTS) window.removeEventListener(e, mark, true) }
+  const USE_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const
+  for (const e of USE_EVENTS) window.addEventListener(e, mark, { capture: true, passive: true })
+}
+
 async function registration(): Promise<ServiceWorkerRegistration | undefined> {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return undefined
   try { return await navigator.serviceWorker.getRegistration() } catch { return undefined }
@@ -34,9 +45,9 @@ async function liveBuild(timeoutMs = 5000): Promise<string | null> {
 }
 
 /** Ask the server whether a newer version is live (and let the offline copy update). */
-export async function checkForUpdate(): Promise<boolean> {
+export async function checkForUpdate(timeoutMs?: number): Promise<boolean> {
   void registration().then(reg => reg?.update().catch(() => undefined))
-  const live = await liveBuild()
+  const live = await liveBuild(timeoutMs)
   if (live && MY_BUILD) {
     if (live !== MY_BUILD) newerBuild = live
     else upToDate = true
@@ -128,11 +139,23 @@ async function switchToNewVersion(): Promise<boolean> {
  * Page load, or about to reload anyway: if a newer version is live, switch
  * to it now and resolve true. Otherwise (already the newest, or offline)
  * resolve false - and a waiting offline copy takes over quietly.
+ *
+ * On page load only while it's still the opening moment: found within
+ * `checkMs` of the page starting and before the person has touched it.
+ * Later than that (a slow connection, the app already in use) the new
+ * version waits - the "Update ready" pill, the next trip to the background
+ * on a resting screen, or the next open (watchForUpdates).
  */
-export async function applyWaitingUpdate(_opts: { checkMs?: number } = {}): Promise<boolean> {
+export function decideLoadSwitch(found: boolean, sincePageStartMs: number, checkMs: number, usedAlready: boolean): boolean {
+  return found && !usedAlready && sincePageStartMs <= checkMs
+}
+
+export async function applyWaitingUpdate(opts: { checkMs?: number } = {}): Promise<boolean> {
   let target: string | null = null
   try { target = sessionStorage.getItem(TARGET_KEY); sessionStorage.removeItem(TARGET_KEY) } catch { /* private mode */ }
-  if (await checkForUpdate()) {
+  const checkMs = opts.checkMs
+  if (await checkForUpdate(checkMs)) {
+    if (checkMs !== undefined && !decideLoadSwitch(true, performance.now(), checkMs, used)) return false
     // We just reloaded for this very version and still came back on the old
     // one: the device's offline copy keeps answering with the old page. Clear
     // it completely and load from the server (lib/lazyRetry - it stops after

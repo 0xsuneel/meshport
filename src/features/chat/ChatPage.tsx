@@ -2,7 +2,7 @@ import { backLayerPop } from '@/lib/backLayers'
 import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
 import { SendIcon } from '@/components/ui/SendIcon'
-import { reachCheck, chatCountChanged, STRANGER_PAY_BLOCKED, BLOCKED_YOU, cachedPrivacy, fetchMyPrivacy, fetchMyRequestIds, fetchBlocked, blockUser, unblockUser, type ChatPrivacy } from '@/lib/privacy'
+import { reachCheck, PAYMENT_REACH_WAIT_MS, chatCountChanged, STRANGER_PAY_BLOCKED, BLOCKED_YOU, cachedPrivacy, fetchMyPrivacy, fetchMyRequestIds, fetchBlocked, blockUser, unblockUser, type ChatPrivacy } from '@/lib/privacy'
 import { Ban, Check, Pin, PinOff, Plus } from 'lucide-react'
 import { ActionIcon } from '@/components/ui/ActionIcon'
 import { TokenLogo } from '@/components/ui/TokenLogo'
@@ -3932,7 +3932,7 @@ export function ChatConversationPage() {
 
     // Chat privacy preflight: they may only accept payments from contacts.
     // Nothing has been signed or sent yet.
-    const reachNow = otherUser?.id ? await reachCheck(otherUser.id) : null
+    const reachNow = otherUser?.id ? await reachCheck(otherUser.id, { maxWaitMs: PAYMENT_REACH_WAIT_MS }) : null
     if (reachNow && !reachNow.canPay) {
       setPayError(reachNow.blocked ? BLOCKED_YOU(otherHandle) : STRANGER_PAY_BLOCKED(otherHandle))
       setPayStep('confirm'); chatPayInFlightRef.current = false
