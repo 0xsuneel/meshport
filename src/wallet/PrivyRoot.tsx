@@ -21,9 +21,9 @@ import { supabase } from '@/lib/supabase'
 import { arcTestnet } from '@/lib/chain'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 import { useAuthStore } from '@/store'
-import { privyAccount, privyAppId, recheckPrivySigners, setPrivyBridge } from './privy'
+import { privyAccount, privyAppId, recheckPrivySigners, setPrivyBridge, privyNeedsRebuild, PRIVY_NEEDED_EVENT } from './privy'
 import { useSupabaseSession } from './PrivyGate'
-import { whenPrivyQuiet } from './privyActivity'
+import { whenPrivyQuiet, rebuildGapMs } from './privyActivity'
 
 // Privy silent this long, with the app's own requests answered meanwhile:
 // its load is stuck, not slow (see PrivyBridgeSync).
@@ -230,23 +230,59 @@ const LONG_BACKGROUND_MS = 3 * 60_000
 // warm-up in ~2 s (field: "[privy warm-up] slow: 2.0-2.6 s").
 const STALE_QUIET_MS = 6_000
 
-// Rebuilds of Privy this page load (a stuck wallet iframe) - at most 2.
-const MAX_PRIVY_REBUILDS = 2
+// Rebuilds of Privy (a stuck wallet iframe, or Privy that never loaded).
+// The first two right away; after that it never gives up for the session -
+// on a weak connection Privy can need several tries (field 31 Oct: two
+// rebuilds at 12 s and 21 s, then "not rebuilding again", and the wallet was
+// gone until the app was restarted). Later rebuilds wait longer each time,
+// so a slow Privy still gets time to finish: 20 s, 40 s, then every 60 s.
+const EVENT_REBUILD_MIN_UP_MS = 10_000
 let privyRebuilds = 0
+let lastRebuildAt = 0
 
 export default function PrivyRoot() {
   const [generation, setGeneration] = useState(0)
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onWalletStuckRef = useRef<(why: string) => void>(() => {})
   const onWalletStuck = (why: string) => {
+    if (!privyNeedsRebuild()) return
+    const wait = lastRebuildAt + rebuildGapMs(privyRebuilds) - performance.now()
+    if (wait > 0) {
+      // Too soon after the last one: try again once the gap has passed (if still needed).
+      if (!retryTimer.current) retryTimer.current = setTimeout(() => { retryTimer.current = null; onWalletStuckRef.current(why) }, wait)
+      return
+    }
     const sinceHidden = lastHiddenAt ? `${((performance.now() - lastHiddenAt) / 1000).toFixed(0)} s after the app was last in the background` : 'no background since page load'
-    const willRebuild = privyRebuilds < MAX_PRIVY_REBUILDS
     const n = privyRebuilds + 1
     void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
-      `[privy iframe] ${why} (${sinceHidden}, page up ${(performance.now() / 1000).toFixed(0)} s) - ${willRebuild ? `rebuilding Privy (#${n})` : 'not rebuilding again'}`,
+      `[privy iframe] ${why} (${sinceHidden}, page up ${(performance.now() / 1000).toFixed(0)} s) - rebuilding Privy (#${n})`,
     ))).catch(() => {})
-    if (!willRebuild) return
     privyRebuilds++
+    lastRebuildAt = performance.now()
     setGeneration(g => g + 1)
   }
+  onWalletStuckRef.current = onWalletStuck
+  // The connection came back, the app came to the screen, or a payment needs
+  // the wallet now (privy.ts restorePrivyAccount): if Privy still isn't up,
+  // start it again on the working connection.
+  useEffect(() => {
+    // Only once this Privy has had 10 s to load (a cold start isn't thrown away mid-load).
+    const again = (why: string) => () => {
+      if (privyNeedsRebuild() && performance.now() - lastRebuildAt >= EVENT_REBUILD_MIN_UP_MS) onWalletStuckRef.current(why)
+    }
+    const online = again('connection back, Privy not up')
+    const needed = again('wallet needed, Privy not up')
+    const visible = () => { if (document.visibilityState === 'visible') again('back on screen, Privy not up')() }
+    window.addEventListener('online', online)
+    window.addEventListener(PRIVY_NEEDED_EVENT, needed)
+    document.addEventListener('visibilitychange', visible)
+    return () => {
+      window.removeEventListener('online', online)
+      window.removeEventListener(PRIVY_NEEDED_EVENT, needed)
+      document.removeEventListener('visibilitychange', visible)
+      if (retryTimer.current) clearTimeout(retryTimer.current)
+    }
+  }, [])
   // Back from a long background (Android freezes the page): the same Privy
   // is checked, not replaced. One silent warm-up signature proves the wallet
   // still signs - the lock screen waits for it (walletReadiness), so the

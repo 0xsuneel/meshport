@@ -1801,7 +1801,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
           `[transfer no signer] source=${s.walletSource} restoreMs=${Date.now() - restoreStarted} hadEarly=${hadEarly} passcode=${!!storedPasscode} privy=${privyUp} chain=${chain.sdk}`,
         ))).catch(() => {})
-        throw new Error('Wallet key unavailable. Lock and unlock the app.')
+        // Nothing was sent; what to do depends on the kind of wallet (same text as Pay).
+        const { walletUnavailableMessage } = await import('@/lib/restoreWallet')
+        throw new Error(walletUnavailableMessage())
       }
 
       // ── 5. Load SDK modules (cached if pre-warmed) ────────────────────────
