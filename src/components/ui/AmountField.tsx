@@ -161,6 +161,16 @@ export function quickAmounts(values: number[], symbol: string, set: (v: string) 
   return values.map(v => ({ label: `${symbol}${v}`, onClick: () => set(String(v)), disabled: max != null && v > max + 1e-9 }))
 }
 
+/** 25% / 50% / 75% chips of `balance`, cut (never rounded up) to `decimals` - for coins
+ *  where round amounts mean little (cirBTC). Greyed out with nothing to take a share of. */
+export function percentAmounts(parts: number[], balance: number, decimals: number, set: (v: string) => void): QuickAmount[] {
+  return parts.map(part => {
+    const units = Math.floor(balance * part * 10 ** decimals)
+    const value = (units / 10 ** decimals).toFixed(decimals).replace(/\.?0+$/, '')
+    return { label: `${Math.round(part * 100)}%`, onClick: () => set(value), disabled: units <= 0 }
+  })
+}
+
 /**
  * The small amount box for one row of a list (Pay staff: each person's
  * amount) - the AmountField look at row size: a soft filled box, the "$"

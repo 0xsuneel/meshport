@@ -35,7 +35,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { HubPush } from '@/components/multichain/HubPage'
 import { EASE_OUT, MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION, type NavDirection } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { AmountField, quickAmounts } from '@/components/ui/AmountField'
+import { AmountField, quickAmounts, percentAmounts } from '@/components/ui/AmountField'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import type { WalletAccount } from '@/wallet'
 import { supabase } from '@/lib/supabase'
@@ -2050,7 +2050,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     ariaLabel={`Amount in ${coin}`}
                     symbol={token ? coinChar : undefined}
                     token={{ label: coin, logo: token ? bridgeTokenInfo(token).logo : '/logos/tokens/usdc.png' }}
-                    quick={token ? [] : quickAmounts([10, 50, 100], '$', v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') }, selectedChain.claimable)}
+                    // USDC / EURC: round amounts; cirBTC: shares of the balance.
+                    quick={token === 'cirBTC'
+                      ? percentAmounts([0.25, 0.5, 0.75], selectedChain.claimable, coinDecimals, v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') })
+                      : quickAmounts([10, 50, 100], coinChar || '$', v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') }, selectedChain.claimable)}
                   />
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 13 }}>
                     <span style={{ color: COLORS.muted }}>Available: {fmtCoin(selectedChain.claimable)} {coin}</span>

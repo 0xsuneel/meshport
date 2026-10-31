@@ -38,7 +38,7 @@ import { gatewaySelfMintsTo, forwarderMintRetry, getUnifiedBalances, UB_MIN_SWEE
 import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { AmountField, quickAmounts } from '@/components/ui/AmountField'
+import { AmountField, quickAmounts, percentAmounts } from '@/components/ui/AmountField'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { KIT_CCTPX_CHAINS, BRIDGE_TOKENS, bridgeTokenDecimals, bridgeTokenInfo, useTokenRouteChains, type BridgeToken } from '@/lib/tokenBridge'
 import { revealFlow } from '@/lib/revealFlow'
@@ -3304,7 +3304,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             </div>
           ) : undefined}
           token={{ label: tokenSym, logo: bridgeTokenInfo(bridgeToken).logo }}
-          quick={isTokenRoute ? [] : quickAmounts([10, 50, 100], '$', setAmount, Math.max(0, balance - feeReserveEstimate))}
+          // USDC / EURC: round amounts (EURC's fee is paid in USDC, so all of it can go);
+          // cirBTC: shares of the balance.
+          quick={bridgeToken === 'cirBTC' ? percentAmounts([0.25, 0.5, 0.75], sendBalance, bridgeTokenDecimals('cirBTC'), setAmount)
+            : bridgeToken === 'EURC' ? quickAmounts([10, 50, 100], '€', setAmount, sendBalance)
+            : quickAmounts([10, 50, 100], '$', setAmount, Math.max(0, balance - feeReserveEstimate))}
         />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
           {/* One line each: short labels, no wrapping (they used to break onto two lines). */}
