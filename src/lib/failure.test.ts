@@ -59,3 +59,12 @@ describe('helpers', () => {
     expect(needsRecovery({ activityType: 'withdraw', status: 'completed', metadata: { ub_stuck_transfer: false } })).toBe(false)
   })
 })
+
+describe('a message that already says nothing was sent', () => {
+  it('is not repeated', async () => {
+    const { classifyFailure } = await import('./failure')
+    const f = classifyFailure(new Error("Your wallet didn't respond - nothing was sent. Try again."))
+    expect(f.message).toBe("Your wallet didn't respond - nothing was sent. Try again.")
+    expect(f.message.match(/nothing was sent/g)).toHaveLength(1)
+  })
+})
