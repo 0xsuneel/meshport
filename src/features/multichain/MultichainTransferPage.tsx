@@ -1740,7 +1740,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     const stageReported = new Set<string>()
     const stageWatch = setInterval(() => {
       const secs = (Date.now() - stageAt) / 1000
-      for (const limit of [20, 60]) {
+      // 8 s too: a 19 s step (31 Oct 18:02, UB deposit) stayed under 20 s and went unnamed.
+      for (const limit of [8, 20, 60]) {
         const key = `${stage}@${limit}`
         if (secs < limit || stageReported.has(key)) continue
         stageReported.add(key)
@@ -1748,7 +1749,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           `[transfer stage] ${chain.ub ? 'ub' : 'cctp'} ${chain.sdk}: still on "${stage}" after ${limit} s`,
         ))).catch(() => {})
       }
-    }, 5_000)
+    }, 2_000)
 
     // Show loading indicator immediately - user gets instant visual feedback
     setLoading(true)
@@ -2063,13 +2064,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // The send leg must be priceable BEFORE anything moves: a deposit
           // whose spend can't be quoted (e.g. a recipient Circle rejects)
           // would sit in Unified Balance until recovered by hand.
-          // A live quote for exactly this send from the last 45 s already
-          // proves that; the spend is re-quoted after the deposit anyway.
+          // A live quote for exactly this send from the last 2 min (Review
+          // refreshes it every 20 s) already proves that; the spend is
+          // re-quoted after the deposit anyway.
           const recent = lastUbQuoteRef.current
           setStage('pre-deposit quote')
           // Circle's Gateway quote, capped: nothing has moved yet, so a quote
           // that hangs fails cleanly instead of holding the screen.
-          const preDeposit = recent && recent.key === feeRequestKey && Date.now() - recent.at < 45_000
+          const preDeposit = recent && recent.key === feeRequestKey && Date.now() - recent.at < 120_000
             ? recent.est
             : await Promise.race([
                 fetchFeeEstimate(true),
@@ -2079,6 +2081,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             throw new Error(`Couldn't get a live fee for ${chain.name} right now - nothing was moved. Try again in a moment.`)
           }
 
+          // In move_timings: how much of the deposit step was Circle's quote.
+          moveTimerRef.current?.mark('ub_quote')
           setStage('deposit')
           const depositResult: any = await kit.unifiedBalance.deposit({
             from: { adapter, chain: ARC_CHAIN_KEY as any },
