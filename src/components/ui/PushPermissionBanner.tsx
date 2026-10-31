@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Bell, X } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import { enablePushNotifications, getNotificationPermission, isPushSupported } from '@/lib/pushNotifications'
+import { useAnyPopupOpen } from '@/hooks/usePopupOpen'
 
 // "Turn on notifications" - shown when this device isn't set up to receive
 // push. Chrome on Android ignores a permission request that doesn't come
@@ -16,12 +17,16 @@ const DENIED_SNOOZE_MS = 30 * 24 * 3600_000
 const DENIED_SHOW_MS = 8000
 
 // It sits at the bottom - above the bottom nav on a phone, in the corner on
-// a desktop - so it never covers a page title or the search bar.
+// a desktop - so it never covers a page title or the search bar. While a
+// popup, sheet or Hub page is open it steps aside: it sits above them
+// (z-index 60), right where their buttons are - it hid Transfer's Review
+// button on desktop.
 export function PushPermissionBanner({ bottom = 12, desktop = false }: { bottom?: number | string; desktop?: boolean }) {
   const userId = useAuthStore(s => s.user?.id)
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
   const [denied, setDenied] = useState(false)
+  const popupOpen = useAnyPopupOpen()
 
   useEffect(() => {
     if (!userId || !isPushSupported()) return
@@ -56,7 +61,7 @@ export function PushPermissionBanner({ bottom = 12, desktop = false }: { bottom?
     return () => clearTimeout(t)
   }, [show, denied])
 
-  if (!show) return null
+  if (!show || popupOpen) return null
 
   const enable = async () => {
     if (!userId) return
@@ -88,7 +93,9 @@ export function PushPermissionBanner({ bottom = 12, desktop = false }: { bottom?
         </p>
         <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.35 }}>
           {denied
-            ? 'Allow them for MeshPort in your phone settings → Apps → MeshPort → Notifications.'
+            ? desktop
+              ? "Allow them for MeshPort in your browser's site settings (the icon next to the web address)."
+              : 'Allow them for MeshPort in your phone settings → Apps → MeshPort → Notifications.'
             : 'Get alerted when you receive money, even when the app is closed.'}
         </p>
       </div>
