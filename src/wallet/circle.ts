@@ -388,21 +388,39 @@ const CHALLENGE_TIMEOUT_MS = 30_000
 const SESSION_ERRORS = new Set([155103, 155104, 155105])
 
 /** Run a challenge in Circle's SDK (no screen while Confirmation UIs are off), one at a time. */
-export function executeChallenge(uid: string, challengeId: string): Promise<ChallengeOutcome> {
-  const run = () => runChallenge(uid, challengeId)
+export function executeChallenge(uid: string, challengeId: string, steps?: Record<string, number>): Promise<ChallengeOutcome> {
+  const run = () => runChallenge(uid, challengeId, steps)
   const next = challengeQueue.then(run, run)
   challengeQueue = next.catch(() => {})
   return next
 }
 
-async function runChallenge(uid: string, challengeId: string): Promise<ChallengeOutcome> {
+async function runChallenge(uid: string, challengeId: string, steps?: Record<string, number>): Promise<ChallengeOutcome> {
   const s = await freshCircleSession(uid)
   const w = await sdk()
   w.setAuthentication({ userToken: s.userToken, encryptionKey: s.encryptionKey })
+  // wallet_events: how the ~3 s splits - Circle's frame page loading
+  // (`frame`: until it says it's ready) and Circle's own work after that
+  // (`circle`: reading the challenge and signing). Read from the frame's
+  // messages to this page; Circle's SDK is not changed.
+  const started = performance.now()
+  let readyAt = 0
+  const onMessage = (e: MessageEvent) => {
+    if (!readyAt && e.origin === 'https://pw-auth.circle.com' && (e.data as { onFrameReady?: unknown } | null)?.onFrameReady) readyAt = performance.now()
+  }
+  const canListen = typeof window !== 'undefined' && typeof window.addEventListener === 'function'
+  if (canListen) window.addEventListener('message', onMessage)
+  const split = () => {
+    if (canListen) window.removeEventListener('message', onMessage)
+    if (!steps || !readyAt) return
+    steps.frame = (steps.frame ?? 0) + readyAt - started
+    steps.circle = (steps.circle ?? 0) + performance.now() - readyAt
+  }
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new CircleError(504, 'challenge', 'Circle did not answer - try again')), CHALLENGE_TIMEOUT_MS)
+    const timer = setTimeout(() => { split(); reject(new CircleError(504, 'challenge', 'Circle did not answer - try again')) }, CHALLENGE_TIMEOUT_MS)
     w.execute(challengeId, (error, result) => {
       clearTimeout(timer)
+      split()
       if (error) {
         const e = error as { code?: number; message?: string }
         reject(new CircleError(400, e.code !== undefined && SESSION_ERRORS.has(e.code) ? 'session' : 'challenge', e.message || 'Not approved'))
@@ -431,6 +449,7 @@ export function circleAccount(address: string, uid: string): CircleAccount {
     // steps: `challenge` - MeshPort's server asking Circle for the challenge;
     // `execute` - Circle's SDK signing it (its frame reloads every time).
     const steps: Record<string, number> = {}
+    preconnectCircle() // Circle's frame loads right after the challenge is made
     const log = (ok: boolean, error?: string) => void import('@/lib/walletEvents')
       .then(m => m.logWalletEvent({ kind: 'circle', event: 'sign', ok, ms: performance.now() - started, detail: what, error, steps })).catch(() => {})
     try {
@@ -451,7 +470,7 @@ export function circleAccount(address: string, uid: string): CircleAccount {
       if (lastCircleApiVia === 'relay') steps.relayed = 1
       try {
         const t1 = performance.now()
-        const out = await executeChallenge(uid, challengeId)
+        const out = await executeChallenge(uid, challengeId, steps)
         steps.execute = (steps.execute ?? 0) + performance.now() - t1
         readyAddresses.set(address.toLowerCase(), uid) // it signed: as ready as the warm-up makes it
         notifyReadiness()
@@ -525,14 +544,26 @@ export function circleSignerReady(address: string): boolean {
 }
 void import('@/lib/walletReadiness').then(m => m.setCircleReadyProbe(circleSignerReady)).catch(() => {})
 
-/** Opens the connection to Circle's frame early (its page loads for every signature). */
+/**
+ * Opens the connection to Circle's frame early (its page loads for every
+ * signature). No `crossorigin`: the frame is a page load, which uses the
+ * browser's normal (credentialed) connections - a `crossorigin` preconnect
+ * opens an anonymous one the frame never uses (field 1 Nov: every signature
+ * still paid DNS + TLS). An unused preconnect is closed after ~10 s, so it's
+ * opened again at the start of each signature, while the challenge is made.
+ */
+let preconnectedAt = 0
 function preconnectCircle(): void {
   try {
-    if (typeof document === 'undefined' || document.querySelector('link[data-circle-preconnect]')) return
-    const l = document.createElement('link')
-    l.rel = 'preconnect'; l.href = 'https://pw-auth.circle.com'; l.crossOrigin = ''
-    l.setAttribute('data-circle-preconnect', '')
-    document.head.appendChild(l)
+    if (typeof document === 'undefined' || Date.now() - preconnectedAt < 8_000) return
+    preconnectedAt = Date.now()
+    document.querySelectorAll('link[data-circle-preconnect]').forEach(n => n.remove())
+    for (const rel of ['dns-prefetch', 'preconnect']) {
+      const l = document.createElement('link')
+      l.rel = rel; l.href = 'https://pw-auth.circle.com'
+      l.setAttribute('data-circle-preconnect', '')
+      document.head.appendChild(l)
+    }
   } catch { /* no DOM */ }
 }
 
