@@ -126,6 +126,23 @@ export async function arcRpcJson(body: unknown, timeoutMs = 10000): Promise<any>
     if (fast) return fast
   }
   if (!isRepeatableRead(body)) return rpcPass(body, timeoutMs)
+  // Not answered within HEDGE_MS: also ask Circle's Arc node directly - another
+  // host, so another connection. A phone's connection to this origin can stall
+  // for 15-40 s while every other host answers (field 1 Nov 13:45, 14:30: no
+  // request reached the proxy for 37 s / 17 s, then all arrived at once) - a
+  // retry here only queued on the same dead connection. First answer wins.
+  const proxied = proxiedRead(body, timeoutMs)
+  const hedge = new Promise<any>(resolve => {
+    const t = setTimeout(() => { void lastResortRead(body, timeoutMs).then(d => { if (d && !d.error) resolve(d) }) }, HEDGE_MS)
+    void proxied.then(() => clearTimeout(t), () => clearTimeout(t))
+  })
+  return Promise.race([proxied, hedge])
+}
+
+/** How long a proxied read / send waits before Circle's Arc node is asked too. */
+export const HEDGE_MS = 2000
+
+async function proxiedRead(body: unknown, timeoutMs: number): Promise<any> {
   try {
     return await rpcPass(body, Math.max(4000, Math.round(timeoutMs * 0.6)))
   } catch (e) {
@@ -144,6 +161,28 @@ export async function arcRpcJson(body: unknown, timeoutMs = 10000): Promise<any>
       return direct
     }
   }
+}
+
+/**
+ * A signed Arc transaction sent straight to Circle's Arc node (not through the
+ * proxy) - the escape route when the phone's connection to this origin has
+ * stalled. True when that node took it (or already had it); null when it
+ * didn't say (unreachable, or an error - the proxy's answer decides then).
+ * Identical signed bytes: sending them twice is harmless.
+ */
+export async function directSendRaw(raw: string, timeoutMs = 6000): Promise<true | null> {
+  try {
+    const res = await fetch(DIRECT_READ_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_sendRawTransaction', params: [raw] }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    if (typeof json?.result === 'string') return true
+    if (/already known|known transaction|already imported/i.test(String(json?.error?.message ?? ''))) return true
+    return null
+  } catch { return null }
 }
 
 async function lastResortRead(body: unknown, timeoutMs: number): Promise<any | null> {

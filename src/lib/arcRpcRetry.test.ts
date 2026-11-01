@@ -79,3 +79,37 @@ describe("Circle's kit reads Arc through arcRpcJson (ethers waits 300 s on its o
     expect(provider._send).not.toBe(undefined)
   })
 })
+
+describe('a stalled connection to the proxy (field 1 Nov 13:45 / 14:30: nothing reached it for 17-37 s)', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
+
+  it("a proxied read with no answer after 2 s is answered by Circle's Arc node", async () => {
+    vi.useFakeTimers()
+    const f = vi.fn((url: string) => String(url).includes('/api/arc-rpc')
+      ? new Promise(() => {}) // the stalled connection: never answers
+      : Promise.resolve(ok('0x5')))
+    vi.stubGlobal('fetch', f)
+    const p = arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionCount', params: ['0x1', 'pending'] })
+    await vi.advanceTimersByTimeAsync(2_100)
+    expect((await p).result).toBe('0x5')
+  })
+
+  it('a proxy that answers in time is used alone', async () => {
+    const f = vi.fn().mockResolvedValue(ok('0x3'))
+    vi.stubGlobal('fetch', f)
+    expect((await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionCount', params: ['0x1', 'pending'] })).result).toBe('0x3')
+    expect(f).toHaveBeenCalledTimes(1)
+  })
+
+  it("directSendRaw: taken or already known counts as sent; anything else doesn't decide", async () => {
+    const { directSendRaw } = await import('./arc')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(ok('0xabc')))
+    expect(await directSendRaw('0x00')).toBe(true)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ error: { code: -32000, message: 'already known' } }) }))
+    expect(await directSendRaw('0x00')).toBe(true)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ error: { code: -32000, message: 'nonce too low' } }) }))
+    expect(await directSendRaw('0x00')).toBeNull()
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(timeout()))
+    expect(await directSendRaw('0x00')).toBeNull()
+  })
+})

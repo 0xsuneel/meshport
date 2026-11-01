@@ -70,12 +70,27 @@ export function sendStartupReport(): void {
     .filter(k => t[k] != null).map(k => `${k} ${s(t[k])}`)
   void reportPerf(`[perf startup] ${kind}, since page load (s): ${parts.join(', ') || 'nothing'}${t.actionReady == null ? ' - not ready after 30 s' : ''}`)
   void import('./walletEvents').then(m => m.logWalletEvent({
-    event: 'startup', ok: t.signer != null, ms: t.signer ?? t.actionReady, steps: t as Record<string, number>, detail: kind,
+    event: 'startup', ok: t.signer != null, ms: t.signer ?? t.actionReady, steps: t as Record<string, number>, detail: `${kind} ${pageLoadInfo()}`,
     error: t.signer == null ? 'wallet not able to sign 30 s after page load' : undefined,
   })).catch(() => {})
 }
 if (typeof window !== 'undefined') {
   setTimeout(() => { if (!startupReported && startup.size) sendStartupReport() }, 30_000)
+}
+
+// Which page load this is, for wallet_events: the browser's own navigation
+// type (navigate / reload / back_forward), whether Chrome had unloaded the tab
+// to save memory and is loading it again (wasDiscarded), installed app vs a
+// browser tab, and an id for this page (two rows with different ids at the
+// same moment are two tabs, not one page reloading).
+const PAGE_ID = Math.random().toString(36).slice(2, 8)
+export function pageLoadInfo(): string {
+  try {
+    const nav = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type ?? '?'
+    const discarded = (document as Document & { wasDiscarded?: boolean }).wasDiscarded === true
+    const standalone = typeof matchMedia === 'function' && matchMedia('(display-mode: standalone)').matches
+    return `nav=${nav} discarded=${discarded} ${standalone ? 'app' : 'tab'} page=${PAGE_ID}`
+  } catch { return `page=${PAGE_ID}` }
 }
 
 /** Resume from the background: how long until signing works again (only when it had stopped). */
