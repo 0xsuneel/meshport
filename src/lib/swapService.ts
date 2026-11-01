@@ -472,7 +472,29 @@ async function swapBlockNumber(hash: string, receipt?: any): Promise<string | un
   return undefined
 }
 
-export async function executeSwapLocal(params: ExecuteSwapParams): Promise<SwapOutcome> {
+// One swap at a time, until Circle's SDK call has really settled. The screen
+// stops waiting after 60 s (SwapPage withTimeout) but the SDK call can't be
+// cancelled and may still broadcast; a second swap started then reset the
+// module state above (hash, receipt, progress) under the first and could
+// swap twice. Held until the first one's own promise settles.
+let _inFlight: Promise<SwapOutcome> | null = null
+export class SwapBusyError extends Error {
+  readonly isUncertain = false
+  constructor() { super('Your previous swap is still finishing - nothing new was sent. Check Activity before swapping again.') }
+}
+/** The transaction hash of a swap still in flight (null when none, or not sent yet). */
+export function swapInFlightHash(): string | null { return _inFlight ? _swapHash : null }
+
+export function executeSwapLocal(params: ExecuteSwapParams): Promise<SwapOutcome> {
+  if (_inFlight) return Promise.reject(new SwapBusyError())
+  const run = executeSwapOnce(params)
+  _inFlight = run
+  const release = () => { if (_inFlight === run) _inFlight = null }
+  run.then(release, release)
+  return run
+}
+
+async function executeSwapOnce(params: ExecuteSwapParams): Promise<SwapOutcome> {
   assertAccountUnlocked() // business not approved yet: nothing moves
   _onSwapProgress = params.onProgress ?? null
   _confirmedHashes = new Set()

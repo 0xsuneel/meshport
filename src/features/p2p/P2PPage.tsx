@@ -1415,20 +1415,29 @@ export function P2PTradePage() {
     // p2pProviders.ts for why this delay exists: it's the one place in the
     // whole module deliberately slow, so the demo reads as "a payment rail
     // is doing something" rather than an instantly, obviously fake flip.
+    if (acting) return
     setProcessingPayment(true)
     setActing(true)
-    // A short floor only so the processing card doesn't flash (the on-chain
-    // step itself is now ~1s; it used to be hidden behind a fixed 2.4s).
-    const [result] = await Promise.all([
-      markPaymentSent(trade),
-      new Promise(r => setTimeout(r, 700)),
-    ])
-    setProcessingPayment(false)
-    setActing(false)
-    // Show the next step at once - don't wait for the live update.
-    if (result.success) fetchTrade(trade.id).then(t => { if (t) setTrade(t) }).catch(() => {})
-    if (result.success) showGlassPop('Payment Marked', result.message, { kind: 'success' })
-    else showToastMessage(result.message, 'error')
+    try {
+      // A short floor only so the processing card doesn't flash (the on-chain
+      // step itself is now ~1s; it used to be hidden behind a fixed 2.4s).
+      const [result] = await Promise.all([
+        markPaymentSent(trade),
+        new Promise(r => setTimeout(r, 700)),
+      ])
+      // Show the next step at once - don't wait for the live update.
+      if (result.success) fetchTrade(trade.id).then(t => { if (t) setTrade(t) }).catch(() => {})
+      if (result.success) showGlassPop('Payment Marked', result.message, { kind: 'success' })
+      else showToastMessage(result.message, 'error')
+    } catch (e: any) {
+      // Anything that throws (an account-lock check, the payment provider,
+      // the database) used to skip the two resets and leave the button stuck.
+      console.error('[P2P] mark payment failed:', e)
+      showToastMessage(e?.message || "Couldn't mark the payment - please try again.", 'error')
+    } finally {
+      setProcessingPayment(false)
+      setActing(false)
+    }
   }
 
   // SECURITY/CORRECTNESS FIX: both handlers used to have no try/catch -
