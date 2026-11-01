@@ -54,3 +54,29 @@ export function rebuildGapMs(done: number): number {
 
 /** Test hook. */
 export function resetPrivyActivity(): void { heard.privy = 0; heard.other = 0; onHeard.clear() }
+
+/**
+ * Does privy.io answer this phone right now? One plain request to Privy's
+ * public app endpoint, outside Privy's SDK. Any HTTP answer (even an error
+ * status) means the network to Privy works - then a hang is inside Privy's
+ * SDK / iframe on this page; no answer means Privy can't be reached at all,
+ * and no rebuild or reload could help. For the hang / rebuild reports only.
+ */
+export async function probePrivyReachable(appId: string, timeoutMs = 8_000): Promise<string> {
+  if (typeof fetch === 'undefined' || !appId) return 'probe n/a'
+  const started = performance.now()
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    const res = await fetch(`https://auth.privy.io/api/v1/apps/${encodeURIComponent(appId)}`, {
+      headers: { 'privy-app-id': appId }, cache: 'no-store', signal: ctrl.signal,
+    })
+    return `privy.io answered ${res.status} in ${Math.round(performance.now() - started)} ms`
+  } catch (e) {
+    return ctrl.signal.aborted
+      ? `privy.io no answer in ${(timeoutMs / 1000).toFixed(0)} s`
+      : `privy.io unreachable (${e instanceof Error ? e.message.slice(0, 60) : 'error'}) after ${Math.round(performance.now() - started)} ms`
+  } finally {
+    clearTimeout(timer)
+  }
+}

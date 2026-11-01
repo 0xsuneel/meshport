@@ -330,6 +330,10 @@ export default function PrivyRoot() {
     privyRebuilds++
     lastRebuildAt = performance.now()
     setGeneration(g => g + 1)
+    // Can this phone reach Privy at all right now? (separates "Privy down / unreachable" from "stuck on this page")
+    void import('./privyActivity').then(m => m.probePrivyReachable(privyAppId()))
+      .then(probe => import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[privy iframe] probe at rebuild #${n}: ${probe}`))))
+      .catch(() => {})
   }
   onWalletStuckRef.current = onWalletStuck
   // The connection came back, the app came to the screen, or a payment needs
