@@ -2771,6 +2771,15 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       })()
 
       const estimate = await estimatePromise
+      // Solana: never burn on a guessed fee. Bridge Kit 1.16 / CCTP provider
+      // 1.14.3 added the recipient's token-account cost (~0.16 USDC) to the
+      // forwarder fee - a maxFee below it leaves the transfer stalled after
+      // the burn, and MeshPort's relayer can only finish EVM mints. Circle's
+      // live estimate (provider + forwarder, padded below) or nothing moves.
+      const liveSolanaFee = !!estimate && !(estimate?.fees ?? []).some((f: any) => f.amount === null || f.error)
+      if (chain.sdk === 'Solana_Devnet' && !irisMaxFee && !liveSolanaFee) {
+        throw new Error("Couldn't get Circle's fee for Solana right now - nothing was sent. Try again in a moment.")
+      }
       if (estimate) {
         const feeEntries: any[] = estimate?.fees ?? []
         const hadFailedLookup = feeEntries.some((f: any) => f.amount === null || f.error)
