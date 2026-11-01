@@ -458,6 +458,10 @@ async function persistErrorBestEffort(supabase: SupabaseClient, claimId: string,
       .from('claims')
       .update({ error: message.slice(0, 250), last_error_at: new Date().toISOString() })
       .eq('id', claimId)
+      // A sweep that started before the mint landed must not stamp its
+      // "no match yet" on a claim another writer (chain-transfer-webhook)
+      // has completed meanwhile.
+      .neq('status', 'completed')
     if (error) console.error(`[claim-worker] ALSO failed to persist error for ${claimId}:`, error.message)
   } catch (e) {
     console.error(`[claim-worker] persistErrorBestEffort threw for ${claimId}:`, e)
