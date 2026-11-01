@@ -1,4 +1,4 @@
-import { http, fallback, keccak256, type Hex } from 'viem'
+import { http, fallback, custom, keccak256, type Hex } from 'viem'
 import { ARC, ARC_RPCS as REGISTRY_ARC_RPCS, ARC_NETWORK as REGISTRY_ARC_NETWORK, ARC_TOKENS } from '@/blockchain/chains'
 
 // ─── Chain/RPC/token constants now live in the shared registry ──────────────
@@ -29,6 +29,30 @@ export function arcTransport(opts?: Parameters<typeof http>[1]) {
 }
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
+
+/**
+ * A viem transport over arcRpcJson: reads try Circle's Arc node directly
+ * first, and a proxied read not answered in 2 s is asked of Circle's node too
+ * (arcRpcJson). The plain arcTransport goes to the proxy only - a phone's
+ * stalled connection to it held Pay's gas estimate 18 s (field 1 Nov 16:56)
+ * and every receipt wait (waitForConfirmation) the same way.
+ * A node's own error answer keeps its code, so viem maps it as usual.
+ */
+export function arcJsonTransport(opts: { timeout?: number; retryCount?: number } = {}) {
+  return custom({
+    async request({ method, params }: { method: string; params?: unknown }) {
+      try {
+        const json = await arcRpcJson({ jsonrpc: '2.0', id: 1, method, params: params ?? [] }, opts.timeout ?? 10_000)
+        if (json?.error) throw json.error
+        return json?.result
+      } catch (e: any) {
+        if (e instanceof Error) throw e
+        // A JSON-RPC error object: an Error carrying its code and data.
+        throw Object.assign(new Error(String(e?.message ?? 'Arc RPC error')), { code: e?.code, data: e?.data })
+      }
+    },
+  }, { retryCount: opts.retryCount ?? 0 })
+}
 
 // Wallet readiness / startup timing: the first time Arc answered (one event,
 // no import of the readiness store from this low-level module).

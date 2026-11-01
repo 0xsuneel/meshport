@@ -5,7 +5,7 @@
 import { span, reportPayment } from './perfTrace'
 import { createPublicClient, parseUnits, encodeFunctionData, parseGwei, getAddress, isAddress, keccak256 } from 'viem'
 import type { WalletAccount } from '@/wallet'
-import { arcTransport, arcRpcJson, directSendHedge } from './arc'
+import { arcJsonTransport, arcRpcJson, directSendHedge } from './arc'
 // A relayed send not answered by then: Circle's Arc node gets the same bytes too.
 const SEND_HEDGE_MS = 2500
 import { ARC, ARC_TOKENS, ARC_CHAIN_INLINE as REGISTRY_ARC_CHAIN_INLINE } from '@/blockchain/chains'
@@ -110,7 +110,9 @@ function arcClient(retryCount: number, timeout: number, pollingInterval?: number
   const key = `${retryCount}|${timeout}|${pollingInterval ?? ''}`
   let c = arcClients.get(key)
   if (!c) {
-    c = createPublicClient({ transport: arcTransport({ retryCount, timeout }), ...(pollingInterval ? { pollingInterval } : {}) })
+    // Through arcRpcJson (Circle's Arc node first, the proxy as backup, 2 s hedge):
+    // Pay's gas estimate and every receipt wait read through here.
+    c = createPublicClient({ transport: arcJsonTransport({ retryCount, timeout }), ...(pollingInterval ? { pollingInterval } : {}) })
     arcClients.set(key, c)
   }
   return c
