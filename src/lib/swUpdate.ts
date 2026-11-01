@@ -247,8 +247,30 @@ function showReadyPill(): void {
   } catch { /* cosmetic only */ }
 }
 
-/** A new version is switched to in the background only after the app has been away this long. */
-export const QUIET_SWITCH_AFTER_HIDDEN_MS = 15 * 60_000
+/**
+ * A new version is switched to in the background once the app has been away
+ * this long - about a minute after it's found, like Android's in-app updates
+ * (a flexible update that finished downloading while the app is in the
+ * background is installed then). Coming back after more than 5 minutes locks
+ * the app anyway (lib/autoLock), so the wallet opens once, on the new
+ * version, after the unlock.
+ */
+export const QUIET_SWITCH_AFTER_HIDDEN_MS = 60_000
+
+/**
+ * When a found new version is applied. Never while the app is being used:
+ *   - in the background for QUIET_SWITCH_AFTER_HIDDEN_MS on a screen where no
+ *     money is moving: 'quiet' (no screen of its own);
+ *   - on the lock screen before anything was typed there: 'now' (the unlock
+ *     that follows opens the new version, the wallet loads once);
+ *   - anywhere else on screen: 'pill' ("Update ready" - only if they tap it);
+ *   - otherwise 'wait'. Pure - unit tested.
+ */
+export function decideApply(p: { visible: boolean; hiddenForMs: number; resting: boolean; onLock: boolean; lockTouched: boolean }): 'quiet' | 'now' | 'pill' | 'wait' {
+  if (!p.visible) return p.hiddenForMs >= QUIET_SWITCH_AFTER_HIDDEN_MS && p.resting ? 'quiet' : 'wait'
+  if (p.onLock && !p.lockTouched) return 'now'
+  return 'pill'
+}
 
 /** Keep looking for new versions while the app stays open / in memory, and switch as soon as it's safe. */
 export function watchForUpdates(): () => void {
@@ -275,17 +297,35 @@ export function watchForUpdates(): () => void {
   // Away this long, the phone has usually frozen the page and Privy's session
   // anyway; a short trip away keeps the warm wallet.
   let hiddenSince = document.visibilityState === 'hidden' ? Date.now() : 0
+  // The lock screen as it is now: has anything been typed / tapped on it?
+  // (A switch then would throw away a passcode being entered.)
+  const onLock = () => window.location.pathname === '/auth/lock'
+  let lockPath = onLock()
+  let lockTouched = false
+  const touch = () => { if (onLock()) lockTouched = true }
+  for (const e of ['pointerdown', 'keydown', 'touchstart'] as const) window.addEventListener(e, touch, { capture: true, passive: true })
+  let applying = false
   const tryApply = async () => {
-    if (!newerBuild) return
-    if (document.visibilityState === 'hidden') {
-      if (hiddenSince && Date.now() - hiddenSince >= QUIET_SWITCH_AFTER_HIDDEN_MS && onRestingScreen()) void switchQuietly()
-    } else {
-      showReadyPill()
-    }
+    const nowLock = onLock()
+    if (nowLock !== lockPath) { lockPath = nowLock; lockTouched = false } // a new lock screen: untouched
+    if (!newerBuild || applying) return
+    const visible = document.visibilityState === 'visible'
+    const action = decideApply({
+      visible, hiddenForMs: hiddenSince ? Date.now() - hiddenSince : 0,
+      resting: onRestingScreen(), onLock: nowLock, lockTouched,
+    })
+    if (action === 'quiet') void switchQuietly()
+    else if (action === 'now') { applying = true; void switchToNewVersion().finally(() => { applying = false }) }
+    else if (action === 'pill') showReadyPill()
   }
   const onVisibility = () => {
-    if (document.visibilityState === 'visible') { hiddenSince = 0; maybeCheck() }
-    else { hiddenSince = Date.now(); void tryApply() }
+    if (document.visibilityState === 'visible') {
+      hiddenSince = 0
+      // Back on screen: ask at once (not after the 30 s throttle) - the lock
+      // screen that may be up is the moment to switch.
+      last = 0
+      maybeCheck()
+    } else { hiddenSince = Date.now(); void tryApply() }
   }
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('online', maybeCheck)
@@ -294,6 +334,7 @@ export function watchForUpdates(): () => void {
   return () => {
     document.removeEventListener('visibilitychange', onVisibility)
     window.removeEventListener('online', maybeCheck)
+    for (const e of ['pointerdown', 'keydown', 'touchstart'] as const) window.removeEventListener(e, touch, { capture: true })
     clearInterval(checkTimer); clearInterval(applyTimer)
   }
 }

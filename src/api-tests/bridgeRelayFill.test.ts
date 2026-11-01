@@ -22,7 +22,7 @@ describe("the relayer never takes gas / fees from the node's eth_fillTransaction
     })
     const chain = defineChain({ id: 43113, name: 'Fuji', nativeCurrency: { name: 'AVAX', symbol: 'AVAX', decimals: 18 }, rpcUrls: { default: { http: ['http://x'] } } })
     const wallet = createWalletClient({ chain, transport: withoutNodeFill(custom({ request: node })), account: privateKeyToAccount(('0x' + '11'.repeat(32)) as `0x${string}`) })
-    const req: any = await wallet.prepareTransactionRequest({ to: '0x10d0611b0a7cb0c8af4438154700a730f008b8cb', data: '0x0f68a778' })
+    const req: any = await (wallet as any).prepareTransactionRequest({ to: '0x10d0611b0a7cb0c8af4438154700a730f008b8cb', data: '0x0f68a778' })
     expect(calls).not.toContain('eth_fillTransaction')
     expect(req.gas).toBe(200_000n)
     expect(req.maxFeePerGas > 1_000_000_000n).toBe(true)
