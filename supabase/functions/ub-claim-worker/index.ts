@@ -20,7 +20,7 @@ import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const GATEWAY = 'https://gateway-api-testnet.circle.com'
-const ARC_EXPLORER = 'https://testnet.arcscan.app'
+const ARC_EXPLORER = 'https://explorer.testnet.arc.io' // Arc's official explorer (docs.arc.io)
 const WAIT_LIMIT_MS = 24 * 60 * 60 * 1000 // give up waiting for a confirmed deposit after 24h
 const MAX_ERRORS = 20
 // Completion push - same endpoint, secret and wording as claim-worker's

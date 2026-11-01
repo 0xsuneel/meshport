@@ -147,7 +147,7 @@ const ARC_RPCS = [
   ...(CONFIGURED_ARC_RPC_URL ? [CONFIGURED_ARC_RPC_URL] : []),
   ...(DRPC_KEY ? [`https://lb.drpc.live/arc-testnet/${DRPC_KEY}`] : []), // dRPC authenticated (higher limits)
 ]
-const ARC_EXPLORER = 'https://testnet.arcscan.app'
+const ARC_EXPLORER = 'https://explorer.testnet.arc.io' // Arc's official explorer (docs.arc.io)
 const ARC_EXPLORER_API = 'https://testnet.arcscan.app/api/v2'
 
 // Circle's own Kit/CCTP infrastructure contracts on Arc - mirrors

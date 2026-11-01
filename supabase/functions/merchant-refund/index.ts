@@ -378,7 +378,7 @@ Deno.serve(async (req: Request) => {
         await db.from('activity').upsert({
           wallet_address: wallet, user_id: target.customerUserId ?? undefined, tx_hash: recvHash, activity_type: 'receive', status: 'completed',
           amount: found.amount, usd_value: found.amount, token_symbol: 'USDC', counterparty_address: REFUNDS_CONTRACT,
-          explorer_url: `https://testnet.arcscan.app/tx/${txHash}`, metadata: { ...refundMeta, source: 'merchant-refund' },
+          explorer_url: `https://explorer.testnet.arc.io/tx/${txHash}`, metadata: { ...refundMeta, source: 'merchant-refund' },
         }, { onConflict: 'tx_hash,wallet_address', ignoreDuplicates: true })
       }
     } catch (e) { console.warn('[merchant-refund] customer activity not updated:', e instanceof Error ? e.message : e) }

@@ -57,7 +57,7 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }
 
-const ARC_EXPLORER = 'https://testnet.arcscan.app'
+const ARC_EXPLORER = 'https://explorer.testnet.arc.io' // Arc's official explorer (docs.arc.io)
 
 /**
  * How far back to look for uncredited events.

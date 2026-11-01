@@ -19,6 +19,18 @@ import { blockedWalletMap } from './privacy'
 import { useAuthStore } from '@/store'
 import { searchUsersPartialDb } from './supabase'
 import { ARC_EXPLORER, explorerTxUrl } from './chainExplorers'
+
+/**
+ * Links saved before 1 Nov point at testnet.arcscan.app; Arc's official
+ * explorers (docs.arc.io) are explorer.testnet.arc.io / explorer.arc.io.
+ * Old rows are shown with the official one - same /tx/<hash> path. Pure.
+ */
+export function officialArcExplorer(url: string | undefined): string | undefined {
+  if (!url) return url
+  return url
+    .replace(/^https:\/\/testnet\.arcscan\.app(?=\/|$)/, 'https://explorer.testnet.arc.io')
+    .replace(/^https:\/\/arcscan\.(?:app|io)(?=\/|$)/, 'https://explorer.arc.io')
+}
 import { subscribeWithRetry } from './chatService'
 
 
@@ -97,7 +109,7 @@ function fromRow(r: any): ActivityRecord {
     status:              (r.status ?? 'completed') as ActivityStatus,
     explorerUrl:         String(r.tx_hash ?? '').startsWith('fail_')
       ? (r.metadata?.failed_tx_hash ? explorerUrl(r.metadata.failed_tx_hash, r.source_chain ?? undefined) : undefined)
-      : (r.explorer_url ?? undefined),
+      : officialArcExplorer(r.explorer_url ?? undefined),
     error:               r.error ?? r.metadata?.failure_reason ?? undefined,
     metadata:            r.metadata ?? {},
     createdAt:           r.created_at,

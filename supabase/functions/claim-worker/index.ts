@@ -725,7 +725,7 @@ async function confirmArrival(supabase: SupabaseClient, claim: Claim) {
     await persistErrorBestEffort(supabase, claim.id, `confirmArrival: ${serializeError(error)}`)
   }
 }
-const ARC_EXPLORER = 'https://testnet.arcscan.app'
+const ARC_EXPLORER = 'https://explorer.testnet.arc.io' // Arc's official explorer (docs.arc.io)
 const CHAIN_EXPLORER: Record<string, string> = {
   Ethereum_Sepolia:    'https://sepolia.etherscan.io',
   Base_Sepolia:        'https://sepolia.basescan.org',
