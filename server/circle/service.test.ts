@@ -111,6 +111,21 @@ describe('circleTransaction (what Circle signs)', () => {
 })
 
 describe('Circle wallet service', () => {
+  it('a link removed from the store is linked again by the next call with that Circle session (same rule as sign-in)', async () => {
+    await svc.link('uid-bob', BOB_TOKEN)
+    evmWallets.add('circle-bob')
+    expect((await svc.wallet('uid-bob', BOB_TOKEN)).address.toLowerCase()).toBe('0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
+    repo.rows.delete('uid-bob') // the row is deleted; this instance still remembers it
+    await svc.link('uid-bob', BOB_TOKEN) // a sign-in saves it again
+    expect(repo.rows.get('uid-bob')?.circleUserId).toBe('circle-bob')
+    repo.rows.delete('uid-bob')
+    await new Promise(r => setTimeout(r, 0))
+    const fresh = createCircleWalletService({ circle: createCircleClient({ apiKey: API_KEY, fetch: fakeCircle as typeof fetch }), repo })
+    expect((await fresh.wallet('uid-bob', BOB_TOKEN)).address.toLowerCase()).toBe('0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb') // healed without a sign-in
+    expect(repo.rows.get('uid-bob')?.circleUserId).toBe('circle-bob')
+    await expect(fresh.wallet('uid-mallory', BOB_TOKEN)).rejects.toMatchObject({ code: 'linked-elsewhere' }) // never someone else's
+  })
+
   it('status: whether the account has a Circle wallet, from its own link only (no Circle session)', async () => {
     expect(await svc.status('uid-bob')).toEqual({ linked: false, address: null })
     await svc.link('uid-bob', BOB_TOKEN)
@@ -133,7 +148,7 @@ describe('Circle wallet service', () => {
   it("acts only with this account's own Circle session", async () => {
     await svc.link('uid-alice', ALICE_TOKEN)
     await svc.link('uid-bob', BOB_TOKEN)
-    await expect(svc.initialize('uid-nobody', ALICE_TOKEN)).rejects.toMatchObject({ code: 'not-linked' })
+    await expect(svc.initialize('uid-nobody', ALICE_TOKEN)).rejects.toMatchObject({ code: 'linked-elsewhere' }) // Alice's Circle user is another account's
     await expect(svc.wallet('uid-alice', BOB_TOKEN)).rejects.toMatchObject({ code: 'linked-elsewhere' })
     await expect(svc.wallet('uid-alice', EXPIRED_TOKEN)).rejects.toMatchObject({ code: 'session' })
     await expect(svc.signTransaction('uid-alice', undefined, { transaction: TX })).rejects.toMatchObject({ code: 'session' })
@@ -210,8 +225,8 @@ describe('Circle wallet service - fewer round trips per signature', () => {
     expect(lastCall('/v1/w3s/user/sign/transaction').body.walletId).toBe(ALICE_WALLET)
   })
 
-  it('an account with no link yet is looked up again (a link made a moment later is seen)', async () => {
-    await expect(svc.wallet('uid-alice', ALICE_TOKEN)).rejects.toMatchObject({ code: 'not-linked' })
+  it('an account with no link yet is linked by its own Circle session, then the wallet is set up', async () => {
+    await expect(svc.wallet('uid-alice', ALICE_TOKEN)).rejects.toMatchObject({ code: 'no-wallet' }) // linked now, no wallet yet
     await svc.link('uid-alice', ALICE_TOKEN)
     await svc.initialize('uid-alice', ALICE_TOKEN)
     expect((await svc.wallet('uid-alice', ALICE_TOKEN)).walletId).toBe(ALICE_WALLET)

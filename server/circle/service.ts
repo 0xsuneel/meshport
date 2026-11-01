@@ -153,8 +153,22 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
   /** The signed-in account's link, after checking the Circle session belongs to it. */
   async function linked(authUid: string, userToken: unknown): Promise<CircleLink> {
     const token = needToken(userToken)
-    const [link, circleUserId] = await Promise.all([linkOf(authUid), circleUserOf(token)])
-    if (!link) throw new CircleWalletError('not-linked', 'Connect your Circle wallet first')
+    const [cached, circleUserId] = await Promise.all([linkOf(authUid), circleUserOf(token)])
+    let link = cached
+    if (!link) {
+      // No link stored (e.g. it was removed while this browser kept its Circle
+      // session - field 1 Nov: a reset deleted the row and a remembered copy
+      // stopped `link` from saving it again). The MeshPort session proves the
+      // account and the Circle session the Circle user - exactly what `link`
+      // checks at sign-in - so it is linked now, under the same rule: a Circle
+      // user already linked to another account is refused.
+      if (await repo.saveLink(authUid, circleUserId) === 'taken') {
+        throw new CircleWalletError('linked-elsewhere', 'This Circle sign-in belongs to a different MeshPort account')
+      }
+      links.delete(authUid)
+      link = await repo.link(authUid)
+      if (!link) throw new CircleWalletError('not-linked', 'Connect your Circle wallet first')
+    }
     if (link.circleUserId !== circleUserId) throw new CircleWalletError('linked-elsewhere', 'This Circle sign-in belongs to a different MeshPort account')
     return link
   }
@@ -214,6 +228,9 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
 
     async link(authUid: string, userToken: unknown) {
       const circleUserId = await circleUserOf(needToken(userToken))
+      // Read the stored link itself, not the remembered copy: a link removed
+      // meanwhile must be saved again at this sign-in.
+      links.delete(authUid)
       const existing = await linkOf(authUid)
       if (existing) {
         if (existing.circleUserId !== circleUserId) throw new CircleWalletError('linked-elsewhere', 'This MeshPort account uses a different Circle sign-in')
