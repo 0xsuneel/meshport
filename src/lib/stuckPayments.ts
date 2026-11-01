@@ -35,10 +35,18 @@ export async function fetchStuckPayments(): Promise<StuckPayments | null> {
 
 export type CancelOutcome = 'cancelled' | 'ran' | 'unknown'
 
-// Well above the payments' own caps (25 gwei, tip 1 gwei): a node only swaps a
-// queued transaction for one paying clearly more.
-const MAX_FEE = parseGwei('60')
+// Well above the payments' own caps, tip 1 gwei: a node only swaps a queued
+// transaction for one paying clearly more (at least +10%). Those caps follow
+// Arc's gas price (arcService.sendFeeCap: twice the price, at least 25 gwei),
+// so a fixed 60 gwei stopped being "more" once the price passed ~27 gwei - the
+// replacement was refused as underpriced. Now twice today's cap, at least 60.
+const MIN_REPLACE_FEE = parseGwei('60')
 const TIP = parseGwei('20')
+/** Pure: the fee cap a replacement signs, given the cap a send would sign now. */
+export function replacementFeeCap(currentSendCap: bigint): bigint {
+  const twice = currentSendCap * 2n
+  return twice > MIN_REPLACE_FEE ? twice : MIN_REPLACE_FEE
+}
 const RELAY = 'meshport_sendRawTransactionAndWait'
 
 async function receipt(hash: string): Promise<{ status: string } | null> {
@@ -64,6 +72,7 @@ export async function cancelStuckPayments(
     gas = (BigInt(est.result) * 130n) / 100n
   } catch { /* the default covers a plain transfer */ }
 
+  const MAX_FEE = replacementFeeCap(await import('./arcService').then(m => m.sendFeeCap()).catch(() => parseGwei('60')))
   onStep?.('Signing')
   const signed: { nonce: number; raw: `0x${string}`; hash: `0x${string}` }[] = []
   for (let nonce = s.chainNonce; nonce <= last; nonce++) {
