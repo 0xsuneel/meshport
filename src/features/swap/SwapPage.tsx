@@ -1,5 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
+import { quoteAccount } from '@/wallet/account'
+import { timeQuote } from '@/lib/quoteTiming'
 import { startMoveTimer, type MoveTimer } from '@/lib/moveTimings'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { HistoryIcon } from '@/components/ui/HistoryRow'
@@ -746,7 +748,11 @@ export function SwapPage() {
     // The swap itself: the readiness check (lib/paymentReadiness) - joins
     // the open handleConfirm started with the passcode, and refuses a signer
     // that isn't this account's. An estimate only needs one already open.
-    const activeSigner = action === 'swap' ? await getReadySigner() : useAuthStore.getState().signer
+    // An estimate signs nothing: the open signer if there is one, otherwise
+    // the address alone (quoteAccount) - it no longer waits for the wallet.
+    const live = useAuthStore.getState()
+    const activeSigner = action === 'swap' ? await getReadySigner()
+      : live.signer ?? (live.walletAddress ? quoteAccount(live.walletAddress) : null)
     if (action === 'swap' && activeSigner) moveTimerRef.current?.mark('wallet_open')
     if (!activeSigner) {
       throw Object.assign(new Error('Wallet unavailable - unlock your wallet and try again.'), { isUncertain: false })
@@ -842,13 +848,13 @@ export function SwapPage() {
     // closed-over signer stays null after the wallet loads and the
     // "retry once the wallet is ready" effect below silently did nothing.
     const auth = useAuthStore.getState()
-    if (!auth.signer || !auth.walletAddress) return
+    if (!auth.walletAddress) return
     const myReqId = ++liveQuoteReqId.current
     setLiveQuoteLoading(true)
     try {
-      const est = await callProxy('estimate', {
+      const est = await timeQuote(`swap ${tokenIn.id}->${tokenOut.id}${auth.signer ? '' : ' (wallet not open yet)'}`, () => callProxy('estimate', {
         tokenIn: tokenIn.id, tokenOut: tokenOut.id, amountIn: amt.toFixed(6),
-      })
+      }))
       if (liveQuoteReqId.current !== myReqId) return // amount/token changed since this fired - drop it
       const gasFee = (est.gasFees ?? []).reduce((s: number, f: any) => s + (parseFloat(f.amount) || 0), 0)
       const freshTotalFees = (est.fees ?? []).reduce((s: number, f: any) => s + (parseFloat(f.amount) || 0), 0)
@@ -903,7 +909,8 @@ export function SwapPage() {
   // ever re-fetch once the wallet becomes ready.
   const hadWalletRef = useRef(false)
   useEffect(() => {
-    const hasWallet = Boolean(signer && walletAddress)
+    // The address is enough for a quote (quoteAccount) - not the signer.
+    const hasWallet = Boolean(walletAddress)
     if (hasWallet && !hadWalletRef.current && step === 'idle') runLiveQuote()
     hadWalletRef.current = hasWallet
   }, [signer, walletAddress, step, runLiveQuote])
@@ -1014,9 +1021,9 @@ export function SwapPage() {
     if (estimate && !liveQuoteLoading) { setError(''); setStep('confirming'); return }
     setStep('estimating'); setError('')
     try {
-      const est = await callProxy('estimate', {
+      const est = await timeQuote(`swap ${tokenIn.id}->${tokenOut.id}${useAuthStore.getState().signer ? '' : ' (wallet not open yet)'}`, () => callProxy('estimate', {
         tokenIn: tokenIn.id, tokenOut: tokenOut.id, amountIn: amt.toFixed(6),
-      })
+      }))
       const gasFee = (est.gasFees ?? []).reduce((s: number, f: any) => s + (parseFloat(f.amount) || 0), 0)
       const freshTotalFees = (est.fees ?? []).reduce((s: number, f: any) => s + (parseFloat(f.amount) || 0), 0)
       totalFeesRef.current = freshTotalFees
@@ -1398,7 +1405,7 @@ export function SwapPage() {
   // the fetch itself): shown as loading, never as a grey "0" that then
   // turns into a spinner and back - and the rate line keeps its place.
   const validQuoteInput = parseFloat(amountIn || '0') > 0 && tokenIn.id !== tokenOut.id
-  const quotePending = isActive && validQuoteInput && !estimate && !error && !!signer && !!walletAddress
+  const quotePending = isActive && validQuoteInput && !estimate && !error && !!walletAddress
   const quoteLoading = step === 'estimating' || liveQuoteLoading || quotePending
 
   // Gas on Arc is always paid in native USDC, no matter which token is

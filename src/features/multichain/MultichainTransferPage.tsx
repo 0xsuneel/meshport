@@ -33,6 +33,8 @@ import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ARC_RPCS, ARC_NETWORK } from '@/lib/arc'
 import { isSolanaAddress } from '@/lib/solana'
 import { useSolanaWallet } from '@/wallet/useSolanaWallet'
+import { quoteAccount } from '@/wallet/account'
+import { timeQuote } from '@/lib/quoteTiming'
 import { circleForwarderMintsTo, noteForwarderMintFailed } from '@/lib/chainRpcs'
 import { gatewaySelfMintsTo, forwarderMintRetry, gatewaySpecAlreadyMinted, getUnifiedBalances, UB_MIN_SWEEP } from '@/lib/ubClaim'
 import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
@@ -1337,7 +1339,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // flashing "Fetching fees…" every poll.
   // The transfer a fee estimate is for (stored in feeEstimateKey when fetched).
   const feeRequestKey = `${address}|${numAmount}|${selectedChain}|${selectedSpeed}|${bridgeToken}`
-  const fetchFeeEstimate = async (silent = false): Promise<FeeEstimate | null> => {
+  const fetchFeeEstimate = (silent = false): Promise<FeeEstimate | null> =>
+    timeQuote(`transfer ${isTokenRoute ? bridgeToken : chain.ub ? 'ub' : 'cctp'} ${chain.sdk}`, () => fetchFeeEstimateInner(silent))
+  const fetchFeeEstimateInner = async (silent = false): Promise<FeeEstimate | null> => {
     if (!numAmount || !address || !senderAddress) return null
     const requestKey = feeRequestKey
     // USDC over CCTP (the direct path, lib/fastCctp): Circle's fee table and
@@ -1383,9 +1387,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         return fresh
       }
     }
-    // The open wallet if there is one, otherwise ask the wallet frame to open it
-    const activeKey = await getReadySigner()
-    if (!activeKey) return null
+    // A quote signs nothing: the open signer if there is one, otherwise the
+    // address alone (quoteAccount). Waiting for the signer held the fee until
+    // Privy had opened the wallet (6-11 s after start in the field, up to 45 s).
+    const activeKey = useAuthStore.getState().signer ?? quoteAccount(senderAddress)
     if (!silent) setFeeEstimate(f => ({ ...f, loading: true, error: '' }))
     try {
       const { AppKit, JsonRpcProvider, FallbackProvider } = await loadSdkModules()
@@ -1451,41 +1456,58 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // estimating on the full numAmount let this diverge from what
         // handleConfirm can actually deposit once the gas reserve is
         // carved out.
-        if (!ubDepositCompletedRef.current) ubDepositGasRef.current = await import('@/lib/arcService').then(m => m.estimateUbDepositGas()).catch(() => ubDepositGasRef.current)
-        const ubTargetAmount = Math.min(numAmount, Math.max(0, balance - ubDepositGasRef.current))
+        // Three independent reads at once (they ran one after another): Arc's
+        // deposit gas, the Arc Unified Balance dust, and Circle's quote - the
+        // quote for the amount the deposit will most likely be; asked again
+        // only if the fresh gas figure changes that amount.
+        const gasP: Promise<number> = ubDepositCompletedRef.current
+          ? Promise.resolve(ubDepositGasRef.current)
+          : import('@/lib/arcService').then(m => m.estimateUbDepositGas()).catch(() => ubDepositGasRef.current)
+        // Dust only (under UB_MIN_SWEEP): a larger Arc balance is an earlier
+        // send's deposit waiting to be finished, not headroom.
+        const dustP: Promise<number | null> = senderAddress && !ubDepositCompletedRef.current
+          ? getUnifiedBalances(kit, senderAddress)
+            .then(rows => rows.filter(r => r.chain === ARC_CHAIN_KEY).reduce((t, r) => t + r.confirmed, 0))
+            .catch(() => 0)
+          : Promise.resolve(null)
+        const targetFor = (gas: number) => Math.min(numAmount, Math.max(0, balance - gas))
 
         // `from` takes an allocations object, not a bare adapter array -
         // `[{ adapter }]` silently satisfied the `any`-typed call but isn't
         // the shape the SDK actually expects (see "Select source
         // blockchains" in the App Kit docs).
-        assertAllocationsMatchAmount(ubTargetAmount.toFixed(6), [{ amount: ubTargetAmount.toFixed(6) }], 'estimateSpend')
         // Priced for the route the send really takes (handleConfirm): where
         // MeshPort's relayer mints (gatewaySelfMintsTo - Ethereum Sepolia…)
         // there's no forwarding fee. Quoting those with the forwarder added
         // Circle's forwarding fee + Ethereum mint gas (~1.5 USDC) that is
         // never charged - a $1 transfer to Ethereum could never pass. Falls
         // back to the forwarder quote (always the higher) if this one fails.
-        const ubQuote = (to: any) => kit.unifiedBalance.estimateSpend({
-          amount: ubTargetAmount.toFixed(6),
-          from: {
-            adapter,
-            allocations: [{ amount: ubTargetAmount.toFixed(6), chain: ARC_CHAIN_KEY }],
-          },
-          to,
-          token: 'USDC',
-        })
-        const forwarderTo = { chain: chain.sdk as any, recipientAddress: address, useForwarder: true }
-        // Dust only (under UB_MIN_SWEEP): a larger Arc balance is an earlier
-        // send's deposit waiting to be finished, not headroom.
-        if (senderAddress && !ubDepositCompletedRef.current) {
-          const arcUb = await getUnifiedBalances(kit, senderAddress)
-            .then(rows => rows.filter(r => r.chain === ARC_CHAIN_KEY).reduce((t, r) => t + r.confirmed, 0))
-            .catch(() => 0)
-          ubArcDustRef.current = arcUb > 0 && arcUb < UB_MIN_SWEEP ? arcUb : 0
+        const ubQuote = (amount: number, to: any) => {
+          assertAllocationsMatchAmount(amount.toFixed(6), [{ amount: amount.toFixed(6) }], 'estimateSpend')
+          return kit.unifiedBalance.estimateSpend({
+            amount: amount.toFixed(6),
+            from: {
+              adapter,
+              allocations: [{ amount: amount.toFixed(6), chain: ARC_CHAIN_KEY }],
+            },
+            to,
+            token: 'USDC',
+          })
         }
-        const est: any = gatewaySelfMintsTo(chain.sdk)
-          ? await ubQuote({ chain: chain.sdk as any, recipientAddress: address, adapter, useForwarder: false }).catch(() => ubQuote(forwarderTo))
-          : await ubQuote(forwarderTo)
+        const forwarderTo = { chain: chain.sdk as any, recipientAddress: address, useForwarder: true }
+        const quoteFor = (amount: number): Promise<any> => gatewaySelfMintsTo(chain.sdk)
+          ? ubQuote(amount, { chain: chain.sdk as any, recipientAddress: address, adapter, useForwarder: false }).catch(() => ubQuote(amount, forwarderTo))
+          : ubQuote(amount, forwarderTo)
+        const guess = targetFor(ubDepositGasRef.current)
+        const guessQuote = quoteFor(guess)
+        guessQuote.catch(() => {}) // awaited below unless the amount changes
+        ubDepositGasRef.current = await gasP
+        const ubTargetAmount = targetFor(ubDepositGasRef.current)
+        const [est, arcUb] = await Promise.all([
+          ubTargetAmount.toFixed(6) === guess.toFixed(6) ? guessQuote : quoteFor(ubTargetAmount),
+          dustP,
+        ])
+        if (arcUb !== null) ubArcDustRef.current = arcUb > 0 && arcUb < UB_MIN_SWEEP ? arcUb : 0
         // Circle's maxFee ('provider' + 'gasFee') is all the spend takes from
         // the Unified Balance; the forwarding fee is a part of it, not extra
         // (lib/transferFees). Dust already in the Arc Unified Balance stands

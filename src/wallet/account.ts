@@ -77,6 +77,20 @@ export function walletAccount(address: string): WalletAccount {
   return account
 }
 
+/**
+ * The wallet's address for fee quotes only - it can't sign. Circle's
+ * estimates (estimateSpend, estimateSwap, estimateBridge's reads) only read
+ * the address; waiting for the real signer held every quote until Privy had
+ * opened the wallet (6-11 s after start in the field logs, up to 45 s).
+ */
+export function quoteAccount(address: string): WalletAccount {
+  const refuse = async (): Promise<never> => { throw new Error('A fee quote never signs') }
+  return Object.assign(
+    toAccount({ address: address as Hex, signMessage: refuse, signTransaction: refuse, signTypedData: refuse }),
+    { meshportWallet: true as const, quoteOnly: true as const },
+  ) as WalletAccount
+}
+
 export function isWalletAccount(v: unknown): v is WalletAccount {
   return !!v && typeof v === 'object' && (v as any).meshportWallet === true
 }
