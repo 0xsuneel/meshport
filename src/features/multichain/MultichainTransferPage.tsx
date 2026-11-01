@@ -1739,6 +1739,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     const setStage = (name: string) => { stage = name; stageAt = Date.now() }
     const stageReported = new Set<string>()
     const stageWatch = setInterval(() => {
+      if (stage === 'start') return // only the named steps (the CCTP path's own steps are timed in move_timings)
       const secs = (Date.now() - stageAt) / 1000
       // 8 s too: a 19 s step (31 Oct 18:02, UB deposit) stayed under 20 s and went unnamed.
       for (const limit of [8, 20, 60]) {
