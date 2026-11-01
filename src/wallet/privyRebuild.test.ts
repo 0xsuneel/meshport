@@ -98,3 +98,34 @@ describe('the wallet stays warm while the app is open', () => {
     privy.setPrivyBridge(null)
   })
 })
+
+describe('a warm wallet whose signature just hangs', () => {
+  const ADDR = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+  const bridgeWith = (sign: () => Promise<`0x${string}`>) => ({
+    ready: true, authenticated: true, wallets: [ADDR], linked: [ADDR],
+    signMessage: sign, signTransaction: sign, signTypedData: sign,
+    createWallet: async () => ADDR, solanaWallets: [], solanaReady: true,
+    createSolanaWallet: async () => 'x', signSolanaTransaction: async (t: Uint8Array) => t,
+  }) as any
+
+  it('is replaced after 12 s and signs on the fresh Privy', async () => {
+    // A fresh privy module: earlier tests here leave Privy retries running.
+    vi.resetModules()
+    const privy = await import('./privy')
+    vi.useFakeTimers()
+    try {
+      let calls = 0
+      // Warm-up answers (the wallet is warm), then every signature hangs.
+      privy.setPrivyBridge(bridgeWith(() => (++calls === 1 ? Promise.resolve('0xwarm') : new Promise(() => {}))))
+      await vi.advanceTimersByTimeAsync(0)
+      const onDead = () => setTimeout(() => { privy.setPrivyBridge(null); privy.setPrivyBridge(bridgeWith(async () => '0xfresh')) }, 0)
+      window.addEventListener(privy.PRIVY_DEAD_EVENT, onDead)
+      const sig = privy.privyAccount(ADDR).signMessage({ message: 'pay' })
+      const out = sig.then(v => v, (e: Error) => e.message)
+      for (let i = 0; i < 10; i++) await vi.advanceTimersByTimeAsync(privy.PRIVY_HUNG_WARM_MS / 4)
+      expect(await out).toBe('0xfresh')
+      window.removeEventListener(privy.PRIVY_DEAD_EVENT, onDead)
+      privy.setPrivyBridge(null)
+    } finally { vi.useRealTimers() }
+  })
+})

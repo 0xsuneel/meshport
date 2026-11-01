@@ -348,6 +348,10 @@ export function jsonTypedData(t: { domain?: unknown; types?: unknown; primaryTyp
 // nothing is broadcast without the signature, so a late one is never used.
 export const PRIVY_STILL_WAITING_MS = 20_000
 export const PRIVY_GIVE_UP_MS = 90_000
+/** A warm wallet's signature not answered by now: the iframe is dead (see timed). */
+export const PRIVY_HUNG_WARM_MS = 12_000
+/** Before the wallet is warm Privy's first authentication can take ~45 s. */
+export const PRIVY_HUNG_COLD_MS = 50_000
 export const PRIVY_NO_ANSWER = "Your wallet didn't respond - nothing was sent. Try again."
 
 /** Privy aborted its own request ("signal is aborted without reason"): its iframe stopped answering. */
@@ -385,11 +389,26 @@ async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b
     const noAnswer = new Promise<never>((_, reject) => {
       giveUp = setTimeout(() => reject(new Error(PRIVY_NO_ANSWER)), PRIVY_GIVE_UP_MS)
     })
+    // A signature that just hangs (no answer, no abort) while Privy shows signed
+    // in (field 1 Nov 01:59, 02:07: "still waiting after 20 s", ready and
+    // authenticated) is a dead iframe too. Once the wallet is warm a signature
+    // takes 0.3-4 s, so past PRIVY_HUNG_WARM_MS it is treated as dead (replaced,
+    // signed again - below); a wallet not warmed yet gets Privy's slow first
+    // authentication (up to ~45 s). The hung request is abandoned: whatever it
+    // returns later is never used, and nothing is sent without a signature.
+    let hung: ReturnType<typeof setTimeout> | undefined
+    const hangs = new Promise<never>((_, reject) => {
+      const ms = address && warmed.has(address.toLowerCase()) ? PRIVY_HUNG_WARM_MS : PRIVY_HUNG_COLD_MS
+      hung = setTimeout(() => {
+        const e = new Error(`no answer after ${s(ms)} s`); e.name = 'AbortError'
+        reject(e)
+      }, ms)
+    })
     const out = await Promise.race([(async () => {
       const b = await open()
       opened = performance.now()
       return sign(b)
-    })(), noAnswer])
+    })(), noAnswer, hangs]).finally(() => clearTimeout(hung))
     const ms = performance.now() - started
     if (ms > 2_000) report(`slow: ${s(ms)} s (${parts()})`)
     return out

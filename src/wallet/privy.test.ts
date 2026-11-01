@@ -146,14 +146,14 @@ describe('a Privy request that never answers', () => {
     setPrivyBridge(fakeBridge({ signTransaction: () => new Promise<never>(() => {}) }))
     const p = privyAccount(ADDR).signTransaction({ to: ADDR, value: 1n, gas: 21000n, nonce: 1, chainId: 5042002, maxFeePerGas: 1n, maxPriorityFeePerGas: 1n, type: 'eip1559' } as any)
     const settled = p.then(() => 'signed', (e: Error) => e.message)
-    await vi.advanceTimersByTimeAsync(privy.PRIVY_STILL_WAITING_MS + 10)
+    // Warm wallet: treated as dead at PRIVY_HUNG_WARM_MS; nobody replaces Privy here, so it gives up.
+    await vi.advanceTimersByTimeAsync(privy.PRIVY_HUNG_WARM_MS + 10)
     await vi.advanceTimersByTimeAsync(privy.PRIVY_GIVE_UP_MS)
     expect(await settled).toBe(privy.PRIVY_NO_ANSWER)
     vi.useRealTimers()
     await new Promise(r => setTimeout(r, 50)) // the reports are sent from a dynamic import
     const reports = spy.mock.calls.map(c => (c[1] as Error).message)
-    expect(reports.some(r => r.includes('[privy signTransaction] still waiting'))).toBe(true)
-    expect(reports.some(r => r.includes('[privy signTransaction] failed') && r.includes(privy.PRIVY_NO_ANSWER))).toBe(true)
+    expect(reports.some(r => r.includes('[privy signTransaction] failed') && r.includes('no answer after'))).toBe(true)
 
   })
 })
