@@ -5,7 +5,7 @@
 import { span, reportPayment } from './perfTrace'
 import { createPublicClient, parseUnits, encodeFunctionData, parseGwei, getAddress, isAddress, keccak256 } from 'viem'
 import type { WalletAccount } from '@/wallet'
-import { arcTransport, arcRpcJson, directSendRaw } from './arc'
+import { arcTransport, arcRpcJson, directSendHedge } from './arc'
 // A relayed send not answered by then: Circle's Arc node gets the same bytes too.
 const SEND_HEDGE_MS = 2500
 import { ARC, ARC_TOKENS, ARC_CHAIN_INLINE as REGISTRY_ARC_CHAIN_INLINE } from '@/blockchain/chains'
@@ -468,10 +468,9 @@ async function relaySendTimed(
   let directlySent = false
   try {
     const relay = arcRpcJson({ jsonrpc: '2.0', id: 1, method: RELAY_METHOD, params: [raw, txHash, 8000] }, isSlowNetwork() ? 40_000 : 20_000)
-    const direct = new Promise<'direct'>(resolve => {
-      const t = setTimeout(() => { void directSendRaw(raw).then(ok => { if (ok) resolve('direct') }) }, SEND_HEDGE_MS)
-      void relay.then(() => clearTimeout(t), () => clearTimeout(t))
-    })
+    let relaySettled = false
+    void relay.then(() => { relaySettled = true }, () => { relaySettled = true })
+    const direct = directSendHedge(raw, SEND_HEDGE_MS, () => relaySettled).then(() => 'direct' as const)
     const first = await Promise.race([relay, direct])
     if (first === 'direct') directlySent = true
     else relayed = first?.result ?? null

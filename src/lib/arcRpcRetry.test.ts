@@ -113,3 +113,52 @@ describe('a stalled connection to the proxy (field 1 Nov 13:45 / 14:30: nothing 
     expect(await directSendRaw('0x00')).toBeNull()
   })
 })
+
+describe('a relayed send whose answer never comes back (field 1 Nov 16:13: on chain in 1.8 s, the app waited 20 s)', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
+  const RAW = '0x02f86a'
+
+  it('refused "nonce too low" because it is already mined: the receipt settles it', async () => {
+    vi.useFakeTimers()
+    const { directSendHedge } = await import('./arc')
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
+      const { method } = JSON.parse(init.body)
+      if (method === 'eth_sendRawTransaction') return { ok: true, status: 200, json: async () => ({ error: { code: -32000, message: 'nonce too low' } }) }
+      return ok({ blockNumber: '0x42f4133', status: '0x1' })
+    }))
+    let done = false
+    void directSendHedge(RAW, 2_500, () => false).then(() => { done = true })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(done).toBe(false)              // the relay gets its 2.5 s first
+    await vi.advanceTimersByTimeAsync(600)
+    expect(done).toBe(true)
+  })
+
+  it('not on chain yet: keeps looking about once a second', async () => {
+    vi.useFakeTimers()
+    const { directSendHedge } = await import('./arc')
+    let mined = false
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
+      const { method } = JSON.parse(init.body)
+      if (method === 'eth_sendRawTransaction') return { ok: true, status: 200, json: async () => ({ error: { code: -32000, message: 'replacement underpriced' } }) }
+      return ok(mined ? { blockNumber: '0x1' } : null)
+    }))
+    let done = false
+    void directSendHedge(RAW, 2_500, () => false).then(() => { done = true })
+    await vi.advanceTimersByTimeAsync(4_000)
+    expect(done).toBe(false)
+    mined = true
+    await vi.advanceTimersByTimeAsync(1_100)
+    expect(done).toBe(true)
+  })
+
+  it('the relay answered first: the hedge stops', async () => {
+    vi.useFakeTimers()
+    const { directSendHedge } = await import('./arc')
+    const f = vi.fn()
+    vi.stubGlobal('fetch', f)
+    void directSendHedge(RAW, 2_500, () => true)
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(f).not.toHaveBeenCalled()
+  })
+})
