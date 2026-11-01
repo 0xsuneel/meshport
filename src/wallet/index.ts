@@ -61,14 +61,12 @@ export function lockWallet(address?: string) { return callWallet('lock', { addre
 export function forgetWallet(address?: string, everything = false) { return callWallet('forget', { address, everything }).catch(() => undefined) }
 
 export async function chatSeed(address: string): Promise<Uint8Array> {
-  // Google / email (Circle): no key in the frame - from a Circle signature (wallet/signatureChatSeed.ts).
+  // Google / email (Circle): no key in the frame, and Circle's signatures
+  // differ every time (field 1 Nov), so a signature can't make a stable chat
+  // key either (wallet/signatureChatSeed.ts would refuse it after spending two
+  // signatures). Refused at once - no Circle signature spent.
   const { useAuthStore } = await import('@/store')
-  const { walletSource, signer } = useAuthStore.getState()
-  if (walletSource === 'circle') {
-    if (!signer || signer.address.toLowerCase() !== address.toLowerCase()) throw new Error('Your wallet is not open yet')
-    const { signatureChatSeed } = await import('./signatureChatSeed')
-    return signatureChatSeed(signer)
-  }
+  if (useAuthStore.getState().walletSource === 'circle') throw new Error('Encrypted chat keys are not available for Circle wallets yet')
   const { seed } = await callWallet('chat:seed', { address })
   const h = seed.slice(2)
   const out = new Uint8Array(h.length / 2)
