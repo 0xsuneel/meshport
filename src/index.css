@@ -38,9 +38,16 @@
        bouncing to reveal background color) without taking away the user's
        manual escape hatch when something goes wrong. */
     overscroll-behavior-x: none;
-    overscroll-behavior-y: auto;
+    /* No browser pull-to-refresh (1 Nov): in the installed app a pull down at
+       the top of a screen reloaded the whole page - 7 reloads in 9 minutes
+       (wallet_events: nav=reload, no error screen, no update) - and every one
+       threw the warm wallet away. `contain` turns pull-to-refresh off and
+       keeps normal scrolling and the edge glow (Chrome: "Take control of
+       your scroll"). Closing and reopening the app is the way to reload. */
+    overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
   }
+  html { overscroll-behavior-y: contain; }
   ::-webkit-scrollbar { display: none; }
   * { scrollbar-width: none; -ms-overflow-style: none; }
 
