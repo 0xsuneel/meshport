@@ -177,6 +177,21 @@ export class FastCctpError extends Error {
   constructor(message: string, readonly kind: 'rejected' | 'not_sent' | 'settling') { super(message) }
 }
 
+export const ARC_UNREACHABLE = "Couldn't reach Arc - your connection dropped. Nothing was sent. Try again."
+/**
+ * Reads made before anything is signed. A lost connection there is a clean
+ * "nothing was sent" - not the browser's raw "signal timed out".
+ */
+export async function beforeSending<T>(p: Promise<T>): Promise<T> {
+  try { return await p } catch (e) {
+    if (e instanceof FastCctpError) throw e
+    const name = e instanceof Error ? e.name : ''
+    if (name === 'TimeoutError' || name === 'AbortError' || e instanceof TypeError || /timed out|failed to fetch|network|Arc RPC (5\d\d|429)/i.test(String((e as any)?.message ?? e)))
+      throw new FastCctpError(ARC_UNREACHABLE, 'not_sent')
+    throw e
+  }
+}
+
 // ── The transfer ─────────────────────────────────────────────────────────────
 export type FastCctpStep = 'approve' | 'burn' | 'attestation' | 'mint'
 type StepPayload = { values: { state: 'success' | 'pending' | 'error'; txHash?: string } }
@@ -275,10 +290,10 @@ export async function fastCctpTransfer(p: FastCctpParams): Promise<FastCctpResul
   const approveData = encodeFunctionData({ abi: ERC20, functionName: 'approve', args: [TOKEN_MESSENGER_V2, amount] })
 
   // Nonce and allowance together (one round trip each, in parallel).
-  const [nonceHex, allowanceHex] = await Promise.all([
+  const [nonceHex, allowanceHex] = await beforeSending(Promise.all([
     rpc('eth_getTransactionCount', [from, 'pending']),
     rpc('eth_call', [{ to: ARC_USDC, data: encodeFunctionData({ abi: ERC20, functionName: 'allowance', args: [from, TOKEN_MESSENGER_V2] }) }, 'latest']),
-  ])
+  ]))
   let nonce = Number(BigInt(nonceHex))
   const allowance = decodeFunctionResult({ abi: ERC20, functionName: 'allowance', data: allowanceHex as Hex }) as bigint
 
