@@ -125,7 +125,7 @@ describe('api/circle-wallet (handler, end to end)', () => {
     expect((await call({ action: 'link', userToken: ALICE_CIRCLE }, 'tok-mallory')).status).toBe(409) // Alice's Circle, Mallory's account
     expect((await call({ action: 'wallet', userToken: 'expired-token-' + 'z'.repeat(40) })).json.code).toBe('session')
     expect((await call({ action: 'sign-transaction', userToken: ALICE_CIRCLE, transaction: { chainId: 1 } })).status).toBe(400)
-    expect((await call({ action: 'wallet', userToken: ALICE_CIRCLE }, 'tok-mallory')).json.code).toBe('not-linked')
+    expect((await call({ action: 'wallet', userToken: ALICE_CIRCLE }, 'tok-mallory')).json.code).toBe('linked-elsewhere') // Alice's Circle, Mallory's account: refused
     expect((await call({ action: 'transfer' })).status).toBe(400) // gone: the app broadcasts
   })
 })
