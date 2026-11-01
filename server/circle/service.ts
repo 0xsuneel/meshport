@@ -201,6 +201,17 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
     },
 
     /** Link this MeshPort account to the Circle user signed in with `userToken` (first time), or confirm it. */
+    /**
+     * Whether this MeshPort account has a Circle wallet, and its address -
+     * from the account's own link only, no Circle session needed. Lets a
+     * sign-in on a new device know it must sign in to Circle (email code /
+     * Google) before the wallet can open.
+     */
+    async status(authUid: string): Promise<{ linked: boolean; address: string | null }> {
+      const link = await linkOf(authUid)
+      return { linked: !!link, address: link?.address && link.blockchain === CIRCLE_CHAIN ? link.address : null }
+    },
+
     async link(authUid: string, userToken: unknown) {
       const circleUserId = await circleUserOf(needToken(userToken))
       const existing = await linkOf(authUid)

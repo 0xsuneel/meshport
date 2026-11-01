@@ -5,7 +5,7 @@
 //
 //   prepareSigner(passcode?)   - as early as possible (the moment the
 //                                passcode is typed, or the screen opens):
-//                                starts opening the wallet, warms a Privy
+//                                starts opening the wallet, warms a Circle
 //                                wallet. Never waits, never shows a banner.
 //   getReadySigner(passcode?)  - right before signing: the signer for THIS
 //                                account, or null. Joins whatever
@@ -25,20 +25,7 @@ import { useAuthStore } from '@/store'
 import type { WalletAccount } from '@/wallet'
 import { startWalletReadiness, walletGeneration, useWalletReadiness, type WalletPhase } from './walletReadiness'
 
-/** Starts a Privy wallet's warm-up when it isn't warm yet. */
-function warmPrivy(address: string): void {
-  void import('@/wallet/privy')
-    .then(m => {
-      if (!m.privySignerConnected(address)) void m.warmPrivySigner(address)
-      // A payment screen opening: prove the warm wallet still answers (background,
-      // only when nothing signed in the last minute), so a dead one is replaced
-      // before the person presses Pay - not after.
-      else void m.checkPrivyAlive(60_000)
-    })
-    .catch(() => {})
-}
-
-/** Same for a Circle wallet (session, backend, SDK - wallet/circle.ts). */
+/** Starts a Circle wallet's warm-up (session, backend, SDK - wallet/circle.ts) when it isn't warm yet. */
 function warmCircle(address: string): void {
   void import('@/wallet/circle')
     .then(m => { if (!m.circleSignerReady(address)) void m.warmCircleSigner(address) })
@@ -47,13 +34,12 @@ function warmCircle(address: string): void {
 
 /** The provider warm-up for this kind of wallet, if it has one. */
 function warmProvider(walletSource: string | null, address: string): void {
-  if (walletSource === 'privy') warmPrivy(address)
-  else if (walletSource === 'circle') warmCircle(address)
+  if (walletSource === 'circle') warmCircle(address)
 }
 
 /**
  * Starts getting the signer ready without waiting: opens the wallet (with
- * the passcode when the person just typed it), warms a Privy wallet. Safe
+ * the passcode when the person just typed it), warms a Circle wallet. Safe
  * to call any number of times.
  */
 export function prepareSigner(passcode?: string): void {

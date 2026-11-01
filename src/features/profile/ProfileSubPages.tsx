@@ -389,7 +389,7 @@ export function ChangePasscodePage() {
       let inFrame = false
       if (walletAddress && signer && walletSource !== 'social-auto' && keyInWalletFrame(walletSource)) {
         // create / import-seed / import-privkey wallets only - social-auto
-        // wallets are never encrypted with the passcode, and Privy / Circle
+        // wallets are never encrypted with the passcode, and Circle
         // wallets have no key in the frame (it failed for them). The wallet
         // frame re-encrypts the key AND the recovery phrase (opened with the
         // just-verified old passcode) under the new one.

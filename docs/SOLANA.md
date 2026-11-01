@@ -7,7 +7,7 @@ fees (option A), so nobody needs SOL.
 
 | Account | Solana wallet |
 |---|---|
-| Google / email (Privy) | Privy's embedded Solana wallet, created once the Arc wallet exists |
+| Google / email (Circle) | none - Solana features stay hidden for these accounts |
 | Created / imported | derived in the wallet frame: ed25519 seed = sha256(walletKey ‖ "meshport-solana-key-v1") (`lib/solanaKey.ts`). Same address on every device; restored by the existing recovery phrase / private key |
 
 ## Moves

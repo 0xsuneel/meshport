@@ -7,14 +7,14 @@ import { supabase } from './supabase'
 import { isChunkLoadError } from './lazyRetry'
 
 type Kind = 'route' | 'uncaught' | 'rejection'
-// Real failures get their own budget. Routine timing lines ("[privy
-// timeline]", "slow: …", "[transfer stage]", "[quote slow]") used to share a
+// Real failures get their own budget. Routine timing lines ("slow: …",
+// "[transfer stage]", "[quote slow]") used to share a
 // budget of 5 with them, and a phone that said it was offline sent nothing:
 // field 1 Nov 06:34, a Transfer failed with "Your wallet didn't open" and its
 // own "[transfer no signer]" report never arrived - the cause couldn't be read.
 const MAX_PER_SESSION = 20
 const sent = new Set<string>()
-const ROUTINE = /^\[(privy timeline|privy warm-up\] slow|privy heartbeat\] slow|privy [a-zA-Z]+\] slow|transfer stage|quote slow|perf )/
+const ROUTINE = /^\[(transfer stage|quote slow|perf )/
 
 const build = () => {
   try {
@@ -103,7 +103,7 @@ export function reportClientError(kind: Kind, error: unknown): void {
 
 // Timings (lib/perfTrace.ts): their own small budget, so they never use up
 // the one real errors get. Same table, a "[perf …]" message.
-const MAX_PERF_PER_SESSION = 30 // startup, payments, and the routine Privy / transfer / quote lines
+const MAX_PERF_PER_SESSION = 30 // startup, payments, and the routine transfer / quote lines
 let perfSent = 0
 export function reportPerf(line: string): void {
   try {

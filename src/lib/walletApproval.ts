@@ -10,7 +10,7 @@
 //   - background work (claims finishing, recoveries, expired P2P trades)
 //     never asks: it runs only while an approval is fresh (`approvalFresh`)
 //     and otherwise waits for the next passcode.
-// Google / email (Privy) wallets aren't in the frame - nothing to do here.
+// Google / email (Circle) wallets aren't in the frame - nothing to do here.
 
 import { create } from 'zustand'
 import { useAuthStore } from '@/store'

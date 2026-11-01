@@ -2,7 +2,7 @@
 //
 // What's left of the older Google / email wallets (walletSource
 // 'social-auto'): clearing the per-device state they kept. New Google /
-// email accounts use Privy (src/wallet/privy.ts); passkey and Recovery QR
+// email accounts use Circle wallets (src/wallet/circle.ts); passkey and Recovery QR
 // backups were removed.
 
 const DEVICE_COPY_PREFIX = 'meshport_social_dv_'

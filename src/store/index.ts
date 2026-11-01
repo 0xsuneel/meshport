@@ -97,7 +97,7 @@ interface AuthStore {
    * locked. The app never holds the key itself; see docs/WALLET_FRAME.md.
    */
   signer: WalletAccount | null
-  walletSource: 'create' | 'import-seed' | 'import-privkey' | 'social-auto' | 'circle' | 'privy' | null
+  walletSource: 'create' | 'import-seed' | 'import-privkey' | 'social-auto' | 'circle' | null
   username: string | null
   loginType: 'social' | 'wallet' | null
   backupEmail: string | null
@@ -108,7 +108,7 @@ interface AuthStore {
   setUser: (user: User) => void
   updateAvatar: (avatarUrl: string | null) => void
   updateDisplayName: (name: string) => void
-  setWallet: (address: string, signer: WalletAccount | null, source?: 'create' | 'import-seed' | 'import-privkey' | 'social-auto' | 'circle' | 'privy') => void
+  setWallet: (address: string, signer: WalletAccount | null, source?: 'create' | 'import-seed' | 'import-privkey' | 'social-auto' | 'circle') => void
   setUsername: (username: string) => void
   setLoginType: (type: 'social' | 'wallet') => void
   setBackupEmail: (email: string | null) => void
@@ -319,7 +319,7 @@ export const useAuthStore = create<AuthStore>()(
       // App lock only: the lock screen covers the app (AuthGuard / the
       // route guards send every screen to /auth/lock, so nothing - including
       // background signing in AppLayout - runs behind it), and the wallet
-      // stays open: the signer, the wallet frame's open key and Privy's
+      // stays open: the signer, the wallet frame's open key and Circle's
       // warmed session are kept, so after unlocking Pay signs at once instead
       // of opening and warming the wallet again. Every value-moving signature
       // still needs the person's passcode / biometric (and, for a frame
@@ -334,7 +334,7 @@ export const useAuthStore = create<AuthStore>()(
       },
       unlock: () => {
         set({ isLocked: false, lastActivityAt: Date.now() })
-        // Lets a wallet provider warm up right away (wallet/PrivyRoot.tsx).
+        // Lets a wallet provider warm up right away.
         try { window.dispatchEvent(new Event('meshport:wallet-unlocked')) } catch { /* no window (tests) */ }
       },
       touchActivity: () => set({ lastActivityAt: Date.now() }),

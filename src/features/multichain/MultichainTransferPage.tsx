@@ -1395,7 +1395,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     }
     // A quote signs nothing: the open signer if there is one, otherwise the
     // address alone (quoteAccount). Waiting for the signer held the fee until
-    // Privy had opened the wallet (6-11 s after start in the field, up to 45 s).
+    // the wallet had opened (6-11 s after start in the field, up to 45 s).
     const activeKey = useAuthStore.getState().signer ?? quoteAccount(senderAddress)
     if (!silent) setFeeEstimate(f => ({ ...f, loading: true, error: '' }))
     try {
@@ -1881,15 +1881,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       if (activeSigner) moveTimerRef.current?.mark('wallet_open')
       if (!activeSigner) {
         // Logged with what's needed to tell why (client_errors): which kind of
-        // wallet, how long opening it took, and whether Privy was up.
+        // wallet, how long opening it took, and whether it was ready.
         // Everything that decides it: the wallet's kind, whether a signer
-        // existed when the passcode was entered, Privy's own state for this
-        // address, the readiness phase, the lock and the connection.
+        // existed when the passcode was entered, the readiness phase, the
+        // lock and the connection.
         const s = useAuthStore.getState()
-        const privy = await import('@/wallet/privy').then(m => m.privyState(s.walletAddress ?? undefined)).catch(() => 'n/a')
         const phase = await import('@/lib/walletReadiness').then(m => m.useWalletReadiness.getState().phase).catch(() => 'n/a')
         import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
-          `[transfer no signer] source=${s.walletSource} signerAtStart=${!!signer} signerNow=${!!s.signer} locked=${s.isLocked} phase=${phase} restoreMs=${Date.now() - restoreStarted} hadEarly=${hadEarly} passcode=${!!storedPasscode} online=${typeof navigator === 'undefined' || navigator.onLine} privy=[${privy}] chain=${chain.sdk}`,
+          `[transfer no signer] source=${s.walletSource} signerAtStart=${!!signer} signerNow=${!!s.signer} locked=${s.isLocked} phase=${phase} restoreMs=${Date.now() - restoreStarted} hadEarly=${hadEarly} passcode=${!!storedPasscode} online=${typeof navigator === 'undefined' || navigator.onLine} chain=${chain.sdk}`,
         ))).catch(() => {})
         // Nothing was sent; what to do depends on the kind of wallet (same text as Pay).
         const { walletUnavailableMessage } = await import('@/lib/restoreWallet')

@@ -187,10 +187,11 @@ export function LoginPage() {
 
   const handleGoogleLogin = async () => {
     if (!agreed) return
-    // With Circle wallets switched on (VITE_CIRCLE_WALLETS_ENABLED - off: new
-    // wallets are Privy), one Google screen signs in to MeshPort and the
-    // Circle wallet together (src/wallet/circle.ts); Google sends the user to
-    // /wallet/circle-login, which then continues at /auth/google below.
+    // One Google screen signs in to MeshPort and the Circle wallet together
+    // (src/wallet/circle.ts); Google sends the user to /wallet/circle-login,
+    // which then continues at /auth/google below. Without Circle's Google
+    // client configured, the plain Supabase Google sign-in (the wallet set-up
+    // screen then asks Circle itself).
     const circle = await import('@/wallet/circle')
     if (circle.circleSignInForNewAccounts()) {
       try { await circle.startGoogleSignIn({ meshport: true }); return }
@@ -408,16 +409,16 @@ export function GoogleAuthPage() {
         return
       }
       const existing = resolved.kind === 'existing' ? resolved.user : null
-      // An account whose wallet is its Privy wallet opens with the Privy signer.
-      // Up to 30 s for Privy to sign in on a slow phone; then the account's
-      // record answers at once (privy.ts restorePrivyAccount).
-      const privySigner = existing?.wallet_address
-        ? await import('@/wallet/privy').then(p => p.restorePrivyAccount(existing.wallet_address!, 30_000)).catch(() => null)
-        : null
-      // An account whose wallet is its Circle wallet opens with the Circle signer.
+      // An account whose wallet is its Circle wallet opens with the Circle
+      // signer (Circle signed in with the same Google screen). Without a
+      // Circle session here, the account's own link says whether its wallet is
+      // a Circle wallet (the older device-kept ones aren't).
+      const circleMod = await import('@/wallet/circle')
       const circleSigner = existing?.wallet_address
-        ? await import('@/wallet/circle').then(c => c.circleSignerFor(supaUser.id, existing.wallet_address!)).catch(() => null)
+        ? await circleMod.circleSignerFor(supaUser.id, existing.wallet_address).catch(() => null)
         : null
+      const isCircle = !!circleSigner || (!!existing?.wallet_address && await circleMod.circleStatus()
+        .then(s => !!s.address && s.address.toLowerCase() === existing.wallet_address!.toLowerCase()).catch(() => false))
 
       const enterExisting = () => {
         if (!existing) return
@@ -433,9 +434,8 @@ export function GoogleAuthPage() {
         // walletSource: 'social-auto' is set here (not just walletAddress) so
         // restoreWallet.ts knows this account is eligible for the server-side
         // key backup fallback if this device has no local key material.
-        if (existing.wallet_address) useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: privySigner ? 'privy' : circleSigner ? 'circle' : 'social-auto' })
-        if (privySigner && existing.wallet_address) useAuthStore.getState().setWallet(existing.wallet_address, privySigner, 'privy')
-        else if (circleSigner && existing.wallet_address) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
+        if (existing.wallet_address) useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: isCircle ? 'circle' : 'social-auto' })
+        if (circleSigner && existing.wallet_address) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
         // A new sign-in always unlocks the wallet with the passkey or
         // Recovery QR - never a copy left on this device from before.
         clearSocialDeviceState()
@@ -568,16 +568,28 @@ export function EmailOTPPage() {
       return
     }
     const existing = resolved.kind === 'existing' ? resolved.user : null
-    // An account whose wallet is its Privy wallet opens with the Privy signer.
-    // Up to 30 s for Privy to sign in on a slow phone; then the account's
-    // record answers at once (privy.ts restorePrivyAccount).
-    const privySigner = existing?.wallet_address
-      ? await import('@/wallet/privy').then(p => p.restorePrivyAccount(existing.wallet_address!, 30_000)).catch(() => null)
+    // An account whose wallet is its Circle wallet opens with the Circle
+    // signer. On a device without a Circle session, Circle's own email code
+    // signs in to the wallet first (its screen opens over this one). The
+    // account's link says whether its wallet is a Circle wallet (the older
+    // device-kept ones aren't).
+    const circleMod = await import('@/wallet/circle')
+    let circleSigner = existing?.wallet_address
+      ? await circleMod.circleSignerFor(supaUser.id, existing.wallet_address).catch(() => null)
       : null
-    // An account whose wallet is its Circle wallet opens with the Circle signer.
-    const circleSigner = existing?.wallet_address
-      ? await import('@/wallet/circle').then(c => c.circleSignerFor(supaUser.id, existing.wallet_address!)).catch(() => null)
-      : null
+    const isCircle = !!circleSigner || (!!existing?.wallet_address && await circleMod.circleStatus()
+      .then(s => !!s.address && s.address.toLowerCase() === existing.wallet_address!.toLowerCase()).catch(() => false))
+    if (isCircle && !circleSigner && existing?.wallet_address) {
+      showToastMessage('Enter the code Circle emailed you to open your wallet', 'info')
+      try {
+        await circleMod.circleEmailSignIn()
+        circleSigner = await circleMod.circleSignerFor(supaUser.id, existing.wallet_address)
+      } catch (e) {
+        setLoading(false)
+        setError(e instanceof Error ? e.message : "Couldn't open your wallet. Try again.")
+        return
+      }
+    }
 
     const enterExisting = () => {
       if (!existing) return
@@ -594,9 +606,8 @@ export function EmailOTPPage() {
       if (existing.wallet_address) {
         // Same reasoning as GoogleAuthPage above - tag walletSource so the
         // server-side key backup fallback is reachable on a fresh device.
-        useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: privySigner ? 'privy' : circleSigner ? 'circle' : 'social-auto' })
-        if (privySigner) useAuthStore.getState().setWallet(existing.wallet_address, privySigner, 'privy')
-        else if (circleSigner) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
+        useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: isCircle ? 'circle' : 'social-auto' })
+        if (circleSigner) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
       }
       setLoading(false)
       showToastMessage(`Welcome back, ${existing.username || existing.display_name}`, 'success')

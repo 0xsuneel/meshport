@@ -14,12 +14,12 @@ export type { PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from '.
 
 /**
  * Wallets whose key is in the wallet frame (created / imported, and the old
- * social-auto ones). Privy (Google / email) and Circle wallets keep it with
- * their provider: frame-key features (passcode re-encryption, device copy,
- * recovery phrase) don't apply to them.
+ * social-auto ones). Circle wallets (Google / email) keep it with Circle:
+ * frame-key features (passcode re-encryption, device copy, recovery phrase)
+ * don't apply to them.
  */
 export function keyInWalletFrame(walletSource: string | null | undefined): boolean {
-  return walletSource !== 'privy' && walletSource !== 'circle'
+  return walletSource !== 'circle'
 }
 
 export function walletStatus(address: string): Promise<WalletStatus> {
@@ -61,11 +61,13 @@ export function lockWallet(address?: string) { return callWallet('lock', { addre
 export function forgetWallet(address?: string, everything = false) { return callWallet('forget', { address, everything }).catch(() => undefined) }
 
 export async function chatSeed(address: string): Promise<Uint8Array> {
-  // Google / email (Privy): no key in the frame - from a Privy signature (wallet/privy.ts).
+  // Google / email (Circle): no key in the frame - from a Circle signature (wallet/signatureChatSeed.ts).
   const { useAuthStore } = await import('@/store')
-  if (useAuthStore.getState().walletSource === 'privy') {
-    const { privyChatSeed } = await import('./privy')
-    return privyChatSeed(address)
+  const { walletSource, signer } = useAuthStore.getState()
+  if (walletSource === 'circle') {
+    if (!signer || signer.address.toLowerCase() !== address.toLowerCase()) throw new Error('Your wallet is not open yet')
+    const { signatureChatSeed } = await import('./signatureChatSeed')
+    return signatureChatSeed(signer)
   }
   const { seed } = await callWallet('chat:seed', { address })
   const h = seed.slice(2)

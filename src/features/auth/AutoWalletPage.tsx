@@ -13,6 +13,8 @@ export function AutoWalletPage() {
   const setWallet = useAuthStore(s => s.setWallet)
   const { setBalance } = useWalletStore()
   const [step, setStep] = useState<'creating' | 'done'>('creating')
+  // Google / email: what this screen is waiting for right now.
+  const [note, setNote] = useState('Creating your secure Arc wallet...')
   const [address, setAddress] = useState('')
   const [error, setError] = useState('')
 
@@ -26,21 +28,30 @@ export function AutoWalletPage() {
       const isSocial = loginType === 'social'
 
       if (isSocial) {
-        // Google / email accounts get a Privy wallet (src/wallet/privy.ts):
-        // Privy keeps the key in its secure hardware and opens it with the
-        // MeshPort sign-in - nothing to back up, any device. The app's
-        // passcode / biometric approves every signature. If Privy can't open
-        // one, this screen's error + Try Again (a device-only wallet would have
-        // no way back on another phone); the reason goes to client_errors.
-        const privy = await import('@/wallet/privy')
-        if (!privy.privyConfigured()) throw new Error('Wallets are not available right now. Please try again later.')
-        const privyAddr = await privy.ensurePrivyWallet(30_000).catch(e => {
-          void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[privy wallet] ${e instanceof Error ? e.message : String(e)}`))).catch(() => {})
-          throw new Error("Couldn't set up your wallet. Check your connection and try again.")
-        })
-        setWallet(privyAddr, privy.privyAccount(privyAddr), 'privy')
-        setBalance(0)
-        setAddress(privyAddr)
+        // Google / email accounts get a Circle user-controlled wallet
+        // (src/wallet/circle.ts): Circle keeps the key; the person signs in to
+        // Circle the way they sign in to MeshPort (Google - already done at
+        // sign-in - or Circle's email code), and the app's passcode /
+        // biometric approves every signature. A failure stays on this screen
+        // with Try Again; the reason goes to client_errors.
+        const circle = await import('@/wallet/circle')
+        if (!circle.circleConfigured()) throw new Error('Wallets are not available right now. Please try again later.')
+        try {
+          if (!(await circle.hasCircleSession())) {
+            setNote(await circle.meshportProvider() === 'google' ? 'Signing in to your wallet with Google...' : 'Enter the code Circle emailed you to open your wallet.')
+            if (await circle.signInToCircle(window.location.pathname) === 'redirected') return // back here after Google
+          }
+          setNote('Creating your secure Arc wallet...')
+          const circleAddr = await circle.ensureCircleWallet()
+          const account = await circle.restoreCircleAccount(circleAddr)
+          if (!account) throw new Error('Your wallet did not open')
+          setWallet(circleAddr, account, 'circle')
+          setBalance(0)
+          setAddress(circleAddr)
+        } catch (e) {
+          void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[circle wallet] ${e instanceof Error ? e.message : String(e)}`))).catch(() => {})
+          throw new Error(e instanceof Error && /code|expired|cancel/i.test(e.message) ? e.message : "Couldn't set up your wallet. Check your connection and try again.")
+        }
       } else {
         // create-wallet accounts: unchanged - generated locally, shown a
         // recovery phrase (elsewhere in the create-wallet flow, not here),
@@ -101,7 +112,7 @@ export function AutoWalletPage() {
           </div>
           <div>
             <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">Setting up your wallet</h2>
-            <p className="text-text-secondary mt-1 text-[14px] leading-[1.5]">Creating your secure Arc wallet...</p>
+            <p className="text-text-secondary mt-1 text-[14px] leading-[1.5]">{loginType === 'social' ? note : 'Creating your secure Arc wallet...'}</p>
           </div>
         </div>
       ) : (

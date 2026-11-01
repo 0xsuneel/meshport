@@ -1,6 +1,5 @@
--- wallet_events: what the wallet itself did on a device - opening, signing,
--- Privy loading / rebuilding / reachability - for Google / email (Privy) and
--- private-key (frame) wallets alike. Written by the app (lib/walletEvents.ts),
+-- wallet_events: what the wallet itself did on a device - opening, signing -
+-- for Google / email (Circle) and private-key (frame) wallets alike. Written by the app (lib/walletEvents.ts),
 -- one row per event, like move_timings. Only timings and outcomes: no keys,
 -- signatures, messages or amounts.
 create table if not exists public.wallet_events (

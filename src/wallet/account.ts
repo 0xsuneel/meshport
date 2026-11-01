@@ -96,7 +96,7 @@ export function walletAccount(address: string): WalletAccount {
 /**
  * The wallet's address for fee quotes only - it can't sign. Circle's
  * estimates (estimateSpend, estimateSwap, estimateBridge's reads) only read
- * the address; waiting for the real signer held every quote until Privy had
+ * the address; waiting for the real signer held every quote until the wallet had
  * opened the wallet (6-11 s after start in the field logs, up to 45 s).
  */
 export function quoteAccount(address: string): WalletAccount {

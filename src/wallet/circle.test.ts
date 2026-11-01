@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 // Supabase session faked, and Circle's SDK faked: session refresh, the
 // combined Google sign-in, and the Circle signer.
 
-let sessionUser: { id: string; email: string; is_anonymous?: boolean } | null = { id: 'uid-alice', email: 'alice@example.com' }
+let sessionUser: { id: string; email: string; is_anonymous?: boolean; app_metadata?: { provider?: string } } | null = { id: 'uid-alice', email: 'alice@example.com' }
 const signInWithIdToken = vi.fn(async (_: unknown) => ({ data: { user: { id: 'uid-alice' } }, error: null as unknown }))
 vi.mock('@/lib/supabase', () => ({
   authApiHeaders: async () => ({ 'Content-Type': 'application/json', Authorization: 'Bearer supa' }),
@@ -20,12 +20,14 @@ vi.mock('./account', () => ({ plainTransaction: (tx: Record<string, unknown>) =>
 let sdkLoginResult: { error?: unknown; result?: unknown } = { result: { userToken: 'ut-google', encryptionKey: 'ek-google', refreshToken: 'rt-google' } }
 let sdkExecute: (id: string) => { error?: unknown; result?: unknown } = () => ({ result: { status: 'COMPLETE', data: { signature: '0xsig' } } })
 let sdkAuth: unknown = null
+let verifyOtpCalls = 0
 vi.mock('@circle-fin/w3s-pw-web-sdk/dist/src/types', async () => vi.importActual('@circle-fin/w3s-pw-web-sdk/dist/src/types'))
 vi.mock('@circle-fin/w3s-pw-web-sdk', () => ({
   W3SSdk: class {
     constructor(_c: unknown, onLogin?: (e: unknown, r: unknown) => void) { if (onLogin) queueMicrotask(() => onLogin(sdkLoginResult.error, sdkLoginResult.result)) }
     updateConfigs(_c: unknown, onLogin?: (e: unknown, r: unknown) => void) { if (onLogin) queueMicrotask(() => onLogin(sdkLoginResult.error, sdkLoginResult.result)) }
     getDeviceId() { return Promise.resolve('device-1234567890') }
+    verifyOtp() { verifyOtpCalls++ }
     setAuthentication(a: unknown) { sdkAuth = a }
     execute(id: string, cb: (e: unknown, r: unknown) => void) { const o = sdkExecute(id); queueMicrotask(() => cb(o.error, o.result)) }
   },
@@ -259,7 +261,7 @@ describe('Circle session is refreshed BEFORE it expires', () => {
   })
 })
 
-describe('Circle signer readiness (like Privy)', () => {
+describe('Circle signer readiness', () => {
   beforeEach(() => saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() }))
 
   it('not ready from a stored session alone; ready once the backend confirmed the wallet and the SDK loaded', async () => {
@@ -320,8 +322,60 @@ describe('Circle failures end instead of hanging, and session errors re-sign onc
   })
 })
 
-describe('Circle sign-in stays off for new accounts', () => {
-  it('MeshPort\'s Google sign-in does not go through Circle unless VITE_CIRCLE_WALLETS_ENABLED=true', () => {
-    expect(circle.circleSignInForNewAccounts()).toBe(false)
+describe('Circle is the wallet of every Google / email account', () => {
+  it('MeshPort\'s Google sign-in goes through Circle whenever Circle\'s Google sign-in is configured (no other switch)', () => {
+    expect(circle.circleSignInForNewAccounts()).toBe(circle.circleGoogleConfigured())
+  })
+})
+
+describe('Circle wallet set-up for Google / email accounts', () => {
+  const session = () => saveCircleSession('uid-alice', { userToken: 'ut-1', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() })
+
+  it('an existing wallet: its address, nothing created', async () => {
+    session()
+    replies = [() => [200, { address: '0xAaAa000000000000000000000000000000000001' }]]
+    expect(await circle.ensureCircleWallet()).toBe('0xAaAa000000000000000000000000000000000001')
+    expect(sent.map(b => b.action)).toEqual(['wallet'])
+  })
+
+  it('no wallet yet: the initialize challenge runs, then the new wallet is listed', async () => {
+    session()
+    replies = [
+      () => [404, { code: 'no-wallet', error: 'not set up' }],
+      () => [200, { challengeId: 'init-1' }],
+      () => [200, { address: '0xBbBb000000000000000000000000000000000002' }],
+    ]
+    const ran: string[] = []
+    sdkExecute = id => { ran.push(id); return { result: { status: 'COMPLETE' } } }
+    expect(await circle.ensureCircleWallet()).toBe('0xBbBb000000000000000000000000000000000002')
+    expect(sent.map(b => b.action)).toEqual(['wallet', 'initialize', 'wallet'])
+    expect(ran).toEqual(['init-1'])
+  })
+
+  it("email code: Circle's code screen, then the session is linked to this account and kept", async () => {
+    sdkLoginResult = { result: { userToken: 'ut-email', encryptionKey: 'ek-email', refreshToken: 'rt-email' } }
+    replies = [
+      () => [200, { deviceToken: 'dt', deviceEncryptionKey: 'dek', otpToken: 'otp' }],
+      () => [200, { circleUserId: 'circle-alice' }],
+    ]
+    verifyOtpCalls = 0
+    await circle.circleEmailSignIn()
+    expect(sent.map(b => b.action)).toEqual(['email-device-token', 'link'])
+    expect(sent[0].email).toBeUndefined() // the backend uses the account's own email, never one from here
+    expect(verifyOtpCalls).toBe(1)
+    expect(loadCircleSession('uid-alice')?.userToken).toBe('ut-email')
+  })
+
+  it('a Google account signs in to Circle with Google (never the email code - another Circle user)', async () => {
+    sessionUser = { id: 'uid-alice', email: 'alice@example.com', app_metadata: { provider: 'google' } }
+    expect(await circle.meshportProvider()).toBe('google')
+    sessionUser = { id: 'uid-alice', email: 'alice@example.com', app_metadata: { provider: 'email' } }
+    expect(await circle.meshportProvider()).toBe('email')
+  })
+
+  it('status needs no Circle session', async () => {
+    replies = [() => [200, { linked: true, address: '0xa' }]]
+    expect(await circle.circleStatus()).toEqual({ linked: true, address: '0xa' })
+    expect(sent[0]).toEqual({ action: 'status' })
   })
 })

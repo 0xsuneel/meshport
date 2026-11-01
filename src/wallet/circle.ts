@@ -22,14 +22,15 @@
 // out (Circle docs) - refreshing only after a call failed meant a Google
 // sign-in again after every idle hour.
 //
-// Readiness (like Privy's, lib/walletReadiness): a Circle signer is only
+// Readiness (lib/walletReadiness): a Circle signer is only
 // "ready" once its session is valid, the backend has confirmed the wallet,
 // and Circle's SDK and frame are loaded (warmCircleSigner) - so the first
 // payment doesn't pay for any of that.
 //
-// OFF for new sign-ins: MeshPort's Google sign-in goes through Circle only
-// with VITE_CIRCLE_WALLETS_ENABLED=true (new wallets are Privy). Accounts
-// whose wallet already is a Circle wallet keep working either way.
+// Every Google / email account's wallet is a Circle wallet: Google signs in
+// to MeshPort and Circle with one Google screen; an email account signs in to
+// Circle with Circle's own email code (circleEmailSignIn) on a device that
+// has no Circle session yet.
 
 import { toAccount } from 'viem/accounts'
 import { bytesToHex, getTypesForEIP712Domain, type Hex, type TypedDataDefinition } from 'viem'
@@ -46,13 +47,11 @@ const DEVICE_KEY = 'mp.circle.deviceId'
 const PENDING_KEY = 'mp.circle.pendingLogin'
 const PENDING_MAX_AGE_MS = 15 * 60_000
 
-const SIGN_IN_ENABLED = (import.meta.env.VITE_CIRCLE_WALLETS_ENABLED as string | undefined)?.trim() === 'true'
-
 export const circleConfigured = (): boolean => !!APP_ID
 /** Circle's Google sign-in can run (an existing Circle wallet signing in again on this device). */
 export const circleGoogleConfigured = (): boolean => !!APP_ID && !!GOOGLE_CLIENT_ID
-/** MeshPort's own Google sign-in goes through Circle - off unless explicitly enabled. */
-export const circleSignInForNewAccounts = (): boolean => SIGN_IN_ENABLED && circleGoogleConfigured()
+/** MeshPort's own Google sign-in goes through Circle whenever Circle's Google sign-in is configured. */
+export const circleSignInForNewAccounts = (): boolean => circleGoogleConfigured()
 
 /** `obtainedAt`: when Circle issued this userToken (sessions saved before it was kept have none). */
 export interface CircleSession { userToken: string; encryptionKey: string; refreshToken?: string; obtainedAt?: number }
@@ -399,6 +398,21 @@ export function circleAccount(address: string, uid: string): CircleAccount {
   const hit = accounts.get(key)
   if (hit) return hit
   async function sign(action: string, body: Record<string, unknown>): Promise<ChallengeOutcome> {
+    // wallet_events: each Circle signature's time and outcome, like the other wallets'.
+    const started = performance.now()
+    const what = action === 'sign-transaction' ? 'signTransaction' : action === 'sign-typed' ? 'signTypedData' : 'signMessage'
+    const log = (ok: boolean, error?: string) => void import('@/lib/walletEvents')
+      .then(m => m.logWalletEvent({ kind: 'circle', event: 'sign', ok, ms: performance.now() - started, detail: what, error })).catch(() => {})
+    try {
+      const out = await signOnce(action, body)
+      log(true)
+      return out
+    } catch (e) {
+      log(false, e instanceof Error ? e.message : String(e))
+      throw e
+    }
+  }
+  async function signOnce(action: string, body: Record<string, unknown>): Promise<ChallengeOutcome> {
     for (let attempt = 0; ; attempt++) {
       const { challengeId } = await circleCall<{ challengeId: string }>(uid, action, body)
       try {
@@ -487,8 +501,7 @@ function preconnectCircle(): void {
 }
 
 /**
- * Gets a Circle signer ready before the first payment (like Privy's
- * warm-up): refreshes the session if it's due, asks the backend for the
+ * Gets a Circle signer ready before the first payment (a warm-up): refreshes the session if it's due, asks the backend for the
  * wallet (checks the session and the link, and wakes the wallet service),
  * and loads Circle's SDK and frame. Ready only if all of it works.
  */
@@ -537,3 +550,90 @@ export async function circleSignerFor(uid: string, address: string): Promise<Cir
 }
 
 export function signOutCircle(uid: string): void { endSession(uid) }
+
+// ── Email-code sign-in, account status, wallet set-up ───────────────────────
+
+/**
+ * How this MeshPort account signs in. A Google sign-in and an email-code
+ * sign-in are different Circle users, so a Google account always signs in to
+ * Circle with Google and an email account with Circle's email code - the
+ * other would be refused ("linked elsewhere").
+ */
+export async function meshportProvider(): Promise<'google' | 'email' | null> {
+  const u = (await supabase.auth.getSession()).data.session?.user
+  if (!u || u.is_anonymous) return null
+  const p = (u.app_metadata as { provider?: string } | undefined)?.provider
+  return p === 'google' ? 'google' : 'email'
+}
+
+/**
+ * Sign this account in to Circle the way it signs in to MeshPort: Google
+ * (leaves for Google, back to `returnTo` - resolves 'redirected') or the email
+ * code (resolves 'signed-in').
+ */
+export async function signInToCircle(returnTo: string): Promise<'signed-in' | 'redirected'> {
+  const a = await meshportAccount()
+  if (!a || a.anonymous) throw new CircleError(401, 'login', 'Sign in to MeshPort first')
+  if (await meshportProvider() === 'google') {
+    if (!circleGoogleConfigured()) throw new CircleError(503, 'config', 'Google wallets are not available right now')
+    await startGoogleSignIn({ meshport: false, uid: a.uid, returnTo })
+    return 'redirected'
+  }
+  await circleEmailSignIn()
+  return 'signed-in'
+}
+
+/** Does this browser have a Circle session for the signed-in MeshPort account? */
+export async function hasCircleSession(): Promise<boolean> {
+  const a = await meshportAccount()
+  return !!a && !a.anonymous && !!loadCircleSession(a.uid)
+}
+
+/** Whether this MeshPort account has a Circle wallet (its own link - no Circle session needed). */
+export async function circleStatus(): Promise<{ linked: boolean; address: string | null }> {
+  return circleApi<{ linked: boolean; address: string | null }>('status')
+}
+
+/**
+ * Circle's email-code sign-in for the signed-in MeshPort account: Circle
+ * sends a code to the account's own email (the backend never takes one from
+ * the request) and opens its hosted screen to enter it; the session is then
+ * linked to this account and kept. Resolves when signed in.
+ */
+export async function circleEmailSignIn(): Promise<void> {
+  const a = await meshportAccount()
+  if (!a || a.anonymous) throw new CircleError(401, 'login', 'Sign in to MeshPort first')
+  const id = await deviceId()
+  const t = await circleApi<{ deviceToken: string; deviceEncryptionKey: string; otpToken: string }>('email-device-token', { deviceId: id })
+  const session = await new Promise<CircleSession>((resolve, reject) => {
+    // Up to 10 minutes to find the email and type the code.
+    const timer = setTimeout(() => reject(new CircleError(504, 'login', 'The email code expired - try again')), 10 * 60_000)
+    sdk({ deviceToken: t.deviceToken, deviceEncryptionKey: t.deviceEncryptionKey, otpToken: t.otpToken }, (error, result) => {
+      clearTimeout(timer)
+      try { resolve(loginResult(error, result)) } catch (e) { reject(e) }
+    }).then(s => s.verifyOtp()).catch(e => { clearTimeout(timer); reject(e) })
+  })
+  await finishLogin(a.uid, session)
+}
+
+/**
+ * This account's Circle wallet address - creating the wallet the first time
+ * (Circle's initialize challenge, run headless like every signature), then
+ * waiting for Circle to list it. Needs a Circle session on this browser.
+ */
+export async function ensureCircleWallet(timeoutMs = 45_000): Promise<string> {
+  const a = await meshportAccount()
+  if (!a || a.anonymous) throw new CircleError(401, 'login', 'Sign in to MeshPort first')
+  const uid = a.uid
+  const read = () => circleCall<{ address: string }>(uid, 'wallet').then(w => w.address)
+  try { return await read() } catch (e) { if (!(e instanceof CircleError) || e.code !== 'no-wallet') throw e }
+  const init = await circleCall<{ challengeId?: string; ready?: true }>(uid, 'initialize')
+  if (init.challengeId) await executeChallenge(uid, init.challengeId)
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    try { return await read() } catch (e) {
+      if (!(e instanceof CircleError) || e.code !== 'no-wallet' || Date.now() > deadline) throw e
+    }
+    await new Promise(r => setTimeout(r, 1_500))
+  }
+}

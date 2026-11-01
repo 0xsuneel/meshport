@@ -91,7 +91,6 @@ import { PayPage } from './features/pay/PayPage'
 import { useSettingsStore } from './store/settingsStore'
 import { FeatureGate } from './components/admin/FeatureGate'
 import { RequireUnlockedAccount as Unlocked } from './components/LockedFeature'
-import { PrivyGate } from './wallet/PrivyGate'
 import { WalletApprovalPrompt } from './components/WalletApprovalPrompt'
 
 function LegacyMultichainRedirect({ tab }: { tab: 'transfer' | 'bring' }) {
@@ -849,8 +848,6 @@ export default function App() {
         <RouterProvider router={router} future={{ v7_startTransition: true }} />
         <SplashRemover />
         <OfflineBanner />
-        {/* Privy wallets for Google / email accounts (src/wallet/privy.ts) */}
-        <PrivyGate />
         {/* Passcode for an action the wallet frame refused without one (lib/walletApproval) */}
         <WalletApprovalPrompt />
       </Suspense>

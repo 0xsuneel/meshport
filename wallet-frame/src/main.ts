@@ -49,7 +49,7 @@ const signer = (address: string) => privateKeyToAccount(vault.keyFor(address) as
 // transactions, typed data (permits, transfer authorizations) and Solana
 // transactions only within APPROVAL_MS of the person's passcode - checked by
 // the frame itself (`approve`; every passcode / fingerprint entry in the app
-// sends it). Like Privy's MFA window: one entry covers a multi-step action
+// sends it). Like a hosted wallet's MFA window: one entry covers a multi-step action
 // (approve + swap, a bridge). Left free: plain messages (sign-in binding,
 // chat key, P2P "marked paid" - they move nothing), MeshPort name
 // registration, and a 0-value transfer to the wallet itself (cancelling a

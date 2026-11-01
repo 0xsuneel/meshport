@@ -11,8 +11,9 @@
  * phrase on its servers, in any form. The frame keeps a passcode-encrypted
  * copy on this device; otherwise the user re-enters the phrase / key.
  *
- * privy (Google / email accounts made since Privy) - Privy opens it for the
- * signed-in account (wallet/privy.ts); nothing is kept on the device.
+ * circle (Google / email accounts) - Circle keeps the key; this browser keeps
+ * the Circle session (wallet/circle.ts). Without it the person signs in to
+ * Circle again.
  *
  * social-auto (older Google / email accounts) - the frame keeps a copy
  * sealed to this browser, opened without a prompt; there is no other copy
@@ -61,13 +62,13 @@ let inFlightRestore: { promise: Promise<boolean>; passcode: string | null; gener
 // a normal (non-silent) call elsewhere still sets the banner exactly as
 // before.
 /**
- * What to tell someone whose wallet didn't open. Google / email (Privy)
+ * What to tell someone whose wallet didn't open. Google / email (Circle)
  * accounts have no recovery phrase to re-import: their wallet comes back
  * with the sign-in.
  */
 export function walletUnavailableMessage(): string {
   const src = useAuthStore.getState().walletSource
-  return src === 'privy' || src === 'social-auto'
+  return src === 'circle' || src === 'social-auto'
     ? "Your wallet didn't open - nothing was sent. Check your connection and try again; if it keeps happening, sign out and sign in again with Google / email."
     : "Couldn't access your wallet on this device. Sign out and re-import your wallet with your recovery phrase or private key to continue."
 }
@@ -172,7 +173,7 @@ export function clearRawPasscode(): void { pendingRawPasscode = null }
 
 /** Whether a passcode can open this kind of wallet (the frame's passcode copy: created / imported). */
 function passcodeOpens(walletSource: string | null | undefined): boolean {
-  return walletSource !== 'privy' && walletSource !== 'social-auto' && walletSource !== 'circle'
+  return walletSource !== 'social-auto' && walletSource !== 'circle'
 }
 
 /** ok, or why not: null = it needs the passcode / an unlock (not an error). */
@@ -183,7 +184,7 @@ const fail = (error: string | null): Outcome => ({ ok: false, error })
 /**
  * Put the opened wallet in the store - only if it still belongs to the
  * account this attempt started for. A restore can wait tens of seconds
- * (Privy signing in, the wallet frame on a weak connection); setWallet with
+ * (Circle signing in, the wallet frame on a weak connection); setWallet with
  * the address captured at the start used to bring a logged-out wallet back.
  */
 function commit(generation: number, address: string, account: WalletAccount, source?: Parameters<ReturnType<typeof useAuthStore.getState>['setWallet']>[2]): boolean {
@@ -199,47 +200,17 @@ async function attemptRestore(generation: number, rawPasscode?: string): Promise
   const { walletAddress, signer, walletSource } = useAuthStore.getState()
 
   if (signer) {
-    // A Privy signer object can exist while Privy hasn't authenticated the
-    // wallet yet (walletReadiness 'wallet_discovered'): start its warm-up so
-    // the first payment doesn't pay for it. Not awaited - the signer itself
-    // waits for Privy's connection when it signs, and readiness reports
-    // 'signer_ready' only once the warm-up answers (untilSignerReady).
-    if (walletSource === 'privy' && walletAddress) {
-      void import('@/wallet/privy').then(m => { if (!m.privySignerConnected(walletAddress)) void m.warmPrivySigner(walletAddress) }).catch(() => {})
+    // A Circle signer can exist before its warm-up has finished (walletReadiness
+    // 'wallet_discovered'): start it so the first payment doesn't pay for it.
+    if (walletSource === 'circle' && walletAddress) {
+      void import('@/wallet/circle').then(m => { if (!m.circleSignerReady(walletAddress)) void m.warmCircleSigner(walletAddress) }).catch(() => {})
     }
     return OK
   }
   if (!walletAddress) return fail(null)
 
-  // ── 1. a Privy wallet: Privy keeps the key in its secure hardware and opens
-  // it for this signed-in account (src/wallet/privy.ts).
-  if (walletSource === 'privy') {
-    const { restorePrivyAccount, privyState } = await import('@/wallet/privy')
-    const started = Date.now()
-    // A known Privy account: wait for Privy to sign in and list the wallet.
-    // 45 s: on a weak connection Privy may need a fresh start (PrivyRoot, on
-    // this request) and still open in time - failing at 30 s lost it.
-    const account = await restorePrivyAccount(walletAddress, 45_000, 20_000)
-    if (account) return commit(generation, walletAddress, account, 'privy') ? OK : fail('account changed')
-    else {
-      // Why it didn't open (client_errors): loaded? signed in? listed?
-      void import('@/lib/errorReport').then(r => r.reportClientError('rejection',
-        new Error(`[privy restore] no wallet after ${((Date.now() - started) / 1000).toFixed(1)} s: ${privyState(walletAddress)} online=${typeof navigator === 'undefined' || navigator.onLine}`))).catch(() => {})
-    }
-    return fail(`privy: ${privyState(walletAddress)}`)
-  }
-
-  // ── 1a. 'social-auto' (an old Google/email account kept on this device):
-  // a sign-in that gave up on a slow Privy also lands here with a real Privy
-  // wallet. If Privy's record has the address, it's that - open it there.
-  if (walletSource === 'social-auto') {
-    const { restorePrivyAccount } = await import('@/wallet/privy')
-    const account = await restorePrivyAccount(walletAddress, 20_000).catch(() => null)
-    if (account) return commit(generation, walletAddress, account, 'privy') ? OK : fail('account changed')
-  }
-
-  // ── 1b. a Circle wallet (switched off): Circle keeps the key; this browser keeps the
-  // Circle session. Without it the user signs in to Circle again.
+  // ── 1. a Circle wallet (Google / email): Circle keeps the key; this browser
+  // keeps the Circle session. Without it the person signs in to Circle again.
   if (walletSource === 'circle') {
     const { restoreCircleAccount } = await import('@/wallet/circle')
     const account = await restoreCircleAccount(walletAddress).catch(() => null)

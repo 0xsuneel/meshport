@@ -1,17 +1,15 @@
 // src/wallet/solana.ts
 //
-// This account's Solana wallet, whatever kind of account it is
-// (docs/SOLANA.md):
-//   - Google / email (Privy): the Privy embedded Solana wallet
-//   - created / imported wallets: the Solana key derived from the wallet key
-//     inside the wallet frame (lib/solanaKey.ts, 'solana:key' / 'solana:sign')
-// Either way the app gets an address and signatures, never a key.
+// This account's Solana wallet (docs/SOLANA.md): for created / imported
+// wallets, the Solana key derived from the wallet key inside the wallet frame
+// (lib/solanaKey.ts, 'solana:key' / 'solana:sign') - the app gets an address
+// and signatures, never a key. Google / email accounts (Circle wallets) have
+// no Solana wallet: Solana features stay hidden for them.
 
 import { getBase58Decoder, getTransactionDecoder, getTransactionEncoder, type Address, type SignatureBytes, type Transaction } from '@solana/kit'
 import { useAuthStore } from '@/store'
 import { callWallet } from './frameClient'
 import { withApproval } from './account'
-import { ensurePrivySolanaWallet, privySignSolana, privySolanaAddress } from './privy'
 
 const hex = (b: Uint8Array) => '0x' + Array.from(b, x => x.toString(16).padStart(2, '0')).join('')
 function unhex(h: string): Uint8Array {
@@ -21,10 +19,9 @@ function unhex(h: string): Uint8Array {
   return out
 }
 
-type Kind = 'privy' | 'frame' | null
+type Kind = 'frame' | null
 function kind(): { kind: Kind; evm: string | null } {
   const s = useAuthStore.getState()
-  if (s.walletSource === 'privy') return { kind: 'privy', evm: s.walletAddress }
   if (s.walletSource === 'circle' || !s.walletAddress) return { kind: null, evm: s.walletAddress }
   return { kind: 'frame', evm: s.walletAddress }
 }
@@ -34,15 +31,13 @@ const frameAddresses = new Map<string, string>()
 /** Already-known Solana address, without waiting (null when not known yet). */
 export function knownSolanaAddress(): string | null {
   const { kind: k, evm } = kind()
-  if (k === 'privy') return privySolanaAddress()
   if (k === 'frame' && evm) return frameAddresses.get(evm.toLowerCase()) ?? null
   return null
 }
 
-/** This account's Solana address (creates the Privy Solana wallet the first time). */
+/** This account's Solana address. */
 export async function getSolanaAddress(): Promise<string> {
   const { kind: k, evm } = kind()
-  if (k === 'privy') return ensurePrivySolanaWallet()
   if (k === 'frame' && evm) {
     const cached = frameAddresses.get(evm.toLowerCase())
     if (cached) return cached
@@ -62,7 +57,6 @@ export async function getSolanaAddress(): Promise<string> {
 export async function signSolanaTransaction(wire: Uint8Array): Promise<Uint8Array> {
   const { kind: k, evm } = kind()
   const me = await getSolanaAddress()
-  if (k === 'privy') return privySignSolana(wire, me)
   if (k === 'frame' && evm) {
     const tx = getTransactionDecoder().decode(wire) as Transaction
     if (!(me in tx.signatures)) throw new Error('This Solana wallet is not a signer of the transaction')

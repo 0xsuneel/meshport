@@ -1,10 +1,9 @@
 # Circle user-controlled wallets
 
-**Status: off for new accounts.** New Google / email accounts get a Privy
-wallet (`src/features/auth/AutoWalletPage.tsx`). MeshPort's Google sign-in
-goes through Circle only with `VITE_CIRCLE_WALLETS_ENABLED=true`
-(`circleSignInForNewAccounts`), whatever other Circle variables are set.
-Accounts whose wallet already is a Circle wallet keep working.
+**Status: the wallet of every Google / email account.** New Google / email
+accounts get a Circle wallet on the "Setting up your wallet" screen
+(`src/features/auth/AutoWalletPage.tsx`). The older device-kept Google / email
+wallets (`social-auto`) keep working as before.
 
 A Circle wallet is a user-controlled, generic EVM EOA (`EVM-TESTNET`, the same
 address on every EVM chain, Arc included). Circle signs; MeshPort broadcasts
@@ -15,7 +14,7 @@ through its own relay, exactly like the app's other wallets.
 | Sign in | MeshPort's "Continue with Google": one Google screen signs in to MeshPort (Supabase `signInWithIdToken`) and the Circle wallet (Circle's Web SDK) |
 | Approve a signature | MeshPort passcode / biometric only; Circle's Confirmation UIs are off (Configurator → Wallet Security Settings), and the Circle wallet screen tells users so |
 | Keys | Circle (MPC, Circle-hosted); MeshPort never sees keys or codes |
-| Email accounts | Keep the frame wallet for now; Circle's email codes need SMTP in Circle Console |
+| Email accounts | Circle's email code (`circleEmailSignIn`): after MeshPort's own email code, on a device with no Circle session yet - Circle sends the code to the account's own email and opens its hosted code screen |
 
 ## One Google sign-in for both
 
@@ -70,7 +69,7 @@ Circle fails, the MeshPort sign-in still goes on and the wallet asks again.
   JWT `exp`, else from when it was issued (`obtainedAt`). A refresh that fails
   for a network reason keeps a still-valid session; Circle refusing it ends
   the session.
-- **Readiness:** like Privy's. A Circle signer is `wallet_discovered` until
+- **Readiness:** a Circle signer is `wallet_discovered` until
   `warmCircleSigner` has refreshed the session if due, asked the backend for
   the wallet (session + link check, wakes the function) and loaded the SDK and
   Circle's frame; then `signer_ready` (`lib/walletReadiness.ts`).
@@ -81,9 +80,9 @@ Circle fails, the MeshPort sign-in still goes on and the wallet asks again.
   again once with a new challenge; requests time out (20 s backend, 30 s
   challenge) instead of holding a payment screen.
 
-What can't be made Privy-fast on the web: a new device (or cleared storage)
-needs its own Circle sign-in - Circle's user wallets can't use MeshPort's
-sign-in the way Privy does - and the SDK reloads Circle's page
+What can't be made faster on the web: a new device (or cleared storage)
+needs its own Circle sign-in - Circle's user wallets can't reuse MeshPort's
+sign-in - and the SDK reloads Circle's page
 (`pw-auth.circle.com`) for every signature (`execute` → `appendIframe` sets
 `iframe.src`). The session tokens are in `localStorage`, readable by any
 script running in the page.
@@ -96,7 +95,7 @@ what it reads.
 
 | Where | What |
 |---|---|
-| Circle Console (Testnet) | Standard API key; App ID; Google Client ID under Social Logins; Confirmation UIs **off**; SMTP when email accounts move over |
-| Vercel (app) | `CIRCLE_API_KEY` (set by the owner, never shared in chat); `VITE_CIRCLE_APP_ID`; `VITE_CIRCLE_GOOGLE_CLIENT_ID`; `VITE_CIRCLE_WALLETS_ENABLED=true` only to switch Circle sign-in on for new accounts (unset = off) |
+| Circle Console (Testnet) | Standard API key; App ID; Google Client ID under Social Logins; Email OTP with SMTP (Authentication Methods); Confirmation UIs **off**; `meshport.xyz` as an allowed domain |
+| Vercel (app) | `CIRCLE_API_KEY` (set by the owner, never shared in chat); `VITE_CIRCLE_APP_ID`; `VITE_CIRCLE_GOOGLE_CLIENT_ID` |
 | Google OAuth client | The Supabase client; redirect URI `https://meshport.xyz/wallet/circle-login` |
 | Supabase | Google provider with that client ID (ID-token sign-in); both migrations above |
