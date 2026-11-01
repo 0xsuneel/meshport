@@ -69,6 +69,10 @@ export function sendStartupReport(): void {
   const parts = (['shell', 'auth', 'provider', 'frame', 'discovered', 'signer', 'rpc', 'actionReady'] as StartupMark[])
     .filter(k => t[k] != null).map(k => `${k} ${s(t[k])}`)
   void reportPerf(`[perf startup] ${kind}, since page load (s): ${parts.join(', ') || 'nothing'}${t.actionReady == null ? ' - not ready after 30 s' : ''}`)
+  void import('./walletEvents').then(m => m.logWalletEvent({
+    event: 'startup', ok: t.signer != null, ms: t.signer ?? t.actionReady, steps: t as Record<string, number>, detail: kind,
+    error: t.signer == null ? 'wallet not able to sign 30 s after page load' : undefined,
+  })).catch(() => {})
 }
 if (typeof window !== 'undefined') {
   setTimeout(() => { if (!startupReported && startup.size) sendStartupReport() }, 30_000)
@@ -77,6 +81,7 @@ if (typeof window !== 'undefined') {
 /** Resume from the background: how long until signing works again (only when it had stopped). */
 export function reportResume(ms: number, outcome: string): void {
   void reportPerf(`[perf resume] wallet ready again after ${s(ms)} s (${outcome})`)
+  void import('./walletEvents').then(m => m.logWalletEvent({ event: 'resume', ok: true, ms, detail: outcome })).catch(() => {})
 }
 
 // What a payment does between the PIN / fingerprint and the send itself

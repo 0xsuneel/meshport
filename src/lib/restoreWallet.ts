@@ -108,10 +108,17 @@ export async function restorePrivateKey(rawPasscode?: string, opts?: { silent?: 
   const promise = (async () => {
     noteRestoring(true)
     let outcome: Outcome = { ok: false, error: 'failed' }
+    const openStarted = performance.now()
     try {
       outcome = await attemptRestore(generation, rawPasscode)
     } finally {
       noteRestoring(false, outcome.ok === false ? outcome.error : null)
+      // wallet_events: how long opening the wallet took, and why it didn't.
+      const failed = outcome.ok === false ? outcome.error ?? 'failed' : undefined
+      void import('./walletEvents').then(m => m.logWalletEvent({
+        event: 'open', ok: !failed, ms: performance.now() - openStarted, error: failed ?? undefined,
+        detail: rawPasscode ? 'with passcode' : opts?.silent ? 'silent' : 'no passcode',
+      })).catch(() => {})
     }
     // Logged out / switched meanwhile: nothing to say about the new account.
     if (generation !== walletGeneration()) return false

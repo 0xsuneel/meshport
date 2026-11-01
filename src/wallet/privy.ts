@@ -412,6 +412,12 @@ export function replaceDeadPrivy(ms: number): Promise<boolean> {
 }
 const PRIVY_REPLACE_WAIT_MS = 30_000
 
+// wallet_events (lib/walletEvents): which event a timed Privy request is.
+const eventOf = (what: string) => (what === 'warm-up' ? 'warmup' : what === 'heartbeat' ? 'heartbeat' : 'sign') as 'warmup' | 'heartbeat' | 'sign'
+function logPrivyEvent(e: Parameters<typeof import('@/lib/walletEvents').logWalletEvent>[0]): void {
+  void import('@/lib/walletEvents').then(m => m.logWalletEvent({ kind: 'privy', ...e })).catch(() => {})
+}
+
 async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b: PrivyBridge) => Promise<T>, address?: string, retryOnDead = true): Promise<T> {
   const started = performance.now()
   let opened = 0
@@ -464,6 +470,10 @@ async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b
     // A signature started without a fresh key obtained (or renewed) one.
     if (!keyFresh) signingKeyAt = Date.now() - ms
     if (ms > 2_000) report(`slow: ${s(ms)} s (${parts()})`)
+    // Every signature; a background heartbeat only when it was slow.
+    if (what !== 'heartbeat' || ms > 2_000) {
+      logPrivyEvent({ event: eventOf(what), ok: true, ms, detail: `${what}${keyFresh ? '' : ' (new signing key)'}`, steps: { wait: opened - started, sign: performance.now() - opened } })
+    }
     return out
   } catch (e) {
     // The Privy it was waiting on was replaced: sign on the new one (not a dead iframe - no rebuild).
@@ -474,9 +484,18 @@ async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b
     }
     const failedText = `failed after ${s(performance.now() - started)} s (${parts()}): ${e instanceof Error ? e.message : String(e)}`
     report(failedText)
+    const failedAt = performance.now()
+    logPrivyEvent({
+      event: eventOf(what), ok: false, ms: failedAt - started, detail: `${what}; ${privyState(address)}`,
+      error: e instanceof Error ? e.message : String(e),
+      steps: opened ? { wait: opened - started, sign: failedAt - opened } : { wait: failedAt - started },
+    })
     // Which hang is it: Privy unreachable from this phone, or stuck on this page?
     void import('./privyActivity').then(m => m.probePrivyReachable(APP_ID))
-      .then(probe => report(`probe after "${what}" hang: ${probe}`)).catch(() => {})
+      .then(probe => {
+        report(`probe after "${what}" hang: ${probe}`)
+        logPrivyEvent({ event: 'privy_probe', ok: probe.includes('answered'), detail: `after ${what} hang: ${probe}` })
+      }).catch(() => {})
     // Privy gives up on its own request with an AbortError ("signal is
     // aborted without reason") - nothing was signed, so nothing was sent.
     // Field 31 Oct: Privy looked signed in with the wallet listed, yet its

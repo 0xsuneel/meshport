@@ -54,6 +54,22 @@ export async function withApproval<T>(request: () => Promise<T>): Promise<T> {
   }
 }
 
+// wallet_events (lib/walletEvents): each frame signature's time and outcome.
+// `ms` includes a passcode prompt when the frame asked for one.
+async function timedFrame<T>(what: string, sign: () => Promise<T>): Promise<T> {
+  const started = performance.now()
+  const log = (ok: boolean, error?: string) => void import('@/lib/walletEvents')
+    .then(m => m.logWalletEvent({ kind: 'frame', event: 'sign', ok, ms: performance.now() - started, detail: what, error })).catch(() => {})
+  try {
+    const out = await sign()
+    log(true)
+    return out
+  } catch (e) {
+    log(false, e instanceof WalletFrameError ? `${e.code}: ${e.message}` : e instanceof Error ? e.message : String(e))
+    throw e
+  }
+}
+
 /** The wallet at `address`, signing through the frame. */
 export function walletAccount(address: string): WalletAccount {
   const key = address.toLowerCase()
@@ -62,14 +78,14 @@ export function walletAccount(address: string): WalletAccount {
   const base = toAccount({
     address: address as Hex,
     async signMessage({ message }) {
-      return (await callWallet('sign:message', { address, message: plainMessage(message) })).signature
+      return (await timedFrame('signMessage', () => callWallet('sign:message', { address, message: plainMessage(message) }))).signature
     },
     async signTransaction(transaction) {
-      return (await withApproval(() => callWallet('sign:transaction', { address, transaction: plainTransaction(transaction) }))).serialized
+      return (await timedFrame('signTransaction', () => withApproval(() => callWallet('sign:transaction', { address, transaction: plainTransaction(transaction) })))).serialized
     },
     async signTypedData(typedData) {
       const { domain, types, primaryType, message } = typedData as TypedDataDefinition
-      return (await withApproval(() => callWallet('sign:typed-data', { address, typedData: { domain, types, primaryType, message } as Record<string, unknown> }))).signature
+      return (await timedFrame('signTypedData', () => withApproval(() => callWallet('sign:typed-data', { address, typedData: { domain, types, primaryType, message } as Record<string, unknown> })))).signature
     },
   })
   const account = Object.assign(base, { meshportWallet: true as const }) as WalletAccount

@@ -51,7 +51,11 @@ const SUPPORTED_CHAINS: [Chain, ...Chain[]] = [
     })),
 ]
 
+// Which Privy instance this page is on (1 = first load, 2+ = rebuilds) - for wallet_events.
+let privyInstances = 0
+
 function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => void }) {
+  const [privyInstance] = useState(() => ++privyInstances)
   const { session, loading } = useSupabaseSession()
   const signedIn = !!session && !session.anonymous
   // The token Privy signs in with. It never answers "no token" while the
@@ -257,6 +261,27 @@ function PrivyBridgeSync({ onWalletStuck }: { onWalletStuck: (why: string) => vo
     if (ready) return
     return whenPrivyQuiet(mountedAt, PRIVY_QUIET_MS, () => stuckRef.current('Privy not loaded, Privy quiet'))
   }, [ready, mountedAt])
+  // wallet_events: this Privy instance (first load or a rebuild) - mount → ready → signed in → wallet listed.
+  const loadMarks = useRef<Record<string, number>>({})
+  const loadLogged = useRef(false)
+  useEffect(() => {
+    const m = loadMarks.current, t = performance.now() - mountedAt
+    if (ready && m.ready == null) m.ready = t
+    if (ready && authenticated && m.signedIn == null) m.signedIn = t
+    if (addresses && m.listed == null) m.listed = t
+    if (m.listed != null && !loadLogged.current) {
+      loadLogged.current = true
+      void import('@/lib/walletEvents').then(w => w.logWalletEvent({ kind: 'privy', event: 'privy_load', ok: true, ms: m.listed, steps: { ...m }, detail: `instance ${privyInstance}` })).catch(() => {})
+    }
+  }, [ready, authenticated, addresses, mountedAt])
+  // Unmounted (rebuilt / signed out) before the wallet was listed: that load never finished.
+  useEffect(() => () => {
+    if (loadLogged.current) return
+    loadLogged.current = true
+    const m = loadMarks.current
+    void import('@/lib/walletEvents').then(w => w.logWalletEvent({ kind: 'privy', event: 'privy_load', ok: false, ms: performance.now() - mountedAt, steps: { ...m }, detail: `instance ${privyInstance}`, error: 'replaced before the wallet was listed' })).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   useEffect(() => () => setPrivyBridge(null), [])
   return null
 }
@@ -331,8 +356,12 @@ export default function PrivyRoot() {
     lastRebuildAt = performance.now()
     setGeneration(g => g + 1)
     // Can this phone reach Privy at all right now? (separates "Privy down / unreachable" from "stuck on this page")
+    void import('@/lib/walletEvents').then(m => m.logWalletEvent({ kind: 'privy', event: 'privy_rebuild', ok: true, detail: `${why} (${sinceHidden})`, steps: { n } })).catch(() => {})
     void import('./privyActivity').then(m => m.probePrivyReachable(privyAppId()))
-      .then(probe => import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[privy iframe] probe at rebuild #${n}: ${probe}`))))
+      .then(probe => {
+        void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[privy iframe] probe at rebuild #${n}: ${probe}`)))
+        void import('@/lib/walletEvents').then(m => m.logWalletEvent({ kind: 'privy', event: 'privy_probe', ok: probe.includes('answered'), detail: `at rebuild #${n}: ${probe}` }))
+      })
       .catch(() => {})
   }
   onWalletStuckRef.current = onWalletStuck
@@ -388,6 +417,7 @@ export default function PrivyRoot() {
         void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
           `[privy iframe] no answer after the background (${((started - lastHiddenAt) / 1000).toFixed(0)} s away) - rebuilding Privy`,
         ))).catch(() => {})
+        void import('@/lib/walletEvents').then(m => m.logWalletEvent({ kind: 'privy', event: 'privy_rebuild', ok: true, detail: `no answer after the background (${((started - lastHiddenAt) / 1000).toFixed(0)} s away)`, steps: { n: privyRebuilds + 1 } })).catch(() => {})
         // A rebuild like any other: the pacing (onWalletStuck) counts from it,
         // so nothing else rebuilds the new Privy while it is still loading.
         privyRebuilds++
