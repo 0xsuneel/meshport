@@ -7,12 +7,18 @@
 // for `value` plus a `maxFee` cap. Gateway takes `value` + at most `maxFee`
 // from the Unified Balance and mints `value` on the destination. `maxFee` is
 // the source chain's gas fee + the 0.005% transfer fee + - when Circle's
-// forwarder mints - the Forwarding Service fee. App Kit reports that maxFee
-// as 'provider' + 'gasFee', and the forwarding fee AGAIN as its own
-// 'forwarder' entry (the part of 'gasFee' that pays the forwarder - measured:
-// every forwarded claim's maxFee was exactly the chain's gas fee + the
-// forwarder entry). So 'forwarder' is never added on top: adding it took the
-// forwarding fee twice and left the extra stranded in the Unified Balance.
+// forwarder mints - the Forwarding Service fee.
+//
+// App Kit >= 1.19 (installed: 1.20, upgraded 31 Oct) reports that maxFee as
+// THREE separate parts: 'provider', 'gasFee' WITHOUT the forwarding fee, and
+// 'forwarder' (unified-balance-kit aggregateFeesByIntent:
+// gasFee = inclusiveGasFee - forwardingFee; changelog 1.19: "no longer count
+// the forwarding fee twice"). Before 1.19 'gasFee' already included it and
+// this code took 'forwarder' as a part of 'gasFee' - after the upgrade that
+// left the forwarding fee out: a forwarded spend (Base…) asked for the
+// deposit + ~0.04 USDC and failed "Insufficient USDC balance", leaving the
+// deposit in the Unified Balance (field 1 Nov 06:40, 1.00 USDC to Base).
+// So all three are added.
 
 export interface UbFees { providerFee: number; gasFee: number; kitFee: number; forwarderFee: number }
 
@@ -34,15 +40,16 @@ export function ubQuoteFees(est: any): UbFees {
   return { providerFee, gasFee, kitFee, forwarderFee }
 }
 
-/** What a spend takes from the Unified Balance besides its value: maxFee.
- *  (A custom fee, never set by MeshPort, would come out of the value.) */
+/** What a spend takes from the Unified Balance besides its value: maxFee =
+ *  Gateway fee + source gas + forwarding fee (App Kit >= 1.19 lists them
+ *  apart). A custom fee, never set by MeshPort, would come out of the value. */
 export function ubSpendCost(f: UbFees): number {
-  return f.providerFee + f.gasFee
+  return f.providerFee + f.gasFee + f.forwarderFee
 }
 
-/** The forwarding fee as a part of 'gasFee' (never more than it). */
+/** The forwarding fee (its own part of maxFee). */
 export function ubForwarderPart(f: UbFees): number {
-  return Math.min(f.forwarderFee, f.gasFee)
+  return f.forwarderFee
 }
 
 /** Headroom kept back from a spend so a small fee rise between estimate and
@@ -67,8 +74,8 @@ export function ubFeeBreakdown(deposit: number, f: UbFees, cushion = 0) {
   const margin = ubSpendMargin(spendOverhead, cushion)
   const forwarderFee = ubForwarderPart(f)
   // Source gas + the headroom, together the "Network Gas" row; the
-  // forwarding fee has its own row, so it's left out of this one.
-  const networkFee = f.gasFee - forwarderFee + margin
+  // forwarding fee has its own row ('gasFee' no longer contains it).
+  const networkFee = f.gasFee + margin
   const totalFee = f.providerFee + forwarderFee + networkFee + f.kitFee
   // Gateway mints exactly the spend; a custom fee comes out of it.
   const receiverGets = Math.max(0, ubSpendAmount(deposit, spendOverhead, cushion) - f.kitFee)
