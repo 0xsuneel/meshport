@@ -452,6 +452,15 @@ type ExecuteSwapParams = {
   walletAddress: string
   tokenIn: string; tokenOut: string; amountIn: string; slippageBps: number
   attemptId?: string | null; intentId?: string | null
+  /**
+   * The minimum output the person confirmed ("At least X, or the swap is
+   * cancelled"), in tokenOut's base units. Passed to the SDK as stopLimit
+   * (Circle's swap-tokens skill: an absolute minimum, it wins over
+   * slippageBps). Without it the SDK set its own minimum from a fresh quote
+   * at execution - possibly below the one shown. Base units: App Kit's
+   * schema rejects a decimal string.
+   */
+  minAmountOutBaseUnits?: string | null
   /** Real on-chain progress for the checklist - see SwapProgress above. */
   onProgress?: (p: SwapProgress) => void
 }
@@ -517,6 +526,16 @@ async function executeSwapOnce(params: ExecuteSwapParams): Promise<SwapOutcome> 
   }
 }
 
+/**
+ * kit.swap's config: slippage, plus the confirmed minimum as stopLimit (it
+ * wins over slippage) when it is a positive integer in base units - App
+ * Kit's schema rejects anything else. Pure.
+ */
+export function swapConfig(slippageBps: number, minAmountOutBaseUnits?: string | null): { slippageBps: number; stopLimit?: string } {
+  const min = (minAmountOutBaseUnits ?? '').trim()
+  return /^\d+$/.test(min) && BigInt(min) > 0n ? { slippageBps, stopLimit: min } : { slippageBps }
+}
+
 async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
   const sdkMods = await getSdkModules()
   const kit = getKit(sdkMods.AppKit)
@@ -535,7 +554,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
     tokenIn:  params.tokenIn,
     tokenOut: params.tokenOut,
     amountIn: amountFormatted,
-    config:   { slippageBps: slip },
+    config:   swapConfig(slip, params.minAmountOutBaseUnits),
   }
 
   // The swap is on Arc: its Activity row is queued on this device first, so a

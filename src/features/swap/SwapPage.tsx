@@ -806,6 +806,7 @@ export function SwapPage() {
       signer: activeSigner, walletAddress: walletAddress ?? '',
       tokenIn: tokenInId, tokenOut: tokenOutId, amountIn: amountInStr, slippageBps: slippage,
       attemptId: extraParams?.attemptId, intentId: extraParams?.intentId,
+      minAmountOutBaseUnits: extraParams?.minAmountOutBaseUnits,
       onProgress: extraParams?.onProgress,
     }))
   }, [tokenIn, tokenOut, amountIn, slippage, walletAddress])
@@ -1093,7 +1094,8 @@ export function SwapPage() {
       if (v == null) return null
       const n = parseFloat(v)
       if (!Number.isFinite(n)) return null
-      return BigInt(Math.round(n * Math.pow(10, decimals))).toString()
+      // Down, not to nearest: a minimum rounded up could cancel a swap that met the one shown.
+      return BigInt(Math.floor(n * Math.pow(10, decimals))).toString()
     }
 
     let attemptId: string | null = null
@@ -1124,6 +1126,8 @@ export function SwapPage() {
       const result = await callProxy('swap', {
         tokenIn: tokenIn.id, tokenOut: tokenOut.id, amountIn: parseFloat(amountIn).toFixed(6),
         onProgress: onSwapProgress, attemptId: intentResult.attemptId, intentId: intentResult.intentId,
+        // The minimum shown on Review ("At least …") is the one enforced.
+        minAmountOutBaseUnits: toAtomicOrNull(minOut, tokenOut.decimals),
       })
       const hash   = result?.txHash ?? ''
       const aOut   = result?.amountOut || estimate?.estimatedOutput?.amount || '0'
@@ -1823,6 +1827,7 @@ export function SwapPage() {
                     ['Swap fee', swapFeeText],
                     ['Network fee', networkFeeText],
                     ['Network', 'Arc'],
+                    ['Routed by', 'LiFi (third party)'],
                   ].map(([l, v], i, rows) => (
                     <div key={l} className="flex justify-between items-center" style={{ padding: '12px 0', borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
                       <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{l}</span>
@@ -1830,6 +1835,11 @@ export function SwapPage() {
                     </div>
                   ))}
                 </div>
+                {/* Circle's swap-tokens skill: swaps go through a third-party
+                    aggregator (currently LiFi) - say so before the swap. */}
+                <p className="text-[11px] text-center" style={{ color: 'var(--text-secondary)', marginTop: 10, lineHeight: 1.4 }}>
+                  Circle routes this swap through LiFi, a third-party aggregator (it may change by route); LiFi's terms apply.
+                </p>
               </>
             ) : (
             /* Processing hero - the Review amounts stay put (nothing jumps on
