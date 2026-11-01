@@ -91,16 +91,26 @@ async function requestQuote(token: CctpxToken, dst: number, amount: bigint, reci
   return parseCctpxQuote(await r.json().catch(() => null))
 }
 
-/** Circle's quote for this exact transfer: fast when Circle quotes it, otherwise standard. */
-export async function quoteCctpx(p: { token: CctpxToken; destination: string; recipient: string; amount: bigint }): Promise<CctpxQuote> {
+/**
+ * Circle's quote for this exact transfer. Standard by default: the transfer
+ * starts on Arc, whose blocks are final at once, so Circle signs it right away
+ * and the PRE_FINALITY (fast) premium buys nothing. `fast` asks for the fast
+ * lane first (standard when Circle doesn't quote it).
+ */
+export async function quoteCctpx(p: { token: CctpxToken; destination: string; recipient: string; amount: bigint; fast?: boolean }): Promise<CctpxQuote> {
   const dst = CCTP_DOMAINS[p.destination]
   if (dst === undefined || !canFastCctp(p.destination)) throw new Error(`${p.token} can't be sent to ${p.destination}`)
   if (!/^0x[0-9a-fA-F]{40}$/.test(p.recipient)) throw new Error('Invalid recipient address')
   let q: { signedQuote: Hex; nativeFee: bigint }
-  let finality = FAST
-  try { q = await requestQuote(p.token, dst, p.amount, p.recipient, true) }
-  catch { q = await requestQuote(p.token, dst, p.amount, p.recipient, false); finality = SLOW }
-  return { ...p, ...q, finality, at: Date.now() }
+  let finality = SLOW
+  if (p.fast) {
+    try { q = await requestQuote(p.token, dst, p.amount, p.recipient, true); finality = FAST }
+    catch { q = await requestQuote(p.token, dst, p.amount, p.recipient, false) }
+  } else {
+    q = await requestQuote(p.token, dst, p.amount, p.recipient, false)
+  }
+  const { fast: _fast, ...want } = p
+  return { ...want, ...q, finality, at: Date.now() }
 }
 
 /** A quote is used for the transfer only while fresh and for exactly this transfer. */
