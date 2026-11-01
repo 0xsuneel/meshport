@@ -18,6 +18,19 @@ export const CHAT_SEED_STATEMENT = (address: string) =>
 
 const seeds = new Map<string, Promise<Uint8Array>>()
 
+// A wallet found to sign non-deterministically (Circle's MPC signatures differ
+// each time - field 1 Nov) can't make a chat key this way: remembered on this
+// device so the check isn't repeated. It cost two Circle signatures (~7 s) on
+// every app open, and Circle runs one signature at a time, so a payment right
+// after opening waited behind them.
+const UNSTABLE_KEY = (address: string) => `mp.chatseed.unstable.${address.toLowerCase()}`
+function knownUnstable(address: string): boolean {
+  try { return localStorage.getItem(UNSTABLE_KEY(address)) === '1' } catch { return false }
+}
+function markUnstable(address: string): void {
+  try { localStorage.setItem(UNSTABLE_KEY(address), '1') } catch { /* storage blocked */ }
+}
+
 /** Pure: the seed from a signature (hex, 0x-prefixed). */
 export async function seedFromSignature(signature: string): Promise<Uint8Array> {
   const { sha256 } = await import('@noble/hashes/sha256')
@@ -31,6 +44,7 @@ export async function seedFromSignature(signature: string): Promise<Uint8Array> 
 
 export function signatureChatSeed(account: WalletAccount): Promise<Uint8Array> {
   const key = account.address.toLowerCase()
+  if (knownUnstable(key)) return Promise.reject(new Error('This wallet cannot make a stable chat key'))
   let p = seeds.get(key)
   if (!p) {
     p = (async () => {
@@ -38,6 +52,7 @@ export function signatureChatSeed(account: WalletAccount): Promise<Uint8Array> {
       const first = await account.signMessage({ message })
       const second = await account.signMessage({ message })
       if (first.toLowerCase() !== second.toLowerCase()) {
+        markUnstable(key)
         void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error('[chat seed] signatures differ - chat key not derived'))).catch(() => {})
         throw new Error('This wallet cannot make a stable chat key')
       }
