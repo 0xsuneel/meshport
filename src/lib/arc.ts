@@ -127,8 +127,34 @@ export async function arcRpcJson(body: unknown, timeoutMs = 10000): Promise<any>
     return await rpcPass(body, Math.max(4000, Math.round(timeoutMs * 0.6)))
   } catch (e) {
     if (!isLostRequest(e)) throw e
-    return rpcPass(body, timeoutMs)
+    try {
+      return await rpcPass(body, timeoutMs)
+    } catch (e2) {
+      // The proxy can't be reached at all (a phone's dead connection to this
+      // origin, field 1 Nov 05:43): a read is asked of Circle's Arc node
+      // directly - another host, another connection. The proxy broadcasts
+      // every send to that node too, so even a pending nonce agrees.
+      if (!isLostRequest(e2)) throw e2
+      const direct = await lastResortRead(body, timeoutMs)
+      if (!direct) throw e2
+      if (direct.error) throw direct.error // that node's answer (a revert, etc.)
+      return direct
+    }
   }
+}
+
+async function lastResortRead(body: unknown, timeoutMs: number): Promise<any | null> {
+  try {
+    const res = await fetch(DIRECT_READ_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(Math.min(timeoutMs, 6000)),
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    if (!json || typeof json !== 'object') return null
+    noteRpcAnswered()
+    return json
+  } catch { return null }
 }
 
 async function rpcPass(body: unknown, timeoutMs: number): Promise<any> {

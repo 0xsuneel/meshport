@@ -77,7 +77,7 @@ async function loadSdk() {
 let _arcProvider: any = null
 async function getArcProvider() {
   if (_arcProvider) return _arcProvider
-  const { JsonRpcProvider, FallbackProvider } = await loadSdk()
+  const { JsonRpcProvider } = await loadSdk()
   const { ARC_RPCS, ARC_NETWORK } = await import('@/lib/arc')
   // Relative paths (e.g. '/api/arc-rpc') are safe to hand ethers as-is
   // when running in a browser - fetch resolves them against the current
@@ -93,8 +93,9 @@ async function getArcProvider() {
       : 'http://localhost'
     return new URL(url.startsWith('/') ? url : '/' + url, base).href
   }
-  const providers = ARC_RPCS.map((url: string) => new JsonRpcProvider(toAbsolute(url), ARC_NETWORK, { staticNetwork: true, pollingInterval: 200 }))
-  _arcProvider = providers.length === 1 ? providers[0] : new FallbackProvider(providers, undefined, { quorum: 1 })
+  // Reads through arcRpcJson (timeout, retry, second route), sends through the relay (lib/arcRelaySend).
+  const { arcKitProvider } = await import('./arcRelaySend')
+  _arcProvider = arcKitProvider(new JsonRpcProvider(toAbsolute(ARC_RPCS[0]), ARC_NETWORK, { staticNetwork: true, pollingInterval: 200 }))
   return _arcProvider
 }
 

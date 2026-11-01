@@ -64,7 +64,7 @@ import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { claimFeeSummary, type SignedClaimFee } from '@/lib/claimFees'
 import { startMoveTimer, type MoveTimer } from '@/lib/moveTimings'
-import { sendThroughRelay } from '@/lib/arcRelaySend'
+import { arcKitProvider } from '@/lib/arcRelaySend'
 import { ARC_NETWORK } from '@/blockchain/chains'
 import { bridgeTokenDecimals, bridgeTokenInfo, type CctpxToken } from '@/lib/tokenBridge'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -259,14 +259,14 @@ async function buildAdapter(signer: WalletAccount) {
       const rpcList = RPC_BY_CHAIN_NAME['Arc Testnet']
       const key = rpcList.join('|')
       if (!_arcProviderCache.has(key)) {
-        const { JsonRpcProvider, FallbackProvider } = await import('ethers')
+        const { JsonRpcProvider } = await import('ethers')
         // pollingInterval 200: ethers' 4000 ms default cost up to 4 s per
         // receipt on Arc's sub-second chain. Sends go out the way Pay's do
         // (lib/arcRelaySend): the server broadcasts and waits for the receipt.
-        const ps = rpcList.map((url: string) => sendThroughRelay(new JsonRpcProvider(toAbsoluteUrl(url), ARC_NETWORK, { staticNetwork: true, pollingInterval: 200 })))
-        _arcProviderCache.set(key, ps.length > 1
-          ? new FallbackProvider(ps.map((p: any, i: number) => ({ provider: p, priority: i, weight: 1, stallTimeout: 2000 })), undefined, { quorum: 1 })
-          : ps[0])
+        // Reads go through arcRpcJson (timeout, retry, Circle's Arc node as a
+        // second route) - it fails over across the RPC list itself, so one
+        // provider serves; ethers' own 300 s wait froze the kit on a lost request.
+        _arcProviderCache.set(key, arcKitProvider(new JsonRpcProvider(toAbsoluteUrl(rpcList[0]), ARC_NETWORK, { staticNetwork: true, pollingInterval: 200 })))
       }
       return _arcProviderCache.get(key)!
     },

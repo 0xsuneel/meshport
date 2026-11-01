@@ -63,3 +63,36 @@ export function sendThroughRelay<P extends { _send: (payload: any) => Promise<an
   }
   return provider
 }
+
+/**
+ * Every other call of an ethers provider through arcRpcJson: ethers' own
+ * request waits up to 300 s, so a request a phone loses (field 1 Nov 05:43:
+ * nothing reached /api/arc-rpc for 50 s while Supabase still answered - a
+ * dead connection to this origin) froze Circle's kit before it ever asked
+ * the wallet to sign. arcRpcJson gives each call a timeout, asks a lost read
+ * again, reads from Circle's Arc node directly (another host) and, only
+ * if the proxy can't be reached at all, falls back to that node for reads.
+ * A node's own JSON-RPC error comes back as that error (reverts, etc.).
+ */
+export function readThroughArcRpc<P extends { _send: (payload: any) => Promise<any[]> }>(provider: P, timeoutMs = 8_000): P {
+  provider._send = async (payload: any) => {
+    const list: RpcRequest[] = Array.isArray(payload) ? payload : [payload]
+    return Promise.all(list.map(async (p) => {
+      try {
+        const json = await arcRpcJson({ jsonrpc: '2.0', id: p.id ?? 1, method: p.method, params: p.params ?? [] }, timeoutMs)
+        return { ...json, id: p.id }
+      } catch (e: any) {
+        if (e && typeof e === 'object' && typeof e.code === 'number' && typeof e.message === 'string') {
+          return { jsonrpc: '2.0', id: p.id, error: { code: e.code, message: e.message, ...(e.data !== undefined ? { data: e.data } : {}) } }
+        }
+        throw e
+      }
+    }))
+  }
+  return provider
+}
+
+/** The Arc provider Circle's kit uses: reads through arcRpcJson, sends through the relay. */
+export function arcKitProvider<P extends { _send: (payload: any) => Promise<any[]> }>(provider: P): P {
+  return sendThroughRelay(readThroughArcRpc(provider))
+}

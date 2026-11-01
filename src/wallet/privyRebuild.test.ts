@@ -165,3 +165,49 @@ describe("Privy's signing key lasts 60 minutes (TEE): the slow re-authentication
     } finally { vi.useRealTimers() }
   })
 })
+
+// Field 1 Nov 05:38: Privy rebuilt after 37 min away while a signature waited
+// on the old one. It hung, then called the new Privy "dead" and rebuilt it too.
+describe('Privy replaced while a signature waits on it', () => {
+  const ADDR = '0xdddddddddddddddddddddddddddddddddddddddd'
+  const bridgeWith = (sign: () => Promise<`0x${string}`>) => ({
+    ready: true, authenticated: true, wallets: [ADDR], linked: [ADDR],
+    signMessage: sign, signTransaction: sign, signTypedData: sign,
+    createWallet: async () => ADDR, solanaWallets: [], solanaReady: true,
+    createSolanaWallet: async () => 'x', signSolanaTransaction: async (t: Uint8Array) => t,
+  }) as any
+
+  it('signs again on the new Privy at once - no hang, no second rebuild', async () => {
+    vi.resetModules()
+    const privy = await import('./privy')
+    vi.useFakeTimers()
+    try {
+      let calls = 0
+      privy.setPrivyBridge(bridgeWith(() => (++calls === 1 ? Promise.resolve('0xwarm') : new Promise(() => {}))))
+      await vi.advanceTimersByTimeAsync(0)
+      const dead = vi.fn()
+      window.addEventListener(privy.PRIVY_DEAD_EVENT, dead)
+      const sig = privy.privyAccount(ADDR).signMessage({ message: 'pay' })
+      await vi.advanceTimersByTimeAsync(1_000) // hanging on the old Privy
+      // PrivyRoot rebuilds it (e.g. the re-check after the background).
+      privy.setPrivyBridge(null)
+      privy.setPrivyBridge(bridgeWith(async () => '0xnew'))
+      await vi.advanceTimersByTimeAsync(100)
+      expect(await sig).toBe('0xnew')
+      expect(dead).not.toHaveBeenCalled() // the new Privy is not thrown away
+      window.removeEventListener(privy.PRIVY_DEAD_EVENT, dead)
+      privy.setPrivyBridge(null)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('a Privy replaced while waiting for it (before signing) does not cancel the signature on the new one', async () => {
+    vi.resetModules()
+    const privy = await import('./privy')
+    privy.setPrivyBridge(null)
+    const sig = privy.privyAccount(ADDR).signMessage({ message: 'pay' })
+    privy.setPrivyBridge(null) // a rebuild while nothing is up yet
+    privy.setPrivyBridge(bridgeWith(async () => '0xok'))
+    expect(await sig).toBe('0xok')
+    privy.setPrivyBridge(null)
+  })
+})
