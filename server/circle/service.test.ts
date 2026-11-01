@@ -111,6 +111,18 @@ describe('circleTransaction (what Circle signs)', () => {
 })
 
 describe('Circle wallet service', () => {
+  it('status: whether the account has a Circle wallet, from its own link only (no Circle session)', async () => {
+    expect(await svc.status('uid-bob')).toEqual({ linked: false, address: null })
+    await svc.link('uid-bob', BOB_TOKEN)
+    expect(await svc.status('uid-bob')).toEqual({ linked: true, address: null }) // linked, wallet not made yet
+    evmWallets.add('circle-bob')
+    await svc.wallet('uid-bob', BOB_TOKEN)
+    const st = await svc.status('uid-bob')
+    expect(st.linked).toBe(true)
+    expect(st.address?.toLowerCase()).toBe('0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
+    expect(await svc.status('uid-alice')).toEqual({ linked: false, address: null })
+  })
+
   it('links one MeshPort account to one Circle user, both ways', async () => {
     expect(await svc.link('uid-alice', ALICE_TOKEN)).toEqual({ circleUserId: 'circle-alice' })
     expect(await svc.link('uid-alice', ALICE_TOKEN)).toEqual({ circleUserId: 'circle-alice' }) // again: fine

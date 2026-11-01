@@ -92,18 +92,18 @@ describe('wallet approval', () => {
   })
 
   it('older passcode formats are refused (sign in again to set a new one)', async () => {
-    auth.walletSource = 'privy'
+    auth.walletSource = 'circle'
     expect(await security.verifyPasscode('123456', '123456')).toBe(false)
     expect(await security.verifyPasscode('123456', 'v2:AAAA:BBBB')).toBe(false)
   })
 
   it('a stored value that is not a passcode is never matched as plain text', async () => {
-    auth.walletSource = 'privy'
+    auth.walletSource = 'circle'
     expect(await security.verifyPasscode('not-a-pin', 'not-a-pin')).toBe(false)
   })
 
-  it('Google / email (Privy) wallets have nothing to approve here', async () => {
-    auth.walletSource = 'privy'
+  it('Google / email (Circle) wallets have nothing to approve here', async () => {
+    auth.walletSource = 'circle'
     expect(await approval.approveWallet('000000')).toEqual({ ok: true })
     expect(approveFrameWallet).not.toHaveBeenCalled()
   })

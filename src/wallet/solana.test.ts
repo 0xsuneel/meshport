@@ -18,7 +18,6 @@ vi.mock('./frameClient', () => ({
   },
 }))
 vi.mock('@/store', () => ({ useAuthStore: { getState: () => ({ walletSource: 'import-privkey', walletAddress: EVM }) } }))
-vi.mock('./privy', () => ({ ensurePrivySolanaWallet: vi.fn(), privySignSolana: vi.fn(), privySolanaAddress: () => null }))
 
 describe('Solana wallet of a created / imported account', () => {
   it('address is the frame-derived key', async () => {

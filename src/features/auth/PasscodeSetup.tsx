@@ -256,15 +256,15 @@ export function PasscodeLockPage() {
 
   // Get the wallet ready while this screen is up, so it's open the moment
   // the passcode is accepted - not loaded only then. Google / email wallets
-  // (Privy, and the old device-kept ones) need no passcode to open: start
+  // (Circle, and the old device-kept ones) need no passcode to open: start
   // now. Created / imported wallets need it: load the wallet frame now, and
   // open it with the passcode in handleUnlock.
   useEffect(() => {
     const { walletAddress: address, signer, walletSource } = useAuthStore.getState()
     if (!address || signer) return
-    if (walletSource === 'privy' || walletSource === 'social-auto') {
+    if (walletSource === 'circle' || walletSource === 'social-auto') {
       import('@/lib/restoreWallet').then(m => m.restorePrivateKey(undefined, { silent: true })).catch(() => {})
-    } else if (walletSource !== 'circle') {
+    } else {
       import('@/wallet').then(w => w.walletReady()).catch(() => {})
       import('@/lib/restoreWallet').catch(() => {})
     }
@@ -333,14 +333,14 @@ export function PasscodeLockPage() {
       // Swap and the rest work on the first tap, and the passcode asked
       // there only confirms the payment. The frame was loaded while this
       // screen was up (Google / email wallets started opening then), so
-      // this is usually short. Capped: a slow Privy or a stuck frame
+      // this is usually short. Capped: a slow Circle sign-in or a stuck frame
       // doesn't hold the lock screen - the same attempt carries on in the
       // background and sets the recovery banner itself if it fails.
       // Never started twice: a second run would only repeat the same wait.
-      // "Open" means it can sign: a Google / email (Privy) wallet that's
-      // listed but whose iframe is still connecting (a fresh one after the
-      // background - PrivyRoot) isn't ready yet, and a payment right after
-      // unlocking would wait on it. Wait for real readiness here instead.
+      // "Open" means it can sign: a Google / email (Circle) wallet whose
+      // session is stored but whose warm-up hasn't finished isn't ready yet,
+      // and a payment right after unlocking would wait on it. Wait for real
+      // readiness here instead.
       const open = import('@/lib/restoreWallet').then(m => m.restorePrivateKey(val))
         .then(async ok => ok && (await import('@/lib/walletReadiness')).untilSignerReady())
         .catch(() => false)

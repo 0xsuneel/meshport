@@ -12,9 +12,9 @@ const now = () => (typeof performance !== 'undefined' ? performance.now() : Date
 export type StartupMark =
   | 'shell'          // first screen painted (splash removed)
   | 'auth'           // signed-in session known (persisted store read)
-  | 'provider'       // wallet provider code running (Privy loaded / wallet frame mounted)
+  | 'provider'       // wallet provider code running (Circle SDK loaded / wallet frame mounted)
   | 'frame'          // wallet frame answered (create / import / old Google wallets)
-  | 'discovered'     // the wallet is known to its provider (Privy lists it)
+  | 'discovered'     // the wallet is known to its provider (Circle session found)
   | 'signer'         // the wallet can sign
   | 'rpc'            // first Arc RPC answer
   | 'actionReady'    // signer + network: Pay / Swap can start without waiting

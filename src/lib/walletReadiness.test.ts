@@ -11,7 +11,7 @@ vi.mock('@/store', () => ({ useAuthStore: { getState: () => auth, subscribe: (l:
 const reports: string[] = []
 vi.mock('./errorReport', () => ({ reportPerf: (l: string) => reports.push(l) }))
 
-import { useWalletReadiness, startWalletReadiness, noteRestoring, setPrivyConnectedProbe, setCircleReadyProbe, walletGeneration, noteNetworkReady, recompute, untilSignerReady } from './walletReadiness'
+import { useWalletReadiness, startWalletReadiness, noteRestoring, setCircleReadyProbe, walletGeneration, noteNetworkReady, recompute, untilSignerReady } from './walletReadiness'
 
 const W = '0x4cb2ff6492d51edfb54f0cff3b517d7f207d80a1'
 const phase = () => useWalletReadiness.getState().phase
@@ -39,15 +39,6 @@ describe('wallet readiness', () => {
     expect(phase()).toBe('initializing')
   })
 
-  it('Privy: listed but not connected is "discovered", not ready to sign', () => {
-    let connected = false
-    setPrivyConnectedProbe(() => connected)
-    setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'privy', signer: {} })
-    expect(phase()).toBe('wallet_discovered')
-    connected = true; recompute()
-    expect(phase()).toBe('signer_ready')
-  })
-
   it('Circle: a stored session is "discovered", not ready to sign, until its warm-up confirms it', () => {
     let ready = false
     setCircleReadyProbe(() => ready)
@@ -73,15 +64,15 @@ describe('wallet readiness', () => {
     expect(walletGeneration()).toBe(g + 2)
   })
 
-  it('after unlock, waits until a Privy wallet can really sign - not just until it is listed', async () => {
+  it('after unlock, waits until a Circle wallet can really sign - not just until its session is stored', async () => {
     let connected = false
-    setPrivyConnectedProbe(() => connected)
-    setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'privy', signer: {} })
+    setCircleReadyProbe(() => connected)
+    setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'circle', signer: {} })
     let done: boolean | null = null
     void untilSignerReady().then(v => { done = v })
     await Promise.resolve()
-    expect(done).toBeNull() // listed, iframe still connecting
-    connected = true; recompute() // Privy's (fresh) iframe connected
+    expect(done).toBeNull() // session stored, warm-up still running
+    connected = true; recompute() // warm-up confirmed it
     await Promise.resolve()
     expect(done).toBe(true)
   })
@@ -94,11 +85,11 @@ describe('wallet readiness', () => {
     expect(await r).toBe(false)
   })
 
-  it('never waits forever: a Privy wallet that never becomes ready settles false after the timeout', async () => {
+  it('never waits forever: a Circle wallet that never becomes ready settles false after the timeout', async () => {
     vi.useFakeTimers()
     try {
-      setPrivyConnectedProbe(() => false)
-      setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'privy', signer: {} })
+      setCircleReadyProbe(() => false)
+      setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'circle', signer: {} })
       let done: boolean | null = null
       void untilSignerReady(5_000).then(v => { done = v })
       await vi.advanceTimersByTimeAsync(4_999)

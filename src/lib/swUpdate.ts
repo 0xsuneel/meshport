@@ -294,7 +294,7 @@ export function watchForUpdates(): () => void {
   // Only after a LONG time away (field 31 Oct: with several deploys a day the
   // app reloaded every time the person switched to another app for a moment
   // - a screenshot, a message - and came back to a cold wallet each time).
-  // Away this long, the phone has usually frozen the page and Privy's session
+  // Away this long, the phone has usually frozen the page and the wallet's session
   // anyway; a short trip away keeps the warm wallet.
   let hiddenSince = document.visibilityState === 'hidden' ? Date.now() : 0
   // The lock screen as it is now: has anything been typed / tapped on it?

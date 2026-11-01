@@ -4,27 +4,21 @@
 // the same way move_timings saves a Transfer / Bring / Swap: one row per
 // event, queryable by wallet, kind and time. It covers both kinds of wallet:
 //
-//   wallet_kind  privy   Google / email (Privy signs in its secure servers)
+//   wallet_kind  circle  Google / email (Circle user-controlled wallet)
 //                frame   created / imported private key (signs on the device)
-//                ...     whatever walletSource says (circle, social-auto)
+//                ...     whatever walletSource says (social-auto)
 //
 //   event        startup        page load → wallet can sign (steps: shell, auth, provider, discovered, signer, rpc, actionReady)
 //                open           opening the wallet (unlock / restore): ms, ok, error
 //                resume         back from the background → signing again
 //                sign           one signature: detail = signTypedData / signTransaction / signMessage
-//                warmup         Privy's silent check signature after open / unlock
-//                heartbeat      Privy's background liveness check (saved only when slow or failed)
-//                privy_load     one Privy instance: mount → ready → signed in → wallet listed
-//                privy_rebuild  Privy replaced (detail: why, steps.n: which rebuild)
-//                privy_probe    could the phone reach privy.io at a hang / rebuild
 //
 // Never blocks or fails anything: fire-and-forget, dropped when offline or
 // signed out. Only timings and outcomes - never keys, signatures, messages,
 // amounts or passcodes.
 
 export type WalletEvent =
-  | 'startup' | 'open' | 'resume' | 'sign' | 'warmup' | 'heartbeat'
-  | 'privy_load' | 'privy_rebuild' | 'privy_probe'
+  | 'startup' | 'open' | 'resume' | 'sign'
 
 export interface WalletEventInput {
   event: WalletEvent
@@ -59,7 +53,7 @@ export function walletEventRow(p: WalletEventInput & {
 }
 
 const kindOf = (source: string | null | undefined) =>
-  source === 'privy' ? 'privy' : source === 'circle' ? 'circle' : source === 'social-auto' ? 'social-auto' : source ? 'frame' : 'unknown'
+  source === 'circle' ? 'circle' : source === 'social-auto' ? 'social-auto' : source ? 'frame' : 'unknown'
 
 export function logWalletEvent(e: WalletEventInput): void {
   void (async () => {

@@ -193,7 +193,7 @@ async function readSolanaUSDC(walletAddress: string): Promise<number> {
     const me = useAuthStore.getState().walletAddress
     if (!me || me.toLowerCase() !== walletAddress.toLowerCase()) return 0
     countRequest(SOLANA_CHAIN, 'eth_call')
-    // Privy can take a few seconds to come up after a reload - don't hold the whole scan for it.
+    // The wallet can take a few seconds to come up after a reload - don't hold the whole scan for it.
     const owner = knownSolanaAddress() ?? await Promise.race([
       getSolanaAddress(),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Solana wallet not open yet')), 8_000)),

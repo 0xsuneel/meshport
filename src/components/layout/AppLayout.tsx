@@ -799,8 +799,8 @@ function DeviceKeyNotice() {
   const [lost, setLost] = useState(false)
   useEffect(() => {
     setLost(false)
-    // No device copy for social-auto, Privy or Circle wallets (no key in the frame).
-    if (!walletAddress || walletSource === 'social-auto' || walletSource === 'privy' || walletSource === 'circle') return
+    // No device copy for social-auto or Circle wallets (no key in the frame).
+    if (!walletAddress || walletSource === 'social-auto' || walletSource === 'circle') return
     let cancelled = false
     // Old app-side copies (before the wallet frame) still get checked until
     // they're moved; the frame reports its own device-sealed copy.

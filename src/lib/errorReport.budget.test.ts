@@ -14,10 +14,10 @@ describe('client_errors: a failure report is never crowded out or dropped offlin
   it('routine timing lines do not use the failure budget', async () => {
     vi.stubGlobal('navigator', { onLine: true, userAgent: 'test' })
     const { reportClientError } = await import('./errorReport')
-    for (let i = 0; i < 12; i++) reportClientError('rejection', new Error(`[privy timeline] since page load: ${i}`))
-    reportClientError('rejection', new Error('[privy warm-up] slow: 3.6 s'))
+    for (let i = 0; i < 12; i++) reportClientError('rejection', new Error(`[perf startup] cold, since page load (s): shell ${i}`))
+    reportClientError('rejection', new Error('[quote slow] transfer ub Base: 6.3 s (ok)'))
     reportClientError('rejection', new Error('[transfer stage] ub Base: still on "deposit" after 8 s'))
-    reportClientError('rejection', new Error('[transfer no signer] source=privy'))
+    reportClientError('rejection', new Error('[transfer no signer] source=circle'))
     expect(inserts.some(r => r.message.startsWith('[transfer no signer]'))).toBe(true)
   })
 
@@ -25,10 +25,10 @@ describe('client_errors: a failure report is never crowded out or dropped offlin
     const nav = { onLine: false, userAgent: 'test' }
     vi.stubGlobal('navigator', nav)
     const { reportClientError } = await import('./errorReport')
-    reportClientError('rejection', new Error('[transfer no signer] source=privy'))
+    reportClientError('rejection', new Error('[transfer no signer] source=circle'))
     expect(inserts).toHaveLength(0)
     nav.onLine = true
     window.dispatchEvent(new Event('online'))
-    expect(inserts.map(r => r.message)).toEqual(['[transfer no signer] source=privy'])
+    expect(inserts.map(r => r.message)).toEqual(['[transfer no signer] source=circle'])
   })
 })

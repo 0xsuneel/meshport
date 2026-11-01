@@ -7,6 +7,7 @@
 // in the browser; server/circle/service.ts checks it belongs to this account.
 //
 //   social-device-token  { deviceId }                          → { deviceToken, deviceEncryptionKey }
+//   status               {}                                    → { linked, address }  (no Circle session needed)
 //   email-device-token   { deviceId }                          → { deviceToken, deviceEncryptionKey, otpToken }
 //                         (always this MeshPort account's email)
 //   refresh              { userToken, refreshToken, deviceId } → { userToken, encryptionKey, refreshToken }
@@ -155,6 +156,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const uid = who.uid
     const t = body.userToken
     switch (body.action) {
+      case 'status': return send(200, await svc.status(uid))
       case 'email-device-token': return send(200, await svc.emailDeviceToken(body.deviceId, who.email))
       case 'refresh': return send(200, await svc.refresh(t, body.refreshToken, body.deviceId))
       case 'link': return send(200, await svc.link(uid, t))

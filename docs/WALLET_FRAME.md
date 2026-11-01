@@ -5,7 +5,7 @@ MeshPort's wallet keys live in one place: a small page on its own origin,
 iframe. The app (`meshport.xyz`) never holds a private key or a recovery
 phrase. It holds an address and a signer that asks the frame to sign.
 
-This is the same split Privy's embedded wallets use (`auth.privy.io`).
+This is the same split hosted wallets use (Circle's wallet frame is `pw-auth.circle.com`).
 
 ```
  meshport.xyz (app)                                wallet.meshport.xyz (frame)
@@ -145,7 +145,7 @@ can't open any wallet.
   script running in the app at that moment could capture them. Phase 3 moves
   these inputs into frame-rendered UI.
 - A script running in the app can still *ask* the frame to sign while the
-  wallet is open (as with Privy). What it can't do is copy the key out and
+  wallet is open (as with any hosted wallet). What it can't do is copy the key out and
   use it later or elsewhere. Phase 3 adds per-action confirmation shown by
   the frame.
 - The WebAuthn ceremony runs in the app (the passkey's RP ID is the app

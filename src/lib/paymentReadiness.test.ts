@@ -17,10 +17,10 @@ const restore = vi.hoisted(() => ({ impl: null as null | ((p?: string, o?: { sil
 const restorePrivateKey = vi.fn((p?: string, o?: { silent?: boolean }) => restore.impl!(p, o))
 vi.mock('./restoreWallet', () => ({ restorePrivateKey: (p?: string, o?: { silent?: boolean }) => restorePrivateKey(p, o) }))
 
-const privy = vi.hoisted(() => ({ connected: false, warm: [] as string[] }))
-vi.mock('@/wallet/privy', () => ({
-  privySignerConnected: () => privy.connected,
-  warmPrivySigner: async (a: string) => { privy.warm.push(a); return true },
+const circle = vi.hoisted(() => ({ ready: false, warm: [] as string[] }))
+vi.mock('@/wallet/circle', () => ({
+  circleSignerReady: () => circle.ready,
+  warmCircleSigner: async (a: string) => { circle.warm.push(a); return true },
 }))
 vi.mock('./arcService', () => ({ warmArcRpc: vi.fn() }))
 vi.mock('./payIntentService', () => ({ warmPayIntent: vi.fn(async () => {}) }))
@@ -34,7 +34,7 @@ const flush = () => new Promise(r => setTimeout(r, 0))
 beforeEach(() => {
   setAuth({ walletAddress: A, walletSource: 'create', signer: null, isLocked: false })
   restorePrivateKey.mockClear()
-  privy.connected = false; privy.warm = []
+  circle.ready = false; circle.warm = []
   // Default: the frame opens the wallet with the right passcode.
   restore.impl = async p => { if (p === '123456') { setAuth({ signer: { address: A } }); return true } return false }
 })
@@ -70,11 +70,11 @@ describe('getReadySigner', () => {
     expect(await getReadySigner()).toBeNull()
   })
 
-  it('a Privy wallet that is open but not warm yet: returned at once, its warm-up started', async () => {
-    setAuth({ walletSource: 'privy', signer: { address: A } })
+  it('a Circle wallet that is open but not warm yet: returned at once, its warm-up started', async () => {
+    setAuth({ walletSource: 'circle', signer: { address: A } })
     expect(await getReadySigner()).toEqual({ address: A })
     await flush(); await flush()
-    expect(privy.warm).toEqual([A])
+    expect(circle.warm).toEqual([A])
   })
 
   it('a failed open passes the silent option through and returns null without throwing', async () => {
@@ -101,11 +101,11 @@ describe('prepareSigner', () => {
     await vi.waitFor(() => expect(restorePrivateKey).toHaveBeenCalled())
   })
 
-  it('an open wallet is not opened again; a Privy one is warmed', async () => {
-    setAuth({ walletSource: 'privy', signer: { address: A } })
+  it('an open wallet is not opened again; a Circle one is warmed', async () => {
+    setAuth({ walletSource: 'circle', signer: { address: A } })
     prepareSigner()
     await flush(); await flush()
     expect(restorePrivateKey).not.toHaveBeenCalled()
-    expect(privy.warm).toEqual([A])
+    expect(circle.warm).toEqual([A])
   })
 })

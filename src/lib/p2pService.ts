@@ -1911,7 +1911,7 @@ async function releaseAbandonedSellReservation(trade: P2PTrade): Promise<boolean
     const { isEscrowContractDeployed, cancelTradeOnChain } = await import('./p2pEscrowContract')
     if (isEscrowContractDeployed()) {
       const { useAuthStore } = await import('../store')
-      // A wallet still opening (Privy after a start or resume) is waited for -
+      // A wallet still opening (after a start or resume) is waited for -
       // without it a plain cancel fell through to the dispute queue.
       const signer = await p2pReadySigner()
       const { walletAddress } = useAuthStore.getState()
@@ -2152,7 +2152,7 @@ export async function reconcileStuckReleases(
 }
 
 /**
- * The open wallet, waiting for one that is still opening (Privy after a start
+ * The open wallet, waiting for one that is still opening (after a start
  * or resume) - the readiness check every payment uses; silent (no recovery
  * banner: background sweeps call this). Null when it can't be opened.
  */
@@ -2175,7 +2175,7 @@ export async function markPaymentSent(trade: P2PTrade): Promise<{ success: boole
   {
     const escrowMod = await import('./p2pEscrowContract')
     // The readiness check every other payment uses: waits for a wallet that
-    // is still opening (Privy loading after a start or resume) instead of
+    // is still opening (after a start or resume) instead of
     // failing at once, and refuses a signer that isn't this account's.
     const { getReadySigner } = await import('./paymentReadiness')
     const signer = await getReadySigner()

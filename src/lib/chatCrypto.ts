@@ -176,7 +176,7 @@ export function clearChatSessionSeeds() {
 /** This wallet's chat seed: this device's copy (saved from the wallet earlier), else from the wallet key. */
 async function getMySeed(walletAddress: string): Promise<Uint8Array | null> {
   // The same seed either way (it's derived from the wallet) - the device copy
-  // costs nothing, the wallet costs a signature round (2 Privy signatures for
+  // costs nothing, the wallet costs a signature round (2 Circle signatures for
   // a Google / email wallet) on every page load.
   const saved = await loadSeed(walletAddress)
   if (saved) return saved
@@ -271,9 +271,9 @@ export async function ensureChatKeysReady(walletAddress: string, myUserId: strin
     const { data: current } = await supabase.from('users').select('chat_public_key, chat_key_sig').eq('id', myUserId).maybeSingle()
     // Already published, from this device's copy of the seed and with a
     // valid wallet signature: nothing to sign. This runs on every start and
-    // every unlock - for a Google / email (Privy) wallet it used to ask Privy
-    // for 3 signatures each time (2 for the seed, 1 for the key), right when
-    // the first payment wanted Privy too.
+    // every unlock - for a Google / email wallet it would ask the wallet for
+    // 3 signatures each time (2 for the seed, 1 for the key), right when the
+    // first payment wants it too.
     const deviceSeed = await loadSeed(walletAddress)
     if (deviceSeed && current?.chat_public_key === toBase64(x25519.getPublicKey(deviceSeed))
       && await verifyChatKey(walletAddress, current.chat_public_key, current.chat_key_sig)) return

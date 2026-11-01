@@ -1,13 +1,13 @@
 // ── Wallet readiness: one answer to "can this wallet sign right now?" ───────
-// Kept apart on purpose - a stored address is not a signer, a Privy account
-// that lists the wallet isn't one either until Privy's wallet iframe has
-// connected, and the app's own lock screen is not the wallet's state:
+// Kept apart on purpose - a stored address is not a signer, a Circle wallet
+// isn't one either until its session, backend check and SDK are ready, and
+// the app's own lock screen is not the wallet's state:
 //
 //   phase         idle               signed out
 //                 authenticated      signed in, no wallet address yet
 //                 initializing       the wallet is being opened (restoreWallet)
 //                 recovering         it was open this session and is being opened again
-//                 wallet_discovered  the provider knows the wallet, signing not connected yet (Privy)
+//                 wallet_discovered  the provider knows the wallet, signing not ready yet (Circle)
 //                 signer_ready       it can sign
 //                 locked             it needs the passcode / an unlock to open
 //                 error              the last open failed (`error` says why) - retryable
@@ -43,8 +43,6 @@ let generation = 0
 let restoring = false
 let lastError: string | null = null
 let hadSigner = false
-// Privy: is the wallet's signing iframe connected? Set once Privy's module is loaded.
-let privyConnected: ((address: string) => boolean) | null = null
 // Circle: is the session valid, confirmed and Circle's SDK loaded? Set once circle.ts is loaded.
 let circleReady: ((address: string) => boolean) | null = null
 
@@ -73,20 +71,14 @@ export function setCircleReadyProbe(probe: (address: string) => boolean): void {
   recompute()
 }
 
-/** privy.ts: lets readiness tell "listed" from "can sign". */
-export function setPrivyConnectedProbe(probe: (address: string) => boolean): void {
-  privyConnected = probe
-  recompute()
-}
 
 export function recompute(): void {
   const { walletAddress, walletSource, signer, isAuthenticated, isLocked } = useAuthStore.getState()
   let phase: WalletPhase
   if (!walletAddress) phase = isAuthenticated ? 'authenticated' : 'idle'
   else if (signer) {
-    const privyWaiting = walletSource === 'privy' && (!privyConnected || !privyConnected(walletAddress))
     const circleWaiting = walletSource === 'circle' && (!circleReady || !circleReady(walletAddress))
-    phase = privyWaiting || circleWaiting ? 'wallet_discovered' : 'signer_ready'
+    phase = circleWaiting ? 'wallet_discovered' : 'signer_ready'
   } else if (restoring) phase = hadSigner ? 'recovering' : 'initializing'
   else if (lastError) phase = 'error'
   else phase = 'locked'
@@ -152,7 +144,7 @@ export function startWalletReadiness(): void {
 /**
  * Resolves true once the wallet can sign (signer_ready), false if it settles
  * without that (locked, error, signed out) - or after `timeoutMs`, so no
- * caller can wait forever on a phase that never settles (a Privy wallet
+ * caller can wait forever on a phase that never settles (a Circle wallet
  * whose warm-up keeps failing stays 'wallet_discovered'). Event-driven.
  */
 export function untilSignerReady(timeoutMs = 60_000): Promise<boolean> {
@@ -171,5 +163,5 @@ export function untilSignerReady(timeoutMs = 60_000): Promise<boolean> {
 
 /** Test hook. */
 export function resetWalletReadiness(): void {
-  generation = 0; restoring = false; lastError = null; hadSigner = false; privyConnected = null; circleReady = null; resumeStartedAt = null
+  generation = 0; restoring = false; lastError = null; hadSigner = false; circleReady = null; resumeStartedAt = null
 }
