@@ -647,7 +647,14 @@ import { ARC_PAY_CHAIN } from './merchantPayBasics'
 export async function payArcFromBrowserWallet(w: BrowserWallet, to: string, amount: number, memo?: { code: string; orderNumber?: string | null }): Promise<string> {
   const from = await connectWallet(w)
   await ensureChain(w, ARC_PAY_CHAIN)
-  if (memo) {
+  // Arc's Memo contract only accepts an EOA as the direct caller: from a
+  // smart-contract wallet (Coinbase Smart Wallet, Safe, any ERC-4337 account)
+  // Memo.memo() is sent and then REVERTS on-chain - gas spent, nothing paid -
+  // and the plain-send fallback below never ran, since it only caught errors
+  // raised before sending (docs.arc.io/arc/concepts/transaction-memos,
+  // "Unsupported wallets"). Those wallets pay with a plain send; the order is
+  // still matched by amount and address.
+  if (memo && await isEoaOnArc(from)) {
     // The order rides along on-chain (Arc Memo contract), so the payment is
     // matched to it even if this page closes before it reports back.
     try {
@@ -659,6 +666,27 @@ export async function payArcFromBrowserWallet(w: BrowserWallet, to: string, amou
   }
   const value = parseUnits(amount.toFixed(6), 18)
   return await w.provider.request({ method: 'eth_sendTransaction', params: [{ from, to, value: `0x${value.toString(16)}` }] })
+}
+
+/**
+ * Can `address` call Arc's Memo contract directly? True for a plain account
+ * (no code) and for an EIP-7702 account (code 0xef0100…, still signed by its
+ * own key - Arc's docs treat it as an EOA); false for contract wallets. Pure
+ * on the code it is given.
+ */
+export function codeIsEoa(code: string | null | undefined): boolean {
+  const c = (code ?? '0x').toLowerCase()
+  return c === '0x' || c === '0x0' || c.startsWith('0xef0100')
+}
+async function isEoaOnArc(address: string): Promise<boolean> {
+  try {
+    const { arcRpcJson } = await import('./arc')
+    const j = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getCode', params: [address, 'latest'] }, 5000)
+    return codeIsEoa(j?.result)
+  } catch {
+    // Unknown: a plain send works for every wallet; the memo is a bonus.
+    return false
+  }
 }
 
 /** A USDC transfer to `to`, wrapped in Memo.memo(...) with the order attached. */
