@@ -94,6 +94,32 @@ export async function getUnifiedBalances(kit: any, walletAddr: string): Promise<
 }
 
 
+/** Gateway refused a spend because the balance it sees is short - before anything moved. */
+export function ubBalanceShort(err: any): boolean {
+  return /insufficient usdc balance on arc/i.test(String(err?.message ?? err ?? ''))
+}
+
+/**
+ * After a deposit, until Gateway counts it: polls the confirmed Arc Unified
+ * Balance until it covers `needed`. A deposit confirmed on Arc isn't in
+ * Gateway's balance at the same instant - a spend sent ~2 s after the deposit
+ * was refused with "Insufficient USDC balance on Arc Testnet. Available:
+ * 0.015218" (field 1 Nov 14:53) and the 1 USDC sat in Recover. True once
+ * counted; false after `timeoutMs` (the spend then goes ahead as before).
+ */
+export async function waitForUbCredit(kit: any, walletAddr: string, needed: number, timeoutMs = 20_000, pollMs = 700): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    try {
+      const rows = await getUnifiedBalances(kit, walletAddr)
+      const arc = rows.find(r => r.chain === ARC_CHAIN_KEY)
+      if (arc && arc.confirmed + 1e-6 >= needed) return true
+    } catch { /* Gateway unreachable for a moment: ask again */ }
+    if (Date.now() + pollMs > deadline) return false
+    await new Promise(r => setTimeout(r, pollMs))
+  }
+}
+
 /**
  * Spend a chain's confirmed Unified Balance to the user's own Arc wallet.
  * `dust`: leftover already in that chain's Unified Balance (earlier

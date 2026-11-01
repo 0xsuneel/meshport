@@ -36,7 +36,7 @@ import { useSolanaWallet } from '@/wallet/useSolanaWallet'
 import { quoteAccount } from '@/wallet/account'
 import { timeQuote } from '@/lib/quoteTiming'
 import { circleForwarderMintsTo, noteForwarderMintFailed } from '@/lib/chainRpcs'
-import { gatewaySelfMintsTo, forwarderMintRetry, gatewaySpecAlreadyMinted, getUnifiedBalances, UB_MIN_SWEEP, ubSpend } from '@/lib/ubClaim'
+import { gatewaySelfMintsTo, forwarderMintRetry, gatewaySpecAlreadyMinted, getUnifiedBalances, UB_MIN_SWEEP, ubSpend, waitForUbCredit, ubBalanceShort } from '@/lib/ubClaim'
 import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -2422,6 +2422,15 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           }
         } catch { /* progress events are best effort */ }
 
+        // Gateway counts a deposit a moment after Arc confirms it: spending
+        // before that is refused ("Insufficient USDC balance", field 1 Nov
+        // 14:53). Wait until it shows (at once when already counted).
+        if (!fromHeld && senderAddress) {
+          setStage('ub credit')
+          const credited = await waitForUbCredit(kit, senderAddress, Number(spendParams.amount))
+          moveTimerRef.current?.mark(credited ? 'ub_credited' : 'ub_credit_timeout')
+        }
+
         let spendResult: any
         setStage('spend')
         const spendAttemptStartedAt = Date.now()
@@ -2488,6 +2497,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               // original error rather than attempt a top-up we can't afford.
               throw spendErr
             }
+          } else if (ubBalanceShort(spendErr) && senderAddress) {
+            // Refused before anything moved: Gateway hadn't counted the
+            // deposit yet. Wait for it, then the same spend once more.
+            logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: 'unifiedBalance.spend: balance not counted yet - waiting, then once more', data: { message: spendErr?.message } })
+            moveTimerRef.current?.mark('ub_short_retry')
+            if (!(await waitForUbCredit(kit, senderAddress, Number(spendParams.amount), 30_000))) throw spendErr
+            spendResult = await ubSpend(kit, spendParams)
           } else {
             // Uses the same tryResumeSpend helper the maxFee top-up retry's
             // catch block now uses above - was inlined here separately
