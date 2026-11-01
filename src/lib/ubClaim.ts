@@ -206,6 +206,34 @@ export function forwarderMintRetry(err: any): { attestation: string; signature: 
 }
 
 /**
+ * Gateway refused the signed spend because its forwarding fee rose between
+ * the estimate the SDK signed and the transfer ("Insufficient total maxFee
+ * across intents to cover forwarding fee. Required additional: 0.000181").
+ * A refusal at /v1/transfer: nothing was burned or attested. Pure.
+ */
+export function gatewayMaxFeeTooLow(err: any): boolean {
+  const text = [err?.message, err?.cause?.message, err?.cause?.trace?.message, (() => { try { return JSON.stringify(err?.cause ?? '') } catch { return '' } })()].join(' ')
+  return /insufficient total maxfee.*forwarding fee/i.test(text)
+}
+
+/**
+ * kit.unifiedBalance.spend(), asked again when Gateway's forwarding fee moved
+ * between estimate and submit: every call re-estimates (/v1/estimate) and
+ * signs the maxFee Gateway asks for NOW, and the refusal means nothing was
+ * sent - so the retry is safe. Any other error is thrown as it is.
+ */
+export async function ubSpend(kit: any, params: any, tries = 3): Promise<any> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await kit.unifiedBalance.spend(params)
+    } catch (e) {
+      if (attempt >= tries || !gatewayMaxFeeTooLow(e)) throw e
+      await new Promise(r => setTimeout(r, 700 * attempt))
+    }
+  }
+}
+
+/**
  * Spend `amount` of `fromChain`'s Unified Balance to any chain/recipient
  * (fees come out of `amount`). Uses Circle's forwarder; if the forwarder's
  * mint fails on-chain - or the destination is in GATEWAY_SELF_MINT_CHAINS -
@@ -243,11 +271,11 @@ export async function spendUnifiedTo(params: {
   if (send <= 0) throw new Error(`Amount too small to cover the Gateway fee (${fee.toFixed(4)} USDC)`)
 
   if (selfMint) {
-    const r: any = await kit.unifiedBalance.spend({ from: alloc(send), to: selfMintTo, token: 'USDC', amount: send.toFixed(6) })
+    const r: any = await ubSpend(kit, { from: alloc(send), to: selfMintTo, token: 'USDC', amount: send.toFixed(6) })
     return { txHash: hashOf(r), received: send }
   }
   try {
-    const r: any = await kit.unifiedBalance.spend({ from: alloc(send), to: forwarderTo, token: 'USDC', amount: send.toFixed(6) })
+    const r: any = await ubSpend(kit, { from: alloc(send), to: forwarderTo, token: 'USDC', amount: send.toFixed(6) })
     return { txHash: hashOf(r), received: send }
   } catch (err) {
     // Forwarder mint failed on-chain: the attestation is still valid -
@@ -295,7 +323,7 @@ export async function spendDustToArc(params: {
     .map(d => ({ chain: d.chain, amount: Math.floor(d.amount * ratio * 1e6) / 1e6 }))
     .filter(a => a.amount > 0)
   const send = allocations.reduce((s, a) => s + a.amount, 0)
-  const r: any = await kit.unifiedBalance.spend({
+  const r: any = await ubSpend(kit, {
     from: { adapter, allocations: allocations.map(a => ({ amount: a.amount.toFixed(6), chain: a.chain })) },
     to, token: 'USDC', amount: send.toFixed(6),
   })

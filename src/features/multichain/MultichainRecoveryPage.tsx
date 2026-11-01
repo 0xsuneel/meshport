@@ -265,7 +265,8 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
 
   const resolveStuck = async (t: (typeof ubStuck)[number], mode: 'refund' | 'forward') => {
     const key = `ubstuck:${t.id}`
-    setBusy(key)
+    // Which button: both are disabled while either runs, only this one says "Sending…".
+    setBusy(`${key}:${mode}`)
     try {
       const { resolveUbStuckTransfer } = await import('@/lib/ubFundRecovery')
       const out = await resolveUbStuckTransfer({ walletAddress: walletAddress!, signer: await getSigner(), item: t, mode, available: t.available })
@@ -366,7 +367,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
       {ubStuck.map(t => {
         const key = `ubstuck:${t.id}`
         const r = result[key]
-        const isBusy = busy === key
+        const isBusy = !!busy && busy.startsWith(`${key}:`)
         // After a failed forwarder delivery Circle keeps the delivered amount
         // reserved until that delivery expires, so the Arc balance reads low.
         // Acting on the remainder then would send only the fee allowance and
@@ -419,11 +420,11 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
                 </div>
               ) : (
               <button style={{ ...btn, flex: 1 }} disabled={isBusy} onClick={() => void resolveStuck(t, 'forward')}>
-                {isBusy ? 'Sending…' : `Send to ${t.destinationLabel}`}
+                {busy === `${key}:forward` ? 'Sending…' : `Send to ${t.destinationLabel}`}
               </button>
               )}
               <button style={{ ...btn, flex: 1 }} disabled={isBusy} onClick={() => void resolveStuck(t, 'refund')}>
-                {isBusy ? 'Sending…' : 'Send back to my wallet'}
+                {busy === `${key}:refund` ? 'Sending…' : 'Send back to my wallet'}
               </button>
             </div>
             )}
