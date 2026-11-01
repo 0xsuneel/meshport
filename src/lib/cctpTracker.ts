@@ -66,12 +66,20 @@ export interface IrisMessage {
   forwardTxHash?: string | null
 }
 
+/** Circle's forwarder delivered it: forwardState CONFIRMED or COMPLETE, with its tx. Pure. */
+export function forwardDone(msg: IrisMessage | null | undefined): boolean {
+  const f = (msg?.forwardState ?? '').toUpperCase()
+  return (f === 'COMPLETE' || f === 'CONFIRMED') && !!msg?.forwardTxHash
+}
+
 /** Maps an Iris record (or none yet) to a progress stage. Pure - unit tested. */
 export function progressFromIris(msg: IrisMessage | null | undefined, knownMintTx?: string): CctpProgress {
   if (knownMintTx) return { stage: 'done', mintTxHash: knownMintTx }
   if (!msg) return { stage: 'burning' }
   const forward = (msg.forwardState ?? '').toUpperCase()
-  if (forward === 'COMPLETE' && msg.forwardTxHash) return { stage: 'done', mintTxHash: msg.forwardTxHash }
+  // Circle: CONFIRMED or COMPLETE with forwardTxHash = delivered (docs.arc.io
+  // app-kit/references/unified-balance-error-recovery#poll-a-pending-deposit).
+  if (forwardDone(msg)) return { stage: 'done', mintTxHash: msg.forwardTxHash! }
   if (forward === 'FAILED') {
     return { stage: 'error', msg: 'Circle couldn’t deliver this transfer automatically. Your USDC is safe - finish it from Multichain Hub → Recover.' }
   }
