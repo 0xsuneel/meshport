@@ -2241,6 +2241,23 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         }
         const spendFeeEstimate = freshEstimate.spendOverhead
         const spendAmount = ubSpendAmount(targetDepositAmount, spendFeeEstimate, ubArcDustRef.current)
+        // Where MeshPort's relayer delivers (gatewaySelfMintsTo), Circle's kit
+        // still signs a gatewayMint transaction through the destination adapter
+        // - a signature the relayed provider throws away (it sends only the
+        // call's target and data, from the relayer: lib/relayedProvider). With
+        // a Circle wallet that cost a full Circle signature (~3.5 s, field
+        // 1 Nov). The burn intent's destinationCaller is zero (anyone may
+        // mint - provider-gateway-v1 createBurnIntentFromAlloc) and Circle's
+        // attestation fixes recipient and amount, so the destination adapter
+        // is a throwaway key made in memory for this transfer: no funds, never
+        // stored, discarded with the screen.
+        const mintAdapter = gatewaySelfMintsTo(chain.sdk)
+          ? await (async () => {
+              const { privateKeyToAccount, generatePrivateKey } = await import('viem/accounts')
+              const throwaway = Object.assign(privateKeyToAccount(generatePrivateKey()), { meshportWallet: true as const })
+              return createWalletAdapter({ account: throwaway as any, getProvider: ({ chain: sdkChain }: any) => relayedProviderFor(sdkChain) })
+            })()
+          : null
         const spendParams = {
           amount: spendAmount.toFixed(6),
           from: {
@@ -2252,7 +2269,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // MeshPort's relayer instead (relayedProviderFor). Recipient is
           // unchanged.
           to: (gatewaySelfMintsTo(chain.sdk)
-            ? { chain: chain.sdk as any, recipientAddress: address, adapter, useForwarder: false }
+            ? { chain: chain.sdk as any, recipientAddress: address, adapter: mintAdapter, useForwarder: false }
             : { chain: chain.sdk as any, recipientAddress: address, useForwarder: true }) as any,
           token: 'USDC',
         }
