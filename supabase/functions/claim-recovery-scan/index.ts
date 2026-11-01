@@ -105,7 +105,7 @@ const MINT_FROM_TOPIC = '0x' + '0'.repeat(64)
 // generic-receive scan - that one keeps its existing wrapper-based
 // behavior unchanged.
 const NATIVE_USDC_EMITTER = '0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE'
-const ARC_EXPLORER = 'https://testnet.arcscan.app'
+const ARC_EXPLORER = 'https://explorer.testnet.arc.io' // Arc's official explorer (docs.arc.io)
 
 // ── Sender-based internal-contract classification (docs/CLAIM_RECOVERY_SENDER_CLASSIFICATION_FIX.md) ──
 // A Transfer whose SENDER is one of these addresses is a MeshPort-internal

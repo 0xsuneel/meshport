@@ -368,7 +368,7 @@ Deno.serve(async (req: Request) => {
     const candidates = await findDepositCandidateChainEvents(supabase, chain.id, sinceIso)
     const lookup = makeLiveDepositEligibilityLookup(supabase)
     const updateRepo = makeLiveDepositActivityUpdateRepository(supabase)
-    const results = await sweepDepositCandidateChainEvents(candidates, lookup, updateRepo, 'https://testnet.arcscan.app')
+    const results = await sweepDepositCandidateChainEvents(candidates, lookup, updateRepo, 'https://explorer.testnet.arc.io')
     return json({ ok: true, mode, sinceIso, processed: results.length, results })
   }
 

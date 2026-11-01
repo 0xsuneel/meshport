@@ -48,7 +48,7 @@ const SUPABASE_SERVICE_KEY = getServiceRoleKey()
 // Separate Circle secret from any CCTP-related Circle usage elsewhere.
 const CIRCLE_API_KEY = Deno.env.get('CIRCLE_API_KEY') ?? ''
 
-const ARC_EXPLORER = 'https://testnet.arcscan.app'
+const ARC_EXPLORER = 'https://explorer.testnet.arc.io' // Arc's official explorer (docs.arc.io)
 const MINT_FROM_TOPIC = '0x' + '0'.repeat(64)
 
 // Same contracts/decimals as claim-recovery-scan's own token list. USDC's
