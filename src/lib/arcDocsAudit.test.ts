@@ -23,3 +23,16 @@ describe('Cancelling a stuck payment always outbids it (replacements need +10%)'
     }
   })
 })
+
+describe("Circle's forwarder delivered: CONFIRMED or COMPLETE with its tx (docs: unified-balance-error-recovery)", () => {
+  it('counts CONFIRMED too, never without the tx, never PENDING / FAILED', async () => {
+    const { forwardDone, progressFromIris } = await import('./cctpTracker')
+    const tx = '0x' + 'a'.repeat(64)
+    expect(forwardDone({ forwardState: 'CONFIRMED', forwardTxHash: tx })).toBe(true)
+    expect(forwardDone({ forwardState: 'COMPLETE', forwardTxHash: tx })).toBe(true)
+    expect(forwardDone({ forwardState: 'CONFIRMED' })).toBe(false)
+    expect(forwardDone({ forwardState: 'PENDING', forwardTxHash: tx })).toBe(false)
+    expect(forwardDone({ forwardState: 'FAILED', forwardTxHash: tx })).toBe(false)
+    expect(progressFromIris({ status: 'complete', attestation: '0x1', forwardState: 'CONFIRMED', forwardTxHash: tx })).toEqual({ stage: 'done', mintTxHash: tx })
+  })
+})

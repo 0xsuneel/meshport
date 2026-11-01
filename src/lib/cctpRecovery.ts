@@ -124,15 +124,15 @@ const MESSAGE_TRANSMITTER_V2 = '0xe737e5cebeeba77efe34d4aa090756590b1ce275' as c
 export async function finishCctpMintViaRelayer(p: {
   sourceChain: string; destinationChain: string; burnTxHash: string; timeoutMs?: number; pollMs?: number
 }): Promise<{ mintTxHash: string } | null> {
-  const { fetchIrisMessage } = await import('./cctpTracker')
+  const { fetchIrisMessage, forwardDone } = await import('./cctpTracker')
   const deadline = Date.now() + (p.timeoutMs ?? 120_000)
   let msg = await fetchIrisMessage(p.sourceChain, p.burnTxHash)
   while (Date.now() < deadline && !(msg?.status === 'complete' && msg.message && msg.attestation && msg.attestation !== 'PENDING')) {
-    if ((msg?.forwardState ?? '').toUpperCase() === 'COMPLETE' && msg?.forwardTxHash) return { mintTxHash: msg.forwardTxHash }
+    if (forwardDone(msg) && msg?.forwardTxHash) return { mintTxHash: msg.forwardTxHash }
     await new Promise(r => setTimeout(r, p.pollMs ?? 3000))
     msg = await fetchIrisMessage(p.sourceChain, p.burnTxHash)
   }
-  if ((msg?.forwardState ?? '').toUpperCase() === 'COMPLETE' && msg?.forwardTxHash) return { mintTxHash: msg.forwardTxHash }
+  if (forwardDone(msg) && msg?.forwardTxHash) return { mintTxHash: msg.forwardTxHash }
   if (!msg?.message || !msg.attestation || msg.attestation === 'PENDING') return null
   // Circle's forwarder gave up on this mint: remember the chain so the next
   // transfers there go straight to the relayer (see noteForwarderMintFailed).
@@ -155,7 +155,7 @@ export async function finishCctpMintViaRelayer(p: {
   // The relayer simulates first, so a refusal usually means it was already
   // minted (e.g. Circle's forwarder got there after all) - check Iris again.
   const again = await fetchIrisMessage(p.sourceChain, p.burnTxHash)
-  if ((again?.forwardState ?? '').toUpperCase() === 'COMPLETE' && again?.forwardTxHash) return { mintTxHash: again.forwardTxHash }
+  if (forwardDone(again) && again?.forwardTxHash) return { mintTxHash: again.forwardTxHash }
   throw new Error(out?.error || 'Relayer could not finish this mint')
 }
 

@@ -26,7 +26,7 @@
 import { encodeFunctionData, decodeFunctionResult, pad, parseUnits, type Hex } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { arcRpcJson } from './arc'
-import { CCTP_DOMAINS, IRIS, fetchIrisMessage, type IrisMessage } from './cctpTracker'
+import { CCTP_DOMAINS, IRIS, fetchIrisMessage, forwardDone, type IrisMessage } from './cctpTracker'
 import { FORWARD_HOOK, FAST_FINALITY, ARC_DOMAIN } from './gaslessBridge'
 
 export const TOKEN_MESSENGER_V2 = '0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA' as Hex
@@ -254,7 +254,7 @@ export async function deliveredOnChain(msg: IrisMessage | null, destination: str
 }
 
 export const attested = (m: IrisMessage | null) => !!m && m.status === 'complete' && !!m.message && !!m.attestation && m.attestation !== 'PENDING'
-export const forwarded = (m: IrisMessage | null) => (m?.forwardState ?? '').toUpperCase() === 'COMPLETE' && !!m?.forwardTxHash
+export const forwarded = (m: IrisMessage | null) => forwardDone(m)
 export const forwardFailed = (m: IrisMessage | null) => (m?.forwardState ?? '').toUpperCase() === 'FAILED'
 
 export async function fastCctpTransfer(p: FastCctpParams): Promise<FastCctpResult> {
