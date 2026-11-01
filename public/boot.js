@@ -37,7 +37,8 @@
         var persisted = localStorage.getItem('meshport-auth-v4');
         if (persisted && persisted.indexOf('"walletSource":"circle"') !== -1) {
           var pc = document.createElement('link');
-          pc.rel = 'preconnect'; pc.href = 'https://pw-auth.circle.com'; pc.crossOrigin = '';
+          // No crossorigin: the frame is a page load (credentialed connection).
+          pc.rel = 'preconnect'; pc.href = 'https://pw-auth.circle.com';
           document.head.appendChild(pc);
         }
       } catch (e) {}
