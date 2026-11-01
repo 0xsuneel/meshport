@@ -12,6 +12,7 @@ import { plainTextOf, parseMedia } from './chatMessageText'
 import { searchTerm } from '@/lib/searchTerm'
 import { SearchField } from '@/components/ui/SearchField'
 import { SkeletonRows } from '@/components/ui/Skeleton'
+import { savedFile, saveFile } from './chatMediaStore'
 
 const MAX_TARGETS = 5
 
@@ -81,9 +82,16 @@ export function ChatForwardSheet({ messages, sourceKey, myUserId, walletAddress,
             if (media) {
               let blob = plainBlobs.get(m.id)
               if (!blob) {
-                const res = await fetch(media.url)
-                if (!res.ok) throw new Error('download failed')
-                const bytes = await res.arrayBuffer()
+                // This phone's copy first (device-only chat: the server copy
+                // may already be gone).
+                const kept = await savedFile(media.url)
+                let bytes: ArrayBuffer
+                if (kept) bytes = await kept.arrayBuffer()
+                else {
+                  const res = await fetch(media.url)
+                  if (!res.ok) throw new Error('download failed')
+                  bytes = await res.arrayBuffer()
+                }
                 blob = media.encrypted ? await decryptBlob(bytes, media.iv, sourceKey) : new Blob([bytes])
                 plainBlobs.set(m.id, blob)
               }
@@ -93,6 +101,7 @@ export function ChatForwardSheet({ messages, sourceKey, myUserId, walletAddress,
               const { error } = await supabase.storage.from('attachments').upload(path, up, { cacheControl: '3600', upsert: false, contentType: encrypted ? 'application/octet-stream' : (blob.type || 'application/octet-stream') })
               if (error) throw error
               const url = supabase.storage.from('attachments').getPublicUrl(path).data.publicUrl
+              await saveFile(url, up)
               const safeName = encodeURIComponent(media.name)
               marker = media.kind === 'image'
                 ? (encrypted ? `[IMAGE-E:${ivBase64}](${url})` : `[IMAGE](${url})`)

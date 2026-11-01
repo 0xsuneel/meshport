@@ -9,6 +9,7 @@ import { Store } from 'lucide-react'
 import { useBusinessTab } from '@/lib/merchant'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 import { backLayerPop } from '@/lib/backLayers'
+import { LOCAL_CHAT_EVENT } from '@/lib/localChat'
 
 // Icons (navIcons.tsx, Phosphor): outline when idle. `filled` (the phone
 // bottom bar) shows the selected tab as the solid version in white on a
@@ -75,23 +76,26 @@ export function BottomNav() {
           fetchBlocked(user.id).catch(() => []),
         ])
         const blockedIds = new Set(blocked.map(b => b.id))
-        // App start: the count comes from the one startup call (lib/homeBootstrap.ts)
-        // - it counts every chat, so only when nothing needs leaving out.
-        const { bootPart } = await import('@/lib/homeBootstrap')
-        const bootCount = await bootPart('unread_chats', 'bottomnav', { userId: user.id })
-        if (typeof bootCount === 'number' && !requestIds.size && !blockedIds.size) { setUnreadChats(bootCount); return }
         const { supabase } = await import('@/lib/supabase')
         const { data: convs } = await supabase
           .from('conversations').select('id, participant_a, participant_b')
           .or(`participant_a.eq.${user.id},participant_b.eq.${user.id}`)
         const convIds = (convs || [])
+          .filter((c: any) => c.participant_a !== c.participant_b) // a chat with myself is never unread
           .filter((c: any) => !requestIds.has(c.id) && !blockedIds.has(c.participant_a === user.id ? c.participant_b : c.participant_a))
           .map((c: any) => c.id)
         if (!convIds.length) { setUnreadChats(0); return }
-        const { count } = await supabase
-          .from('messages').select('*', { count: 'exact', head: true })
-          .in('conversation_id', convIds).eq('is_read', false).neq('sender_id', user.id)
-        setUnreadChats(count || 0)
+        // Device-only chat: unread chat messages are counted on this phone
+        // (lib/localChat.ts); the server only for payment cards.
+        const [{ count }, local] = await Promise.all([
+          supabase.from('messages').select('*', { count: 'exact', head: true })
+            .in('conversation_id', convIds).in('type', ['payment_sent', 'payment_received'])
+            .eq('is_read', false).neq('sender_id', user.id),
+          import('@/lib/localChat').then(l => l.summaries(user.id, [user.id])).catch(() => new Map()),
+        ])
+        let localUnread = 0
+        for (const id of convIds) localUnread += local.get(id)?.unread ?? 0
+        setUnreadChats((count || 0) + localUnread)
       } catch {}
     }
     fetchUnread()
@@ -112,7 +116,10 @@ export function BottomNav() {
     Promise.all([import('@/lib/supabase'), import('@/lib/chatService')]).then(([{ supabase: sb }, { subscribeWithRetry }]) => {
       if (cancelled) return
       unsubscribe = subscribeWithRetry(sb, 'nav-unread-' + (user?.id?.slice(0, 12) || 'anon'), channel => channel
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload: any) => {
+          // Chat text and receipts are counted once saved on this phone (LOCAL_CHAT_EVENT).
+          const t = payload?.new?.type
+          if (t !== 'payment_sent' && t !== 'payment_received') return
           import('@/lib/supabase').then(({ invalidateConversationsCache }) => invalidateConversationsCache())
           fetchUnread()
         })
@@ -124,12 +131,18 @@ export function BottomNav() {
       )
     })
     window.addEventListener('meshport:session-bound', fetchUnread)
+    // This phone's chat store changed (a message saved, or read).
+    let localTimer: ReturnType<typeof setTimeout> | null = null
+    const onLocal = () => { if (localTimer) clearTimeout(localTimer); localTimer = setTimeout(fetchUnread, 200) }
+    window.addEventListener(LOCAL_CHAT_EVENT, onLocal)
     // Blocking, unblocking or accepting someone changes what counts.
     window.addEventListener('meshport:chat-count-changed', fetchUnread)
     return () => {
       cancelled = true; unsubscribe?.()
       window.removeEventListener('meshport:session-bound', fetchUnread)
       window.removeEventListener('meshport:chat-count-changed', fetchUnread)
+      window.removeEventListener(LOCAL_CHAT_EVENT, onLocal)
+      if (localTimer) clearTimeout(localTimer)
     }
   }, [user?.id, setUnreadChats])
 

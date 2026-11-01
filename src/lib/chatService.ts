@@ -281,26 +281,46 @@ export interface SendParams {
   replyToId?: string | null
 }
 
-// ── Load messages from Supabase REST (anon key - SELECT works fine) ───────────
-export async function loadMessages(conversationId: string): Promise<ChatMessage[]> {
-  try {
-    // Fetch newest 100 first (DESC), then reverse for display order
-    const r = await fetch(
-      `${SUPA_URL}/rest/v1/messages?conversation_id=eq.${encodeURIComponent(conversationId)}&order=created_at.desc&limit=1000&select=*`,
-      { headers: await authHeaders() }
-    )
-    if (!r.ok) {
-      console.error('[chatService] loadMessages HTTP', r.status, await r.text().catch(() => ''))
-      return []
+// ── Load a conversation: chat from this phone + payment cards from Supabase ──
+const MSG_COLS = 'id,conversation_id,sender_id,content,type,payment_amount,payment_tx_hash,token_symbol,is_read,created_at,delivered_at,read_at,reply_to_id,forwarded,deleted_at'
+
+/** Merges two message lists by id (a later copy wins) and keeps the newest `limit`, oldest first (exported for tests). */
+export function mergeNewest(a: ChatMessage[], b: ChatMessage[], limit: number): ChatMessage[] {
+  const byId = new Map<string, ChatMessage>()
+  for (const m of [...a, ...b]) if (m?.id) byId.set(m.id, { ...byId.get(m.id), ...m })
+  const all = [...byId.values()].sort((x, y) => (x.created_at < y.created_at ? -1 : x.created_at > y.created_at ? 1 : 0))
+  return all.slice(Math.max(0, all.length - limit))
+}
+
+/**
+ * The newest `limit` messages of a conversation (older than `before` when
+ * paging back), oldest first. Device-only chat: text, photos and files come
+ * from this phone (lib/localChat.ts); payment cards from Supabase, so
+ * payment history shows on every device.
+ */
+export async function loadMessages(conversationId: string, userId: string, limit = 50, before?: string): Promise<ChatMessage[]> {
+  const local = import('./localChat').then(l => l.getMessages(userId, conversationId, limit, before)).catch(e => {
+    console.error('[chatService] local messages failed:', e instanceof Error ? e.message : e)
+    return [] as ChatMessage[]
+  })
+  const server = (async () => {
+    try {
+      const r = await fetch(
+        `${SUPA_URL}/rest/v1/messages?conversation_id=eq.${encodeURIComponent(conversationId)}&type=in.(payment_sent,payment_received)`
+          + (before ? `&created_at=lt.${encodeURIComponent(before)}` : '')
+          + `&order=created_at.desc&limit=${limit}&select=${MSG_COLS}`,
+        { headers: await authHeaders() },
+      )
+      if (!r.ok) { console.error('[chatService] loadMessages HTTP', r.status); return [] as ChatMessage[] }
+      const data = await r.json()
+      return (Array.isArray(data) ? data : []) as ChatMessage[]
+    } catch (e: any) {
+      console.error('[chatService] loadMessages error:', e?.message)
+      return [] as ChatMessage[]
     }
-    const data = await r.json()
-    const rows = Array.isArray(data) ? data : []
-    // Reverse so oldest messages are first (correct display order)
-    return [...rows].reverse()
-  } catch (e: any) {
-    console.error('[chatService] loadMessages error:', e?.message)
-    return []
-  }
+  })()
+  const [l, s] = await Promise.all([local, server])
+  return mergeNewest(s, l, limit)
 }
 
 // ── Get or create conversation ────────────────────────────────────────────────
@@ -358,6 +378,18 @@ export async function ensureConversation(myId: string, otherId: string): Promise
 const _serverTouched = new Map<string, string>()
 
 export async function persistMessage(p: SendParams): Promise<ChatMessage | null> {
+  const saved = await persistOnServer(p)
+  // Device-only chat: my copy of a chat message lives on this phone (the
+  // server copy goes once the recipient's phone has it). Payment cards stay
+  // in Supabase.
+  if (saved) {
+    await import('./localChat').then(l => l.putMessages(p.senderId, [saved])).catch(e =>
+      console.error('[chatService] saving my copy failed:', e instanceof Error ? e.message : e))
+  }
+  return saved
+}
+
+async function persistOnServer(p: SendParams): Promise<ChatMessage | null> {
   // PATH 1: Vercel /api/send-message with service role key
   try {
     const r = await fetch('/api/chat?action=send', {
@@ -481,7 +513,23 @@ export async function touchConversation(
 }
 
 // ── Mark messages read ────────────────────────────────────────────────────────
+/**
+ * Chat messages live on this phone: marks the other person's unread ones read
+ * here and sends them a read receipt (blue ticks) as a signal.
+ */
+export async function markReadLocal(conversationId: string, myId: string): Promise<void> {
+  try {
+    const { markConversationRead } = await import('./localChat')
+    const ids = await markConversationRead(myId, conversationId, [myId])
+    if (ids.length) await import('./chatMailbox').then(m => m.sendSignal(conversationId, 'read', ids))
+  } catch (e) {
+    console.error('[chatService] local markRead failed:', e instanceof Error ? e.message : e)
+  }
+}
+
 export async function markRead(conversationId: string, myId: string) {
+  await markReadLocal(conversationId, myId)
+  // Payment cards (in Supabase):
   try {
     // BUG FIX (2026-09-03): a self-conversation (participant_a ===
     // participant_b === myId - you paying/messaging your own username) has
