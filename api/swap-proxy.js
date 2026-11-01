@@ -86,7 +86,7 @@ async function recordSwapActivity(walletAddress, txHash, amountIn, amountOut, to
         usd_value:      amountIn,
         token_symbol:   tokenIn,
         status:         'completed',
-        explorer_url:   `https://testnet.arcscan.app/tx/${txHash}`,
+        explorer_url:   `https://explorer.testnet.arc.io/tx/${txHash}`,
         metadata:       { tokenIn, tokenOut, amountIn, amountOut },
         // Best-effort traceability back to the canonical intent, when the
         // client sent one - never required, on_conflict=ignore means an

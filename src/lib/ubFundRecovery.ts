@@ -54,8 +54,8 @@ const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) =
   ? 'Arc'
   : 'Arc_Testnet'
 const ARC_EXPLORER = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
-  ? 'https://arcscan.app'
-  : 'https://testnet.arcscan.app'
+  ? 'https://explorer.arc.io'
+  : 'https://explorer.testnet.arc.io'
 
 let _sdkModules: { AppKit: any; JsonRpcProvider: any; FallbackProvider: any } | null = null
 async function loadSdk() {
