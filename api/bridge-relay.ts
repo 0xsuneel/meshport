@@ -727,6 +727,8 @@ async function quote(chainKey: string, total: bigint) {
 // (cap, default 0.50).
 
 const CCTPX_IRIS = (process.env.CCTPX_IRIS || 'https://iris-api-sandbox.circle.com').replace(/\/+$/, '')
+/** How long token_relay waits for the source chain's receipt before answering 'pending'. */
+const TOKEN_RECEIPT_WAIT_MS = 4_000
 const TOKEN_ROUTER_GAS = 420_000n     // receive/permit + fee transfer + approves + crossChainTransfer
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
@@ -1015,8 +1017,16 @@ async function tokenRelay(req: VercelRequest, res: VercelResponse) {
     chainGasPrice(pub, chainKey).catch(() => undefined),
   ])
   if (used) {
-    const logs = await pub.getContractEvents({ address: router, abi: TOKEN_ROUTER_ABI, eventName: 'TokenBridged', args: { from: auth.from, nonce }, fromBlock: 'earliest' }).catch(() => [])
-    const hit = (logs as any[])[0]
+    // Public nodes often refuse a log search from block 0; the authorization
+    // can only have been used inside its window (MAX_AUTH_WINDOW_SEC), so the
+    // recent blocks are searched when the full search is refused.
+    const find = (fromBlock: bigint | 'earliest') => pub.getContractEvents({ address: router, abi: TOKEN_ROUTER_ABI, eventName: 'TokenBridged', args: { from: auth.from, nonce }, fromBlock }) as Promise<any[]>
+    let logs: any[] = await find('earliest').catch(() => [])
+    if (!logs.length) {
+      const head = await pub.getBlockNumber().catch(() => null)
+      if (head !== null) logs = await find(head > 9_000n ? head - 9_000n : 0n).catch(() => [])
+    }
+    const hit = logs[0]
     return hit ? res.status(200).json({ txHash: hit.transactionHash, alreadySubmitted: true })
       : res.status(409).json({ error: 'This authorization was already used' })
   }
@@ -1040,8 +1050,13 @@ async function tokenRelay(req: VercelRequest, res: VercelResponse) {
     account: wallet.account, address: router, abi: TOKEN_ROUTER_ABI, ...call, value: q.nativeFee,
   } as any).catch((e: any) => { throw Object.assign(new Error(e?.shortMessage || 'Transfer would fail'), { status: 400 }) })
   const txHash = await wallet.writeContract({ ...request, ...(await relayFees(pub, pub.chain.id)) })
+  // Answer as soon as it is sent. Waiting here for the source chain's receipt
+  // (up to 40 s on Ethereum) held the phone's request open that long, and a
+  // phone that dropped it saw "Failed to fetch" for a transfer that was sent
+  // (field 1 Nov 04:46, EURC from Ethereum). The app waits for the receipt
+  // itself ('pending'); a fast chain still answers with the receipt here.
   try {
-    const receipt = await pub.waitForTransactionReceipt({ hash: txHash, timeout: 40_000 })
+    const receipt = await pub.waitForTransactionReceipt({ hash: txHash, timeout: TOKEN_RECEIPT_WAIT_MS })
     if (receipt.status !== 'success') return res.status(502).json({ error: 'Transaction reverted', txHash })
     return res.status(200).json({ txHash })
   } catch {
