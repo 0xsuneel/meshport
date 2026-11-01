@@ -17,7 +17,16 @@ export function RouteErrorPage() {
   // otherwise the connection dropped it (weak signal), and "MeshPort was
   // updated" was the wrong thing to say.
   const [updated, setUpdated] = useState(false)
-  useEffect(() => { if (stale) void buildVerdict().then(v => setUpdated(v === 'stale')) }, [stale])
+  useEffect(() => {
+    if (!stale) return
+    void buildVerdict().then(v => {
+      setUpdated(v === 'stale')
+      // The screen itself (reportClientError skips file failures): which file, and was it a deploy.
+      void import('@/lib/errorReport').then(r => r.reportChunkFailure(
+        `error screen shown, server says ${v}: ${String((error as any)?.message ?? error).slice(0, 300)}`,
+      )).catch(() => {})
+    })
+  }, [stale, error])
 
   useEffect(() => {
     // Offline: a failed load isn't an update - wait for the connection (below).

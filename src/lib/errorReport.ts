@@ -37,6 +37,40 @@ function insert(row: Row): void {
     () => hold(row),
   )
 }
+// ── Screen files that didn't load ([chunk]) ─────────────────────────────────
+// reportClientError skips these (a deploy's own reload handles them), so a
+// phone stuck on "This screen didn't load" left nothing to read. They're
+// reported here, and also kept on the device first: the reload that follows
+// right away would cut the request off - whatever didn't arrive is sent on
+// the next page load.
+const CHUNK_KEY = 'meshport:chunk-reports'
+function storedChunkRows(): Row[] {
+  try { return JSON.parse(localStorage.getItem(CHUNK_KEY) || '[]') as Row[] } catch { return [] }
+}
+function storeChunkRows(rows: Row[]): void {
+  try { rows.length ? localStorage.setItem(CHUNK_KEY, JSON.stringify(rows.slice(-10))) : localStorage.removeItem(CHUNK_KEY) } catch { /* private mode */ }
+}
+function sendChunkRow(row: Row): void {
+  void supabase.from('client_errors').insert(row).then((r: { error?: unknown } | null) => {
+    if (r && (r as any).error) return
+    storeChunkRows(storedChunkRows().filter(x => x.message !== row.message || x.path !== row.path))
+  }, () => {})
+}
+export function reportChunkFailure(line: string): void {
+  try {
+    const row: Row = {
+      kind: 'route', path: window.location.pathname.slice(0, 300), message: `[chunk] ${line}`.slice(0, 1000),
+      stack: '', user_agent: navigator.userAgent.slice(0, 400), build: build(),
+    }
+    storeChunkRows([...storedChunkRows(), row])
+    if (navigator.onLine !== false) sendChunkRow(row)
+  } catch { /* reporting must never break the app */ }
+}
+if (typeof window !== 'undefined') {
+  // Left over from the page before a reload: send them now (a little later, after start-up).
+  setTimeout(() => { for (const r of storedChunkRows()) sendChunkRow(r) }, 5_000)
+}
+
 function hold(row: Row): void {
   if (pending.length < 20) pending.push(row)
   if (flushHooked || typeof window === 'undefined') return
