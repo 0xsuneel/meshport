@@ -60,6 +60,9 @@ export interface CircleSession { userToken: string; encryptionKey: string; refre
 export const CIRCLE_SESSION_MS = 60 * 60_000
 export const CIRCLE_REFRESH_AHEAD_MS = 10 * 60_000
 const API_TIMEOUT_MS = 20_000
+const SUPABASE_URL_ENV = ((import.meta.env.VITE_SUPABASE_URL as string) || '').replace(/\/$/, '')
+const SUPABASE_FUNCTIONS = SUPABASE_URL_ENV ? `${SUPABASE_URL_ENV}/functions/v1` : ''
+const SUPABASE_ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
 
 /** When this session's userToken expires: its JWT `exp` if it has one, else 60 min after it was issued. */
 export function circleSessionExpiry(s: CircleSession): number | null {
@@ -106,15 +109,39 @@ export async function meshportAccount(): Promise<{ uid: string; email: string | 
 
 // ── backend ─────────────────────────────────────────────────────────────────
 
+// Signing challenges: a duplicate is harmless (the unused one expires), so a
+// stalled connection to meshport.xyz is hedged through Supabase after
+// HEDGE_AFTER_MS (lib/hedgedApi.ts - field 1 Nov: 9-13 s stalls).
+const HEDGED_ACTIONS = new Set(['sign-message', 'sign-typed', 'sign-transaction'])
+const HEDGE_AFTER_MS = 2_000
+/** Which road the last hedged call took (wallet_events steps). */
+export let lastCircleApiVia: 'direct' | 'relay' | null = null
+
 export async function circleApi<T>(action: string, body: Record<string, unknown> = {}): Promise<T> {
   let r: Response
+  const headers = await authApiHeaders()
+  const payload = JSON.stringify({ action, ...body }, (_k, v) => (typeof v === 'bigint' ? v.toString() : v))
+  const direct = (signal: AbortSignal) => fetch('/api/circle-wallet', { method: 'POST', headers, body: payload, signal })
   try {
-    r = await fetch('/api/circle-wallet', {
-      method: 'POST', headers: await authApiHeaders(),
-      body: JSON.stringify({ action, ...body }, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)),
-      // A hung request used to hold a payment screen with no end.
-      signal: AbortSignal.timeout(API_TIMEOUT_MS),
-    })
+    if (HEDGED_ACTIONS.has(action) && SUPABASE_FUNCTIONS) {
+      const { hedgedFetch } = await import('@/lib/hedgedApi')
+      const out = await hedgedFetch({
+        hedgeAfterMs: HEDGE_AFTER_MS,
+        // A hung request used to hold a payment screen with no end.
+        timeoutMs: API_TIMEOUT_MS,
+        direct,
+        relay: signal => fetch(`${SUPABASE_FUNCTIONS}/api-relay`, {
+          method: 'POST',
+          headers: { ...headers, ...(SUPABASE_ANON ? { apikey: SUPABASE_ANON } : {}) },
+          body: JSON.stringify({ path: '/api/circle-wallet', body: payload }),
+          signal,
+        }),
+      })
+      r = out.res
+      lastCircleApiVia = out.via
+    } else {
+      r = await direct(AbortSignal.timeout(API_TIMEOUT_MS))
+    }
   } catch (e) {
     const timedOut = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')
     throw new CircleError(504, 'timeout', timedOut ? 'Your wallet did not answer - nothing was sent. Try again.' : 'Could not reach your wallet - check your connection and try again')
@@ -418,8 +445,10 @@ export function circleAccount(address: string, uid: string): CircleAccount {
   async function signOnce(action: string, body: Record<string, unknown>, steps: Record<string, number>): Promise<ChallengeOutcome> {
     for (let attempt = 0; ; attempt++) {
       const t0 = performance.now()
+      lastCircleApiVia = null
       const { challengeId } = await circleCall<{ challengeId: string }>(uid, action, body)
       steps.challenge = (steps.challenge ?? 0) + performance.now() - t0
+      if (lastCircleApiVia === 'relay') steps.relayed = 1
       try {
         const t1 = performance.now()
         const out = await executeChallenge(uid, challengeId)
