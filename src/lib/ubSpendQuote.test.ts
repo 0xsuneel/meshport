@@ -74,38 +74,8 @@ describe('Unified Balance spend pricing', () => {
   })
 })
 
-describe('Unified Balance Bring: fee checked before anything moves', () => {
+describe('Unified Balance fee estimate (Recover)', () => {
   beforeEach(() => store.clear())
-
-  it('refuses a $1 Bring from Ethereum when the fee is ~$1.12 - no deposit', async () => {
-    const { runUbClaim } = await import('./ubClaim')
-    let deposited = false
-    const kit = {
-      unifiedBalance: {
-        estimateSpend: async () => ({ fees: [usdc('provider', 0.00005), usdc('gasFee', 1.12), usdc('forwarder', 0.05)] }),
-        deposit: async () => { deposited = true; return { txHash: '0x1' } },
-        getBalances: async () => ({ balances: [] }),
-      },
-    }
-    await expect(runUbClaim({ kit, adapter: {}, walletAddr: '0xabc', sdkChainId: 'Ethereum_Sepolia', chainLabel: 'Ethereum', amount: 1, onStep: () => {} }))
-      .rejects.toThrow(/nothing was moved/)
-    expect(deposited).toBe(false)
-  })
-
-  it('no live quote before the deposit (empty Unified Balance): Circle\'s published fee decides - $1 from Ethereum refused, no deposit', async () => {
-    const { runUbClaim } = await import('./ubClaim')
-    let deposited = false
-    const kit = {
-      unifiedBalance: {
-        estimateSpend: async () => { throw new Error('Insufficient balance on Ethereum_Sepolia') },
-        deposit: async () => { deposited = true; return { txHash: '0x1' } },
-        getBalances: async () => ({ balances: [] }),
-      },
-    }
-    await expect(runUbClaim({ kit, adapter: {}, walletAddr: '0xabc', sdkChainId: 'Ethereum_Sepolia', chainLabel: 'Ethereum', amount: 1, onStep: () => {} }))
-      .rejects.toThrow(/nothing was moved/)
-    expect(deposited).toBe(false)
-  })
 
   it('no live quote from a cheap chain still lets a $1 Bring through', async () => {
     const { estimateUbClaimFee } = await import('./ubClaim')
@@ -142,12 +112,3 @@ describe('Unified Balance Bring: leftover dust goes back to the user', () => {
   })
 })
 
-describe('Auto-finish only moves held funds when the fee is small', () => {
-  it('a held $1.09 on Ethereum (fee ~0.6) stays for Recover; $10 on Base (fee 0.026) is moved', async () => {
-    const { autoFinishWorthIt } = await import('./ubClaim')
-    expect(autoFinishWorthIt({ total: 0.6, receiveAtLeast: 0.48 }, 1.09)).toBe(false)
-    expect(autoFinishWorthIt({ total: 0.026389, receiveAtLeast: 9.97 }, 10)).toBe(true)
-    // A published-fee fallback (no live quote) never moves anything by itself.
-    expect(autoFinishWorthIt({ total: 0.01, receiveAtLeast: 9.9, approx: true }, 10)).toBe(false)
-  })
-})

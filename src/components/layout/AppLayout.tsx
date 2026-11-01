@@ -486,42 +486,6 @@ export function AppLayout() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [walletAddress, signer])
 
-  // ── Auto-finish Unified Balance claims (Bring Funds via UB) ────────────────
-  // Sweeps confirmed Unified Balance on other chains into the Arc wallet -
-  // see autoFinishUbClaims in lib/ubClaim.ts. Runs on open, on refocus and
-  // every 90s while visible, so a claim left mid-way (page closed, phone
-  // locked during the 15-min finality wait) still lands on Arc by itself.
-  useEffect(() => {
-    if (!walletAddress || !signer) return
-    const run = () => {
-      if (document.visibilityState !== 'visible') return
-      // Very slow network: sending now could time out mid-way - the next
-      // tick (or the network getting better) finishes it.
-      if (isSlowNetwork()) return
-      import('@/lib/ubClaim').then(async ({ autoFinishUbClaims }) => {
-        // Signs with no PIN step of its own: only right after the person's
-        // passcode (lib/walletApproval), never asking - else the next tick.
-        const { approvalFresh, inBackground } = await import('@/lib/walletApproval')
-        if (!approvalFresh()) return
-        // Merchants too: this only finishes money already on other chains
-        // (Unified Balance). Customer payments sitting in the wallet on other
-        // chains wait for the merchant's Claim All - nothing collects them.
-        const n = await inBackground(() => autoFinishUbClaims({ walletAddress, signer }))
-        if (n > 0) {
-          try {
-            const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
-            useWalletStore.getState().setBalance?.(await readUSDCBalanceOrThrow(walletAddress))
-          } catch { /* next balance poll picks it up */ }
-        }
-      }).catch(() => { /* best-effort - retries on next trigger */ })
-    }
-    run()
-    const iv = setInterval(run, 90_000)
-    const onVisible = () => { if (document.visibilityState === 'visible') run() }
-    document.addEventListener('visibilitychange', onVisible)
-    const offReconnect = onReconnect(run) // back online: finish claims now, not on the next tick
-    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVisible); offReconnect() }
-  }, [walletAddress, signer])
 
   // ── Keep retrying wallet key restoration in the background ─────────────────
   // restorePrivateKey() (see lib/restoreWallet.ts) already retries a failed
