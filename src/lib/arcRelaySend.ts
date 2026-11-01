@@ -15,7 +15,7 @@
 // harmless ("already known").
 
 import { keccak256, type Hex } from 'viem'
-import { arcRpcJson, directSendRaw } from './arc'
+import { arcRpcJson, directSendHedge } from './arc'
 import { ARC } from '@/blockchain/chains'
 
 const RELAY_METHOD = 'meshport_sendRawTransactionAndWait'
@@ -37,10 +37,9 @@ export async function relayRawSend(req: RpcRequest): Promise<RpcResponse | null>
     // Not answered within 2.5 s (a stalled connection to this origin): the same
     // signed bytes go straight to Circle's Arc node too - first to take it wins.
     const relay = arcRpcJson({ jsonrpc: '2.0', id: 1, method: RELAY_METHOD, params: [raw, hash, RELAY_WAIT_MS] }, 20_000)
-    const direct = new Promise<'direct'>(resolve => {
-      const t = setTimeout(() => { void directSendRaw(raw).then(ok => { if (ok) resolve('direct') }) }, 2_500)
-      void relay.then(() => clearTimeout(t), () => clearTimeout(t))
-    })
+    let relaySettled = false
+    void relay.then(() => { relaySettled = true }, () => { relaySettled = true })
+    const direct = directSendHedge(raw, 2_500, () => relaySettled).then(() => 'direct' as const)
     const first = await Promise.race([relay, direct])
     if (first === 'direct') return { jsonrpc: '2.0', id: req.id, result: hash }
     const json = first

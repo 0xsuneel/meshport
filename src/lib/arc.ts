@@ -1,4 +1,4 @@
-import { http, fallback } from 'viem'
+import { http, fallback, keccak256, type Hex } from 'viem'
 import { ARC, ARC_RPCS as REGISTRY_ARC_RPCS, ARC_NETWORK as REGISTRY_ARC_NETWORK, ARC_TOKENS } from '@/blockchain/chains'
 
 // ─── Chain/RPC/token constants now live in the shared registry ──────────────
@@ -183,6 +183,42 @@ export async function directSendRaw(raw: string, timeoutMs = 6000): Promise<true
     if (/already known|known transaction|already imported/i.test(String(json?.error?.message ?? ''))) return true
     return null
   } catch { return null }
+}
+
+/** Is this signed transaction already on Arc? Its receipt, read from Circle's Arc node directly. */
+async function directlyMined(raw: string, timeoutMs = 4000): Promise<boolean> {
+  try {
+    const res = await fetch(DIRECT_READ_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionReceipt', params: [keccak256(raw as Hex)] }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!res.ok) return false
+    const json = await res.json()
+    return !!json?.result?.blockNumber
+  } catch { return false }
+}
+
+/**
+ * The escape route for a relayed send whose answer hasn't come back (a
+ * phone's stalled connection to this origin): from `afterMs`, the same
+ * signed bytes go to Circle's Arc node, and its receipt is looked for there
+ * about once a second. Resolves true once that node has the transaction or it
+ * is on chain; never resolves while neither is true (or once `settled()`).
+ * Field 1 Nov 16:13: the relay put the approve on chain in 1.8 s, its answer
+ * never reached the phone, the direct send was refused "nonce too low" (it
+ * was already mined) - and the app waited out the relay's 20 s timeout.
+ */
+export function directSendHedge(raw: string, afterMs: number, settled: () => boolean): Promise<true> {
+  return new Promise(resolve => {
+    let tries = 0
+    const step = async () => {
+      if (settled() || tries++ > 30) return
+      if (await directSendRaw(raw) || await directlyMined(raw)) { resolve(true); return }
+      setTimeout(() => { void step() }, 1000)
+    }
+    setTimeout(() => { void step() }, afterMs)
+  })
 }
 
 async function lastResortRead(body: unknown, timeoutMs: number): Promise<any | null> {

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { keccak256 } from 'viem'
 
 const rpc = vi.fn()
-vi.mock('./arc', () => ({ arcRpcJson: (...a: any[]) => rpc(...a) }))
+vi.mock('./arc', () => ({ arcRpcJson: (...a: any[]) => rpc(...a), directSendHedge: () => new Promise(() => {}) }))
 import { relayRawSend, sendThroughRelay } from './arcRelaySend'
 
 const RAW = '0x02f86d8205d8'
