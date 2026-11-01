@@ -110,9 +110,38 @@ export function markBuildHealthy() {
   } catch { /* ignore */ }
 }
 
+/** Where the device is right now, for a [chunk] report. */
+function chunkContext(): string {
+  const nav = navigator as Navigator & { connection?: { effectiveType?: string; downlink?: number } }
+  const sw = typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? !!navigator.serviceWorker.controller : false
+  return `online=${nav.onLine !== false} net=${nav.connection?.effectiveType ?? '?'}/${nav.connection?.downlink ?? '?'}Mbps sw=${sw} build=${MY_BUILD || '?'}`
+}
+
+/**
+ * The file a failed import named, fetched again (a few tries) so the reload
+ * that follows finds it in the browser's cache - on a weak connection the
+ * reload otherwise asks for the same large file over the same link and fails
+ * the same way (two reloads, then "This screen didn't load"). Returns how it went.
+ */
+async function warmFailedFile(err: unknown): Promise<string> {
+  const url = /(https?:\/\/[^\s'"]+\.(?:js|css))/.exec(String((err as any)?.message ?? ''))?.[1]
+  if (!url || new URL(url).origin !== window.location.origin) return 'no file url'
+  for (let i = 0; i < 3; i++) {
+    const started = performance.now()
+    try {
+      const res = await fetch(url, { cache: 'reload', signal: AbortSignal.timeout(15_000) })
+      if (res.ok) { await res.arrayBuffer(); return `refetched on try ${i + 1} in ${Math.round(performance.now() - started)} ms` }
+      // Gone from the server: a deploy removed it - only a reload onto the new version helps.
+      if (res.status === 404) return 'file gone (404)'
+    } catch { /* timed out / dropped - try again */ }
+    await new Promise(r => setTimeout(r, 1_000 * (i + 1)))
+  }
+  return 'refetch failed 3 times'
+}
+
 export function lazyRetry<T extends ComponentType<any>>(
   importFn: () => Promise<{ default: T }>,
-  _chunkName: string,
+  chunkName: string,
 ) {
   return lazy(async () => {
     try {
@@ -125,6 +154,14 @@ export function lazyRetry<T extends ComponentType<any>>(
       if (isChunkLoadError(err) && !isOnline()) {
         await new Promise<void>(resolve => { const off = onReconnect(() => { off(); resolve() }) })
         try { return await importFn() } catch (again) { err = again }
+      }
+      if (isChunkLoadError(err)) {
+        const started = performance.now()
+        const warm = await warmFailedFile(err)
+        const msg = String((err as any)?.message ?? err).slice(0, 300)
+        void import('./errorReport').then(r => r.reportChunkFailure(
+          `${chunkName} failed (${chunkContext()}; ${warm} after ${Math.round(performance.now() - started)} ms): ${msg}`,
+        )).catch(() => {})
       }
       if (isChunkLoadError(err) && await recoverFromStaleBuild()) {
         // Never resolves - the reload replaces this page.
