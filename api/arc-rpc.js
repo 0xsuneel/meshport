@@ -186,6 +186,17 @@ function isHeadLagError(errorObj) {
   return Number(errorObj?.code) === -32014
 }
 
+/**
+ * The JSON-RPC answer in a response: any 2xx body, or a 4xx (not 429) whose
+ * body is a JSON-RPC error. Null when there is no usable answer.
+ */
+async function jsonRpcBody(r) {
+  if (r.ok) return r.json()
+  if (r.status < 400 || r.status >= 500 || r.status === 429) return null
+  const j = await r.json().catch(() => null)
+  return j && !Array.isArray(j) && j.error && typeof j.error === 'object' ? j : null
+}
+
 function isQuarantined(url) {
   return getStats(url).quarantinedUntil > Date.now()
 }
@@ -350,8 +361,14 @@ async function raceOnce(body) {
         body: JSON.stringify(body),
         signal: AbortSignal.any([settled.signal, AbortSignal.timeout(RPC_TIMEOUT_MS)]),
       })
-      if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status} from ${label(url)}`), { httpStatus: r.status })
-      const json = await r.json()
+      // dRPC and Alchemy answer a JSON-RPC error (an on-chain revert, a
+      // refused send) with HTTP 400 and the error in the body. Throwing on the
+      // status alone counted a correct answer as a broken endpoint and benched
+      // the authenticated nodes (logs 1 Nov: "HTTP 400 from lb.drpc.live /
+      // arc-testnet.g.alchemy.com", leaving the rate-limited public node). So
+      // a 4xx that carries a JSON-RPC body is read and handled as that answer.
+      const json = await jsonRpcBody(r)
+      if (!json) throw Object.assign(new Error(`HTTP ${r.status} from ${label(url)}`), { httpStatus: r.status })
       const latencyMs = Date.now() - startedAt
       // The provider answered (an on-chain revert, a node a block behind and
       // "no receipt yet" are all answers): one served call.
@@ -509,9 +526,11 @@ async function broadcastToAll(raw) {
         .then(r => {
           usage.note('upstream', label(url), 'eth_sendRawTransaction', r.status === 429 ? 'rate_limited' : r.ok ? 'ok' : 'error', Date.now() - startedAt)
           // An HTTP error (402 out of credits, 401 bad key, 429, 5xx) is the
-          // provider failing, not an answer about the transaction.
-          if (!r.ok) throw new Error(`HTTP ${r.status} from ${label(url)}`)
-          return r.json().catch(() => null)
+          // provider failing, not an answer about the transaction - except a
+          // 4xx carrying a JSON-RPC error (dRPC / Alchemy send their answer
+          // that way): that IS the node's answer about the transaction.
+          if (r.ok) return r.json().catch(() => null)
+          return jsonRpcBody(r).then(j => { if (!j) throw new Error(`HTTP ${r.status} from ${label(url)}`); return j })
         }, (e) => {
           usage.note('upstream', label(url), 'eth_sendRawTransaction', 'error', 0)
           throw e

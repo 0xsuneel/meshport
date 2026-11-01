@@ -80,3 +80,37 @@ describe('arc-rpc ranking', () => {
     expect(firsts[15]).not.toBe(top)
   })
 })
+
+// Logs 1 Nov: dRPC and Alchemy send a JSON-RPC error with HTTP 400; the proxy
+// threw on the status, so a correct answer benched the authenticated nodes.
+describe('arc-rpc: a JSON-RPC answer sent with HTTP 400', () => {
+  beforeEach(() => { vi.resetModules(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+  it('a revert sent as 400 is the answer, not a broken endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn((_u: string, init: any) => {
+      const { id } = JSON.parse(init.body)
+      return Promise.resolve(new Response(JSON.stringify({ jsonrpc: '2.0', id, error: { code: 3, message: 'execution reverted: ERC20: transfer amount exceeds balance' } }), { status: 400 }))
+    }))
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const mod: any = await import('../../api/arc-rpc.js')
+    const r = await mod.forward({ jsonrpc: '2.0', id: 9, method: 'eth_estimateGas', params: [{}] })
+    expect(r.error.message).toMatch(/execution reverted/)
+    expect(errors.mock.calls.some(c => /failed/.test(String(c[0])))).toBe(false)
+  })
+
+  it('a 400 without a JSON-RPC body is still a failure', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', vi.fn((_u: string, init: any) => {
+      const { id } = JSON.parse(init.body)
+      if (calls++ === 0) return Promise.resolve(new Response('bad request', { status: 400 }))
+      return Promise.resolve(new Response(JSON.stringify({ jsonrpc: '2.0', id, result: '0x3' }), { status: 200 }))
+    }))
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const mod: any = await import('../../api/arc-rpc.js')
+    const r = await mod.forward({ jsonrpc: '2.0', id: 10, method: 'eth_blockNumber', params: [] })
+    expect(r.result).toBe('0x3')
+    expect(errors.mock.calls.some(c => /failed: HTTP 400/.test(String(c[0])))).toBe(true)
+  })
+})
