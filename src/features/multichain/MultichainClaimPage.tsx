@@ -1321,12 +1321,36 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           if (token) {
             const [{ bringTokenGasless }, { readArcToken, waitForArc }] = await Promise.all([import('@/lib/gaslessToken'), import('./TokenBring')])
             const before = await readArcToken(token, wallet.addr).catch(() => null)
-            const r = await bringTokenGasless({
-              chainId: chain.chainId, token, amount: claimAmount, tokenAddress, signer: wallet.signer, walletAddress: wallet.addr,
-              onStatus: msg => msg === 'Submitting…' || msg === 'Confirming…'
-                ? setChain(chain.chainId, 'burning', msg === 'Confirming…' ? `Waiting for ${getMeta(chain.chainId).label} to confirm the transfer…` : 'Signed - MeshPort is sending the transfer…', 45)
-                : setChain(chain.chainId, 'approving', msg === 'Signing…' ? `Signing the ${token} transfer…` : 'Getting fee…', 25),
-            })
+            let r: Awaited<ReturnType<typeof bringTokenGasless>>
+            try {
+              r = await bringTokenGasless({
+                chainId: chain.chainId, token, amount: claimAmount, tokenAddress, signer: wallet.signer, walletAddress: wallet.addr,
+                onStatus: msg => msg === 'Submitting…' || msg === 'Confirming…'
+                  ? setChain(chain.chainId, 'burning', msg === 'Confirming…' ? `Waiting for ${getMeta(chain.chainId).label} to confirm the transfer…` : 'Signed - MeshPort is sending the transfer…', 45)
+                  : setChain(chain.chainId, 'approving', msg === 'Signing…' ? `Signing the ${token} transfer…` : 'Getting fee…', 25),
+              })
+            } catch (e: any) {
+              if (!e?.sentUnknown) throw e
+              // Signed and handed to the relayer, answer lost: it may be on
+              // its way - never "failed". Arc's balance says when it lands.
+              burned = true
+              setIsSubmitted(true)
+              setChain(chain.chainId, 'attesting', `Connection dropped while sending - checking Arc for your ${token}…`, 65)
+              setConfirmPhase(phase => phase === 'processing' ? 'submitted' : phase)
+              const receive = Number(e.receive) || 0
+              const startedAt = Date.now()
+              void waitForArc(token, wallet.addr, before, receive, () => true).then(landed => {
+                if (landed) {
+                  setChain(chain.chainId, 'done', `${fmtCoin(receive)} ${token} is in your Arc wallet`, 100)
+                  setConfirmPhase(phase => (phase === 'processing' || phase === 'submitted' || phase === 'tracking') ? 'done' : phase)
+                  notifyClaimArrived(receive, chain.chainId, Date.now() - startedAt, undefined, undefined, token)
+                  refreshBalancesAfterTx(wallet.addr)
+                } else {
+                  setChain(chain.chainId, 'attesting', `Not on Arc yet - if it was sent it still arrives on its own. Check your ${token} balance later.`, 65)
+                }
+              }).catch(() => {})
+              return { chainId: chain.chainId, amount: claimAmount }
+            }
             burned = true
             setClaimFees(prev => ({ ...prev, [chain.chainId]: { meshport: r.fee, circleCap: 0 } }))
             setIsSubmitted(true)

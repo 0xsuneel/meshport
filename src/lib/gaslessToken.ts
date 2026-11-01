@@ -204,17 +204,39 @@ export async function bringTokenGasless(p: {
   }
 
   p.onStatus?.('Submitting…')
+  const receive = fromTokenUnits(p.token, total - fee)
   const { authApiHeaders } = await import('@/lib/supabase')
-  const rr = await fetch('/api/bridge-relay', {
-    method: 'POST',
-    headers: await authApiHeaders(),
-    body: JSON.stringify({
-      action: 'token_relay', chain: p.chainId, symbol: p.token,
-      bridge: { ...params, fee: params.fee.toString() },
-      ...body,
-    }),
+  const payload = JSON.stringify({
+    action: 'token_relay', chain: p.chainId, symbol: p.token,
+    bridge: { ...params, fee: params.fee.toString() },
+    ...body,
   })
-  const out = await rr.json().catch(() => null) as { txHash?: Hex; error?: string; pending?: boolean } | null
+  // The relayer sends the transfer and answers. A phone that loses that
+  // answer (field 1 Nov 04:46: "Failed to fetch" after 40 s, EURC from
+  // Ethereum) can't know whether it went out - so the SAME signed request is
+  // sent again. That is safe: the signature can be used once on-chain, and
+  // the relayer answers a used one with the transaction it already sent.
+  let rr: Response | null = null
+  let out: { txHash?: Hex; error?: string; pending?: boolean } | null = null
+  // An answer was lost: the first send may still be confirming, so a later
+  // try can only add a duplicate that fails on-chain (the signature is used
+  // once) - that failure is not this transfer's. Spaced out so the first one
+  // usually confirms and the relayer answers with its hash.
+  let lostAnswer = false
+  for (let attempt = 0; attempt < RELAY_ATTEMPTS; attempt++) {
+    if (attempt) await new Promise(r => setTimeout(r, 3_000 * 2 ** (attempt - 1)))
+    try {
+      rr = await fetch('/api/bridge-relay', { method: 'POST', headers: await authApiHeaders(), body: payload })
+    } catch { rr = null; lostAnswer = true; continue } // no answer: maybe sent - ask again
+    // A gateway timeout is no answer either.
+    if (rr.status === 504) { lostAnswer = true; continue }
+    out = await rr.json().catch(() => null)
+    break
+  }
+  if (!rr || rr.status === 504) throw new TokenBringUnknown(receive, fromTokenUnits(p.token, fee))
+  // "Already used" with no transaction found: it was sent (by the first try).
+  if (rr.status === 409) throw new TokenBringUnknown(receive, fromTokenUnits(p.token, fee))
+  if (lostAnswer && rr.status === 502) throw new TokenBringUnknown(receive, fromTokenUnits(p.token, fee))
   if (!rr.ok || !out?.txHash) { recentQuotes.clear(); throw new Error(out?.error || 'Relayer did not accept the transfer') }
   if (out.pending) {
     p.onStatus?.('Confirming…')
@@ -223,7 +245,23 @@ export async function bringTokenGasless(p: {
       const { getClient } = await import('@/blockchain/ProviderManager')
       receipt = await getClient(p.chainId as any).waitForTransactionReceipt({ hash: out.txHash, timeout: 180_000 })
     } catch { /* RPC trouble - Circle still delivers once it's confirmed */ }
-    if (receipt?.status === 'reverted') throw new Error('The transfer failed on-chain - nothing was moved')
+    if (receipt?.status === 'reverted') {
+      if (lostAnswer) throw new TokenBringUnknown(receive, fromTokenUnits(p.token, fee))
+      throw new Error('The transfer failed on-chain - nothing was moved')
+    }
   }
-  return { txHash: out.txHash, fee: fromTokenUnits(p.token, fee), receive: fromTokenUnits(p.token, total - fee) }
+  return { txHash: out.txHash, fee: fromTokenUnits(p.token, fee), receive }
+}
+
+const RELAY_ATTEMPTS = 4
+
+/**
+ * The transfer was signed and handed to the relayer, but no answer came back:
+ * it may be on its way. Never "failed" - the caller watches Arc for it.
+ */
+export class TokenBringUnknown extends Error {
+  readonly sentUnknown = true
+  constructor(readonly receive: number, readonly fee: number) {
+    super("The connection dropped while sending. If it went through it arrives on Arc on its own - we're watching for it.")
+  }
 }
