@@ -27,7 +27,7 @@ import type { WalletAccount } from '@/wallet'
 import { CCTP_DOMAINS, IRIS_SANDBOX, fetchIrisMessage, type IrisMessage } from './cctpTracker'
 import { ARC_DOMAIN } from './gaslessBridge'
 import { CCTPX_TOKEN_IDS } from './gaslessToken'
-import { FastCctpError, estimate, sendStep, rpc, sleep, attested, forwarded, forwardFailed, deliveredOnChain, canFastCctp, type FastCctpStep } from './fastCctp'
+import { FastCctpError, beforeSending, estimate, sendStep, rpc, sleep, attested, forwarded, forwardFailed, deliveredOnChain, canFastCctp, type FastCctpStep } from './fastCctp'
 import type { CctpxToken } from './tokenBridge'
 
 /** Circle's CrossChainTokenService (testnet; the same address on every testnet chain). */
@@ -195,17 +195,17 @@ export async function fastCctpxTransfer(p: FastCctpxParams): Promise<FastCctpxRe
   const want = { token: p.token, destination: p.destination, recipient: p.recipient, amount: p.amount }
 
   // Quote (reused when fresh), token manager, nonce: in parallel.
-  const [quote0, manager, nonceHex] = await Promise.all([
+  const [quote0, manager, nonceHex] = await beforeSending(Promise.all([
     quoteMatches(p.quote, want) ? Promise.resolve(p.quote) : quoteCctpx(want),
     tokenManager(p.token),
     rpc('eth_getTransactionCount', [from, 'pending']),
-  ])
+  ]))
   let quote: CctpxQuote = quote0
   let nonce = Number(BigInt(nonceHex))
 
   // 1. Approve the token manager for exactly this amount (only when short).
   let approveHash: string | undefined
-  if (await allowanceOf(p.tokenAddress, from, manager) < p.amount) {
+  if (await beforeSending(allowanceOf(p.tokenAddress, from, manager)) < p.amount) {
     const data = encodeFunctionData({ abi: ERC20, functionName: 'approve', args: [manager, p.amount] })
     approveHash = await sendStep(p.account, { to: p.tokenAddress, data, gas: await estimate(from, p.tokenAddress, data), nonce }, 'The approval')
     nonce += 1

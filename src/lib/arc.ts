@@ -99,12 +99,40 @@ async function directRead(body: unknown, timeoutMs: number): Promise<any | null>
 // giving up on it and moving to the next one in ARC_RPCS. Any other error
 // (5xx, timeout, network failure) fails over immediately as before, since
 // backing off in place doesn't help a genuinely down endpoint.
+// A phone on a weak connection loses a request now and then (field 1 Nov
+// 03:57: a Transfer's nonce read never reached /api/arc-rpc - no request in
+// Vercel's log, the proxy answering others in ~90 ms - and the Transfer failed
+// at 10 s with the browser's "signal timed out"). Reads are safe to ask again,
+// so one that times out or drops is retried once on a fresh request (the first
+// try gets a shorter wait). Sends are never repeated here: they have their own
+// handling (arcService.relaySendTimed).
+const NOT_REPEATABLE: ReadonlySet<string> = new Set(['eth_sendRawTransaction', 'meshport_sendRawTransactionAndWait', 'eth_sendTransaction'])
+/** True for a single JSON-RPC call that only reads, so it can be asked again. Pure. */
+export function isRepeatableRead(body: unknown): boolean {
+  return !!body && typeof body === 'object' && !Array.isArray(body)
+    && typeof (body as { method?: unknown }).method === 'string'
+    && !NOT_REPEATABLE.has((body as { method: string }).method)
+}
+/** No answer at all (timeout, dropped connection, gateway trouble) - not a node's JSON-RPC answer. */
+const isLostRequest = (e: unknown) => e instanceof Error
+  && (e.name === 'TimeoutError' || e.name === 'AbortError' || e instanceof TypeError || /^Arc RPC (5\d\d|429) /.test(e.message))
+
 export async function arcRpcJson(body: unknown, timeoutMs = 10000): Promise<any> {
-  let lastErr: unknown = null
   if (isDirectReadable(body)) {
     const fast = await directRead(body, timeoutMs)
     if (fast) return fast
   }
+  if (!isRepeatableRead(body)) return rpcPass(body, timeoutMs)
+  try {
+    return await rpcPass(body, Math.max(4000, Math.round(timeoutMs * 0.6)))
+  } catch (e) {
+    if (!isLostRequest(e)) throw e
+    return rpcPass(body, timeoutMs)
+  }
+}
+
+async function rpcPass(body: unknown, timeoutMs: number): Promise<any> {
+  let lastErr: unknown = null
   for (const url of ARC_RPCS) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
