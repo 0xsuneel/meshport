@@ -44,7 +44,7 @@ import { prewarmTokenRoutes, type CctpxToken, KIT_CCTPX_CHAINS, BRIDGE_TOKENS, b
 import { ARC_TOKENS } from '@/blockchain/chains'
 import { revealFlow } from '@/lib/revealFlow'
 import { startMoveTimer, type MoveTimer } from '@/lib/moveTimings'
-import { sendThroughRelay } from '@/lib/arcRelaySend'
+import { arcKitProvider } from '@/lib/arcRelaySend'
 import { peekTokenSnapshot } from '@/lib/tokenSnapshot'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -177,18 +177,17 @@ const _ARC_FALLBACK_KEY = '__arc_fallback__'
 // The Gateway quote before a Unified Balance deposit: past this, nothing has moved - fail cleanly.
 const UB_PRE_DEPOSIT_QUOTE_MS = 25_000
 
-function getArcFallbackProvider(JsonRpcProvider: any, FallbackProvider: any) {
+function getArcFallbackProvider(JsonRpcProvider: any) {
   if (!_providerCache.has(_ARC_FALLBACK_KEY)) {
     // pollingInterval 200: ethers' 4000ms default made each SDK receipt wait
     // (approve, burn, UB deposit) cost ~4s on Arc's sub-second chain.
-    const providers = ARC_RPCS.map(url => new JsonRpcProvider(toAbsoluteRpcUrl(url), ARC_NETWORK, { staticNetwork: true, pollingInterval: 200 }))
-    // quorum: 1 - treat this purely as failover, not multi-node consensus
-    // Sends go out the way Pay's do (lib/arcRelaySend): one request, the
-    // server broadcasts to every node and waits for the receipt.
-    providers.forEach(sendThroughRelay)
-    _providerCache.set(_ARC_FALLBACK_KEY, providers.length === 1
-      ? providers[0]
-      : new FallbackProvider(providers, undefined, { quorum: 1 }))
+    // Reads go through arcRpcJson (timeout, retry, Circle's Arc node as a
+    // second route; it fails over across ARC_RPCS itself) - ethers' own
+    // request waits up to 300 s, and a lost one froze the kit before it ever
+    // asked the wallet to sign (field 1 Nov 05:43, a Base transfer). Sends go
+    // out the way Pay's do (lib/arcRelaySend): the server broadcasts to every
+    // node and waits for the receipt.
+    _providerCache.set(_ARC_FALLBACK_KEY, arcKitProvider(new JsonRpcProvider(toAbsoluteRpcUrl(ARC_RPCS[0]), ARC_NETWORK, { staticNetwork: true, pollingInterval: 200 })))
   }
   return _providerCache.get(_ARC_FALLBACK_KEY)
 }
@@ -1403,7 +1402,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // limited. Force the fallback list for Arc regardless of what the
           // SDK provides; only use its endpoint for non-Arc chains.
           const isArc = sdkChain?.name?.toLowerCase?.().includes('arc') || /arc[.-]/i.test(rpcUrl ?? '')
-          if (isArc) return getArcFallbackProvider(JsonRpcProvider, FallbackProvider)
+          if (isArc) return getArcFallbackProvider(JsonRpcProvider)
           // Destination chains: mints the wallet would submit itself go
           // through MeshPort's relayer, so it needs no gas there.
           return relayedProviderFor(sdkChain)
@@ -1884,7 +1883,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // retry hit the same rate-limited rpc.testnet.arc.io with no
           // failover to /api/arc-rpc or any other fallback.
           const isArc = sdkChain?.name?.toLowerCase?.().includes('arc') || /arc[.-]/i.test(rpcUrl ?? '')
-          if (isArc) return getArcFallbackProvider(JsonRpcProvider, FallbackProvider)
+          if (isArc) return getArcFallbackProvider(JsonRpcProvider)
           // Destination chains: mints the wallet would submit itself go
           // through MeshPort's relayer, so it needs no gas there.
           return relayedProviderFor(sdkChain)

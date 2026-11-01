@@ -384,6 +384,10 @@ export default function PrivyRoot() {
         void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
           `[privy iframe] no answer after the background (${((started - lastHiddenAt) / 1000).toFixed(0)} s away) - rebuilding Privy`,
         ))).catch(() => {})
+        // A rebuild like any other: the pacing (onWalletStuck) counts from it,
+        // so nothing else rebuilds the new Privy while it is still loading.
+        privyRebuilds++
+        lastRebuildAt = performance.now()
         setGeneration(g => g + 1)
       })
       stopWatch = watch

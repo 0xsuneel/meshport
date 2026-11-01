@@ -75,12 +75,27 @@ export function privySigningKeyFresh(now = Date.now()): boolean {
 }
 
 const replacedWaiters = new Set<() => void>()
+// Each Privy PrivyRoot mounts. A signature waiting on one that gets replaced
+// (rebuilt after the background, a stuck iframe) can never be answered: the
+// old iframe is gone. Told at once (PrivyReplacedError) it signs again on the
+// new Privy - instead of hanging 12-50 s and then, "dead iframe", asking for
+// another rebuild that threw the new, healthy Privy away too (field 1 Nov
+// 05:38: rebuilt after 37 min away, then "wallets=0" while signing hung).
+let privyGeneration = 0
+const generationWaiters = new Set<() => void>()
+export class PrivyReplacedError extends Error {
+  // Shown only if it happens twice in a row (the first is signed again): nothing was sent.
+  constructor() { super(PRIVY_NO_ANSWER); this.name = 'PrivyReplaced' }
+}
+const isReplaced = (e: unknown) => e instanceof Error && e.name === 'PrivyReplaced'
 /** Window event: Privy's iframe is dead - PrivyRoot rebuilds it (paced). */
 export const PRIVY_DEAD_EVENT = 'meshport:privy-dead'
 
 export function setPrivyBridge(b: PrivyBridge | null): void {
   bridge = b
   if (!b) {
+    privyGeneration++
+    for (const w of [...generationWaiters]) w()
     iframeDead = false
     signingKeyAt = 0 // a new Privy authenticates afresh
     for (const w of [...replacedWaiters]) w()
@@ -177,7 +192,9 @@ export function checkPrivyAlive(freshMs = PRIVY_HEARTBEAT_MS): Promise<boolean> 
   const address = b.wallets[0]
   heartbeatRunning = timed('heartbeat', async () => b, x => x.signMessage(PRIVY_WARM_MESSAGE, address), address, false)
     .then(() => { noteSigned(address); return true })
-    .catch(() => {
+    .catch((e) => {
+      // Replaced meanwhile: the new Privy gets its own warm-up - nothing to rebuild.
+      if (isReplaced(e)) return false
       // Still the same Privy and it didn't answer: replace it now, while nobody is waiting on it.
       // Offline is not a dead wallet: a new Privy couldn't load either.
       const online = typeof navigator === 'undefined' || navigator.onLine !== false
@@ -430,17 +447,31 @@ async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b
         reject(e)
       }, ms)
     })
+    let offReplaced = () => {}
     const out = await Promise.race([(async () => {
       const b = await open()
       opened = performance.now()
-      return sign(b)
-    })(), noAnswer, hangs]).finally(() => clearTimeout(hung))
+      // Waiting for a Privy is open()'s job; from here the request belongs to
+      // THIS Privy - replaced while it signs, it can never answer.
+      const replaced = new Promise<never>((_, reject) => {
+        const onGen = () => reject(new PrivyReplacedError())
+        offReplaced = () => { generationWaiters.delete(onGen) }
+        generationWaiters.add(onGen)
+      })
+      return Promise.race([sign(b), replaced])
+    })(), noAnswer, hangs]).finally(() => { clearTimeout(hung); offReplaced() })
     const ms = performance.now() - started
     // A signature started without a fresh key obtained (or renewed) one.
     if (!keyFresh) signingKeyAt = Date.now() - ms
     if (ms > 2_000) report(`slow: ${s(ms)} s (${parts()})`)
     return out
   } catch (e) {
+    // The Privy it was waiting on was replaced: sign on the new one (not a dead iframe - no rebuild).
+    if (isReplaced(e)) {
+      report(`Privy replaced after ${s(performance.now() - started)} s while signing - signing on the new one`)
+      if (retryOnDead) return timed(what, open, sign, address, false)
+      throw e
+    }
     report(`failed after ${s(performance.now() - started)} s (${parts()}): ${e instanceof Error ? e.message : String(e)}`)
     // Privy gives up on its own request with an AbortError ("signal is
     // aborted without reason") - nothing was signed, so nothing was sent.

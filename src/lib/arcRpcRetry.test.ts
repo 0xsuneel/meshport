@@ -50,3 +50,32 @@ describe('beforeSending', () => {
     expect(await beforeSending(Promise.resolve(3))).toBe(3)
   })
 })
+
+describe("Circle's kit reads Arc through arcRpcJson (ethers waits 300 s on its own)", () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('proxy unreachable twice: a read is answered by Circle\'s Arc node directly', async () => {
+    const f = vi.fn(async (url: string) => {
+      if (String(url).includes('/api/arc-rpc')) throw timeout()
+      return ok('0x9')
+    })
+    vi.stubGlobal('fetch', f)
+    const r = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionCount', params: ['0x1', 'pending'] })
+    expect(r.result).toBe('0x9')
+  })
+
+  it('an ethers provider routed through it answers reads, keeps ids, and returns node errors as errors', async () => {
+    const { readThroughArcRpc } = await import('./arcRelaySend')
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: any) => {
+      const b = JSON.parse(init.body)
+      if (b.method === 'eth_call') return { ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: b.id, error: { code: 3, message: 'execution reverted: nope', data: '0x08c379a0' } }) }
+      return ok('0x2a')
+    }))
+    const provider: any = { _send: vi.fn() }
+    readThroughArcRpc(provider)
+    const out = await provider._send([{ id: 5, method: 'eth_blockNumber', params: [] }, { id: 6, method: 'eth_call', params: [{}] }])
+    expect(out[0]).toMatchObject({ id: 5, result: '0x2a' })
+    expect(out[1]).toMatchObject({ id: 6, error: { code: 3, message: 'execution reverted: nope', data: '0x08c379a0' } })
+    expect(provider._send).not.toBe(undefined)
+  })
+})
