@@ -16,3 +16,13 @@ describe('swap single-flight', () => {
     expect(await mod.executeSwapLocal(params as any).catch(e => e)).not.toBeInstanceOf(mod.SwapBusyError)
   })
 })
+
+describe('swap config: the minimum confirmed on Review is enforced', () => {
+  it('stopLimit in base units when valid; never a decimal or zero', async () => {
+    const { swapConfig } = await import('./swapService')
+    expect(swapConfig(300, '998500')).toEqual({ slippageBps: 300, stopLimit: '998500' })
+    expect(swapConfig(300, '0.9985')).toEqual({ slippageBps: 300 })  // App Kit rejects decimals
+    expect(swapConfig(300, '0')).toEqual({ slippageBps: 300 })
+    expect(swapConfig(300, null)).toEqual({ slippageBps: 300 })
+  })
+})
