@@ -116,6 +116,22 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
             // What the contract itself holds - the 7-day withdrawal's limit,
             // which Circle's hold on a failed delivery doesn't lower.
             let chainLeft = open.length ? (await getArcGatewayOnChainBalance(walletAddress)) ?? 0 : 0
+            // A transfer out of the Unified Balance is charged on Arc only some
+            // time after it's delivered (field 1 Nov: delivered 14:48, charged
+            // 15:04). Until then the contract still counts that money as
+            // available - Circle's figure doesn't. Withdrawing the contract's
+            // figure then took money owed to a delivered transfer (the 14:49
+            // 7-day withdrawal), and the next transfer was refused. So after any
+            // recent transfer out of Arc, only Circle's figure is offered.
+            if (open.length && chainLeft > arcLeft) {
+              const since = new Date(Date.now() - STUCK_HOLD_FALLBACK_MS).toISOString()
+              const { supabase } = await import('@/lib/supabase')
+              const { data: recent } = await supabase.from('activity').select('id')
+                .eq('wallet_address', walletAddress.toLowerCase()).eq('activity_type', 'bridge')
+                .eq('source_chain', ARC_CHAIN_KEY).gte('created_at', since).limit(1)
+              // Unknown (query failed) counts as recent: never withdraw on a guess.
+              if (!recent || recent.length) chainLeft = arcLeft
+            }
             const stuck = open.map(t => {
               const available = Math.min(t.amount, arcLeft)
               arcLeft = Math.max(0, arcLeft - available)
