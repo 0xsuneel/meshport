@@ -835,8 +835,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   useEffect(() => {
     setStep(prev => (prev === 'review' ? 'form' : prev))
   }, [address, amount, selectedChain])
-  // MeshPort always uses Fast transfer - no user-facing speed selector anymore.
-  const selectedSpeed: SpeedId = 'fast'
+  // Transfers start on Arc, and Arc finalizes in under a second (deterministic
+  // finality - docs.arc.io/arc/concepts/deterministic-finality): Circle signs a
+  // Standard transfer out of Arc as soon as the block is made, so Fast buys no
+  // time and only adds Circle's fast-transfer fee (docs.arc.io/app-kit/
+  // concepts/bridge-fees: Standard skips it). Field 1 Nov: Circle executed an
+  // Arc burn at standard finality (2000) and signed it 4.6 s later. No
+  // user-facing speed selector.
+  const selectedSpeed = 'standard' as SpeedId
   // Destination chip row: keep the selected chain's chip in view (it can sit
   // off-screen when the chain was restored or set from elsewhere).
   const chipRowRef = useRef<HTMLDivElement>(null)

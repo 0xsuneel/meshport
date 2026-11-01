@@ -152,3 +152,19 @@ describe('delivery read from the destination chain (Iris lags it)', () => {
     expect(onStep.mock.calls.map(c => c[0])).toEqual(['approve', 'burn', 'attestation', 'mint'])
   })
 })
+
+describe('transfers out of Arc are standard (Arc is final at once)', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+  it('asks Circle for a standard quote only - no PRE_FINALITY premium', async () => {
+    const { quoteCctpx } = await import('./fastCctpx')
+    const bodies: any[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_u: string, init: any) => {
+      bodies.push(JSON.parse(init.body))
+      return { ok: true, json: async () => ({ signedQuote: '0xab', feeTotalAmount: '5', feeToken: '0x0000000000000000000000000000000000000000' }) }
+    }))
+    const q = await quoteCctpx({ token: 'EURC', destination: 'Base_Sepolia', recipient: TO, amount: 1_000_000n })
+    expect(q.finality).toBe(2000)
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0].requests.map((r: any) => r.type)).toEqual(['FORWARD'])
+  })
+})
