@@ -1873,10 +1873,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       if (!activeSigner) {
         // Logged with what's needed to tell why (client_errors): which kind of
         // wallet, how long opening it took, and whether Privy was up.
+        // Everything that decides it: the wallet's kind, whether a signer
+        // existed when the passcode was entered, Privy's own state for this
+        // address, the readiness phase, the lock and the connection.
         const s = useAuthStore.getState()
-        const privyUp = await import('@/wallet/privy').then(m => !!m.privySolanaAddress() || m.privyConfigured()).catch(() => false)
+        const privy = await import('@/wallet/privy').then(m => m.privyState(s.walletAddress ?? undefined)).catch(() => 'n/a')
+        const phase = await import('@/lib/walletReadiness').then(m => m.useWalletReadiness.getState().phase).catch(() => 'n/a')
         import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
-          `[transfer no signer] source=${s.walletSource} restoreMs=${Date.now() - restoreStarted} hadEarly=${hadEarly} passcode=${!!storedPasscode} privy=${privyUp} chain=${chain.sdk}`,
+          `[transfer no signer] source=${s.walletSource} signerAtStart=${!!signer} signerNow=${!!s.signer} locked=${s.isLocked} phase=${phase} restoreMs=${Date.now() - restoreStarted} hadEarly=${hadEarly} passcode=${!!storedPasscode} online=${typeof navigator === 'undefined' || navigator.onLine} privy=[${privy}] chain=${chain.sdk}`,
         ))).catch(() => {})
         // Nothing was sent; what to do depends on the kind of wallet (same text as Pay).
         const { walletUnavailableMessage } = await import('@/lib/restoreWallet')

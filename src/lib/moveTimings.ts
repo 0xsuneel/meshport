@@ -64,7 +64,9 @@ export function startMoveTimer(kind: MoveKind, info: { route?: string; chain?: s
           const [{ useAuthStore }, { supabase }] = await Promise.all([import('@/store'), import('./supabase')])
           const wallet = useAuthStore.getState().walletAddress
           if (!wallet) return
-          const version = (import.meta.env.VITE_APP_VERSION as string | undefined) || undefined
+          // Which build ran it: a phone on a weak connection can open the
+          // stored older copy (sw.ts), so a failure is tied to its code.
+          const version = (typeof __MP_BUILD__ === 'string' && __MP_BUILD__) || (import.meta.env.VITE_APP_VERSION as string | undefined) || undefined
           await supabase.from('move_timings').insert(timingRow({ kind, wallet, ...info, steps, totalMs, ok, error, txHash, version }))
         } catch { /* timings are best-effort */ }
       })()
