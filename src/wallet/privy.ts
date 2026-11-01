@@ -54,6 +54,26 @@ const listeners = new Set<() => void>()
 // but stopped answering): the next Privy must be a fresh one. Cleared when
 // PrivyRoot replaces Privy (the bridge goes to null on its unmount).
 let iframeDead = false
+
+// ── Privy's signing key (TEE) ───────────────────────────────────────────────
+// With TEE execution, Privy's wallet frame gets a wallet-API signing key from
+// the enclave (the slow "authenticate" step, 5-45 s) that lasts the dashboard's
+// "Signing key duration" - 60 minutes, the maximum. The first signature after
+// it expires authenticates again and is slow by design. So: while the key is
+// fresh a signature answers in seconds (a hang means a dead frame); once it is
+// due, a slow signature is expected - and the heartbeat renews it in the
+// background right away, so a payment doesn't pay for it.
+const SIGNING_KEY_MINUTES = Number(import.meta.env.VITE_PRIVY_SIGNING_KEY_MINUTES) || 60
+export const PRIVY_SIGNING_KEY_MS = SIGNING_KEY_MINUTES * 60_000
+/** Renewed this long before it expires (a signature started then may authenticate). */
+const SIGNING_KEY_MARGIN_MS = 60_000
+/** When this Privy's current signing key was obtained (0: not yet, or a new Privy). */
+let signingKeyAt = 0
+/** Is the signing key still good for a fast signature? */
+export function privySigningKeyFresh(now = Date.now()): boolean {
+  return signingKeyAt > 0 && now - signingKeyAt < PRIVY_SIGNING_KEY_MS - SIGNING_KEY_MARGIN_MS
+}
+
 const replacedWaiters = new Set<() => void>()
 /** Window event: Privy's iframe is dead - PrivyRoot rebuilds it (paced). */
 export const PRIVY_DEAD_EVENT = 'meshport:privy-dead'
@@ -62,6 +82,7 @@ export function setPrivyBridge(b: PrivyBridge | null): void {
   bridge = b
   if (!b) {
     iframeDead = false
+    signingKeyAt = 0 // a new Privy authenticates afresh
     for (const w of [...replacedWaiters]) w()
   }
   // A new Privy (PrivyRoot rebuilt it - a new iframe) has to authenticate
@@ -151,7 +172,8 @@ export function checkPrivyAlive(freshMs = PRIVY_HEARTBEAT_MS): Promise<boolean> 
   if (heartbeatRunning) return heartbeatRunning
   const b = bridge
   if (!b?.ready || !b.authenticated || !b.wallets.length) return Promise.resolve(false)
-  if (Date.now() - lastSignedAt < freshMs) return Promise.resolve(true)
+  // Also when the signing key is due: renew it now, in the background.
+  if (Date.now() - lastSignedAt < freshMs && privySigningKeyFresh()) return Promise.resolve(true)
   const address = b.wallets[0]
   heartbeatRunning = timed('heartbeat', async () => b, x => x.signMessage(PRIVY_WARM_MESSAGE, address), address, false)
     .then(() => { noteSigned(address); return true })
@@ -396,9 +418,13 @@ async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b
     // signed again - below); a wallet not warmed yet gets Privy's slow first
     // authentication (up to ~45 s). The hung request is abandoned: whatever it
     // returns later is never used, and nothing is sent without a signature.
+    // Only with a fresh signing key: past its 60 minutes the signature
+    // authenticates again (slow by design) - treating that as a dead frame
+    // would replace Privy and throw the authentication away.
+    const keyFresh = privySigningKeyFresh()
     let hung: ReturnType<typeof setTimeout> | undefined
     const hangs = new Promise<never>((_, reject) => {
-      const ms = address && warmed.has(address.toLowerCase()) ? PRIVY_HUNG_WARM_MS : PRIVY_HUNG_COLD_MS
+      const ms = keyFresh && address && warmed.has(address.toLowerCase()) ? PRIVY_HUNG_WARM_MS : PRIVY_HUNG_COLD_MS
       hung = setTimeout(() => {
         const e = new Error(`no answer after ${s(ms)} s`); e.name = 'AbortError'
         reject(e)
@@ -410,6 +436,8 @@ async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b
       return sign(b)
     })(), noAnswer, hangs]).finally(() => clearTimeout(hung))
     const ms = performance.now() - started
+    // A signature started without a fresh key obtained (or renewed) one.
+    if (!keyFresh) signingKeyAt = Date.now() - ms
     if (ms > 2_000) report(`slow: ${s(ms)} s (${parts()})`)
     return out
   } catch (e) {

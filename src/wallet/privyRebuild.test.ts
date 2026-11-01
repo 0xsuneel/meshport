@@ -129,3 +129,39 @@ describe('a warm wallet whose signature just hangs', () => {
     } finally { vi.useRealTimers() }
   })
 })
+
+describe("Privy's signing key lasts 60 minutes (TEE): the slow re-authentication after it is not a dead frame", () => {
+  const ADDR = '0xcccccccccccccccccccccccccccccccccccccccc'
+  const bridgeWith = (sign: () => Promise<`0x${string}`>) => ({
+    ready: true, authenticated: true, wallets: [ADDR], linked: [ADDR],
+    signMessage: sign, signTransaction: sign, signTypedData: sign,
+    createWallet: async () => ADDR, solanaWallets: [], solanaReady: true,
+    createSolanaWallet: async () => 'x', signSolanaTransaction: async (t: Uint8Array) => t,
+  }) as any
+
+  it('fresh for 59 minutes; after that a 20 s signature completes - Privy is not replaced', async () => {
+    vi.resetModules()
+    const privy = await import('./privy')
+    vi.useFakeTimers()
+    try {
+      let n = 0
+      // Warm-up quick; after the key expires the next signature takes 20 s (re-authentication).
+      privy.setPrivyBridge(bridgeWith(() => (++n === 1
+        ? Promise.resolve('0xwarm')
+        : new Promise(r => setTimeout(() => r('0xreauth'), 20_000)))))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(privy.privySigningKeyFresh()).toBe(true)
+      await vi.advanceTimersByTimeAsync(privy.PRIVY_SIGNING_KEY_MS) // the hour is up
+      expect(privy.privySigningKeyFresh()).toBe(false)
+      const dead = vi.fn()
+      window.addEventListener(privy.PRIVY_DEAD_EVENT, dead)
+      const sig = privy.privyAccount(ADDR).signMessage({ message: 'pay' })
+      await vi.advanceTimersByTimeAsync(21_000)
+      expect(await sig).toBe('0xreauth')
+      expect(dead).not.toHaveBeenCalled()
+      expect(privy.privySigningKeyFresh()).toBe(true) // renewed
+      window.removeEventListener(privy.PRIVY_DEAD_EVENT, dead)
+      privy.setPrivyBridge(null)
+    } finally { vi.useRealTimers() }
+  })
+})
