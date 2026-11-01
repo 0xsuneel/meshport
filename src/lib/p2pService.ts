@@ -463,8 +463,7 @@ export async function updateOfferDetails(
   // the limits stored on-chain, so new limits go on-chain first (seller-signed).
   if (offer.autoAccept && (fields.min_amount !== offer.minAmount || fields.max_amount !== offer.maxAmount) && fields.min_amount !== undefined) {
     try {
-      const { useAuthStore } = await import('../store')
-      const { signer } = useAuthStore.getState()
+      const signer = await p2pReadySigner()
       if (!signer) return { success: false, message: "Couldn't access your wallet on this device to update the ad's limits." }
       const { getAutoAcceptOperator, setAutoAcceptLimits } = await import('./p2pEscrowContract')
       const operator = await getAutoAcceptOperator()
@@ -838,8 +837,7 @@ export async function cancelOfferAndWithdrawEscrow(offer: P2POffer, opts?: { adm
         return { success: false, message: 'This offer is currently frozen by an admin (an active dispute may be in progress) - it cannot be cancelled or withdrawn until unfrozen.' }
       }
       try {
-        const { useAuthStore } = await import('../store')
-        const { signer } = useAuthStore.getState()
+        const signer = await p2pReadySigner()
         if (!signer) return { success: false, message: "Couldn't access your wallet on this device to withdraw escrow." }
         const txHash = await withdrawRemainingFromEscrow(signer, offer.id)
         await fetch(`${SUPA_URL}/rest/v1/p2p_offers?id=eq.${offer.id}`, {
@@ -1913,7 +1911,10 @@ async function releaseAbandonedSellReservation(trade: P2PTrade): Promise<boolean
     const { isEscrowContractDeployed, cancelTradeOnChain } = await import('./p2pEscrowContract')
     if (isEscrowContractDeployed()) {
       const { useAuthStore } = await import('../store')
-      const { signer, walletAddress } = useAuthStore.getState()
+      // A wallet still opening (Privy after a start or resume) is waited for -
+      // without it a plain cancel fell through to the dispute queue.
+      const signer = await p2pReadySigner()
+      const { walletAddress } = useAuthStore.getState()
       if (signer && walletAddress && walletAddress.toLowerCase() === trade.sellerWallet.toLowerCase()) {
         await cancelTradeOnChain(signer, trade.id)
         return true
@@ -2150,6 +2151,16 @@ export async function reconcileStuckReleases(
   return outcomes
 }
 
+/**
+ * The open wallet, waiting for one that is still opening (Privy after a start
+ * or resume) - the readiness check every payment uses; silent (no recovery
+ * banner: background sweeps call this). Null when it can't be opened.
+ */
+async function p2pReadySigner() {
+  const { getReadySigner } = await import('./paymentReadiness')
+  return getReadySigner(undefined, { silent: true })
+}
+
 export async function markPaymentSent(trade: P2PTrade): Promise<{ success: boolean; message: string }> {
   assertAccountUnlocked() // business not approved yet: nothing moves
   if (trade.disputeStatus === 'open') return { success: false, message: DISPUTE_LOCKED_MESSAGE }
@@ -2163,9 +2174,12 @@ export async function markPaymentSent(trade: P2PTrade): Promise<{ success: boole
   // seller can no longer cancel and withdraw.
   {
     const escrowMod = await import('./p2pEscrowContract')
-    const { useAuthStore } = await import('@/store')
-    const signer = useAuthStore.getState().signer
-    if (!signer) return { success: false, message: 'Unlock your wallet and try again.' }
+    // The readiness check every other payment uses: waits for a wallet that
+    // is still opening (Privy loading after a start or resume) instead of
+    // failing at once, and refuses a signer that isn't this account's.
+    const { getReadySigner } = await import('./paymentReadiness')
+    const signer = await getReadySigner()
+    if (!signer) return { success: false, message: "Your wallet didn't open - nothing was marked. Try again." }
     try { await escrowMod.markTradePaidOnChain(signer, trade.id) }
     catch (e: any) {
       return { success: false, message: /not active|only the trade's buyer/i.test(e?.message || '')

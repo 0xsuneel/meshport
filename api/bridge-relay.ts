@@ -47,6 +47,7 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_KEY  session → wallet ownership check
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { EXTERNAL_CHAINS } from '../src/blockchain/chains'
 
 const ARC_DOMAIN = 26
 const FORWARD_HOOK = '0x636374702d666f72776172640000000000000000000000000000000000000000'
@@ -275,8 +276,28 @@ async function relayFees(pub: any, chainId: number): Promise<{ maxFeePerGas?: bi
   return { maxPriorityFeePerGas: tip, maxFeePerGas: base * 2n + tip }
 }
 
+/**
+ * The chain's RPCs in order - the env override (and a _2 one), this file's
+ * primary, then the app's own registry (src/blockchain/chains, the same list
+ * the app reads balances with). Every relay client used ONE RPC with a 15 s
+ * timeout: when that node was slow or down, quotes waited and submissions
+ * failed although another node for the chain worked.
+ */
+export function rpcListFor(chainKey: string, primary: string | undefined): string[] {
+  const env = (k: string) => (process.env[k] || '').trim()
+  const K = `BRIDGE_RPC_${chainKey.toUpperCase()}`
+  return [...new Set([env(K), env(`${K}_2`), primary ?? '', ...(EXTERNAL_CHAINS[chainKey]?.rpcs ?? [])].filter(Boolean))]
+}
+/** One RPC: as before. Several: viem's fallback - the next one when a call fails or times out. */
+async function rpcTransport(chainKey: string, primary: string) {
+  const { http, fallback } = await import('viem')
+  const list = rpcListFor(chainKey, primary)
+  if (list.length < 2) return http(list[0] ?? primary, { timeout: 15_000 })
+  return fallback(list.map(u => http(u, { timeout: 8_000, retryCount: 0 })), { retryCount: 1 })
+}
+
 async function clients(chainKey: string) {
-  const { createPublicClient, createWalletClient, http, defineChain } = await import('viem')
+  const { createPublicClient, createWalletClient, defineChain } = await import('viem')
   const c = CHAINS[chainKey]
   const rpc = process.env[`BRIDGE_RPC_${chainKey.toUpperCase()}`] || c.rpc
   // Arc's native currency is USDC, not Ether (18 native decimals on both).
@@ -284,13 +305,17 @@ async function clients(chainKey: string) {
   const chain = defineChain({ id: c.id, name: c.name, nativeCurrency, rpcUrls: { default: { http: [rpc] } } })
   // Receipt waits check every 250ms on Arc (sub-second blocks) and every 1s
   // elsewhere - viem's 4s default added seconds to every relayed step.
-  const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }), pollingInterval: pollMsFor(c.id) })
+  // A resend of the same signed bytes to the next node is harmless ("already
+  // known"); the relay's replay checks (used nonce / TokenBridged) answer a
+  // repeated request with the transaction already sent.
+  const transport = await rpcTransport(chainKey, rpc)
+  const pub: any = createPublicClient({ chain, transport, pollingInterval: pollMsFor(c.id) })
   let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
   if (key && !key.startsWith('0x')) key = '0x' + key
   let wallet: any = null
   if (/^0x[0-9a-fA-F]{64}$/.test(key)) {
     const { privateKeyToAccount } = await import('viem/accounts')
-    wallet = createWalletClient({ chain, transport: http(rpc, { timeout: 15_000 }), account: privateKeyToAccount(key as `0x${string}`) })
+    wallet = createWalletClient({ chain, transport, account: privateKeyToAccount(key as `0x${string}`) })
   }
   return { pub, wallet }
 }
@@ -443,12 +468,13 @@ async function callClients(chainKey: string) {
     id = await probe.getChainId()
   }
   const chain = defineChain({ id, name: chainKey, nativeCurrency: { name: 'Native', symbol: 'NATIVE', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } })
-  const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }), pollingInterval: pollMsFor(id) })
+  const transport = await rpcTransport(chainKey, rpc)
+  const pub: any = createPublicClient({ chain, transport, pollingInterval: pollMsFor(id) })
   let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
   if (key && !key.startsWith('0x')) key = '0x' + key
   if (!/^0x[0-9a-fA-F]{64}$/.test(key)) return { pub, wallet: null as any }
   const { privateKeyToAccount } = await import('viem/accounts')
-  const wallet: any = createWalletClient({ chain, transport: http(rpc, { timeout: 15_000 }), account: privateKeyToAccount(key as `0x${string}`) })
+  const wallet: any = createWalletClient({ chain, transport, account: privateKeyToAccount(key as `0x${string}`) })
   return { pub, wallet }
 }
 

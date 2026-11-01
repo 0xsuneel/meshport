@@ -115,6 +115,19 @@ function timeAgo(ts: number): string {
 function swapTokenDecimals(id: string): number {
   return id === 'cirBTC' ? 8 : 3
 }
+/** Circle's swap fees, per token ("0.0002 EURC + 0.01 USDC"). Pure. */
+export function swapFeesText(fees: Array<{ amount?: string; token?: string }>): string {
+  const byToken = new Map<string, number>()
+  for (const f of fees) {
+    const n = parseFloat(f.amount || '0')
+    if (!Number.isFinite(n) || n <= 0) continue
+    const raw = String(f.token ?? '')
+    const t = SWAP_TOKENS.find(x => x.id.toLowerCase() === raw.toLowerCase() || (!!x.contract && x.contract.toLowerCase() === raw.toLowerCase()))?.id ?? (raw || 'USDC')
+    byToken.set(t, (byToken.get(t) ?? 0) + n)
+  }
+  if (!byToken.size) return '0'
+  return [...byToken].map(([t, n]) => `~${trimTrailingZeros(n.toFixed(t === 'cirBTC' ? 8 : 4))} ${t}`).join(' + ')
+}
 // Currency sign for the line under each amount: it used to be "$" for every
 // token, so 18.4 EURC read as "$18.4" and 0.001 cirBTC as "$0.001".
 function swapTokenSymbolChar(id: string): string {
@@ -948,7 +961,10 @@ export function SwapPage() {
   // up automatically. Never re-fetched once the passcode has been entered
   // (see handleConfirm).
   useEffect(() => {
-    if (step !== 'confirming') return
+    // Frozen while the passcode sheet is open: the quote confirmed is the
+    // one the swap's intent records (min output, expected output) - it used
+    // to keep refreshing under the passcode entry.
+    if (step !== 'confirming' || showPasscodeSheet) return
     let cancelled = false
     const fetchQuote = async (silent: boolean) => {
       const amt = parseFloat(amountIn)
@@ -965,7 +981,7 @@ export function SwapPage() {
           if (prevTotal > 0) {
             const delta = Math.abs(freshTotalFees - prevTotal)
             if (delta > Math.max(0.0002, prevTotal * 0.02)) {
-              setQuoteChangedNotice(`Fees updated (${trimTrailingZeros(prevTotal.toFixed(4))} → ${trimTrailingZeros(freshTotalFees.toFixed(4))} USDC)`)
+              setQuoteChangedNotice(`Swap fee updated: ${swapFeesText(est.fees ?? [])}`)
               setTimeout(() => setQuoteChangedNotice(''), 6000)
             }
           }
@@ -984,7 +1000,7 @@ export function SwapPage() {
     const interval = setInterval(() => fetchQuote(true), 20000)
     return () => { cancelled = true; clearInterval(interval) }
    
-  }, [step, amountIn, tokenIn, tokenOut, slippage, callProxy])
+  }, [step, showPasscodeSheet, amountIn, tokenIn, tokenOut, slippage, callProxy])
 
   // ── Fetch the quote once, transitioning the form into Review on success ──
   // The only trigger for the very first quote fetch - tapping Swap. Nothing
@@ -1062,21 +1078,13 @@ export function SwapPage() {
     setStep('swapping'); setError(''); setIsUncertainFailure(false)
     const amt = parseFloat(amountIn)
 
-    // ── Intent creation + swap call run in parallel ───────────────────────────
-    // Previously these were strictly serial: intent creation (a Supabase Edge
-    // Function round-trip, ~300–800ms) had to fully complete BEFORE the swap
-    // proxy call was even started. The swap proxy itself has its own non-trivial
-    // cold-start cost - there's no reason to wait for one to finish before
-    // beginning the other. Running both concurrently with Promise.all shaves
-    // the intent-creation round-trip entirely off the critical path on warm
-    // containers. The attempt ID only needs to be ready by the time the proxy
-    // RESPONDS (not when it's called), so this is safe as long as we wait for
-    // both before processing the result.
-    //
-    // Safety invariant preserved: if intent creation fails we still cancel the
-    // swap by checking the result before marking success/doing any bookkeeping.
-    // The proxy may have already broadcast by then - same "uncertain" outcome
-    // handling as any other mid-flight failure applies.
+    // ── The intent first, then the swap (same rule as Pay) ───────────────────
+    // These used to run in parallel, the swap sent with no intent IDs and the
+    // intent attached afterwards; when creating the intent failed the swap
+    // still happened, with no ledger intent (only a console warning). Now the
+    // swap starts only once its intent exists, and carries its IDs
+    // (recordCompletion / markAttemptSubmitted use them). A failed intent
+    // means nothing was sent.
     const decimalsInVal = tokenIn.decimals
     const amountInAtomic = BigInt(Math.round(amt * Math.pow(10, decimalsInVal))).toString()
     const minOut = estimate?.stopLimit?.amount ?? null
@@ -1088,54 +1096,35 @@ export function SwapPage() {
       return BigInt(Math.round(n * Math.pow(10, decimals))).toString()
     }
 
-    // Start intent creation immediately (fire, don't await yet)
-    const intentPromise = import('@/lib/swapIntentService').then(({ createSwapIntent }) =>
-      createSwapIntent({
-        walletAddress: walletAddress ?? '',
-        idempotencyKey: crypto.randomUUID(),
-        chainId: 'arc',
-        amountInAtomic,
-        decimalsIn: decimalsInVal,
-        tokenInAddress: tokenIn.contract || null,
-        tokenInSymbol: tokenIn.id,
-        isNativeIn: !tokenIn.contract,
-        tokenOutAddress: tokenOut.contract || null,
-        tokenOutSymbol: tokenOut.id,
-        decimalsOut: tokenOut.decimals,
-        minAmountOutAtomic: toAtomicOrNull(minOut, tokenOut.decimals),
-        expectedAmountOutAtomic: toAtomicOrNull(expectedOut, tokenOut.decimals),
-        slippageBps: slippage ?? null,
-        routerAddress: null,
-      })
-    )
-
-    // Start swap proxy call immediately in parallel - attemptId/intentId are
-    // passed as undefined for now; updated server-side via the parallel intent
-    // result (see markAttemptSubmittedServerSide in swap-proxy.js which handles
-    // the id write independently). The proxy's own server-side attempt marking
-    // uses the attemptId forwarded in the request body - we pass it once both
-    // promises resolve below.
-    const swapProxyPromise = callProxy('swap', {
-      tokenIn: tokenIn.id, tokenOut: tokenOut.id, amountIn: parseFloat(amountIn).toFixed(6),
-      onProgress: onSwapProgress,
-    })
-
     let attemptId: string | null = null
 
     try {
-      // Wait for both in parallel - the slower of the two determines wall-clock
-      // time, but in practice the swap proxy takes longer (it does real on-chain
-      // work), so intent creation finishes well before the swap completes.
-      const [intentResult, result] = await Promise.all([intentPromise, swapProxyPromise])
-
-      if (!intentResult.success || !intentResult.attemptId) {
-        // Intent creation failed - but the swap may have already broadcast.
-        // Treat this the same as an uncertain failure: log, but don't mark
-        // the swap as definitively failed if we have a txHash.
-        console.warn('[Swap] intent creation failed (swap may have already broadcast):', intentResult.error)
-      } else {
-        attemptId = intentResult.attemptId
+      const intentResult = await import('@/lib/swapIntentService').then(({ createSwapIntent }) =>
+        createSwapIntent({
+          walletAddress: walletAddress ?? '',
+          idempotencyKey: crypto.randomUUID(),
+          chainId: 'arc',
+          amountInAtomic,
+          decimalsIn: decimalsInVal,
+          tokenInAddress: tokenIn.contract || null,
+          tokenInSymbol: tokenIn.id,
+          isNativeIn: !tokenIn.contract,
+          tokenOutAddress: tokenOut.contract || null,
+          tokenOutSymbol: tokenOut.id,
+          decimalsOut: tokenOut.decimals,
+          minAmountOutAtomic: toAtomicOrNull(minOut, tokenOut.decimals),
+          expectedAmountOutAtomic: toAtomicOrNull(expectedOut, tokenOut.decimals),
+          slippageBps: slippage ?? null,
+          routerAddress: null,
+        }))
+      if (!intentResult.success || !intentResult.attemptId || !intentResult.intentId) {
+        throw Object.assign(new Error("Couldn't prepare the swap - nothing was sent. Try again."), { isUncertain: false, cause: intentResult.error })
       }
+      attemptId = intentResult.attemptId
+      const result = await callProxy('swap', {
+        tokenIn: tokenIn.id, tokenOut: tokenOut.id, amountIn: parseFloat(amountIn).toFixed(6),
+        onProgress: onSwapProgress, attemptId: intentResult.attemptId, intentId: intentResult.intentId,
+      })
       const hash   = result?.txHash ?? ''
       const aOut   = result?.amountOut || estimate?.estimatedOutput?.amount || '0'
       setTxHash(hash); setAmountOut(aOut)
@@ -1153,12 +1142,8 @@ export function SwapPage() {
         })
       }
 
-      // Persist the real tx_hash server-side IMMEDIATELY - fire-and-forget.
-      // The swap-proxy already calls markAttemptSubmittedServerSide server-
-      // side, but that path only runs if the proxy's own request body carried
-      // the attemptId. Since the parallel approach above may have had intent
-      // creation resolve after the proxy call was already sent (without the
-      // ID), this client-side call is the belt-and-suspenders fallback.
+      // Persist the real tx_hash server-side IMMEDIATELY - fire-and-forget
+      // (recordCompletion has the IDs too; this one lands first).
       if (hash && attemptId) {
         import('@/lib/swapIntentService').then(({ markSwapAttemptSubmitted }) => {
           markSwapAttemptSubmitted(attemptId!, hash).catch(() => { /* best-effort */ })
@@ -1342,7 +1327,15 @@ export function SwapPage() {
       }
       setIsUncertainFailure(uncertain)
       setError(msg); setStep('failed')
-      clearResumableOperation('swap')
+      // An uncertain outcome may still land: keep (or write) the recovery
+      // marker for the swap that may be on its way - clearing it here let the
+      // next open forget it. Only a definite failure clears it.
+      if (uncertain) {
+        const pendingHash = await import('@/lib/swapService').then(m => m.swapInFlightHash()).catch(() => null)
+        if (pendingHash) saveResumableOperation('swap', pendingHash, { amountIn, amountOut: estimate?.estimatedOutput?.amount ?? '', tokenInId: tokenIn.id, tokenOutId: tokenOut.id, walletAddress })
+      } else {
+        clearResumableOperation('swap')
+      }
     }
   }, [callProxy, onSwapProgress, tokenIn, tokenOut, amountIn, slippage, estimate, walletAddress])
 
@@ -1399,7 +1392,11 @@ export function SwapPage() {
     setFlipTurns(t => t + 1)
   }
 
-  const totalFees = (estimate?.fees ?? []).reduce((s, f) => s + parseFloat(f.amount || '0'), 0)
+  // Circle's swap fees are in their own tokens (EURC, cirBTC, USDC): shown
+  // per token, never added up as dollars (0.00001 cirBTC is not "$0.00001").
+  // Arc's network gas is a separate fee, in USDC (estimate.gasFee).
+  const swapFeeText = swapFeesText(estimate?.fees ?? [])
+  const networkFeeText = estimate && estimate.gasFee > 0 ? `~${trimTrailingZeros(estimate.gasFee.toFixed(4))} USDC` : '-'
   const isActive  = ['idle','estimating'].includes(step)
   // A valid amount whose quote is on its way (the 500ms typing debounce, or
   // the fetch itself): shown as loading, never as a grey "0" that then
@@ -1714,7 +1711,7 @@ export function SwapPage() {
                     tokenOut.id === 'cirBTC' ? 8 : 4
                   ))} {tokenOut.id}
                 </span>
-                <span>Fee ~${formatAmount(totalFees)}</span>
+                <span>Fee {swapFeeText}</span>
               </>
             ) : (
               // Same line, placeholder bars, while the quote loads.
@@ -1823,7 +1820,8 @@ export function SwapPage() {
                 <div className="rounded-2xl" style={{ position: 'relative', marginTop: 20, padding: '4px 16px', background: 'var(--surface)', border: '1px solid var(--border)' }}>
                   {[
                     ['Rate', `1 ${tokenIn.id} = ${estimate ? trimTrailingZeros((parseFloat(estimate.estimatedOutput.amount)/parseFloat(amountIn)).toFixed(tokenOut.id === 'cirBTC' ? 8 : 4)) : '-'} ${tokenOut.id}`],
-                    ['Network fee', `~$${formatAmount(totalFees)}`],
+                    ['Swap fee', swapFeeText],
+                    ['Network fee', networkFeeText],
                     ['Network', 'Arc'],
                   ].map(([l, v], i, rows) => (
                     <div key={l} className="flex justify-between items-center" style={{ padding: '12px 0', borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
@@ -1922,7 +1920,7 @@ export function SwapPage() {
               ]}
               detailRows={[
                 ...(inNum > 0 && outNum > 0 ? [{ label: 'Rate', value: `1 ${tokenIn.id} = ${trimTrailingZeros((outNum / inNum).toFixed(4))} ${tokenOut.id}` }] : []),
-                { label: 'Total Fees', value: `~$${formatAmount(totalFees)}` },
+                { label: 'Swap fee', value: swapFeeText },
                 { label: 'Network', value: 'Arc' },
               ]}
               fullHash={txHash || undefined}
