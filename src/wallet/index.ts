@@ -63,10 +63,10 @@ export function forgetWallet(address?: string, everything = false) { return call
 export async function chatSeed(address: string): Promise<Uint8Array> {
   // Google / email (Circle): no key in the frame, and Circle's signatures
   // differ every time (field 1 Nov), so a signature can't make a stable chat
-  // key either (wallet/signatureChatSeed.ts would refuse it after spending two
-  // signatures). Refused at once - no Circle signature spent.
+  // key either. Refused at once - no Circle signature spent; the device
+  // makes its own chat key instead (lib/chatCrypto.ts getMySeed).
   const { useAuthStore } = await import('@/store')
-  if (useAuthStore.getState().walletSource === 'circle') throw new Error('Encrypted chat keys are not available for Circle wallets yet')
+  if (useAuthStore.getState().walletSource === 'circle') throw new Error('No wallet-derived chat key for a Circle wallet')
   const { seed } = await callWallet('chat:seed', { address })
   const h = seed.slice(2)
   const out = new Uint8Array(h.length / 2)

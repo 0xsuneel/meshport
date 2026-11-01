@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { createClient } from '@supabase/supabase-js'
+import type { LocalSummary } from './localChat'
 
 const SUPABASE_URL  = (import.meta.env.VITE_SUPABASE_URL  as string) || ''
 const SUPABASE_ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
@@ -743,18 +744,23 @@ export async function fetchConversations(myId: string): Promise<DbConversation[]
   )
   const otherIds = Array.from(new Set(otherIdByConv.values()))
 
-  const [usersRes, unreadRes, msgsRes] = await Promise.all([
+  // Device-only chat: chat text, photos and files are on this phone
+  // (lib/localChat.ts) - previews and unread counts for them come from there.
+  // The server is asked only about payment cards, which stay in Supabase.
+  const PAY = ['payment_sent', 'payment_received']
+  const [usersRes, unreadRes, msgsRes, localRes] = await Promise.all([
     supabase.from('users').select(USER_COLS).in('id', otherIds),
     supabase.from('messages').select('conversation_id, sender_id')
-      .in('conversation_id', convIds).eq('is_read', false),
+      .in('conversation_id', convIds).in('type', PAY).eq('is_read', false),
     // Fetches a shared window across all conversations (not just 1 each) so
     // the preview can still skip past a "Delete for everyone"'d message and
     // fall back to the last real message underneath it, same as before -
     // just batched instead of one query per conversation.
     supabase.from('messages').select('conversation_id, sender_id, type, content, created_at')
-      .in('conversation_id', convIds)
+      .in('conversation_id', convIds).in('type', PAY)
       .order('created_at', { ascending: false })
       .limit(Math.min(Math.max(convIds.length * 10, 100), 1000)),
+    import('./localChat').then(l => l.summaries(myId, [myId])).catch(() => new Map<string, LocalSummary>()),
   ])
 
   const usersById = new Map((usersRes.data || []).map((u: any) => [u.id, u]))
@@ -796,7 +802,12 @@ export async function fetchConversations(myId: string): Promise<DbConversation[]
   const enriched = data.map((conv: any) => {
     const otherId = otherIdByConv.get(conv.id)!
     const otherUser = usersById.get(otherId)
-    const lastMsgRows = msgsByConv.get(conv.id) || []
+    const paymentRows = msgsByConv.get(conv.id) || []
+    const localSum = localRes.get(conv.id)
+    const localLast = localSum?.last
+    // This phone's latest chat message and the latest payment card, newest first.
+    const lastMsgRows = (localLast ? [localLast, ...paymentRows] : paymentRows)
+      .sort((a: any, b: any) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
     const trueLatest = lastMsgRows[0]
     const previewMsg  = lastMsgRows.find(m => m.content !== '[deleted]') ?? trueLatest
 
@@ -819,8 +830,8 @@ export async function fetchConversations(myId: string): Promise<DbConversation[]
     return {
       ...conv,
       other_user: userWithFreshAvatar,
-      unread_count: unreadByConv.get(conv.id) || 0,
-      last_message: previewMsg?.content ?? conv.last_message,
+      unread_count: (unreadByConv.get(conv.id) || 0) + (otherId === myId ? 0 : localSum?.unread ?? 0),
+      last_message: previewMsg?.content ?? null,
       last_message_at: trueLatest?.created_at ?? conv.last_message_at,
       last_message_sender: trueSender,
       last_message_type: previewMsg?.type ?? null,
@@ -877,7 +888,8 @@ export async function sendMessage(params: {
   }
 
   const updateConv = () => supabase.from('conversations').update({
-    last_message:    params.content,
+    // Device-only chat: no chat text on the server, only payment lines.
+    last_message:    row.type === 'text' ? null : params.content,
     last_message_at: new Date().toISOString(),
   }).eq('id', params.conversationId).then(() => {})
 

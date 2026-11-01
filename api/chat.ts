@@ -167,6 +167,8 @@ async function verifyPayment(txHash: string, from: string, to: string, token: st
 // bind-session function). Without this, anyone could post messages or fake
 // payment cards as anyone.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// Payment cards stay in Supabase; chat text never does (device-only chat).
+const PAYMENT_TYPES: ReadonlySet<unknown> = new Set(['payment_sent', 'payment_received'])
 
 async function sessionUid(req: VercelRequest): Promise<string | null> {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
@@ -333,7 +335,9 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
   const lastMessageUpdate = supaFetch(
     `/conversations?id=eq.${conversationId}`,
     'PATCH',
-    { last_message: content, last_message_at: new Date().toISOString(),
+    // Device-only chat: the server keeps no chat text - only a payment
+    // card's line (payments stay in Supabase) and the time.
+    { last_message: PAYMENT_TYPES.has(type) ? content : null, last_message_at: new Date().toISOString(),
       last_message_sender: senderId, last_message_type: type }
   ).catch(() => {})
 
@@ -466,8 +470,9 @@ async function handleTouchConversation(req: VercelRequest, res: VercelResponse) 
   if (!(await callerIs(req, senderId))) return res.status(403).json(NOT_LINKED)
   if (!(await isParticipant(conversationId, senderId)).ok) return res.status(403).json({ error: 'Not in this conversation' })
 
-  const patch: Record<string, string> = {
-    last_message: lastMessage,
+  const patch: Record<string, string | null> = {
+    // Device-only chat: no chat text on the server (see handleSendMessage).
+    last_message: PAYMENT_TYPES.has(messageType) ? lastMessage : null,
     last_message_at: new Date().toISOString(),
   }
   if (typeof lastMessage !== 'string' || lastMessage.length > 20000) return res.status(400).json({ error: 'Bad message' })

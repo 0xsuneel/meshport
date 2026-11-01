@@ -1,6 +1,6 @@
 // Waiting (e2e:q2) messages handed over to the recipient, end to end through
-// resealWaitingMessages - including the conversation's stored preview, which
-// otherwise kept the q2 ciphertext (recipient's chat list: "Waiting…" forever).
+// resealWaitingMessages - and the sender's copy on the phone (device-only
+// chat: the server keeps no preview text).
 // Also: an encrypted photo/file is never passed through as ciphertext when
 // the key isn't there yet.
 import { describe, it, expect, vi } from 'vitest'
@@ -34,6 +34,8 @@ function builder(table: string) {
 }
 
 vi.mock('@/lib/supabase', () => ({ supabase: { from: (t: string) => builder(t) } }))
+const patchMessages = vi.fn(async (..._a: unknown[]) => {})
+vi.mock('@/lib/localChat', () => ({ patchMessages: (...a: unknown[]) => patchMessages(...a) }))
 vi.mock('@/lib/homeBootstrap', () => ({ bootPart: async () => undefined }))
 vi.mock('@/lib/security', () => ({ sealForDevice: async () => null, openFromDevice: async () => null }))
 // Alice's wallet is open; her chat seed comes from the wallet frame (stood in here).
@@ -51,7 +53,7 @@ import {
 const b64 = (u: Uint8Array) => btoa(String.fromCharCode(...u))
 
 describe('resealWaitingMessages', () => {
-  it('hands the message over and updates the conversation preview that still holds the q2 copy', async () => {
+  it('hands the message over and updates my copy on the phone', async () => {
     const alice = deriveMyChatIdentity(ALICE_PK)
     const bob = deriveMyChatIdentity(BOB_PK)
     const aliceAddr = privateKeyToAccount(ALICE_PK as `0x${string}`).address
@@ -71,10 +73,9 @@ describe('resealWaitingMessages', () => {
     expect(sealed.startsWith('e2e:v2:')).toBe(true)
     expect(await decryptText(sealed, await makeChatKeys(bob.privateKey, alice.publicKey))).toBe('hi bob')
 
-    const convOps = ops.filter(o => o.table === 'conversations')
-    expect(convOps.find(o => o.op === 'update')?.args[0]).toEqual({ last_message: sealed })
-    // Only when the preview IS that waiting message - a newer one is left alone.
-    expect(convOps.filter(o => o.op === 'eq').map(o => o.args)).toEqual([['id', 'c1'], ['last_message', q2]])
+    // No chat text is written to the conversation row any more.
+    expect(ops.filter(o => o.table === 'conversations')).toEqual([])
+    expect(patchMessages).toHaveBeenCalledWith('alice', ['m1'], { content: sealed })
   })
 })
 

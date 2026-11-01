@@ -70,38 +70,85 @@ export function putCachedMedia(remoteUrl: string, blob: Blob, localUrl?: string)
   cache.set(bare(remoteUrl), { url: localUrl ?? URL.createObjectURL(blob), blob })
 }
 
+// ── this phone's copy of chat files (device-only chat) ──────────────────────
+// The bytes as stored on the server - still sealed for the chat - kept in
+// IndexedDB by URL. The sender keeps theirs from the upload; the recipient
+// from the first download, after which the server copy is deleted (the
+// storage policy lets either person in the chat delete chat/<conversation>/…).
+const FILES_DB = 'meshport-chat-files'
+let filesDb: Promise<IDBDatabase> | null = null
+function openFiles(): Promise<IDBDatabase> {
+  if (!filesDb) {
+    filesDb = new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open(FILES_DB, 1)
+      req.onupgradeneeded = () => { req.result.createObjectStore('files') }
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+    filesDb.catch(() => { filesDb = null })
+  }
+  return filesDb
+}
+/** This phone's saved copy of a chat file, or null. */
+export async function savedFile(url: string): Promise<Blob | null> {
+  try {
+    const db = await openFiles()
+    return await new Promise<Blob | null>((resolve, reject) => {
+      const req = db.transaction('files').objectStore('files').get(bare(url))
+      req.onsuccess = () => resolve((req.result as Blob | undefined) ?? null)
+      req.onerror = () => reject(req.error)
+    })
+  } catch { return null }
+}
+/** Keeps a chat file's (sealed) bytes on this phone. */
+export async function saveFile(url: string, bytes: Blob): Promise<boolean> {
+  try {
+    const db = await openFiles()
+    return await new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction('files', 'readwrite')
+      tx.objectStore('files').put(bytes, bare(url))
+      tx.oncomplete = () => resolve(true)
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch { return false }
+}
+/** Storage path of a chat file URL (…/object/public/attachments/chat/<conv>/<file>), or null. */
+export function chatStoragePath(url: string): string | null {
+  const m = /\/storage\/v1\/object\/public\/attachments\/(chat\/[^?#]+)$/.exec(bare(url))
+  return m ? decodeURIComponent(m[1]) : null
+}
+async function removeFromServer(url: string): Promise<void> {
+  const path = chatStoragePath(url)
+  if (!path) return
+  const { supabase } = await import('@/lib/supabase')
+  const { error } = await supabase.storage.from('attachments').remove([path])
+  if (error) console.warn('[chatMedia] server copy not removed:', error.message)
+}
+
 const inflight = new Map<string, Promise<{ url: string; blob: Blob }>>()
 /**
  * Downloads (and decrypts, when `iv` is set) a chat photo / file, reporting
  * 0..1 progress. Cached for the session; concurrent callers share one fetch.
  */
-export function loadMedia(url: string, iv: string | null, key: any, onProgress?: (p: number) => void, mime?: string): Promise<{ url: string; blob: Blob }> {
+export function loadMedia(url: string, iv: string | null, key: any, onProgress?: (p: number) => void, mime?: string,
+  /** A file someone sent me: once it's saved on this phone, delete the server copy. */
+  opts?: { received?: boolean }): Promise<{ url: string; blob: Blob }> {
   const k = bare(url)
   const hit = cache.get(k)
   if (hit) { onProgress?.(1); return Promise.resolve(hit) }
   const running = inflight.get(k)
   if (running) return running
   const job = (async () => {
-    const res = await fetch(k)
-    if (!res.ok) throw new Error(`Download failed (${res.status})`)
-    const total = Number(res.headers.get('content-length')) || metaOf(url).s || 0
+    const kept = await savedFile(k)
     let bytes: ArrayBuffer
-    if (res.body && total && onProgress) {
-      const reader = res.body.getReader()
-      const chunks: Uint8Array[] = []
-      let got = 0
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        chunks.push(value); got += value.length
-        onProgress(Math.min(0.99, got / total))
-      }
-      const all = new Uint8Array(got)
-      let off = 0
-      for (const c of chunks) { all.set(c, off); off += c.length }
-      bytes = all.buffer
+    let contentType = ''
+    if (kept) {
+      bytes = await kept.arrayBuffer()
     } else {
-      bytes = await res.arrayBuffer()
+      const got = await download(k, url, onProgress)
+      bytes = got.bytes; contentType = got.contentType
+      const stored = await saveFile(k, new Blob([bytes]))
+      if (stored && opts?.received) void removeFromServer(k).catch(() => {})
     }
     let blob: Blob
     if (iv) {
@@ -109,7 +156,7 @@ export function loadMedia(url: string, iv: string | null, key: any, onProgress?:
       const plain = await decryptBlob(bytes, iv, key)
       blob = mime ? new Blob([plain], { type: mime }) : plain
     } else {
-      blob = new Blob([bytes], { type: mime || res.headers.get('content-type') || '' })
+      blob = new Blob([bytes], { type: mime || contentType || '' })
     }
     const entry = { url: URL.createObjectURL(blob), blob }
     cache.set(k, entry)
@@ -119,6 +166,31 @@ export function loadMedia(url: string, iv: string | null, key: any, onProgress?:
   inflight.set(k, job)
   job.finally(() => inflight.delete(k)).catch(() => {})
   return job
+}
+
+async function download(k: string, url: string, onProgress?: (p: number) => void): Promise<{ bytes: ArrayBuffer; contentType: string }> {
+  const res = await fetch(k)
+  if (!res.ok) throw new Error(`Download failed (${res.status})`)
+  const total = Number(res.headers.get('content-length')) || metaOf(url).s || 0
+  let bytes: ArrayBuffer
+  if (res.body && total && onProgress) {
+    const reader = res.body.getReader()
+    const chunks: Uint8Array[] = []
+    let got = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value); got += value.length
+      onProgress(Math.min(0.99, got / total))
+    }
+    const all = new Uint8Array(got)
+    let off = 0
+    for (const c of chunks) { all.set(c, off); off += c.length }
+    bytes = all.buffer
+  } else {
+    bytes = await res.arrayBuffer()
+  }
+  return { bytes, contentType: res.headers.get('content-type') || '' }
 }
 
 // ── compression ─────────────────────────────────────────────────────────────

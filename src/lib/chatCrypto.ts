@@ -65,7 +65,15 @@
 //   the passcode was entered) and showed every message locked meanwhile. The
 //   chat identity seed (it reads chat; it can't move funds) is now also kept
 //   on this device, sealed with the browser's non-extractable device key
-//   (see sealForDevice in security.ts), and removed on logout.
+//   (see sealForDevice in security.ts). It stays after logout: chats are
+//   kept on the device (lib/localChat.ts), sealed, and need it to open.
+//
+// GOOGLE / EMAIL (CIRCLE) WALLETS - a key per device.
+//   Circle's signatures differ each time, so no seed can be derived from
+//   them. The device makes a random key instead and publishes it with one
+//   wallet signature (getMySeed). Like WhatsApp, chats then belong to that
+//   device - which matches device-only chat (the server keeps a message only
+//   until the recipient's phone has saved it, lib/chatMailbox.ts).
 
 import { x25519 } from '@noble/curves/ed25519'
 import { sha256 } from '@noble/hashes/sha256'
@@ -135,10 +143,10 @@ const SEED_PREFIX = 'meshport_chat_seed_'        // sessionStorage, this tab
 const SEED_DEVICE_PREFIX = 'meshport_chat_seed_dv_' // localStorage, sealed to this browser
 const PUB_PREFIX = 'meshport_chat_vpub_' // verified (wallet-signed) keys only
 
-function saveSeed(walletAddress: string, seed: Uint8Array) {
+function saveSeed(walletAddress: string, seed: Uint8Array): Promise<void> {
   const addr = walletAddress.toLowerCase()
   try { sessionStorage.setItem(SEED_PREFIX + addr, toHex(seed)) } catch { /* storage blocked */ }
-  void import('@/lib/security').then(async ({ sealForDevice }) => {
+  return import('@/lib/security').then(async ({ sealForDevice }) => {
     const sealed = await sealForDevice(toHex(seed))
     if (sealed) { try { localStorage.setItem(SEED_DEVICE_PREFIX + addr, sealed) } catch { /* storage blocked */ } }
   }).catch(() => {})
@@ -159,33 +167,54 @@ async function loadSeed(walletAddress: string): Promise<Uint8Array | null> {
     return seed
   } catch { return null }
 }
-/** Forget this device's chat identity (logout). */
+/**
+ * Logout: forget this tab's copy. The device copy stays - chats live on this
+ * phone (lib/localChat.ts) and are sealed for this device's key, so signing
+ * back in must find the same key. It's sealed to this browser and only used
+ * for the same wallet.
+ */
 export function clearChatSessionSeeds() {
-  for (const store of [() => sessionStorage, () => localStorage]) {
-    try {
-      const st = store()
-      for (let i = st.length - 1; i >= 0; i--) {
-        const k = st.key(i)
-        if (k?.startsWith(SEED_PREFIX)) st.removeItem(k)
-      }
-    } catch { /* storage blocked */ }
-  }
+  try {
+    const st = sessionStorage
+    for (let i = st.length - 1; i >= 0; i--) {
+      const k = st.key(i)
+      if (k?.startsWith(SEED_PREFIX) && !k.startsWith(SEED_DEVICE_PREFIX)) st.removeItem(k)
+    }
+  } catch { /* storage blocked */ }
   _keysCache.clear()
 }
 
-/** This wallet's chat seed: this device's copy (saved from the wallet earlier), else from the wallet key. */
-async function getMySeed(walletAddress: string): Promise<Uint8Array | null> {
-  // The same seed either way (it's derived from the wallet) - the device copy
-  // costs nothing, the wallet costs a signature round (2 Circle signatures for
-  // a Google / email wallet) on every page load.
-  const saved = await loadSeed(walletAddress)
-  if (saved) return saved
-  const seed = await seedFromWallet(walletAddress)
-  if (seed) {
-    saveSeed(walletAddress, seed)
-    return seed
+/**
+ * This wallet's chat seed on this device. Created / imported wallets derive
+ * it from the wallet key (the same on every device). A Google / email
+ * (Circle) wallet can't - its signatures differ each time - so this device
+ * makes its own random key, keeps it (sealed to this browser) and publishes
+ * it with one wallet signature. Chats are device-only, like WhatsApp: a
+ * message is sealed for the key published when it was sent and kept on the
+ * phone that received it.
+ */
+const _seedInFlight = new Map<string, Promise<Uint8Array | null>>()
+function getMySeed(walletAddress: string): Promise<Uint8Array | null> {
+  const addr = walletAddress.toLowerCase()
+  let p = _seedInFlight.get(addr)
+  if (!p) {
+    p = (async () => {
+      const saved = await loadSeed(walletAddress)
+      if (saved) return saved
+      const seed = await seedFromWallet(walletAddress)
+      if (seed) { await saveSeed(walletAddress, seed); return seed }
+      // No derivable seed. With the wallet open (a Circle wallet), make this
+      // device's key; with it locked, wait for the unlock.
+      const signer = (await import('@/store')).useAuthStore.getState().signer
+      if (!signer || signer.address.toLowerCase() !== addr) return null
+      const fresh = crypto.getRandomValues(new Uint8Array(32))
+      await saveSeed(walletAddress, fresh)
+      return fresh
+    })()
+    _seedInFlight.set(addr, p)
+    p.finally(() => _seedInFlight.delete(addr)).catch(() => {})
   }
-  return null
+  return p
 }
 
 // ── Remembered contact identities (per device, per my wallet) ──────────────
@@ -274,12 +303,10 @@ export async function ensureChatKeysReady(walletAddress: string, myUserId: strin
     // every unlock - for a Google / email wallet it would ask the wallet for
     // 3 signatures each time (2 for the seed, 1 for the key), right when the
     // first payment wants it too.
-    const deviceSeed = await loadSeed(walletAddress)
-    if (deviceSeed && current?.chat_public_key === toBase64(x25519.getPublicKey(deviceSeed))
-      && await verifyChatKey(walletAddress, current.chat_public_key, current.chat_key_sig)) return
-    const seed = await seedFromWallet(walletAddress)
+    const seed = await getMySeed(walletAddress)
     if (!seed) return
-    saveSeed(walletAddress, seed)
+    if (current?.chat_public_key === toBase64(x25519.getPublicKey(seed))
+      && await verifyChatKey(walletAddress, current.chat_public_key, current.chat_key_sig)) return
     const publicKeyStr = toBase64(x25519.getPublicKey(seed))
     const sig = await signer.signMessage({ message: chatKeyStatement(walletAddress, publicKeyStr) })
     if (current?.chat_public_key === publicKeyStr && current?.chat_key_sig === sig) return
@@ -588,10 +615,8 @@ export async function resealWaitingMessages(walletAddress: string, myUserId: str
         const { error } = await supabase.from('messages').update({ content: sealed }).eq('id', r.id)
         if (!error) {
           done++
-          // The chat list's stored preview may be this very message: hand it
-          // over too, or the recipient's preview keeps reading "Waiting…".
-          await supabase.from('conversations').update({ last_message: sealed })
-            .eq('id', c.id).eq('last_message', r.content as string)
+          // My copy on this phone shows it as handed over too.
+          await import('@/lib/localChat').then(l => l.patchMessages(myUserId, [r.id as string], { content: sealed })).catch(() => {})
         }
       }
     }

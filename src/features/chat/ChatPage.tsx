@@ -15,7 +15,7 @@ import { _plainByContent, plainTextOf, messagePreview, parseMedia, isDecryptFail
 import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { ChatForwardSheet, chatPushMotion } from './ChatForwardSheet'
 import { ChatImage, ChatFile, QuoteThumb, FileTypeTile, MediaPreview, ChatImageViewer, type PreviewItem, type ViewerItem } from './ChatMedia'
-import { preparePhoto, uploadWithProgress, withMeta, metaOf, putCachedMedia, mimeOf } from './chatMediaStore'
+import { preparePhoto, uploadWithProgress, withMeta, metaOf, putCachedMedia, saveFile, mimeOf } from './chatMediaStore'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { PinSheet } from '@/components/ui/PinSheet'
 import { ActionSheet } from '@/components/ui/ActionSheet'
@@ -38,6 +38,7 @@ import { AmountField } from '@/components/ui/AmountField'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isCoinEnabled } from '@/lib/featureFilters'
 import { useAuthStore, useUIStore, useWalletStore, useChatUnreadStore } from '@/store'
+import { LOCAL_CHAT_EVENT } from '@/lib/localChat'
 import {
   supabase,
   fetchConversations,
@@ -55,6 +56,7 @@ import {
   persistMessage,
   touchConversation,
   markRead,
+  markReadLocal,
   subscribeWithRetry,
   type ChatMessage,
 } from '@/lib/chatService'
@@ -185,7 +187,9 @@ function warmChatWithin(msgs: ChatMessage[], otherId: string | null | undefined,
 }
 function prefetchChat(conv: { id: string; other_user?: { id?: string } | null }) {
   if (_cachedMessages[conv.id]) { void prefetchPendingOrders(conv.other_user?.id); return }
-  loadMessages(conv.id).then(msgs => {
+  const me = useAuthStore.getState().user?.id
+  if (!me) return
+  loadMessages(conv.id, me).then(msgs => {
     if (!msgs.length) return
     _cachedMessages[conv.id] = msgs
     void warmChat(msgs, conv.other_user?.id)
@@ -605,7 +609,12 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     loadConversations()
 
     const unsubscribe = subscribeWithRetry(supabase, 'chat-list-' + user.id, channel => channel
-      .on('postgres_changes', { event: 'INSERT',  schema: 'public', table: 'messages' }, () => { invalidateConversationsCache(); loadConversations() })
+      .on('postgres_changes', { event: 'INSERT',  schema: 'public', table: 'messages' }, (payload: any) => {
+        // Chat text and receipts reach the list through this phone's store (below).
+        const t = payload?.new?.type
+        if (t !== 'payment_sent' && t !== 'payment_received') return
+        invalidateConversationsCache(); loadConversations()
+      })
       // BUG FIX (desktop chat-list flicker): this used to unconditionally
       // invalidateConversationsCache() + loadConversations() on EVERY
       // messages UPDATE - including the read-receipt write that fires the
@@ -664,7 +673,18 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
       { onReconnect: () => { invalidateConversationsCache(); loadConversations() } },
     )
 
-    return unsubscribe
+    // Device-only chat: previews and unread counts come from this phone's store.
+    let localTimer: ReturnType<typeof setTimeout> | null = null
+    const onLocalChange = () => {
+      if (localTimer) clearTimeout(localTimer)
+      localTimer = setTimeout(() => { invalidateConversationsCache(); loadConversations() }, 150)
+    }
+    window.addEventListener(LOCAL_CHAT_EVENT, onLocalChange)
+    return () => {
+      if (localTimer) clearTimeout(localTimer)
+      window.removeEventListener(LOCAL_CHAT_EVENT, onLocalChange)
+      unsubscribe()
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [user?.id])
 
@@ -742,7 +762,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     const unsubscribe = subscribeWithRetry(supabase, 'chat-restore-' + user.id, channel => channel
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload: any) => {
         const msg = payload.new
-        if (!msg?.conversation_id) return
+        if (!msg?.conversation_id || msg.type === 'signal') return
         if (getDeletedChatsMap(chatWalletAddr)[msg.conversation_id]) {
           // A deleted chat comes back with anything new (the reload restores it).
           invalidateConversationsCache(); await loadConversations(); return
@@ -1772,7 +1792,7 @@ const MessageBubble = memo(function MessageBubble({
               {(plainImageUrl || encImageMatch) ? (
                 <>
                   <ChatImage
-                    url={plainImageUrl ?? encImageMatch![2]} iv={encImageMatch ? encImageMatch[1] : null} convKey={convKey}
+                    url={plainImageUrl ?? encImageMatch![2]} iv={encImageMatch ? encImageMatch[1] : null} convKey={convKey} received={!isMine}
                     radius={caption ? '15px 15px 4px 4px' : (isLastInGroup ? (isMine ? '15px 15px 3px 15px' : '15px 15px 15px 3px') : '15px')} maxW={254}
                     upload={msg._upload ? { progress: msg._upload.progress, onCancel: () => onCancelUpload?.(msg) } : null}
                     failed={!!msg._failed} onRetry={() => onRetry?.(msg)}
@@ -1976,7 +1996,7 @@ const AlbumBubble = memo(function AlbumBubble({ msgs, isMine, convKey, onOpen, o
             const moreHere = i === 3 && extra > 0
             return (
               <div key={m.id} style={{ position: 'relative', height: cellHeight(i), ...span }}>
-                <ChatImage url={md.url} iv={md.iv} convKey={convKey} square radius="3px"
+                <ChatImage url={md.url} iv={md.iv} convKey={convKey} square radius="3px" received={!isMine}
                   upload={m._upload ? { progress: m._upload.progress, onCancel: () => onCancelUpload(m) } : null}
                   failed={!!m._failed} onRetry={() => onRetry(m)}
                   onTap={() => { if (!selecting) onOpen(m.id) }} />
@@ -2864,77 +2884,16 @@ export function ChatConversationPage() {
 
   // autoResize is now called directly in onChange - no useEffect needed (avoids re-render blink)
 
-  // ── Fetch messages using supabase-js (SELECT works with sb_publishable_ key) ──
+  // ── Messages: chat from this phone, payment cards from Supabase ──────────
+  // (chatService.loadMessages). 50 on open, like WhatsApp/Telegram; older
+  // pages only when the user scrolls up to them.
   const fetchMessagesFromDB = async (conversationId: string, limit = 50): Promise<ChatMessage[]> => {
-    try {
-      // Fetch newest `limit` first (DESC), then reverse for display order.
-      // Defaults to 50 for the initial open - matches WhatsApp/Telegram-style
-      // lazy loading instead of pulling the entire history up front. Older
-      // messages are fetched separately via loadOlderMessages() only when
-      // the user actually scrolls up to them.
-      const { data, error } = await supabase
-        .from('messages')
-        .select('id, conversation_id, sender_id, content, type, payment_amount, payment_tx_hash, token_symbol, is_read, created_at, delivered_at, read_at, reply_to_id, forwarded, deleted_at')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: false })
-        .limit(limit)
-
-      if (error) {
-        console.error('[Chat] fetchMessages error:', error.message)
-        return await loadMessages(conversationId)
-      }
-
-      const rows = (data ?? []) as ChatMessage[]
-
-      // Auto-delete oldest 100 messages when total exceeds 400
-      if (rows.length >= 800) {
-        // rows is DESC so last items are oldest
-        const oldest100 = rows.slice(-100).map(m => m.id)
-        supabase
-          .from('messages')
-          .delete()
-          .in('id', oldest100)
-          .then(() => {
-          })
-      }
-
-      // Reverse to get oldest→newest order for display
-      const ordered = [...rows].reverse()
-
-      // Deduplicate by id
-      const seen = new Set<string>()
-      const deduped = ordered.filter(m => {
-        if (seen.has(m.id)) return false
-        seen.add(m.id)
-        return true
-      })
-
-      return deduped
-    } catch (e: any) {
-      console.error('[Chat] fetchMessages threw:', e?.message)
-      return await loadMessages(conversationId)
-    }
+    if (!user?.id) return []
+    return loadMessages(conversationId, user.id, limit)
   }
-
-  // ── Lazy history - fetch the next page of OLDER messages, only called on
-  // scroll-to-top. Keeps the initial open fast (50 messages) while still
-  // letting the user scroll back through full history a page at a time,
-  // same pattern as WhatsApp/Telegram/Signal.
   const loadOlderMessages = async (conversationId: string, beforeCreatedAt: string, pageSize = 50): Promise<ChatMessage[]> => {
-    try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('id, conversation_id, sender_id, content, type, payment_amount, payment_tx_hash, token_symbol, is_read, created_at, delivered_at, read_at, reply_to_id, forwarded, deleted_at')
-        .eq('conversation_id', conversationId)
-        .lt('created_at', beforeCreatedAt)
-        .order('created_at', { ascending: false })
-        .limit(pageSize)
-      if (error) { console.error('[Chat] loadOlderMessages error:', error.message); return [] }
-      return [...((data ?? []) as ChatMessage[])].reverse()
-    } catch (e: any) {
-      console.error('[Chat] loadOlderMessages threw:', e?.message)
-      return []
-    }
+    if (!user?.id) return []
+    return loadMessages(conversationId, user.id, pageSize, beforeCreatedAt)
   }
 
   // ── Setup conversation - always fetches fresh from Supabase ─────────────
@@ -3118,6 +3077,9 @@ export function ChatConversationPage() {
     const onInsert = (payload: any) => { insertQueue = insertQueue.then(() => handleInsert(payload)).catch(() => {}) }
     const handleInsert = async (payload: any) => {
         const newMsg = payload.new as ChatMessage
+        // Receipts / delete-for-everyone: applied to this phone's copies by
+        // the mailbox (lib/chatMailbox.ts), which then refreshes this screen.
+        if (newMsg.type === 'signal') return
         const key = ownKeyRef.current
         if (key && isEncryptedPayload(newMsg.content) && !_plainByContent.has(newMsg.content)) {
           const d = await decryptText(newMsg.content, key).catch(() => '')
@@ -3226,23 +3188,36 @@ export function ChatConversationPage() {
         // Reconnected after a drop - pull anything sent during the gap
         // (the fresh socket only sees INSERTs from here forward) and merge
         // it in the same de-duplicated way as fetchMessagesFromDB does.
-        onReconnect: () => {
-          fetchMessagesFromDB(conversationId).then(msgs => {
-            setMessages(prev => {
-              const byId = new Map<string, ChatMessage>(prev.map(m => [m.id, m]))
-              for (const m of msgs) byId.set(m.id, m)
-              const next: ChatMessage[] = Array.from(byId.values()).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-              _cachedMessages[conversationId] = next
-              return filterDeleted(next)
-            })
-          }).catch(() => {})
-        },
+        onReconnect: () => mergeLatest(),
       }
     )
+    // Pull the latest from this phone + server and merge it in (de-duplicated by id).
+    function mergeLatest() {
+      fetchMessagesFromDB(conversationId!).then(msgs => {
+        setMessages(prev => {
+          const byId = new Map<string, ChatMessage>(prev.map(m => [m.id, m]))
+          for (const m of msgs) byId.set(m.id, { ...byId.get(m.id), ...m })
+          const next: ChatMessage[] = Array.from(byId.values()).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+          _cachedMessages[conversationId!] = next
+          return filterDeleted(next)
+        })
+      }).catch(() => {})
+    }
+    // This phone's chat store changed (a message saved, a receipt or a
+    // delete-for-everyone applied - lib/chatMailbox.ts): show it.
+    const onLocalChange = (e: Event) => {
+      const c = (e as CustomEvent).detail?.conversationId
+      if (c && c !== conversationId) return
+      mergeLatest()
+      // A message just saved while this chat is on screen has been read.
+      if (document.visibilityState === 'visible') void markReadLocal(conversationId!, user!.id)
+    }
+    window.addEventListener(LOCAL_CHAT_EVENT, onLocalChange)
 
     return () => {
       clearTimeout(initialMarkReadTimer)
       document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener(LOCAL_CHAT_EVENT, onLocalChange)
       unsubscribe()
       // Leaving a conversation that was on screen: everything in it has been
       // seen. Mark it read now (anything that arrived in the last moment, or
@@ -3436,11 +3411,17 @@ export function ChatConversationPage() {
   const deleteForEveryoneMany = async (msgs: any[]) => {
     setDeleting(true)
     let failed = 0
-    const { supabase } = await import('@/lib/supabase')
-    for (const m of msgs) {
-      const { error } = await supabase.from('messages').update({ content: '[deleted]', type: 'text' }).eq('id', m.id)
-      if (error) { failed++; continue }
-      setMessages(prev => prev.map(x => x.id === m.id ? { ...x, content: '[deleted]', type: 'text', deleted_at: new Date().toISOString() } : x))
+    // Device-only chat: a 'delete' signal goes to the other phone (and the
+    // server copy goes, if it's still waiting there); my copy is marked here.
+    const [{ sendSignal }, { patchMessages }] = await Promise.all([import('@/lib/chatMailbox'), import('@/lib/localChat')])
+    const byConv = new Map<string, any[]>()
+    for (const m of msgs) byConv.set(m.conversation_id, [...(byConv.get(m.conversation_id) ?? []), m])
+    for (const [conv, list] of byConv) {
+      const ids = list.map(m => m.id as string)
+      if (!(await sendSignal(conv, 'delete', ids))) { failed += ids.length; continue }
+      const at = new Date().toISOString()
+      if (user?.id) await patchMessages(user.id, ids, { content: '[deleted]', type: 'text', deleted_at: at }).catch(() => {})
+      setMessages(prev => prev.map(x => ids.includes(x.id) ? { ...x, content: '[deleted]', type: 'text', deleted_at: at } : x))
     }
     setDeleting(false)
     setDeleteTargets(null)
@@ -3541,6 +3522,9 @@ export function ChatConversationPage() {
       const remote = withMeta(await handle.promise, job.meta)
       // The saved copy shows the local bytes at once - no re-download, no flash.
       putCachedMedia(remote, job.blob, job.localUrl)
+      // Device-only chat: my copy of the file stays on this phone (the
+      // server copy goes once the recipient has it).
+      await saveFile(remote, up)
       patchMsg(convId, optId, { _remote: remote.split('#')[0] })
       const safeName = encodeURIComponent(job.name)
       const marker = job.isImage

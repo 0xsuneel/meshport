@@ -33,8 +33,10 @@ export function ProgressRing({ progress, size = 46, onCancel, label }: { progres
  * jump when it loads), shows a progress ring while downloading, reuses the
  * session cache (instant for photos you just sent / already opened).
  */
-export function ChatImage({ url, iv, convKey, radius, square, upload, failed, onRetry, onTap, maxW = 260 }: {
+export function ChatImage({ url, iv, convKey, radius, square, upload, failed, onRetry, onTap, maxW = 260, received }: {
   url: string; iv: string | null; convKey: any; radius: string
+  /** Sent to me: kept on this phone and removed from the server once downloaded. */
+  received?: boolean
   /** Album tile: fill a square cell. */
   square?: boolean
   /** Sending: upload progress 0..1 + cancel. */
@@ -55,7 +57,7 @@ export function ChatImage({ url, iv, convKey, radius, square, upload, failed, on
     if (src || (iv && convKey === undefined)) return
     setError(false)
     let cancelled = false
-    loadMedia(url, iv, convKey, p => { if (!cancelled) setProgress(p) })
+    loadMedia(url, iv, convKey, p => { if (!cancelled) setProgress(p) }, undefined, { received })
       .then(r => { if (!cancelled) setSrc(r.url) })
       .catch(() => { if (!cancelled) setError(true) })
     return () => { cancelled = true }
@@ -77,7 +79,7 @@ export function ChatImage({ url, iv, convKey, radius, square, upload, failed, on
       {error && !src && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
           <span>Couldn't load this photo</span>
-          <button type="button" onClick={e => { e.stopPropagation(); setError(false); setProgress(0); loadMedia(url, iv, convKey, setProgress).then(r => setSrc(r.url)).catch(() => setError(true)) }}
+          <button type="button" onClick={e => { e.stopPropagation(); setError(false); setProgress(0); loadMedia(url, iv, convKey, setProgress, undefined, { received }).then(r => setSrc(r.url)).catch(() => setError(true)) }}
             style={{ border: 'none', borderRadius: 14, padding: '5px 12px', background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 13, fontWeight: 600 }}>Try again</button>
         </div>
       )}
@@ -154,7 +156,7 @@ export function ChatFile({ name, url, iv, convKey, isMine, upload, failed, onRet
   const download = async () => {
     setError(''); setProgress(0.01)
     try {
-      const r = await loadMedia(url, iv, convKey, p => setProgress(p), mimeOf(name))
+      const r = await loadMedia(url, iv, convKey, p => setProgress(p), mimeOf(name), { received: !isMine })
       setReady(r); setProgress(null)
     } catch (e) {
       setProgress(null); setError(e instanceof Error ? e.message : 'Download failed')
