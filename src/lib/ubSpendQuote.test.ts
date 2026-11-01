@@ -21,9 +21,9 @@ function fakeKit(opts: { selfMintQuoteFails?: boolean } = {}) {
     unifiedBalance: {
       estimateSpend: async (p: any) => {
         quotes.push(p.to)
-        // As App Kit reports it: the forwarding fee is part of gasFee (the
-        // signed maxFee) and is also listed on its own.
-        if (p.to.useForwarder) return { fees: [usdc('provider', 0.0001), usdc('gasFee', 1.521), usdc('forwarder', 1.52)] }
+        // As App Kit >= 1.19 reports it: maxFee in three parts - gasFee
+        // WITHOUT the forwarding fee, and the forwarding fee on its own.
+        if (p.to.useForwarder) return { fees: [usdc('provider', 0.0001), usdc('gasFee', 0.001), usdc('forwarder', 1.52)] }
         if (opts.selfMintQuoteFails) throw new Error('quote failed')
         return { fees: [usdc('provider', 0.0001), usdc('gasFee', 0.001), { type: 'gasFee', token: 'ETH', amount: '0.0004' }] }
       },
@@ -93,7 +93,7 @@ describe('Unified Balance Bring: leftover dust goes back to the user', () => {
     const { spendUnifiedToArc } = await import('./ubClaim')
     const spends: any[] = []
     const kit = { unifiedBalance: {
-      estimateSpend: async () => ({ fees: [usdc('provider', 0.0005), usdc('gasFee', 0.025889), usdc('forwarder', 0.016389)] }),
+      estimateSpend: async () => ({ fees: [usdc('provider', 0.0005), usdc('gasFee', 0.0095), usdc('forwarder', 0.016389)] }),
       spend: async (p: any) => { spends.push(p); return { txHash: '0xabc' } },
     } }
     const out = await spendUnifiedToArc({ kit, adapter: {}, walletAddr: '0x1', fromChain: 'Base_Sepolia', amount: 10, dust: 0.03 })
