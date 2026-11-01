@@ -178,6 +178,8 @@ const _ARC_FALLBACK_KEY = '__arc_fallback__'
 
 // The Gateway quote before a Unified Balance deposit: past this, nothing has moved - fail cleanly.
 const UB_PRE_DEPOSIT_QUOTE_MS = 25_000
+// The pre-deposit quote is reused for the spend when it's this fresh.
+const UB_QUOTE_REUSE_MS = 30_000
 
 function getArcFallbackProvider(JsonRpcProvider: any) {
   if (!_providerCache.has(_ARC_FALLBACK_KEY)) {
@@ -918,6 +920,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // headroom, unused maxFee) - stands in for the next send's headroom, so it
   // is used instead of keeping more back. Read on Review, before the deposit.
   const ubArcDustRef = useRef(0)
+  // The whole Arc Unified Balance at the last quote, and whether sending from
+  // it (no deposit) failed this session - then transfers deposit as usual.
+  const ubArcHeldRef = useRef(0)
+  const ubHeldUnusableRef = useRef(false)
   // Arc gas kept back for the Unified Balance deposit (see estimateUbDepositGas).
   const ubDepositGasRef = useRef(0.05)
   const [bridgeSteps, setBridgeSteps] = useState<BridgeStepState[]>(makeDefaultSteps('Destination'))
@@ -1507,7 +1513,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           ubTargetAmount.toFixed(6) === guess.toFixed(6) ? guessQuote : quoteFor(ubTargetAmount),
           dustP,
         ])
-        if (arcUb !== null) ubArcDustRef.current = arcUb > 0 && arcUb < UB_MIN_SWEEP ? arcUb : 0
+        if (arcUb !== null) {
+          ubArcDustRef.current = arcUb > 0 && arcUb < UB_MIN_SWEEP ? arcUb : 0
+          ubArcHeldRef.current = arcUb
+        }
         // Circle's maxFee ('provider' + 'gasFee') is all the spend takes from
         // the Unified Balance; the forwarding fee is a part of it, not extra
         // (lib/transferFees). Dust already in the Arc Unified Balance stands
@@ -1897,8 +1906,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         kit.on(action as any, handler)
         kitListeners.push([action, handler])
       }
+      // Each signature Circle's kit asks for is timed (move_timings: sign_typed1 =
+      // the deposit permit, sign_tx1 = the deposit transaction, …).
+      const { withSignMarks } = await import('@/lib/signMarks')
       const adapter = await createWalletAdapter({
-        account: activeSigner,
+        account: withSignMarks(activeSigner, step => moveTimerRef.current?.mark(step)),
         getProvider: ({ chain: sdkChain }: any) => {
           const rpcUrl: string | undefined = sdkChain?.rpcEndpoints?.[0]
             || sdkChain?.rpcUrls?.default?.http?.[0]
@@ -2069,7 +2081,29 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         let targetDepositAmount: number
         let depositHash = ''
 
-        if (resumingFromPriorDeposit) {
+        // Already enough in the Unified Balance on Arc: send from it - no
+        // deposit (two signatures and ~9 s less). Never the part an unfinished
+        // transfer is holding (Recover's cards): only what's free beyond them.
+        // If that spend fails, nothing moved (no deposit was made, so no Recover
+        // card either) and this session deposits as usual from then on.
+        let fromHeld = false
+        if (!resumingFromPriorDeposit && !ubHeldUnusableRef.current && senderAddress && ubArcHeldRef.current >= numAmount) {
+          const stuck = await import('@/lib/ubFundRecovery').then(m => m.listUbStuckTransfers(senderAddress)).catch(() => null)
+          if (stuck) fromHeld = ubArcHeldRef.current - stuck.reduce((t, r) => t + (Number(r.amount) || 0), 0) >= numAmount
+        }
+
+        if (fromHeld) {
+          ubHeldUnusableRef.current = true // cleared once this spend succeeds
+          // Already in Unified Balance, so the wallet's own balance doesn't cap it.
+          targetDepositAmount = numAmount
+          logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: 'UB - sending from the existing Unified Balance, no deposit', data: { targetDepositAmount, held: ubArcHeldRef.current } })
+          moveTimerRef.current?.mark('from_held')
+          setBridgeSteps(prev => prev.map(s => {
+            if (s.name === 'deposit') return { ...s, status: 'done', verified: true, message: 'Already in Unified Balance', completedAt: Date.now() }
+            if (s.name === 'sign')    return { ...s, status: 'active', message: UB_STEP_DEFS[1].activeMsg, startedAt: Date.now() }
+            return s
+          }))
+        } else if (resumingFromPriorDeposit) {
           targetDepositAmount = parseFloat(ubDepositedAmountRef.current!)
           logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: 'UB resume - reusing prior deposit, skipping deposit step', data: { targetDepositAmount } })
           setBridgeSteps(prev => prev.map(s => {
@@ -2149,7 +2183,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // immediately dump the user on the failed screen - a plain retry of
         // just this call usually clears it.
         setStage('spend quote')
-        let freshEstimate = await fetchFeeEstimate(true)
+        // The quote taken just before the deposit (same transfer, same amount)
+        // is reused when it's under 30 s old - asking Circle again added ~1 s
+        // between deposit and spend. A fee that moved since is handled at the
+        // spend itself (ubSpend asks Gateway again on its maxFee refusal).
+        const lastQuote = lastUbQuoteRef.current
+        const quoteFresh = !resumingFromPriorDeposit && !!lastQuote && lastQuote.key === feeRequestKey
+          && Date.now() - lastQuote.at < UB_QUOTE_REUSE_MS && !lastQuote.est.approx && lastQuote.est.receiverGets > 0
+        let freshEstimate = quoteFresh ? lastQuote!.est : await fetchFeeEstimate(true)
         // A stand-in estimate (approx) is never spent against - wait for a live one.
         const notLive = (e: FeeEstimate | null) => !e || e.receiverGets <= 0 || !!e.approx
         for (let attempt = 0; notLive(freshEstimate) && attempt < 3; attempt++) {
@@ -2462,6 +2503,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         }
 
         logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'unifiedBalance.spend result - SUCCESS', data: spendResult })
+        if (fromHeld) ubHeldUnusableRef.current = false
         const spendHash = getUBHash(spendResult)
 
         setBridgeSteps(prev => prev.map(s => {
