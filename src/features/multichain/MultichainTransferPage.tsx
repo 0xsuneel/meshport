@@ -36,7 +36,7 @@ import { useSolanaWallet } from '@/wallet/useSolanaWallet'
 import { quoteAccount } from '@/wallet/account'
 import { timeQuote } from '@/lib/quoteTiming'
 import { circleForwarderMintsTo, noteForwarderMintFailed } from '@/lib/chainRpcs'
-import { gatewaySelfMintsTo, forwarderMintRetry, gatewaySpecAlreadyMinted, getUnifiedBalances, UB_MIN_SWEEP } from '@/lib/ubClaim'
+import { gatewaySelfMintsTo, forwarderMintRetry, gatewaySpecAlreadyMinted, getUnifiedBalances, UB_MIN_SWEEP, ubSpend } from '@/lib/ubClaim'
 import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -2385,7 +2385,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         setStage('spend')
         const spendAttemptStartedAt = Date.now()
         try {
-          spendResult = await kit.unifiedBalance.spend(spendParams)
+          // Asked again if Gateway's forwarding fee moved since the estimate (lib/ubClaim ubSpend).
+          spendResult = await ubSpend(kit, spendParams)
         } catch (spendErr: any) {
           logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'error', label: 'unifiedBalance.spend failed', data: { message: spendErr?.message } })
 
