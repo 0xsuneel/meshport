@@ -38,6 +38,8 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountField, quickAmounts, percentAmounts } from '@/components/ui/AmountField'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import type { WalletAccount } from '@/wallet'
+import { quoteAccount } from '@/wallet/account'
+import { timeQuote } from '@/lib/quoteTiming'
 import { supabase } from '@/lib/supabase'
 import { formatAmount, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
@@ -939,7 +941,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
   // ── Pre-claim fee estimate ───────────────────────────────────────────────
   // The gasless relayer's quote - read-only, signs nothing.
-  const fetchClaimFeeEstimate = useCallback(async (chainId: string, amount: number) => {
+  const fetchClaimFeeEstimate = useCallback((chainId: string, amount: number) =>
+    timeQuote(`bring ${token ?? 'USDC'} ${chainId}`, () => fetchClaimFeeEstimateInner(chainId, amount)),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [token, tokenAddress])
+  const fetchClaimFeeEstimateInner = async (chainId: string, amount: number) => {
     const key = `${chainId}|${amount}`
     setFeeEstimate(prev => ({ ...prev, loading: true, error: '' }))
     // EURC / cirBTC: the relayer's quote - MeshPort's fee in the token covers
@@ -979,7 +985,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       return
     }
     setFeeEstimate({ loading: false, error: 'Not available for this chain', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0 })
-  }, [token, tokenAddress])
+  }
 
   // Debounced trigger - fires ~600ms after the user stops typing/adjusting
   // the amount, same cadence MultichainTransferPage.tsx uses for its own
@@ -1592,13 +1598,15 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     setUbFee(prev => ({ ...prev, loading: true, error: '', needsUnlock: false, forKey: ubFeeKey }))
     const t = setTimeout(async () => {
       try {
-        const { signer, walletAddress } = useAuthStore.getState()
-        // Never prompts here: without an unlocked key the fees are shown on the next screen.
-        if (!signer || !walletAddress) { if (!cancelled) setUbFee(prev => ({ ...prev, loading: false, needsUnlock: true })); return }
+        const { signer: openSigner, walletAddress } = useAuthStore.getState()
+        if (!walletAddress) { if (!cancelled) setUbFee(prev => ({ ...prev, loading: false, needsUnlock: true })); return }
+        // A quote signs nothing: the address alone until the wallet is open
+        // (it used to wait for the signer - no fee until Privy had opened it).
+        const signer = openSigner ?? quoteAccount(walletAddress)
         const { AppKit } = sdkRef.current ?? await loadSdk()
         const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
         const adapter = await buildAdapter(signer)
-        const r = await estimateUbClaimFee({ kit, adapter, walletAddr: walletAddress, fromChain: selectedSdkId, amount: claimAmt })
+        const r = await timeQuote(`bring ub ${selectedSdkId}`, () => estimateUbClaimFee({ kit, adapter, walletAddr: walletAddress, fromChain: selectedSdkId, amount: claimAmt }))
         if (!cancelled) setUbFee({ approx: false, ...r, forKey: ubFeeKey, loading: false, error: '', needsUnlock: false })
       } catch (e: any) {
         console.warn('[bring] Unified Balance fee estimate failed', e)

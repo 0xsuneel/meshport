@@ -8,7 +8,7 @@ import { callWallet, WalletFrameError, walletOrigin } from './frameClient'
 import { walletAccount, type WalletAccount } from './account'
 import type { PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
 
-export { walletAccount, isWalletAccount, toEthersSigner, createWalletAdapter, type WalletAccount } from './account'
+export { walletAccount, quoteAccount, isWalletAccount, toEthersSigner, createWalletAdapter, type WalletAccount } from './account'
 export { WalletFrameError, walletOrigin, walletReady } from './frameClient'
 export type { PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
 

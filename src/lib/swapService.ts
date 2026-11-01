@@ -240,16 +240,18 @@ function buildArcForwardProvider(JsonRpcProvider: any, Transaction: any) {
 // Adapter cache, keyed by wallet address. Avoids rebuilding the adapter on
 // every call for the same wallet within this session. It signs through the
 // wallet frame (src/wallet) - no key here.
-let _adapterCache: { address: string; adapter: any } | null = null
+let _adapterCache: { address: string; adapter: any; signer: WalletAccount } | null = null
 async function getAdapter(signer: WalletAccount) {
   const address = signer.address.toLowerCase()
-  if (_adapterCache?.address === address) return _adapterCache.adapter
+  // Per signer, not per address: a quote's adapter (quoteAccount, can't sign)
+  // must never be the one a swap then signs with.
+  if (_adapterCache?.address === address && _adapterCache.signer === signer) return _adapterCache.adapter
   const [{ JsonRpcProvider, Transaction }, { createWalletAdapter }] = await Promise.all([getSdkModules(), import('@/wallet')])
   const adapter = await createWalletAdapter({
     account: signer,
     getProvider: () => buildArcForwardProvider(JsonRpcProvider, Transaction),
   })
-  _adapterCache = { address, adapter }
+  _adapterCache = { address, adapter, signer }
   return adapter
 }
 
