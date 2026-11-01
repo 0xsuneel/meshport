@@ -401,10 +401,13 @@ export function circleAccount(address: string, uid: string): CircleAccount {
     // wallet_events: each Circle signature's time and outcome, like the other wallets'.
     const started = performance.now()
     const what = action === 'sign-transaction' ? 'signTransaction' : action === 'sign-typed' ? 'signTypedData' : 'signMessage'
+    // steps: `challenge` - MeshPort's server asking Circle for the challenge;
+    // `execute` - Circle's SDK signing it (its frame reloads every time).
+    const steps: Record<string, number> = {}
     const log = (ok: boolean, error?: string) => void import('@/lib/walletEvents')
-      .then(m => m.logWalletEvent({ kind: 'circle', event: 'sign', ok, ms: performance.now() - started, detail: what, error })).catch(() => {})
+      .then(m => m.logWalletEvent({ kind: 'circle', event: 'sign', ok, ms: performance.now() - started, detail: what, error, steps })).catch(() => {})
     try {
-      const out = await signOnce(action, body)
+      const out = await signOnce(action, body, steps)
       log(true)
       return out
     } catch (e) {
@@ -412,11 +415,15 @@ export function circleAccount(address: string, uid: string): CircleAccount {
       throw e
     }
   }
-  async function signOnce(action: string, body: Record<string, unknown>): Promise<ChallengeOutcome> {
+  async function signOnce(action: string, body: Record<string, unknown>, steps: Record<string, number>): Promise<ChallengeOutcome> {
     for (let attempt = 0; ; attempt++) {
+      const t0 = performance.now()
       const { challengeId } = await circleCall<{ challengeId: string }>(uid, action, body)
+      steps.challenge = (steps.challenge ?? 0) + performance.now() - t0
       try {
+        const t1 = performance.now()
         const out = await executeChallenge(uid, challengeId)
+        steps.execute = (steps.execute ?? 0) + performance.now() - t1
         readyAddresses.set(address.toLowerCase(), uid) // it signed: as ready as the warm-up makes it
         notifyReadiness()
         return out
