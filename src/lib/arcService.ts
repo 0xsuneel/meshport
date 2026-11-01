@@ -5,7 +5,9 @@
 import { span, reportPayment } from './perfTrace'
 import { createPublicClient, parseUnits, encodeFunctionData, parseGwei, getAddress, isAddress, keccak256 } from 'viem'
 import type { WalletAccount } from '@/wallet'
-import { arcTransport, arcRpcJson } from './arc'
+import { arcTransport, arcRpcJson, directSendRaw } from './arc'
+// A relayed send not answered by then: Circle's Arc node gets the same bytes too.
+const SEND_HEDGE_MS = 2500
 import { ARC, ARC_TOKENS, ARC_CHAIN_INLINE as REGISTRY_ARC_CHAIN_INLINE } from '@/blockchain/chains'
 import { isSlowNetwork } from './connectivity'
 import { ARC_MEMO_CONTRACT, memoTransferData, type OrderMemo } from './arcMemo'
@@ -460,14 +462,30 @@ async function relaySendTimed(
   // Broadcast → hash and (usually) the receipt: the relay waits for it server-side.
   const broadcast = span('pay:broadcast')
   let relayed: { hash?: string; status?: string; blockNumber?: string; broadcast?: string } | null = null
+  // The relay hasn't answered within 2.5 s: also send the same signed bytes
+  // straight to Circle's Arc node (lib/arc directSendRaw) - a stalled
+  // connection to this origin otherwise held the send for 20-40 s.
+  let directlySent = false
   try {
-    const json = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: RELAY_METHOD, params: [raw, txHash, 8000] }, isSlowNetwork() ? 40_000 : 20_000)
-    relayed = json?.result ?? null
+    const relay = arcRpcJson({ jsonrpc: '2.0', id: 1, method: RELAY_METHOD, params: [raw, txHash, 8000] }, isSlowNetwork() ? 40_000 : 20_000)
+    const direct = new Promise<'direct'>(resolve => {
+      const t = setTimeout(() => { void directSendRaw(raw).then(ok => { if (ok) resolve('direct') }) }, SEND_HEDGE_MS)
+      void relay.then(() => clearTimeout(t), () => clearTimeout(t))
+    })
+    const first = await Promise.race([relay, direct])
+    if (first === 'direct') directlySent = true
+    else relayed = first?.result ?? null
   } catch (e: any) {
     // Every node that answered refused it: nothing was sent.
     if (e && typeof e === 'object' && e.code === RELAY_REJECTED) throw new Error(e.message || 'Transaction rejected')
     // Otherwise unknown (lost answer / older server): handled below.
   } finally { stages.broadcast = broadcast() }
+  if (directlySent) {
+    // Circle's node has it; its receipt is read on the direct lane (lib/arc).
+    onSent(txHash)
+    const confirm = span('pay:confirm')
+    try { return { txHash, ...(await waitForConfirmation(txHash)) } } finally { stages.confirm = confirm() }
+  }
   if (relayed?.hash && relayed.broadcast !== 'unknown') {
     onSent(txHash)
     if (relayed.status === 'success' || relayed.status === 'failed') {
