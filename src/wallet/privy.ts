@@ -279,7 +279,7 @@ function whenBridge(test: (b: PrivyBridge) => boolean, timeoutMs: number): Promi
     const check = () => {
       if (bridge?.ready && bridge.authenticated && test(bridge)) { done(); resolve(bridge) }
     }
-    const timer = setTimeout(() => { done(); reject(new Error('Your wallet is taking too long to open - try again')) }, timeoutMs)
+    const timer = setTimeout(() => { done(); reject(new Error('Your wallet didn\'t open in time - nothing was sent. Try again.')) }, timeoutMs)
     const done = () => { clearTimeout(timer); waiters.delete(check) }
     waiters.add(check)
     check()
@@ -472,7 +472,11 @@ async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b
       if (retryOnDead) return timed(what, open, sign, address, false)
       throw e
     }
-    report(`failed after ${s(performance.now() - started)} s (${parts()}): ${e instanceof Error ? e.message : String(e)}`)
+    const failedText = `failed after ${s(performance.now() - started)} s (${parts()}): ${e instanceof Error ? e.message : String(e)}`
+    report(failedText)
+    // Which hang is it: Privy unreachable from this phone, or stuck on this page?
+    void import('./privyActivity').then(m => m.probePrivyReachable(APP_ID))
+      .then(probe => report(`probe after "${what}" hang: ${probe}`)).catch(() => {})
     // Privy gives up on its own request with an AbortError ("signal is
     // aborted without reason") - nothing was signed, so nothing was sent.
     // Field 31 Oct: Privy looked signed in with the wallet listed, yet its
