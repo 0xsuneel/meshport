@@ -399,6 +399,9 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
             </div>
             {held > 0.01 && row('Available now', `${t.available.toFixed(2)} USDC`)}
             {held > 0.01 && row('Still held by Circle', `${held.toFixed(2)} USDC`)}
+            {/* What the Gateway contract on Arc holds for this wallet - when it's more than
+                Circle's "available", the gap is something Circle's API is holding back. */}
+            {held > 0.01 && Number.isFinite(t.onChain) && row('In the Gateway contract on Arc', `${t.onChain.toFixed(2)} USDC`)}
             {row('Destination chain', t.destinationLabel)}
             {row('Destination address', t.destinationAddress, true)}
             {r?.diag?.detail && <div style={{ fontSize: 13, marginTop: 10, color: 'var(--text-primary)' }}>{r.diag.detail}</div>}
