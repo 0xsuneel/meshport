@@ -54,6 +54,9 @@ const DIRECT_READ_URL = ARC.rpcUrl
 const DIRECT_READ_METHODS: ReadonlySet<string> = new Set([
   'eth_call', 'eth_estimateGas', 'eth_gasPrice', 'eth_maxPriorityFeePerGas',
   'eth_getBalance', 'eth_blockNumber', 'eth_getTransactionReceipt',
+  // The latest block (fee data before a send - Circle's kit reads it on every
+  // deposit/approve): a plain read, it went through the proxy (+~350 ms).
+  'eth_getBlockByNumber',
   // Not eth_getTransactionCount: a nonce is read right after a send, and the
   // proxy is the path that knows about that send.
 ])

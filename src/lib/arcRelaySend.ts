@@ -16,6 +16,7 @@
 
 import { keccak256, type Hex } from 'viem'
 import { arcRpcJson } from './arc'
+import { ARC } from '@/blockchain/chains'
 
 const RELAY_METHOD = 'meshport_sendRawTransactionAndWait'
 const RELAY_REJECTED = -32003
@@ -74,10 +75,15 @@ export function sendThroughRelay<P extends { _send: (payload: any) => Promise<an
  * if the proxy can't be reached at all, falls back to that node for reads.
  * A node's own JSON-RPC error comes back as that error (reverts, etc.).
  */
+const ARC_CHAIN_ID_HEX = '0x' + ARC.chainId.toString(16)
+
 export function readThroughArcRpc<P extends { _send: (payload: any) => Promise<any[]> }>(provider: P, timeoutMs = 8_000): P {
   provider._send = async (payload: any) => {
     const list: RpcRequest[] = Array.isArray(payload) ? payload : [payload]
     return Promise.all(list.map(async (p) => {
+      // Arc's chain id never changes: answered here, not over the network
+      // (ethers asks it again after sends).
+      if (p.method === 'eth_chainId') return { jsonrpc: '2.0', id: p.id, result: ARC_CHAIN_ID_HEX }
       try {
         const json = await arcRpcJson({ jsonrpc: '2.0', id: p.id ?? 1, method: p.method, params: p.params ?? [] }, timeoutMs)
         return { ...json, id: p.id }
