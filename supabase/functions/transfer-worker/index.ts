@@ -319,14 +319,23 @@ async function advanceTransfer(supabase: SupabaseClient, t: Transfer) {
       console.error(`[transfer-worker] attestation fetch failed for ${t.id}:`, serializeError(e))
     }
 
-    if (circleMsg?.forwardState === 'COMPLETE' && circleMsg?.destinationMintTxHash) {
-      const mintHash = circleMsg.destinationMintTxHash as string
+    // Delivered: COMPLETE, or CONFIRMED with the forwarding tx (the app's
+    // cctpTracker.forwardDone reads it the same way). A cirBTC transfer to
+    // Ethereum (1 Nov 15:40) sat 'pending' here with forwardState CONFIRMED.
+    const fwd = String(circleMsg?.forwardState ?? '').toUpperCase()
+    const deliveredHash = (circleMsg?.destinationMintTxHash || circleMsg?.forwardTxHash) as string | undefined
+    if ((fwd === 'COMPLETE' || fwd === 'CONFIRMED') && deliveredHash) {
+      const mintHash = deliveredHash
       const body = circleMsg?.decodedMessage?.decodedMessageBody
       // Real arrived amount straight from Circle's own decoded message -
       // amount minus the fee actually charged, both already in raw USDC
       // units (6 decimals) in this response. No RPC call needed to derive
       // it, unlike the amount-fuzzy path which has to read it off-chain.
-      const arrivedAmount = body ? (Number(body.amount) - Number(body.feeExecuted)) / 1e6 : null
+      // EURC / cirBTC (CCTPx, decodedCctpXMessageBody): Circle's fee is paid
+      // in USDC, the token arrives in full - the row's own amount.
+      const arrivedAmount = body
+        ? (Number(body.amount) - Number(body.feeExecuted)) / 1e6
+        : circleMsg?.decodedMessage?.decodedCctpXMessageBody ? Number(latest.amount) : null
 
       const { data: alreadyUsed } = await supabase
         .from('activity').select('id').eq('destination_tx_hash', mintHash).eq('activity_type', 'bridge').neq('id', t.id).maybeSingle()
@@ -548,10 +557,14 @@ Deno.serve(async (req: Request) => {
       try {
         const circleRes = await fetch(`${CIRCLE_IRIS_API}/v2/messages/${ARC_DOMAIN}?transactionHash=${t.tx_hash}`, { signal: AbortSignal.timeout(8000) })
         const circleMsg = (await circleRes.json().catch(() => ({})))?.messages?.[0]
-        if (circleMsg?.forwardState === 'COMPLETE' && circleMsg?.destinationMintTxHash) {
-          const mintHash = circleMsg.destinationMintTxHash as string
+        const fwd2 = String(circleMsg?.forwardState ?? '').toUpperCase()
+        const delivered2 = (circleMsg?.destinationMintTxHash || circleMsg?.forwardTxHash) as string | undefined
+        if ((fwd2 === 'COMPLETE' || fwd2 === 'CONFIRMED') && delivered2) {
+          const mintHash = delivered2
           const body2 = circleMsg?.decodedMessage?.decodedMessageBody
-          const arrivedAmount = body2 ? (Number(body2.amount) - Number(body2.feeExecuted)) / 1e6 : null
+          const arrivedAmount = body2
+            ? (Number(body2.amount) - Number(body2.feeExecuted)) / 1e6
+            : circleMsg?.decodedMessage?.decodedCctpXMessageBody ? Number(t.amount) : null
           const { data: alreadyUsed } = await supabase.from('activity').select('id').eq('destination_tx_hash', mintHash).eq('activity_type', 'bridge').neq('id', t.id).maybeSingle()
           if (!alreadyUsed) {
             const { error } = await supabase.from('activity').update({ status: 'completed', destination_tx_hash: mintHash, arrived_amount: arrivedAmount, error: null }).eq('id', t.id)

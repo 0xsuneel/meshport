@@ -288,12 +288,36 @@ export function rpcListFor(chainKey: string, primary: string | undefined): strin
   const K = `BRIDGE_RPC_${chainKey.toUpperCase()}`
   return [...new Set([env(K), env(`${K}_2`), primary ?? '', ...(EXTERNAL_CHAINS[chainKey]?.rpcs ?? [])].filter(Boolean))]
 }
+/**
+ * A transport that answers eth_fillTransaction with "method not found", so
+ * viem fills gas, fees and nonce itself (estimateGas, estimateFeesPerGas,
+ * getTransactionCount - its fallback for nodes without that method).
+ * viem 2.5x asks the node to fill any field the caller didn't give; Avalanche
+ * Fuji's node filled a Bring's router call with gas 11,445,952,253,021,861 and
+ * a 204 wei fee cap, and every node refused it ("Missing or invalid
+ * parameters", field 1 Nov 15:36 / 15:37 - Bring from Avalanche failed twice).
+ */
+export function withoutNodeFill<T extends (...a: any[]) => any>(base: T): T {
+  return ((config: any) => {
+    const t = base(config)
+    return {
+      ...t,
+      request: async (args: any, opts?: any) => {
+        if (args?.method === 'eth_fillTransaction') {
+          throw Object.assign(new Error('eth_fillTransaction is not available'), { code: -32601 })
+        }
+        return t.request(args, opts)
+      },
+    }
+  }) as T
+}
+
 /** One RPC: as before. Several: viem's fallback - the next one when a call fails or times out. */
 async function rpcTransport(chainKey: string, primary: string) {
   const { http, fallback } = await import('viem')
   const list = rpcListFor(chainKey, primary)
-  if (list.length < 2) return http(list[0] ?? primary, { timeout: 15_000 })
-  return fallback(list.map(u => http(u, { timeout: 8_000, retryCount: 0 })), { retryCount: 1 })
+  if (list.length < 2) return withoutNodeFill(http(list[0] ?? primary, { timeout: 15_000 }))
+  return withoutNodeFill(fallback(list.map(u => http(u, { timeout: 8_000, retryCount: 0 })), { retryCount: 1 }))
 }
 
 async function clients(chainKey: string) {
