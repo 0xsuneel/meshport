@@ -48,7 +48,7 @@ export const ARC = {
   chainId:     5042002,
   name:        'Arc Testnet',
   rpcUrl:      'https://rpc.testnet.arc.io',
-  explorerUrl: 'https://testnet.arcscan.app',
+  explorerUrl: 'https://explorer.testnet.arc.io', // Arc's official explorer (docs.arc.io)
   faucetUrl:   'https://faucet.circle.com',
 } as const
 

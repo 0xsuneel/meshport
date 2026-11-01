@@ -4,6 +4,7 @@
  */
 import React from 'react'
 import { ExternalLink } from 'lucide-react'
+import { ARC_EXPLORER } from '@/lib/chainExplorers'
 
 export interface ReceiptCardProps {
   storeName: string
@@ -91,7 +92,7 @@ export function ReceiptCard({
       {/* Explorer link */}
       {txHash && (
         <a
-          href={`https://arcscan.io/tx/${txHash}`}
+          href={`${ARC_EXPLORER}/tx/${txHash}`}
           target="_blank"
           rel="noreferrer"
           className="flex items-center justify-center gap-1 text-xs text-blue-600 pb-4"

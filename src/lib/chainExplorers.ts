@@ -34,9 +34,11 @@
 // page. Derived from VITE_NETWORK_ENV: mainnet uses arcscan.app,
 // testnet (and anything else) uses testnet.arcscan.app, same convention
 // ARC_CHAIN_KEY uses across ubClaim.ts/swapService.ts/ubFundRecovery.ts.
+// Arc's official explorers (docs.arc.io, Circle's use-arc skill):
+// explorer.arc.io / explorer.testnet.arc.io. arcscan.app isn't in Arc's docs.
 export const ARC_EXPLORER = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
-  ? 'https://arcscan.app'
-  : 'https://testnet.arcscan.app'
+  ? 'https://explorer.arc.io'
+  : 'https://explorer.testnet.arc.io'
 
 // App Kit chain key for Arc, derived from VITE_NETWORK_ENV like ARC_EXPLORER.
 export const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
