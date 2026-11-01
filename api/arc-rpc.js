@@ -497,7 +497,16 @@ function rejectReason(body) {
 const SEND_METHOD = 'meshport_sendRawTransactionAndWait'
 const SEND_WAIT_MAX_MS = 8000
 const RECEIPT_POLL_MS = 200 // Arc blocks are ~0.5s
-const ALREADY_SENT = /already known|known transaction|already imported|nonce too low|replacement transaction underpriced/i
+// The node already has THIS transaction (the same signed bytes): it was sent.
+const ALREADY_SENT = /already known|known transaction|already imported/i
+// The nonce is taken - by this transaction (re-sent after it was mined) or by
+// ANOTHER one. Only the hash tells which. Counting it as "sent" unchecked hid a
+// stale nonce (field 1 Nov 06:07: Circle's adapter keeps its own nonce counter
+// for the session; MeshPort's direct sends moved the chain on, the next kit
+// deposit reused a nonce, the relay said "sent" and the screen waited forever
+// on "deposit" - while Circle's adapter would have re-synced and re-sent on a
+// "nonce too low" error).
+const NONCE_TAKEN = /nonce too low|replacement transaction underpriced|transaction nonce is too low|invalid nonce/i
 // A provider refusing the REQUEST (its own plan, quota, key or rate limit -
 // e.g. dRPC's "User monthly free request limit has been reached") says
 // nothing about the transaction: that node simply didn't take part. Only a
@@ -511,12 +520,12 @@ async function broadcastToAll(raw) {
   // to RPC_TIMEOUT_MS to every payment. A rejection is only final once every
   // node has answered or failed.
   return new Promise((resolve) => {
-    let pending = ARC_RPCS.length, maybeSent = false, rejection = null, anyAnswer = false, done = false
+    let pending = ARC_RPCS.length, maybeSent = false, rejection = null, anyAnswer = false, done = false, nonceTaken = null
     const finish = (out) => { if (!done) { done = true; resolve(out) } }
     const settle = () => {
-      if (--pending === 0) finish({ accepted: false, maybeSent, rejection, anyAnswer })
+      if (--pending === 0) finish({ accepted: false, maybeSent, rejection, anyAnswer, nonceTaken })
     }
-    if (pending === 0) return finish({ accepted: false, maybeSent: false, rejection: null, anyAnswer: false })
+    if (pending === 0) return finish({ accepted: false, maybeSent: false, rejection: null, anyAnswer: false, nonceTaken: null })
     for (const url of ARC_RPCS) {
       const startedAt = Date.now()
       fetch(url, {
@@ -546,12 +555,23 @@ async function broadcastToAll(raw) {
             maybeSent = true
             return finish({ accepted: false, maybeSent: true, rejection: null, anyAnswer: true })
           }
+          // Decided once every node has answered (sendAndWait checks the hash).
+          if (j && j.error && NONCE_TAKEN.test(String(j.error.message || ''))) { nonceTaken = nonceTaken || j.error; return }
           if (j && j.error && !rejection) rejection = j.error
         })
         .catch(() => { /* this node failed; others may still accept */ })
         .finally(settle)
     }
   })
+}
+
+/** True when Arc has this exact transaction (mined, or pending in a node). */
+async function isKnownTransaction(hash) {
+  if (await receiptOf(hash)) return true
+  try {
+    const j = await forward({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionByHash', params: [hash] })
+    return !!j?.result
+  } catch { return false }
 }
 
 async function receiptOf(hash) {
@@ -572,6 +592,14 @@ async function sendAndWait(id, params) {
   const started = Date.now()
   const waitMs = Math.min(Math.max(Number(waitMsIn) || SEND_WAIT_MAX_MS, 0), SEND_WAIT_MAX_MS)
   const b = await broadcastToAll(raw)
+  if (!b.accepted && !b.maybeSent && b.nonceTaken) {
+    // Its nonce is used. By this very transaction (mined already, or still
+    // waiting in a node): sent. By another one: NOT sent - answered as the
+    // node's rejection, so the caller re-syncs its nonce (Circle's adapter
+    // re-sends by itself) instead of waiting for a receipt that never comes.
+    if (await isKnownTransaction(hash)) b.maybeSent = true
+    else return { jsonrpc: '2.0', id, error: { code: -32003, message: String(b.nonceTaken.message || 'nonce too low').slice(0, 300) } }
+  }
   if (!b.accepted && !b.maybeSent) {
     // Answers came back and every one was a rejection: it was not sent.
     if (b.rejection) return { jsonrpc: '2.0', id, error: { code: -32003, message: String(b.rejection.message || 'Transaction rejected').slice(0, 300) } }

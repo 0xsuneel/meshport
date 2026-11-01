@@ -57,6 +57,30 @@ describe('meshport_sendRawTransactionAndWait', () => {
     expect(r.result).toMatchObject({ status: 'pending', broadcast: 'sent' })
   })
 
+  // Field 1 Nov 06:07: a stale nonce (Circle's adapter counts nonces for the
+  // session; MeshPort's own sends moved the chain on) was answered "sent" and
+  // the deposit waited forever for a receipt that could never come.
+  it('"nonce too low" for a transaction Arc does not have: rejected (-32003), so the caller re-syncs', async () => {
+    stub(m => m === 'eth_sendRawTransaction' ? { error: { code: -32000, message: 'nonce too low: next nonce 7, tx nonce 5' } } : { result: null })
+    const r = await relay([RAW, HASH, 700])
+    expect(r.error.code).toBe(-32003)
+    expect(r.error.message).toMatch(/nonce too low/)
+  })
+
+  it('"nonce too low" for this very transaction (already mined): sent, with its receipt', async () => {
+    stub(m => m === 'eth_sendRawTransaction' ? { error: { code: -32000, message: 'nonce too low' } }
+      : m === 'eth_getTransactionReceipt' ? { result: { status: '0x1', blockNumber: '0x2c' } } : { result: null })
+    const r = await relay([RAW, HASH, 700])
+    expect(r.result).toMatchObject({ hash: HASH, status: 'success' })
+  })
+
+  it('"underpriced" while this very transaction waits in a node: sent (pending)', async () => {
+    stub(m => m === 'eth_sendRawTransaction' ? { error: { code: -32000, message: 'replacement transaction underpriced' } }
+      : m === 'eth_getTransactionByHash' ? { result: { hash: HASH } } : { result: null })
+    const r = await relay([RAW, HASH, 700])
+    expect(r.result).toMatchObject({ hash: HASH, status: 'pending', broadcast: 'sent' })
+  })
+
   it('every node rejects: error -32003 (nothing sent)', async () => {
     stub(m => m === 'eth_sendRawTransaction' ? { error: { code: -32000, message: 'insufficient funds for gas * price + value' } } : { result: null })
     const r = await relay([RAW, HASH, 700])
