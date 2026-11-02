@@ -50,7 +50,11 @@ export function AutoWalletPage() {
           setAddress(circleAddr)
         } catch (e) {
           void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[circle wallet] ${e instanceof Error ? e.message : String(e)}`))).catch(() => {})
-          throw new Error(e instanceof Error && /code|expired|cancel/i.test(e.message) ? e.message : "Couldn't set up your wallet. Check your connection and try again.")
+          const m = e instanceof Error ? e.message : ''
+          // Circle 155150/155151/155154/155155: email codes aren't set up in
+          // the Circle Console (SMTP / template) - not the user's connection.
+          if (/SMTP|email template/i.test(m)) throw new Error('Email sign-in for wallets is not available yet. Please sign in with Google, or try again later.')
+          throw new Error(/code|expired|cancel/i.test(m) ? m : "Couldn't set up your wallet. Check your connection and try again.")
         }
       } else {
         // create-wallet accounts: unchanged - generated locally, shown a
