@@ -4,10 +4,11 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 
 const SUPA = 'https://fake.supabase.test'
 const API_KEY = 'TEST_API_KEY:abc123:secret456'
-const SESSIONS: Record<string, { id: string; email: string; is_anonymous?: boolean }> = {
-  'tok-alice': { id: 'uid-alice', email: 'alice@example.com' },
-  'tok-mallory': { id: 'uid-mallory', email: 'mallory@example.com' },
+const SESSIONS: Record<string, { id: string; email: string; is_anonymous?: boolean; app_metadata?: { provider?: string; providers?: string[] } }> = {
+  'tok-alice': { id: 'uid-alice', email: 'alice@example.com', app_metadata: { provider: 'google', providers: ['google'] } },
+  'tok-mallory': { id: 'uid-mallory', email: 'mallory@example.com', app_metadata: { provider: 'google', providers: ['google'] } },
   'tok-anon': { id: 'uid-anon', email: '', is_anonymous: true },
+  'tok-email': { id: 'uid-email', email: 'erin@example.com', app_metadata: { provider: 'email', providers: ['email'] } },
 }
 const ALICE_CIRCLE = 'alice-circle-token-' + 'x'.repeat(40)
 const WALLET = '22222222-2222-4222-8222-222222222222'
@@ -76,6 +77,8 @@ describe('api/circle-wallet (handler, end to end)', () => {
   it('needs a real MeshPort sign-in: none → 401, anonymous → 403, GET → 405', async () => {
     expect((await call({ action: 'link' }, 'tok-nobody')).status).toBe(401)
     expect((await call({ action: 'link' }, 'tok-anon')).status).toBe(403)
+    // Email sign-in is for the admin panel only: an email account gets no wallet.
+    expect((await call({ action: 'link' }, 'tok-email')).json).toMatchObject({ code: 'google-only' })
     let status = 0
     const res = { status(s: number) { status = s; return res }, json() { return res } }
     await handler({ method: 'GET', headers: {} }, res)
