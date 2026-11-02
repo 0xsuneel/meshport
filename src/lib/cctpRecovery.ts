@@ -125,6 +125,7 @@ export async function finishCctpMintViaRelayer(p: {
   sourceChain: string; destinationChain: string; burnTxHash: string; timeoutMs?: number; pollMs?: number
 }): Promise<{ mintTxHash: string } | null> {
   const { fetchIrisMessage, forwardDone } = await import('./cctpTracker')
+  const waitStartedAt = performance.now()
   const deadline = Date.now() + (p.timeoutMs ?? 120_000)
   let msg = await fetchIrisMessage(p.sourceChain, p.burnTxHash)
   while (Date.now() < deadline && !(msg?.status === 'complete' && msg.message && msg.attestation && msg.attestation !== 'PENDING')) {
@@ -143,6 +144,7 @@ export async function finishCctpMintViaRelayer(p: {
 
   const { encodeFunctionData } = await import('viem')
   const { authApiHeaders } = await import('./supabase')
+  const requestStartedAt = performance.now()
   const r = await fetch('/api/bridge-relay', {
     method: 'POST', headers: await authApiHeaders(),
     body: JSON.stringify({
@@ -150,7 +152,10 @@ export async function finishCctpMintViaRelayer(p: {
       data: encodeFunctionData({ abi: RECEIVE_MESSAGE_ABI, functionName: 'receiveMessage', args: [msg.message as Hex, msg.attestation as Hex] }),
     }),
   })
-  const out = await r.json().catch(() => null) as { txHash?: string; error?: string; pending?: boolean } | null
+  const out = await r.json().catch(() => null) as { txHash?: string; error?: string; pending?: boolean; timing?: import('./relayTiming').RelayServerTiming } | null
+  void import('./relayTiming').then(m => m.reportRelayTiming('cctp-mint', p.destinationChain, {
+    waitMs: requestStartedAt - waitStartedAt, requestMs: performance.now() - requestStartedAt, server: out?.timing, ok: r.ok && !!out?.txHash,
+  })).catch(() => {})
   if (r.ok && out?.txHash) return { mintTxHash: out.txHash }
   // The relayer simulates first, so a refusal usually means it was already
   // minted (e.g. Circle's forwarder got there after all) - check Iris again.
