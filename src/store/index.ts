@@ -275,6 +275,7 @@ export const useAuthStore = create<AuthStore>()(
         // logging out should mean the next login for ANY account on this
         // browser starts from a real passcode prompt, not a leftover cache.
         clearSessionPrivateKey(currentAddr)
+        if (get().walletSource === 'circle') import('@/wallet/circle').then(m => m.discardPreparedSignatures()).catch(() => {})
         // The frame's open key, session copy and (Google / email) device copy
         // go too. Passcode copies stay, exactly as before.
         import('@/wallet').then(({ forgetWallet }) => forgetWallet(currentAddr ?? undefined)).catch(() => {})
@@ -331,6 +332,8 @@ export const useAuthStore = create<AuthStore>()(
         const addr = get().walletAddress
         set({ isLocked: true })
         import('@/lib/security').then(({ clearSessionPrivateKey, forgetVerifiedPasscodes }) => { clearSessionPrivateKey(addr); forgetVerifiedPasscodes() }).catch(() => {})
+        // A Circle wallet's signing requests prepared for a payment (wallet/circle.ts) go too.
+        if (get().walletSource === 'circle') import('@/wallet/circle').then(m => m.discardPreparedSignatures()).catch(() => {})
       },
       unlock: () => {
         set({ isLocked: false, lastActivityAt: Date.now() })

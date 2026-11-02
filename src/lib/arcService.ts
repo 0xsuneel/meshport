@@ -135,7 +135,10 @@ function estimateGasPrice(): Promise<bigint> {
 let payStages: { prepare?: number; sign?: number; broadcast?: number; confirm?: number } = {}
 
 type PayToken = 'USDC' | 'EURC' | 'cirBTC'
-type Preflight = { intent: import('./payIntentService').CreatePayIntentResult; gas: bigint; balance?: number }
+// feeCap: maxFeePerGas, read once here so the send signs exactly the
+// transaction prepared for it (a Circle wallet's signing request is made from
+// it while the PIN is typed - prepareCircleSignature).
+type Preflight = { intent: import('./payIntentService').CreatePayIntentResult; gas: bigint; balance?: number; feeCap: bigint }
 
 const PREFLIGHT_TTL_MS = 60_000
 const preflights = new Map<string, { sig: string; at: number; promise: Promise<Preflight> }>()
@@ -172,7 +175,7 @@ async function runPreflight(token: PayToken, sender: `0x${string}`, destination:
   const tx = payTx(token, destination, amount, memo)
   const publicClient = arcClient(3, 30000)
   const { createPayIntent } = await import('./payIntentService')
-  const [balance, intent, gas] = await Promise.all([
+  const [balance, intent, gas, feeCap] = await Promise.all([
     // A failed read is "unknown", never 0: on a weak connection a timed-out
     // balance read used to stop the payment as "Not enough balance" with
     // plenty in the wallet. The chain still refuses a real shortfall.
@@ -191,8 +194,46 @@ async function runPreflight(token: PayToken, sender: `0x${string}`, destination:
       callTarget: tx.callTarget,
     }),
     publicClient.estimateGas({ account: sender, to: tx.to, value: tx.value, data: tx.data }),
+    sendFeeCap(),
   ])
-  return { intent, gas, balance }
+  return { intent, gas, balance, feeCap }
+}
+
+/** What a Pay send signs (relaySendTimed) - one builder, so a prepared Circle signature matches it exactly. */
+type SendTx = { to: `0x${string}`; value?: bigint; data?: `0x${string}`; gas: bigint; nonce: number; maxFeePerGas?: bigint }
+function signingTx(tx: SendTx, maxFeePerGas: bigint) {
+  return {
+    type: 'eip1559' as const,
+    chainId: ARC_CHAIN_INLINE.id,
+    to: tx.to,
+    value: tx.value ?? 0n,
+    data: tx.data,
+    gas: tx.gas,
+    nonce: tx.nonce,
+    maxFeePerGas,
+    maxPriorityFeePerGas: parseGwei('1'),
+  }
+}
+/** The send for a preflight: what sendUSDC / sendEURC / sendCirBtc pass to relaySend. */
+function sendTxFor(tx: ReturnType<typeof payTx>, pf: Preflight): SendTx | null {
+  if (!pf.intent.success || pf.intent.existingTxHash || typeof pf.intent.nonce !== 'number') return null
+  return { to: tx.to, value: tx.value, data: tx.data, gas: (pf.gas * 120n) / 100n, nonce: pf.intent.nonce, maxFeePerGas: pf.feeCap }
+}
+
+/**
+ * A Google / email (Circle) wallet: ask Circle for this payment's signing
+ * request now, while the PIN is typed (wallet/circle.ts "Prepared signing
+ * requests"). Signs nothing; used only if the send signs this exact
+ * transaction after the PIN. Fire-and-forget.
+ */
+async function prepareCircleSignature(sender: string, tx: ReturnType<typeof payTx>, pf: Preflight): Promise<void> {
+  const send = sendTxFor(tx, pf)
+  if (!send) return
+  const { useAuthStore } = await import('@/store')
+  const { signer, walletSource, isLocked } = useAuthStore.getState()
+  if (walletSource !== 'circle' || isLocked || !signer || signer.address.toLowerCase() !== sender.toLowerCase()) return
+  const { isCircleAccount } = await import('@/wallet/circle')
+  if (isCircleAccount(signer)) signer.prepareTransaction(signingTx(send, pf.feeCap))
 }
 
 /** Starts a send's preflight early (see comment above). Fire-and-forget; never throws. */
@@ -222,6 +263,8 @@ export function preparePayment(params: { token: PayToken; from: string; to: stri
     if (existing && existing.sig === sig && Date.now() - existing.at < PREFLIGHT_TTL_MS) return
     const promise = runPreflight(params.token, sender, destination, params.amount, params.idempotencyKey, params.recipientUsername, memo)
     promise.catch(() => { /* surfaced (or retried fresh) by the send that consumes it */ })
+    // Circle wallets: the signing request too, as soon as the transaction is known.
+    void promise.then(pf => prepareCircleSignature(sender, payTx(params.token, destination, params.amount, memo), pf)).catch(() => {})
     preflights.set(params.idempotencyKey, { sig, at: Date.now(), promise })
   } catch { /* purely an optimization - the send runs its own preflight */ }
 }
@@ -417,7 +460,7 @@ const ALREADY_SENT = /already known|known transaction|already imported|nonce too
 
 export async function relaySend(
   account: WalletAccount,
-  tx: { to: `0x${string}`; value?: bigint; data?: `0x${string}`; gas: bigint; nonce: number },
+  tx: SendTx,
   onSent: (hash: `0x${string}`) => void,
 ): Promise<{ txHash: `0x${string}`; state: SendResult['state']; blockNumber?: string; nonce: number }> {
   const stages = payStages
@@ -441,23 +484,15 @@ export async function relayArcSend(
 }
 async function relaySendTimed(
   account: WalletAccount,
-  tx: { to: `0x${string}`; value?: bigint; data?: `0x${string}`; gas: bigint; nonce: number },
+  tx: SendTx,
   onSent: (hash: `0x${string}`) => void,
   stages: typeof payStages,
 ): Promise<{ txHash: `0x${string}`; state: SendResult['state']; blockNumber?: string }> {
-  const maxFeePerGas = await sendFeeCap()
+  // Pay passes the fee cap its preflight read (so a prepared Circle signature
+  // matches); other sends read it now.
+  const maxFeePerGas = tx.maxFeePerGas ?? await sendFeeCap()
   const signed = span('pay:sign')
-  const raw = await account.signTransaction({
-    type: 'eip1559',
-    chainId: ARC_CHAIN_INLINE.id,
-    to: tx.to,
-    value: tx.value ?? 0n,
-    data: tx.data,
-    gas: tx.gas,
-    nonce: tx.nonce,
-    maxFeePerGas,
-    maxPriorityFeePerGas: parseGwei('1'),
-  })
+  const raw = await account.signTransaction(signingTx(tx, maxFeePerGas))
   stages.sign = signed()
   const txHash = keccak256(raw)
 
@@ -568,7 +603,7 @@ export async function sendUSDC(params: {
   // any other pre-broadcast failure (e.g. estimateGas throwing) in the
   // previous sequential version of this same function.
   // Usually already resolved: started at PIN entry via preparePayment().
-  const { intent: intentResult, gas: gasEstimate, balance } = await getPreflight(
+  const { intent: intentResult, gas: gasEstimate, balance, feeCap } = await getPreflight(
     'USDC', senderAddress, destination, params.amount, params.idempotencyKey ?? crypto.randomUUID(), params.recipientUsername, params.memo)
   // Step 2: Check balance - only when it was actually read (see runPreflight).
   if (balance !== undefined && balance < params.amount) {
@@ -629,7 +664,7 @@ export async function sendUSDC(params: {
   // failure must never block or fail an already-broadcast payment.
   // The same transaction the preflight estimated and the intent expects (payTx).
   const tx = payTx('USDC', destination, params.amount, params.memo)
-  const sent = await relaySend(account, { to: tx.to, value: tx.value ?? 0n, data: tx.data, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce },
+  const sent = await relaySend(account, { to: tx.to, value: tx.value ?? 0n, data: tx.data, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce, maxFeePerGas: feeCap },
     h => { void markPayAttemptSubmitted(attemptId, h).catch(() => { /* best-effort */ }) })
   const txHash = sent.txHash
 
@@ -748,7 +783,7 @@ export async function sendEURC(params: {
   // comment for the full reasoning.
   // Usually already resolved: started at PIN entry via preparePayment().
   const { markPayAttemptSubmitted } = await import('./payIntentService')
-  const { intent: intentResult, gas: gasEstimate } = await getPreflight(
+  const { intent: intentResult, gas: gasEstimate, feeCap } = await getPreflight(
     'EURC', senderAddress, destination, params.amount, params.idempotencyKey ?? crypto.randomUUID(), params.recipientUsername)
   // RESILIENCE FIX (2026-09-17): see sendUSDC's own comment above for the
   // full reasoning - resume from an already-broadcast retry instead of
@@ -773,7 +808,7 @@ export async function sendEURC(params: {
   // too. Runtime behavior is unaffected.
   // Signed here, sent and confirmed by the server in one request - see
   // relaySend (and sendUSDC's comments).
-  const sent = await relaySend(account, { to: EURC_CONTRACT as `0x${string}`, data: data as `0x${string}`, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce },
+  const sent = await relaySend(account, { to: EURC_CONTRACT as `0x${string}`, data: data as `0x${string}`, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce, maxFeePerGas: feeCap },
     h => { void markPayAttemptSubmitted(attemptId, h).catch(() => { /* best-effort */ }) })
   const txHash = sent.txHash
 
@@ -863,7 +898,7 @@ export async function sendCirBTC(params: {
   // sendUSDC/sendEURC - see sendUSDC's own comment for the full reasoning.
   // Usually already resolved: started at PIN entry via preparePayment().
   const { markPayAttemptSubmitted } = await import('./payIntentService')
-  const { intent: intentResult, gas: gasEstimate } = await getPreflight(
+  const { intent: intentResult, gas: gasEstimate, feeCap } = await getPreflight(
     'cirBTC', senderAddress, destination, params.amount, params.idempotencyKey ?? crypto.randomUUID(), params.recipientUsername)
   // RESILIENCE FIX (2026-09-17): see sendUSDC's own comment above for the
   // full reasoning - resume from an already-broadcast retry instead of
@@ -889,7 +924,7 @@ export async function sendCirBTC(params: {
   // with ARC_CHAIN_INLINE (env-driven, matches sendUSDC and now sendEURC).
   // Signed here, sent and confirmed by the server in one request - see
   // relaySend (and sendUSDC's comments).
-  const sent = await relaySend(account, { to: CIRBTC_CONTRACT as `0x${string}`, data: data as `0x${string}`, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce },
+  const sent = await relaySend(account, { to: CIRBTC_CONTRACT as `0x${string}`, data: data as `0x${string}`, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce, maxFeePerGas: feeCap },
     h => { void markPayAttemptSubmitted(attemptId, h).catch(() => { /* best-effort */ }) })
   const txHash = sent.txHash
 
