@@ -79,6 +79,7 @@ import { useAuthStore } from './store'
 import { startWalletReadiness } from './lib/walletReadiness'
 import { awayPastAutoLock } from './lib/autoLock'
 import { installGlassHeaders } from './lib/glassHeaders'
+import { installViewportDebug } from './lib/viewportDebug'
 
 // Clear all legacy mock/fake data from localStorage on startup
 clearLegacyData()
@@ -135,6 +136,7 @@ void import('./lib/swUpdate').then(m => {
 })
 
 installGlassHeaders()
+installViewportDebug()
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     {/* Phone set to reduce motion: framer animations drop their movement
