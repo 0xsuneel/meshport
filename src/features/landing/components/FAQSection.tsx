@@ -7,7 +7,7 @@ import { Reveal } from './Reveal'
 const FAQS = [
   {
     q: 'Is MeshPort self-custodial?',
-    a: 'Yes - every wallet. Whether you create one, import one, or sign in with Google or an email code, the wallet key is generated on your own device and is never sent to MeshPort. MeshPort cannot move your funds.',
+    a: 'Yes - every wallet. Whether you create one, import one, or sign in with Google, the wallet key is generated on your own device and is never sent to MeshPort. MeshPort cannot move your funds.',
   },
   {
     q: 'How are Google/email wallets secured?',

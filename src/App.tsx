@@ -71,7 +71,6 @@ const HelpSupportPage       = lazyRetry(() => import('./features/profile/HelpSup
 const SwapPage              = lazyRetry(() => import('./features/swap/SwapPage').then(m => ({ default: m.SwapPage })), 'SwapPage')
 const LoginPage             = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.LoginPage })), 'LoginPage')
 const GoogleAuthPage        = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.GoogleAuthPage })), 'GoogleAuthPage')
-const EmailOTPPage          = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.EmailOTPPage })), 'EmailOTPPage')
 const CreateWalletPage      = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.CreateWalletPage })), 'CreateWalletPage')
 const ImportWalletPage      = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.ImportWalletPage })), 'ImportWalletPage')
 const WalletSetupPage       = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.WalletSetupPage })), 'WalletSetupPage')
@@ -263,7 +262,7 @@ function RootGate() {
  *
  * Guard matrix (what each route checks):
  *
- *  /auth, /auth/google, /auth/email  →  RequireNoAuth
+ *  /auth, /auth/google  →  RequireNoAuth
  *    - fully onboarded → /
  *    - partially through → next incomplete step
  *
@@ -372,7 +371,8 @@ const router = createBrowserRouter([
   // and centered on desktop instead of stretching full browser width.
   { path: '/auth',                element: <AuthShell><RequireNoAuth><LoginPage /></RequireNoAuth></AuthShell> },
   { path: '/auth/google',         element: <AuthShell><RequireNoAuth><GoogleAuthPage /></RequireNoAuth></AuthShell> },
-  { path: '/auth/email',          element: <AuthShell><RequireNoAuth><EmailOTPPage /></RequireNoAuth></AuthShell> },
+  // Email-code sign-in was removed (Google only): old links land on sign-in.
+  { path: '/auth/email',          element: <Navigate to="/auth" replace /> },
   { path: '/auth/passcode',       element: <AuthShell><RequireNoPasscode><PasscodeSetupPage /></RequireNoPasscode></AuthShell> },
   { path: '/auth/enable-biometric', element: <AuthShell><RequireUnlocked><EnableBiometricPage /></RequireUnlocked></AuthShell> },
   { path: '/auth/lock',           element: <AuthShell><PasscodeLockPage /></AuthShell> },

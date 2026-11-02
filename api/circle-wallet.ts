@@ -8,8 +8,6 @@
 //
 //   social-device-token  { deviceId }                          → { deviceToken, deviceEncryptionKey }
 //   status               {}                                    → { linked, address }  (no Circle session needed)
-//   email-device-token   { deviceId }                          → { deviceToken, deviceEncryptionKey, otpToken }
-//                         (always this MeshPort account's email)
 //   refresh              { userToken, refreshToken, deviceId } → { userToken, encryptionKey, refreshToken }
 //   link                 { userToken }                         → { circleUserId }
 //   initialize           { userToken }                         → { challengeId } | { ready: true }
@@ -148,7 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const who = await caller(req)
   if (!who) return send(401, { error: 'Sign in to MeshPort first', code: 'meshport-session' })
   // A wallet hangs off the account's id; an anonymous session's id doesn't last.
-  if (who.anonymous) return send(403, { error: 'Sign in with Google or email to use your wallet' })
+  if (who.anonymous) return send(403, { error: 'Sign in with Google to use your wallet' })
   if (!allow(who.uid)) return send(429, { error: 'Too many requests - try again in a minute' })
 
   try {
@@ -157,7 +155,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const t = body.userToken
     switch (body.action) {
       case 'status': return send(200, await svc.status(uid))
-      case 'email-device-token': return send(200, await svc.emailDeviceToken(body.deviceId, who.email))
       case 'refresh': return send(200, await svc.refresh(t, body.refreshToken, body.deviceId))
       case 'link': return send(200, await svc.link(uid, t))
       case 'initialize': return send(200, await svc.initialize(uid, t))

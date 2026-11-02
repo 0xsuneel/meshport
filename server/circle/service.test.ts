@@ -192,12 +192,6 @@ describe('Circle wallet service', () => {
     await expect(svc.signTransaction('uid-bob', BOB_TOKEN, { transaction: { ...TX, to: 'nope' } })).rejects.toMatchObject({ code: 'bad-request' })
   })
 
-  it('email codes always go to the MeshPort account email', async () => {
-    await svc.emailDeviceToken('device-12345678', 'alice@example.com')
-    expect(lastCall('/v1/w3s/users/email/token').body).toMatchObject({ email: 'alice@example.com', deviceId: 'device-12345678' })
-    await expect(svc.emailDeviceToken('device-12345678', null)).rejects.toMatchObject({ code: 'bad-request' })
-  })
-
   it('checks a session with Circle once, then remembers it for a few minutes', async () => {
     await svc.link('uid-bob', BOB_TOKEN)
     await svc.initialize('uid-bob', BOB_TOKEN)

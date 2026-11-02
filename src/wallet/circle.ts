@@ -27,10 +27,8 @@
 // and Circle's SDK and frame are loaded (warmCircleSigner) - so the first
 // payment doesn't pay for any of that.
 //
-// Every Google / email account's wallet is a Circle wallet: Google signs in
-// to MeshPort and Circle with one Google screen; an email account signs in to
-// Circle with Circle's own email code (circleEmailSignIn) on a device that
-// has no Circle session yet.
+// Every Google account's wallet is a Circle wallet: Google signs in to
+// MeshPort and Circle with one Google screen (email codes were removed).
 
 import { toAccount } from 'viem/accounts'
 import { bytesToHex, getTypesForEIP712Domain, type Hex, type TypedDataDefinition } from 'viem'
@@ -223,7 +221,7 @@ function endSession(uid: string): void {
 
 let sdkPromise: Promise<W3SSdk> | null = null
 type LoginCallback = (error: unknown, result: unknown) => void
-type LoginConfigs = { deviceToken: string; deviceEncryptionKey: string; otpToken?: string; email?: { email: string }; google?: { clientId: string; redirectUri: string; selectAccountPrompt?: boolean } }
+type LoginConfigs = { deviceToken: string; deviceEncryptionKey: string; google?: { clientId: string; redirectUri: string; selectAccountPrompt?: boolean } }
 
 /** The SDK, with these login settings. Constructing it also picks up a Google
  *  answer in the page address and sends it to Circle. */
@@ -618,13 +616,12 @@ export async function circleSignerFor(uid: string, address: string): Promise<Cir
 
 export function signOutCircle(uid: string): void { endSession(uid) }
 
-// ── Email-code sign-in, account status, wallet set-up ───────────────────────
+// ── Account status, wallet set-up ───────────────────────────────────────────
 
 /**
- * How this MeshPort account signs in. A Google sign-in and an email-code
- * sign-in are different Circle users, so a Google account always signs in to
- * Circle with Google and an email account with Circle's email code - the
- * other would be refused ("linked elsewhere").
+ * How this MeshPort account signs in. Google is the only sign-in for Circle
+ * wallets (email codes were removed); an older email account is 'email' and
+ * can no longer open its Circle wallet.
  */
 export async function meshportProvider(): Promise<'google' | 'email' | null> {
   const u = (await supabase.auth.getSession()).data.session?.user
@@ -634,9 +631,8 @@ export async function meshportProvider(): Promise<'google' | 'email' | null> {
 }
 
 /**
- * Sign this account in to Circle the way it signs in to MeshPort: Google
- * (leaves for Google, back to `returnTo` - resolves 'redirected') or the email
- * code (resolves 'signed-in').
+ * Sign this account in to Circle with Google, the way it signs in to
+ * MeshPort (leaves for Google, back to `returnTo` - resolves 'redirected').
  */
 export async function signInToCircle(returnTo: string): Promise<'signed-in' | 'redirected'> {
   const a = await meshportAccount()
@@ -646,8 +642,7 @@ export async function signInToCircle(returnTo: string): Promise<'signed-in' | 'r
     await startGoogleSignIn({ meshport: false, uid: a.uid, returnTo })
     return 'redirected'
   }
-  await circleEmailSignIn()
-  return 'signed-in'
+  throw new CircleError(403, 'login', 'Wallets open with Google only. Sign out and continue with Google.')
 }
 
 /** Does this browser have a Circle session for the signed-in MeshPort account? */
@@ -659,28 +654,6 @@ export async function hasCircleSession(): Promise<boolean> {
 /** Whether this MeshPort account has a Circle wallet (its own link - no Circle session needed). */
 export async function circleStatus(): Promise<{ linked: boolean; address: string | null }> {
   return circleApi<{ linked: boolean; address: string | null }>('status')
-}
-
-/**
- * Circle's email-code sign-in for the signed-in MeshPort account: Circle
- * sends a code to the account's own email (the backend never takes one from
- * the request) and opens its hosted screen to enter it; the session is then
- * linked to this account and kept. Resolves when signed in.
- */
-export async function circleEmailSignIn(): Promise<void> {
-  const a = await meshportAccount()
-  if (!a || a.anonymous) throw new CircleError(401, 'login', 'Sign in to MeshPort first')
-  const id = await deviceId()
-  const t = await circleApi<{ deviceToken: string; deviceEncryptionKey: string; otpToken: string }>('email-device-token', { deviceId: id })
-  const session = await new Promise<CircleSession>((resolve, reject) => {
-    // Up to 10 minutes to find the email and type the code.
-    const timer = setTimeout(() => reject(new CircleError(504, 'login', 'The email code expired - try again')), 10 * 60_000)
-    sdk({ deviceToken: t.deviceToken, deviceEncryptionKey: t.deviceEncryptionKey, otpToken: t.otpToken }, (error, result) => {
-      clearTimeout(timer)
-      try { resolve(loginResult(error, result)) } catch (e) { reject(e) }
-    }).then(s => s.verifyOtp()).catch(e => { clearTimeout(timer); reject(e) })
-  })
-  await finishLogin(a.uid, session)
 }
 
 /**

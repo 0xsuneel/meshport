@@ -352,21 +352,13 @@ describe('Circle wallet set-up for Google / email accounts', () => {
     expect(ran).toEqual(['init-1'])
   })
 
-  it("email code: Circle's code screen, then the session is linked to this account and kept", async () => {
-    sdkLoginResult = { result: { userToken: 'ut-email', encryptionKey: 'ek-email', refreshToken: 'rt-email' } }
-    replies = [
-      () => [200, { deviceToken: 'dt', deviceEncryptionKey: 'dek', otpToken: 'otp' }],
-      () => [200, { circleUserId: 'circle-alice' }],
-    ]
-    verifyOtpCalls = 0
-    await circle.circleEmailSignIn()
-    expect(sent.map(b => b.action)).toEqual(['email-device-token', 'link'])
-    expect(sent[0].email).toBeUndefined() // the backend uses the account's own email, never one from here
-    expect(verifyOtpCalls).toBe(1)
-    expect(loadCircleSession('uid-alice')?.userToken).toBe('ut-email')
+  it('an older email account cannot open a Circle wallet (Google only)', async () => {
+    sessionUser = { id: 'uid-alice', email: 'alice@example.com', app_metadata: { provider: 'email' } }
+    await expect(circle.signInToCircle('/')).rejects.toMatchObject({ code: 'login' })
+    expect(sent).toEqual([])
   })
 
-  it('a Google account signs in to Circle with Google (never the email code - another Circle user)', async () => {
+  it('a Google account signs in to Circle with Google', async () => {
     sessionUser = { id: 'uid-alice', email: 'alice@example.com', app_metadata: { provider: 'google' } }
     expect(await circle.meshportProvider()).toBe('google')
     sessionUser = { id: 'uid-alice', email: 'alice@example.com', app_metadata: { provider: 'email' } }

@@ -24,10 +24,10 @@ export const SECTIONS: Section[] = [
     features: [
       {
         id: 'sign-in', title: 'Sign in', image: 'auth',
-        summary: 'Open MeshPort with Google, a one-time email code, or a wallet you already have.',
+        summary: 'Open MeshPort with Google or a wallet you already have.',
         steps: [
           'Tick the box to accept the Terms and Privacy Policy.',
-          'Choose Continue with Google or Continue with Email OTP - no password needed.',
+          'Choose Continue with Google - no password needed.',
           'Prefer a classic wallet? Create New Wallet gives you 12 secret words; Import Existing Wallet uses yours.',
           'Pick a .arc username and set a 6-digit passcode. That’s it.',
         ],
