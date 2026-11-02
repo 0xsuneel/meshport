@@ -35,7 +35,7 @@ vi.mock('viem', async () => {
   return { ...actual, createPublicClient: () => ({ estimateGas: async () => 21000n, getGasPrice: async () => 1_000_000_000n, getTransactionReceipt: async () => ({ status: 'success', blockNumber: 1n }) }) }
 })
 
-const { preparePayment, sendUSDC, sendEURC } = await import('./arcService')
+const { preparePayment, sendUSDC, sendEURC, sendCirBTC } = await import('./arcService')
 const settle = () => new Promise(r => setTimeout(r, 20))
 
 describe('Circle wallet: the signing request prepared during the PIN', () => {
@@ -54,6 +54,14 @@ describe('Circle wallet: the signing request prepared during the PIN', () => {
     preparePayment({ token: 'EURC', from: SENDER, to: RECIPIENT, amount: 3, idempotencyKey: 'k-eurc' })
     await settle()
     await sendEURC({ signer: circleSigner, to: RECIPIENT, amount: 3, idempotencyKey: 'k-eurc' })
+    expect(prepared.length).toBe(1)
+    expect(signed[0]).toEqual(prepared[0])
+  })
+
+  it('cirBTC (8 decimals): the same', async () => {
+    preparePayment({ token: 'cirBTC', from: SENDER, to: RECIPIENT, amount: 0.00012345, idempotencyKey: 'k-cirbtc' })
+    await settle()
+    await sendCirBTC({ signer: circleSigner, to: RECIPIENT, amount: 0.00012345, idempotencyKey: 'k-cirbtc' })
     expect(prepared.length).toBe(1)
     expect(signed[0]).toEqual(prepared[0])
   })
