@@ -5420,7 +5420,7 @@ export function ChatConversationPage() {
         value={payPassEntry}
         onChange={v => setPayPassEntry(v)}
         error={payError || undefined}
-        onComplete={(_, viaBiometric) => { setPayViaBiometric(!!viaBiometric); executeChatPayment() }}
+        onComplete={(_, viaBiometric) => { setPayViaBiometric(!!viaBiometric); import('@/lib/perfTrace').then(m => m.payApprovedVia(viaBiometric)).catch(() => {}); executeChatPayment() }}
         header={isDesktop ? undefined : (
           <div className="mb-5">
             <div className="flex items-center justify-between">

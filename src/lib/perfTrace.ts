@@ -117,6 +117,14 @@ export function reportResume(ms: number, outcome: string): void {
 // What a payment does between the PIN / fingerprint and the send itself
 // (passcode check, recipient check, opening the wallet) - timed by the screen.
 let payBefore: { at: number; last: number; steps: string[] } | null = null
+// How this payment was approved: the typed passcode or a fingerprint / Face
+// ID (PinKeypad's viaBiometric). Set by the screen when its PIN step
+// completes, reported once with the payment's line.
+let payVia: { how: 'pin' | 'fingerprint'; at: number } | null = null
+/** The payment's PIN step completed - by typed passcode or by fingerprint / Face ID. */
+export function payApprovedVia(viaBiometric: boolean | undefined): void {
+  payVia = { how: viaBiometric ? 'fingerprint' : 'pin', at: now() }
+}
 /** The PIN / fingerprint was accepted input: a payment's own clock starts. */
 export function payStepStart(): void { payBefore = { at: now(), last: now(), steps: [] } }
 /** One step before the send finished (`name` took the time since the last step). */
@@ -132,7 +140,10 @@ export function reportPayment(stages: { prepare?: number; sign?: number; broadca
   // Only this payment's own steps (a screen that gave up earlier left old ones).
   const before = payBefore && now() - payBefore.at < 120_000 && payBefore.steps.length ? `before ${payBefore.steps.join(' ')}, ` : ''
   payBefore = null
-  void reportPerf(`[perf pay] ${before}prepare ${s(stages.prepare)}, sign ${s(stages.sign)}, broadcast ${s(stages.broadcast)}, confirm ${s(stages.confirm)} (${outcome})`)
+  // Only this payment's approval (one from a screen given up on is stale).
+  const via = payVia && now() - payVia.at < 120_000 ? `, via ${payVia.how}` : ''
+  payVia = null
+  void reportPerf(`[perf pay] ${before}prepare ${s(stages.prepare)}, sign ${s(stages.sign)}, broadcast ${s(stages.broadcast)}, confirm ${s(stages.confirm)} (${outcome}${via})`)
 }
 
 /** A swap, in seconds: until the swap transaction went out (quote, approval, signing), then until Arc confirmed it. */
@@ -146,7 +157,7 @@ async function reportPerf(line: string): Promise<void> {
 
 /** Test hook. */
 export function resetPerfTrace(): void {
-  startup.clear(); startupDetail.clear(); startupReported = false; payBefore = null
+  startup.clear(); startupDetail.clear(); startupReported = false; payBefore = null; payVia = null
   if (startupTimer) clearTimeout(startupTimer)
   startupTimer = null
 }
