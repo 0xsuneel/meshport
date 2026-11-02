@@ -171,15 +171,18 @@ function payTx(token: PayToken, destination: `0x${string}`, amount: number, memo
 const preflightSig = (token: PayToken, sender: string, destination: string, amountAtomic: bigint, memo?: OrderMemo | null) =>
   `${token}|${sender.toLowerCase()}|${destination.toLowerCase()}|${amountAtomic}|${memo?.code ?? ''}`
 
-async function runPreflight(token: PayToken, sender: `0x${string}`, destination: `0x${string}`, amount: number, idempotencyKey: string, recipientUsername?: string | null, memo?: OrderMemo | null): Promise<Preflight> {
+/** What the transaction itself needs (the balance read is only a pre-check). */
+type SendInputs = Pick<Preflight, 'intent' | 'gas' | 'feeCap'>
+
+async function runPreflight(token: PayToken, sender: `0x${string}`, destination: `0x${string}`, amount: number, idempotencyKey: string, recipientUsername?: string | null, memo?: OrderMemo | null, onSendInputs?: (inputs: SendInputs) => void): Promise<Preflight> {
   const tx = payTx(token, destination, amount, memo)
   const publicClient = arcClient(3, 30000)
   const { createPayIntent } = await import('./payIntentService')
-  const [balance, intent, gas, feeCap] = await Promise.all([
-    // A failed read is "unknown", never 0: on a weak connection a timed-out
-    // balance read used to stop the payment as "Not enough balance" with
-    // plenty in the wallet. The chain still refuses a real shortfall.
-    token === 'USDC' ? readUSDCBalanceOrThrow(sender).catch(() => undefined) : Promise.resolve(undefined),
+  // A failed read is "unknown", never 0: on a weak connection a timed-out
+  // balance read used to stop the payment as "Not enough balance" with
+  // plenty in the wallet. The chain still refuses a real shortfall.
+  const balanceP = token === 'USDC' ? readUSDCBalanceOrThrow(sender).catch(() => undefined) : Promise.resolve(undefined)
+  const sendInputsP = Promise.all([
     createPayIntent({
       walletAddress: sender,
       idempotencyKey,
@@ -195,8 +198,12 @@ async function runPreflight(token: PayToken, sender: `0x${string}`, destination:
     }),
     publicClient.estimateGas({ account: sender, to: tx.to, value: tx.value, data: tx.data }),
     sendFeeCap(),
-  ])
-  return { intent, gas, balance, feeCap }
+  ]).then(([intent, gas, feeCap]) => ({ intent, gas, feeCap }))
+  // The transaction is known as soon as these are: a Circle wallet's signing
+  // request can be asked for without waiting on the balance read.
+  if (onSendInputs) void sendInputsP.then(onSendInputs, () => {})
+  const [balance, inputs] = await Promise.all([balanceP, sendInputsP])
+  return { ...inputs, balance }
 }
 
 /** What a Pay send signs (relaySendTimed) - one builder, so a prepared Circle signature matches it exactly. */
@@ -215,7 +222,7 @@ function signingTx(tx: SendTx, maxFeePerGas: bigint) {
   }
 }
 /** The send for a preflight: what sendUSDC / sendEURC / sendCirBtc pass to relaySend. */
-function sendTxFor(tx: ReturnType<typeof payTx>, pf: Preflight): SendTx | null {
+function sendTxFor(tx: ReturnType<typeof payTx>, pf: SendInputs): SendTx | null {
   if (!pf.intent.success || pf.intent.existingTxHash || typeof pf.intent.nonce !== 'number') return null
   return { to: tx.to, value: tx.value, data: tx.data, gas: (pf.gas * 120n) / 100n, nonce: pf.intent.nonce, maxFeePerGas: pf.feeCap }
 }
@@ -226,7 +233,7 @@ function sendTxFor(tx: ReturnType<typeof payTx>, pf: Preflight): SendTx | null {
  * requests"). Signs nothing; used only if the send signs this exact
  * transaction after the PIN. Fire-and-forget.
  */
-async function prepareCircleSignature(sender: string, tx: ReturnType<typeof payTx>, pf: Preflight): Promise<void> {
+async function prepareCircleSignature(sender: string, tx: ReturnType<typeof payTx>, pf: SendInputs): Promise<void> {
   const send = sendTxFor(tx, pf)
   if (!send) return
   const { useAuthStore } = await import('@/store')
@@ -261,10 +268,12 @@ export function preparePayment(params: { token: PayToken; from: string; to: stri
     const sig = preflightSig(params.token, sender, destination, payTx(params.token, destination, params.amount).amountAtomic, memo)
     const existing = preflights.get(params.idempotencyKey)
     if (existing && existing.sig === sig && Date.now() - existing.at < PREFLIGHT_TTL_MS) return
-    const promise = runPreflight(params.token, sender, destination, params.amount, params.idempotencyKey, params.recipientUsername, memo)
+    // Circle wallets: the signing request too, as soon as the transaction is
+    // known (nonce, gas, fee cap) - not after the balance read as well.
+    const tx = payTx(params.token, destination, params.amount, memo)
+    const promise = runPreflight(params.token, sender, destination, params.amount, params.idempotencyKey, params.recipientUsername, memo,
+      inputs => { void prepareCircleSignature(sender, tx, inputs).catch(() => {}) })
     promise.catch(() => { /* surfaced (or retried fresh) by the send that consumes it */ })
-    // Circle wallets: the signing request too, as soon as the transaction is known.
-    void promise.then(pf => prepareCircleSignature(sender, payTx(params.token, destination, params.amount, memo), pf)).catch(() => {})
     preflights.set(params.idempotencyKey, { sig, at: Date.now(), promise })
   } catch { /* purely an optimization - the send runs its own preflight */ }
 }
