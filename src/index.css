@@ -905,7 +905,7 @@ input, textarea { caret-color: var(--brand-text); }
   [data-frost="bg"] { background: var(--bg) !important; }
 }
 @media (prefers-contrast: more) {
-  [data-frost="surface"] { border-top-color: var(--text-secondary) !important; }
+  [data-frost="surface"], [data-bottom-nav] [data-frost] { border-top-color: var(--text-secondary) !important; }
 }
 
 /* Theme curtain (lib/themeTransition.ts): the new theme drops down from the
@@ -934,9 +934,9 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
 .mp-frost { background: transparent; }
 #root .mp-frost::before {
   content: ''; position: absolute; left: 0; right: 0; z-index: -1; pointer-events: none;
-  background: color-mix(in srgb, var(--frost-tint, var(--bg)) 75%, transparent);
-  backdrop-filter: blur(40px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
+  background: color-mix(in srgb, var(--frost-tint, var(--bg)) 72%, transparent);
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
 }
 /* The header's top edge fades into the plain page colour: the phone's status
    bar above it is that colour (theme-color) and a website can't draw behind
@@ -945,7 +945,7 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
   top: 0; bottom: -80px;
   -webkit-mask-image: linear-gradient(#000 calc(100% - 80px), transparent calc(100% - 80px));
   mask-image: linear-gradient(#000 calc(100% - 80px), transparent calc(100% - 80px));
-  background: linear-gradient(var(--frost-tint, var(--bg)), transparent 28px), color-mix(in srgb, var(--frost-tint, var(--bg)) 75%, transparent);
+  background: linear-gradient(var(--frost-tint, var(--bg)), transparent 28px), color-mix(in srgb, var(--frost-tint, var(--bg)) 72%, transparent);
 }
 #root .mp-frost-bottom::before {
   top: -80px; bottom: 0;

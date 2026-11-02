@@ -184,10 +184,13 @@ export function BottomNav() {
       boxSizing: 'border-box',
     }}>
       {/* Standard bottom nav bar - flush to the screen edges/bottom */}
-      <div data-frost="surface" className="mp-frost mp-frost-bottom" style={{
+      <div data-frost="bg" className="mp-frost mp-frost-bottom" style={{
         // Frosted (index.css, "Frosted bars"): what scrolls behind it turns
         // into a soft blur of colour (Home's content runs under the bar).
-        ['--frost-tint' as string]: 'var(--surface)',
+        // Same page-colour glass as Home's header, so both bars match and
+        // the bar runs seamlessly into the phone's gesture-bar strip below
+        // it (drawn in the page colour) - a white tint left a visible band.
+        ['--frost-tint' as string]: 'var(--bg)',
         borderTop: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-around',
         height: 65,
