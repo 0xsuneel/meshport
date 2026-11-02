@@ -117,11 +117,18 @@ async function build(urls: string[], chainKey: string, chainId?: number) {
     const tx = Transaction.from(raw)
     if (!tx.to || !isRelayable(tx)) throw new Error('This step needs gas on this chain and cannot be relayed')
     const { authApiHeaders } = await import('./supabase')
+    const requestStartedAt = performance.now()
     const r = await fetch('/api/bridge-relay', {
       method: 'POST', headers: await authApiHeaders(),
       body: JSON.stringify({ action: 'call', chain: chainKey, to: tx.to, data: tx.data }),
     })
-    const out = await r.json().catch(() => null) as { txHash?: string; error?: string } | null
+    const out = await r.json().catch(() => null) as { txHash?: string; error?: string; timing?: import('./relayTiming').RelayServerTiming } | null
+    // Which call: a Gateway mint or deposit, a CCTP mint (by its selector).
+    const sel = String(tx.data).slice(0, 10).toLowerCase()
+    const what = sel === '0x9fb01cc5' ? 'gateway-mint' : sel === '0x57ecfd28' ? 'cctp-mint' : 'relayed-call'
+    void import('./relayTiming').then(m => m.reportRelayTiming(what, chainKey, {
+      requestMs: performance.now() - requestStartedAt, server: out?.timing, ok: r.ok && !!out?.txHash,
+    })).catch(() => {})
     if (!r.ok || !out?.txHash) throw new Error(out?.error || 'Relayer did not accept the transaction')
     aliases.set(tx.hash!.toLowerCase(), { relayed: out.txHash, tx })
     return tx.hash!

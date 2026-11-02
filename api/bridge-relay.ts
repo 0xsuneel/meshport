@@ -625,7 +625,30 @@ async function checkP2PRegistration(tradeId: string, data: `0x${string}`, caller
 // Relayable calls that spend the caller's funds or start a P2P order.
 const SPEND_CALLS = new Set(['depositWithAuthorization', 'depositWithPermit', 'transferWithAuthorization', 'registerTrade', 'markPaidFor'])
 
+// ── Relay timing ─────────────────────────────────────────────────────────────
+// One line per relayed call (mints: receiveMessage, gatewayMint; deposits;
+// refunds), in Vercel's log and in the response (`timing`, which the app
+// stores with its own wait times - lib/relayTiming): where a destination mint
+// spends its time. Field 2 Nov: Arc → Ethereum mints by this relayer took
+// 6-26 s and nothing recorded whether that was our checks, the RPC, or
+// blocks. `blocks` = blocks from the head we saw before sending to the one it
+// landed in (1 = the next block). Durations and block numbers only - no
+// addresses or amounts.
+const instanceStartedAt = Date.now()
+let relayCallsServed = 0
+interface RelayTiming {
+  fn: string; chain: string; cold: boolean
+  checksMs: number; simulateMs?: number; sendMs?: number; receiptMs?: number; totalMs: number
+  headBlock?: number; minedBlock?: number; blocks?: number; tipGwei?: number; outcome: string
+}
+function logRelayTiming(t: RelayTiming): RelayTiming {
+  console.log(`[relay timing] ${t.fn} ${t.chain} ${t.outcome} cold=${t.cold} checks=${t.checksMs}ms simulate=${t.simulateMs ?? '-'}ms send=${t.sendMs ?? '-'}ms receipt=${t.receiptMs ?? '-'}ms total=${t.totalMs}ms head=${t.headBlock ?? '-'} mined=${t.minedBlock ?? '-'} blocks=${t.blocks ?? '-'} tip=${t.tipGwei ?? '-'}gwei`)
+  return t
+}
+
 async function relayCall(req: VercelRequest, res: VercelResponse) {
+  const startedAt = Date.now()
+  const cold = relayCallsServed++ === 0
   const { chain, to, data } = (req.body ?? {}) as any
   const chainKey = CHAIN_ALIASES[chain] ?? String(chain || '')
   if (!isHex(to, 20) || !isHex(data) || data.length < 10) return res.status(400).json({ error: 'Malformed call' })
@@ -664,16 +687,42 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
     } catch { return res.status(400).json({ error: 'Unknown order' }) }
   }
 
+  const checksDoneAt = Date.now()
+  const timing = (outcome: string, extra: Partial<RelayTiming> = {}) => logRelayTiming({
+    fn: fnName, chain: chainKey, cold: cold && startedAt - instanceStartedAt < 10_000,
+    checksMs: checksDoneAt - startedAt, totalMs: Date.now() - startedAt, outcome, ...extra,
+  })
+
   // Simulate first: an already-used or invalid signature/attestation never costs gas.
-  try { await cl.pub.call({ account: cl.wallet.account, to, data }) }
-  catch (e: any) { return res.status(400).json({ error: e?.shortMessage || 'Call would fail' }) }
-  const txHash = await cl.wallet.sendTransaction({ to, data, ...(await relayFees(cl.pub, cl.pub.chain.id)) })
+  // The chain head is read alongside (no added wait) so `blocks` can be counted.
+  let headBlock: number | undefined
+  try {
+    const [, head] = await Promise.all([
+      cl.pub.call({ account: cl.wallet.account, to, data }),
+      cl.pub.getBlockNumber().then((b: bigint) => Number(b)).catch(() => undefined),
+    ])
+    headBlock = head
+  } catch (e: any) {
+    timing('refused', { simulateMs: Date.now() - checksDoneAt })
+    return res.status(400).json({ error: e?.shortMessage || 'Call would fail' })
+  }
+  const simulatedAt = Date.now()
+  const fees = await relayFees(cl.pub, cl.pub.chain.id)
+  const tipGwei = fees.maxPriorityFeePerGas != null ? Number(fees.maxPriorityFeePerGas) / 1e9 : undefined
+  const txHash = await cl.wallet.sendTransaction({ to, data, ...fees })
+  const sentAt = Date.now()
+  const base = { simulateMs: simulatedAt - checksDoneAt, sendMs: sentAt - simulatedAt, headBlock, tipGwei }
   try {
     const receipt = await cl.pub.waitForTransactionReceipt({ hash: txHash, timeout: 40_000 })
-    if (receipt.status !== 'success') return res.status(502).json({ error: 'Transaction reverted', txHash })
-    return res.status(200).json({ txHash })
+    const minedBlock = Number(receipt.blockNumber)
+    const t = timing(receipt.status === 'success' ? 'mined' : 'reverted', {
+      ...base, receiptMs: Date.now() - sentAt, minedBlock, blocks: headBlock != null ? minedBlock - headBlock : undefined,
+    })
+    if (receipt.status !== 'success') return res.status(502).json({ error: 'Transaction reverted', txHash, timing: t })
+    return res.status(200).json({ txHash, timing: t })
   } catch {
-    return res.status(200).json({ txHash, pending: true })
+    const t = timing('pending', { ...base, receiptMs: Date.now() - sentAt })
+    return res.status(200).json({ txHash, pending: true, timing: t })
   }
 }
 
