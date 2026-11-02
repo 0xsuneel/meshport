@@ -21,7 +21,7 @@
  * never reach the client), but only ever takes a txHash + amounts, never
  * a private key.
  */
-import { ARC_NETWORK, arcRpcJson } from './arc'
+import { ARC_NETWORK, arcRpcJson, isDirectReadable } from './arc'
 import type { WalletAccount } from '@/wallet'
 import { USDC_CONTRACT, EURC_CONTRACT, CIRBTC_CONTRACT } from './arcService'
 import { ARC_EXPLORER } from './chainExplorers'
@@ -213,6 +213,20 @@ function buildArcForwardProvider(JsonRpcProvider: any, Transaction: any) {
           reportSwapProgress([payload], [relayed], Transaction)
           return [relayed]
         }
+      }
+      // Reads (allowance, balance, gas, fees, receipts, blocks) the way
+      // Transfer and Bring read: Circle's Arc node directly first, the proxy
+      // on anything unusual (arcRpcJson). Circle's SDK makes its reads one
+      // after another before it signs; through the proxy alone each cost
+      // ~0.2-0.4 s more (field 2 Nov 16:27: 16 s before the swap's first
+      // signature). Nonce reads and sends stay on the proxy (arc.ts).
+      const reqs = isBatch ? payload : [payload]
+      if (reqs.length > 0 && reqs.every(isDirectReadable)) {
+        try {
+          const results = await Promise.all(reqs.map((r: unknown) => arcRpcJson(r, SWAP_RPC_TIMEOUT_MS)))
+          reportSwapProgress(reqs, results, Transaction)
+          return results
+        } catch { /* the proxy path below answers it */ }
       }
       try {
         // Bounded like every other Arc call (arcRpcJson): a request stuck on a

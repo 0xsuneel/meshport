@@ -116,6 +116,10 @@ clearLegacyData()
   // A Google / email (Circle) wallet: load Circle's SDK and frame now, before
   // React has mounted, so the wallet is ready by the first payment.
   if (auth.isAuthenticated && auth.walletSource === 'circle') import('./wallet/circle').then(m => m.warmCircle()).catch(() => {})
+  // A created / imported wallet: load its wallet frame now too, so it is
+  // ready (or reloading if its first load failed - wallet/frameClient.ts)
+  // by the time the lock screen or the first payment needs it.
+  else if (auth.isAuthenticated && auth.walletSource) import('./wallet/frameClient').then(m => m.walletReady()).catch(() => {})
   // Start fetching the lock screen now, so the splash goes straight to it.
   if (useAuthStore.getState().isLocked) {
     import('./features/auth/PasscodeSetup').catch(() => {})
