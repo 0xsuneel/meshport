@@ -930,7 +930,7 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
    Android draws no other backdrop blur
    (above); these two bars are the exception. While a popup is open the
    popup-open rule above still drops it. */
-.mp-frost, .mp-glass-header { background: transparent !important; }
+.mp-frost { background: transparent !important; }
 /* The shared page header (Home and every page's top bar): one class, so
    every header in the app is the same glass. Positioned so its glass layer
    sits inside it; its own stacking context keeps that layer under its
@@ -970,6 +970,17 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   #root .mp-frost::before, #root .mp-glass-header::before { background: var(--frost-tint, var(--bg)); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 }
-/* Home's header is glass all the time, like the bottom nav (X-style): over
-   the bare page it reads as the page colour, and cards blur under it as
-   soon as they reach it. */
+/* Every page's header is plain page colour - no glass, no colour from what
+   sits below it - until the page has actually scrolled (data-scrolled, set
+   by lib/glassHeaders.ts for every header and by Home for its own). The glass only
+   fades in and out: switching backdrop blur on and off made Android flash. */
+.mp-glass-header { background: var(--frost-tint, var(--bg)) !important; transition: background-color .2s ease; }
+.mp-glass-header[data-scrolled] { background: transparent !important; }
+#root .mp-glass-header::before { opacity: 0; transition: opacity .2s ease; }
+#root .mp-glass-header[data-scrolled]::before { opacity: 1; }
+/* The bottom nav's last 3px are solid: at the very bottom of the screen the
+   blur has nothing below it to read and drew a dark line there. */
+#root .mp-frost-bottom::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  z-index: -1; pointer-events: none; background: var(--frost-tint, var(--bg));
+}
