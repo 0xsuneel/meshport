@@ -1,0 +1,32 @@
+{
+  "packageId": "xyz.meshport.app",
+  "host": "meshport.xyz",
+  "name": "MeshPort - USDC Payments",
+  "launcherName": "MeshPort",
+  "display": "standalone",
+  "orientation": "portrait",
+  "themeColor": "#F5F4F0",
+  "themeColorDark": "#000000",
+  "navigationColor": "#F5F4F0",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#F5F4F0",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#F5F4F0",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://meshport.xyz/pwa-any-512x512.png",
+  "webManifestUrl": "https://meshport.xyz/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "splashScreenFadeOutDuration": 300,
+  "enableSiteSettingsShortcut": true,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "meshport"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "minSdkVersion": 21,
+  "shortcuts": [],
+  "features": {},
+  "additionalTrustedOrigins": []
+}

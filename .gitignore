@@ -43,3 +43,9 @@ coverage/
 # deep-research notes and reports
 research_notes/
 reports/
+android/android.keystore
+android/*.aab
+android/*.apk
+android/app/
+android/build/
+android/.gradle/
