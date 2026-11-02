@@ -1408,9 +1408,13 @@ export function SwapPage() {
 
   // Circle's swap fees are in their own tokens (EURC, cirBTC, USDC): shown
   // per token, never added up as dollars (0.00001 cirBTC is not "$0.00001").
-  // Arc's network gas is a separate fee, in USDC (estimate.gasFee).
+  // Arc's network gas is a separate fee, in USDC. App Kit's swap estimate
+  // no longer includes gas (no gasFees in 1.20), so - as for gasNeeded below -
+  // it is Arc's live transfer fee scaled to a swap's gas.
   const swapFeeText = swapFeesText(estimate?.fees ?? [])
-  const networkFeeText = estimate && estimate.gasFee > 0 ? `~${trimTrailingZeros(estimate.gasFee.toFixed(4))} USDC` : '-'
+  const SWAP_GAS_MULTIPLIER = 12 // swap ≈ 150k-250k gas vs. 21k for a transfer
+  const networkFee = estimate ? (estimate.gasFee > 0 ? estimate.gasFee : estimatedFee * SWAP_GAS_MULTIPLIER) : 0
+  const networkFeeText = networkFee > 0 ? `~${trimTrailingZeros(networkFee.toFixed(4))} USDC` : '-'
   const isActive  = ['idle','estimating'].includes(step)
   // A valid amount whose quote is on its way (the 500ms typing debounce, or
   // the fetch itself): shown as loading, never as a grey "0" that then
@@ -1425,7 +1429,6 @@ export function SwapPage() {
   // once an estimate has loaded; fall back to a scaled transfer-fee guess
   // before that. Shared by the Max button, the pre-flight confirm check,
   // and the inline warning below so they never disagree with each other.
-  const SWAP_GAS_MULTIPLIER = 12 // swap ≈ 150k-250k gas vs. 21k for a transfer
   const MIN_GAS_RESERVE = 0.02
   const gasNeeded = estimate && estimate.gasFee > 0
     ? Math.max(estimate.gasFee * 1.15, MIN_GAS_RESERVE)
