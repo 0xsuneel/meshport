@@ -31,7 +31,7 @@
 // MeshPort and Circle with one Google screen (email codes were removed).
 
 import { toAccount } from 'viem/accounts'
-import { bytesToHex, getTypesForEIP712Domain, type Hex, type TypedDataDefinition } from 'viem'
+import { bytesToHex, getTypesForEIP712Domain, type Hex, type TransactionSerializable, type TypedDataDefinition } from 'viem'
 import { authApiHeaders, supabase } from '@/lib/supabase'
 import { plainTransaction, type WalletAccount } from './account'
 import type { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
@@ -430,7 +430,37 @@ async function runChallenge(uid: string, challengeId: string, steps?: Record<str
   })
 }
 
-export type CircleAccount = WalletAccount & { readonly circleWallet: true }
+export type CircleAccount = WalletAccount & {
+  readonly circleWallet: true
+  /** Ask Circle for this exact transaction's signing request now (see "Prepared signing requests"). Never signs. */
+  prepareTransaction(transaction: TransactionSerializable): void
+}
+
+// ── Prepared signing requests ───────────────────────────────────────────────
+// A Circle signature is two steps: MeshPort's server asks Circle for a
+// challenge (0.8-3.3 s on a phone, field 2 Nov), then Circle's SDK signs it.
+// Pay asks for the challenge while the PIN is being typed (prepareTransaction,
+// from the payment's own preparation - lib/arcService) so the signature after
+// the PIN only waits for the second step.
+//   - Creating a challenge signs nothing. Only executing it signs, and that
+//     happens only in sign() below - the same call as before, after the PIN.
+//   - Tied to the exact payload: the transaction to sign must be identical
+//     (recipient, amount, token, nonce, gas, fees). Anything else and the
+//     prepared one is not used - a fresh challenge is made, as before.
+//   - One per wallet, used at most once, for PREPARED_TTL_MS; replaced by a
+//     newer one, dropped on lock / sign-out (discardPreparedSignatures). An
+//     unused challenge simply expires at Circle.
+//   - If it fails (expired, refused), the signature is made the normal way.
+const PREPARED_TTL_MS = 60_000
+interface Prepared { key: string; at: number; challengeId: Promise<string> }
+const preparedByAccount = new Map<string, Prepared>()
+function preparedKey(action: string, body: Record<string, unknown>): string {
+  return `${action}\n${JSON.stringify(body, (_k, v) => (typeof v === 'bigint' ? v.toString() : v))}`
+}
+/** Lock / sign-out: forget every prepared signing request. */
+export function discardPreparedSignatures(): void {
+  preparedByAccount.clear()
+}
 export const isCircleAccount = (v: unknown): v is CircleAccount => !!v && typeof v === 'object' && (v as { circleWallet?: unknown }).circleWallet === true
 
 const accounts = new Map<string, CircleAccount>()
@@ -459,13 +489,33 @@ export function circleAccount(address: string, uid: string): CircleAccount {
       throw e
     }
   }
+  // The prepared challenge for exactly this payload, if there is a fresh one
+  // (taken: never used twice). null otherwise.
+  function takePrepared(action: string, body: Record<string, unknown>): Promise<string> | null {
+    const p = preparedByAccount.get(key)
+    if (!p) return null
+    preparedByAccount.delete(key)
+    if (Date.now() - p.at > PREPARED_TTL_MS || p.key !== preparedKey(action, body)) return null
+    return p.challengeId
+  }
   async function signOnce(action: string, body: Record<string, unknown>, steps: Record<string, number>): Promise<ChallengeOutcome> {
+    let prepared = takePrepared(action, body)
     for (let attempt = 0; ; attempt++) {
       const t0 = performance.now()
       lastCircleApiVia = null
-      const { challengeId } = await circleCall<{ challengeId: string }>(uid, action, body)
+      let challengeId: string | null = null
+      let usedPrepared = false
+      if (prepared) {
+        challengeId = await prepared.catch(() => null) // failed early: make it now
+        usedPrepared = challengeId != null
+        prepared = null
+        if (usedPrepared) steps.prepared = 1
+      }
+      if (!challengeId) {
+        challengeId = (await circleCall<{ challengeId: string }>(uid, action, body)).challengeId
+        if (lastCircleApiVia === 'relay') steps.relayed = 1
+      }
       steps.challenge = (steps.challenge ?? 0) + performance.now() - t0
-      if (lastCircleApiVia === 'relay') steps.relayed = 1
       try {
         const t1 = performance.now()
         const out = await executeChallenge(uid, challengeId, steps)
@@ -474,6 +524,14 @@ export function circleAccount(address: string, uid: string): CircleAccount {
         notifyReadiness()
         return out
       } catch (e) {
+        // A prepared challenge Circle wouldn't run (expired, or its session
+        // ended): nothing was signed - make a fresh one, the normal way.
+        if (usedPrepared) {
+          steps.preparedFailed = 1
+          const s = loadCircleSession(uid)
+          if (e instanceof CircleError && e.code === 'session' && s) await refreshSession(uid, s, false)
+          continue
+        }
         // The session ended between creating the challenge and running it:
         // refresh once and sign again with a new challenge (nothing was signed).
         const s = loadCircleSession(uid)
@@ -504,7 +562,18 @@ export function circleAccount(address: string, uid: string): CircleAccount {
       return r.signature
     },
   })
-  const account = Object.assign(base, { meshportWallet: true as const, circleWallet: true as const }) as CircleAccount
+  const prepareTransaction = (transaction: TransactionSerializable) => {
+    try {
+      const body = { transaction: plainTransaction(transaction) }
+      const k = preparedKey('sign-transaction', body)
+      const have = preparedByAccount.get(key)
+      if (have && have.key === k && Date.now() - have.at < PREPARED_TTL_MS) return // already asked for this exact one
+      const challengeId = circleCall<{ challengeId: string }>(uid, 'sign-transaction', body).then(r => r.challengeId)
+      challengeId.catch(() => { /* the signature makes its own then */ })
+      preparedByAccount.set(key, { key: k, at: Date.now(), challengeId })
+    } catch { /* purely a head start */ }
+  }
+  const account = Object.assign(base, { meshportWallet: true as const, circleWallet: true as const, prepareTransaction }) as CircleAccount
   accounts.set(key, account)
   return account
 }

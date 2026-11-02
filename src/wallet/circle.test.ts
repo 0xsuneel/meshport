@@ -371,3 +371,87 @@ describe('Circle wallet set-up for Google / email accounts', () => {
     expect(sent[0]).toEqual({ action: 'status' })
   })
 })
+
+// ── Prepared signing requests (Pay: asked for while the PIN is typed) ──────
+describe('prepared Circle signing requests', () => {
+  beforeEach(() => { saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() }); circle.discardPreparedSignatures() })
+  const tx = (value: bigint) => ({ type: 'eip1559' as const, chainId: 5042002, to: '0x2222222222222222222222222222222222222222' as const, value, nonce: 7, gas: 21000n, maxFeePerGas: 10n, maxPriorityFeePerGas: 1n })
+  const executed: string[] = []
+  beforeEach(() => { executed.length = 0; sdkExecute = id => { executed.push(id); return { result: { status: 'COMPLETE', data: { signedTransaction: '0xsigned-' + id } } } } })
+  const settle = () => new Promise(r => setTimeout(r, 0))
+
+  it('preparing asks Circle for the challenge but signs nothing; the signature after the PIN uses it', async () => {
+    replies = [() => [200, { challengeId: 'prep' }]]
+    const acct = circleAccount('0xdddddddddddddddddddddddddddddddddddddddd', 'uid-alice')
+    acct.prepareTransaction(tx(5n))
+    await settle()
+    expect(sent.map(b => b.action)).toEqual(['sign-transaction'])
+    expect(executed).toEqual([]) // nothing signed by preparing
+    expect(await acct.signTransaction(tx(5n))).toBe('0xsigned-prep')
+    expect(sent.length).toBe(1) // no second request: the prepared one was used
+  })
+
+  it('a different transaction (amount changed) never uses the prepared request', async () => {
+    replies = [() => [200, { challengeId: 'prep-5' }], () => [200, { challengeId: 'fresh-50' }]]
+    const acct = circleAccount('0xdddddddddddddddddddddddddddddddddddddddd', 'uid-alice')
+    acct.prepareTransaction(tx(5n))
+    await settle()
+    expect(await acct.signTransaction(tx(50n))).toBe('0xsigned-fresh-50')
+    expect(executed).toEqual(['fresh-50'])
+    expect(sent[1].transaction.value).toBe('50')
+  })
+
+  it('used once: the next signature of the same transaction makes a fresh request', async () => {
+    replies = [() => [200, { challengeId: 'prep' }], () => [200, { challengeId: 'fresh' }]]
+    const acct = circleAccount('0xdddddddddddddddddddddddddddddddddddddddd', 'uid-alice')
+    acct.prepareTransaction(tx(5n))
+    await settle()
+    await acct.signTransaction(tx(5n))
+    expect(await acct.signTransaction(tx(5n))).toBe('0xsigned-fresh')
+    expect(executed).toEqual(['prep', 'fresh'])
+  })
+
+  it('asking again for the same transaction does not make a second request', async () => {
+    replies = [() => [200, { challengeId: 'prep' }]]
+    const acct = circleAccount('0xdddddddddddddddddddddddddddddddddddddddd', 'uid-alice')
+    acct.prepareTransaction(tx(5n)); acct.prepareTransaction(tx(5n)); acct.prepareTransaction(tx(5n))
+    await settle()
+    expect(sent.length).toBe(1)
+  })
+
+  it('a prepared request Circle will not run (expired) is replaced by a fresh one - still one signature', async () => {
+    replies = [() => [200, { challengeId: 'stale' }], () => [200, { challengeId: 'fresh' }]]
+    sdkExecute = id => { executed.push(id); return id === 'stale' ? { error: { code: 155201, message: 'Challenge expired' } } : { result: { status: 'COMPLETE', data: { signedTransaction: '0xsigned-' + id } } } }
+    const acct = circleAccount('0xdddddddddddddddddddddddddddddddddddddddd', 'uid-alice')
+    acct.prepareTransaction(tx(5n))
+    await settle()
+    expect(await acct.signTransaction(tx(5n))).toBe('0xsigned-fresh')
+    expect(executed).toEqual(['stale', 'fresh'])
+  })
+
+  it('preparing that failed (no connection) just signs the normal way', async () => {
+    replies = [() => [503, { error: 'down' }], () => [200, { challengeId: 'fresh' }]]
+    const acct = circleAccount('0xdddddddddddddddddddddddddddddddddddddddd', 'uid-alice')
+    acct.prepareTransaction(tx(5n))
+    await settle()
+    expect(await acct.signTransaction(tx(5n))).toBe('0xsigned-fresh')
+  })
+
+  it('locking / signing out discards it, and an old one (over a minute) is not used', async () => {
+    replies = [() => [200, { challengeId: 'prep' }], () => [200, { challengeId: 'after-lock' }]]
+    const acct = circleAccount('0xdddddddddddddddddddddddddddddddddddddddd', 'uid-alice')
+    acct.prepareTransaction(tx(5n))
+    await settle()
+    circle.discardPreparedSignatures()
+    expect(await acct.signTransaction(tx(5n))).toBe('0xsigned-after-lock')
+
+    replies = [() => [200, { challengeId: 'old' }], () => [200, { challengeId: 'new' }]]
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      acct.prepareTransaction(tx(6n))
+      await settle()
+      vi.setSystemTime(Date.now() + 61_000)
+      expect(await acct.signTransaction(tx(6n))).toBe('0xsigned-new')
+    } finally { vi.useRealTimers() }
+  })
+})
