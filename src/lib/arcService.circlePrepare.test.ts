@@ -9,6 +9,7 @@ const SENDER = '0x1111111111111111111111111111111111111111'
 const RECIPIENT = '0x2222222222222222222222222222222222222222'
 
 const prepared: unknown[] = []
+let slowBalance = false
 const signed: unknown[] = []
 const circleSigner = {
   address: SENDER, circleWallet: true,
@@ -26,6 +27,7 @@ vi.mock('./arc', async () => {
   const actual = await vi.importActual<typeof import('./arc')>('./arc')
   return { ...actual, arcRpcJson: async (body: { method: string }) => {
     if (body.method === 'eth_gasPrice') return { result: '0x3b9aca00' } // 1 gwei
+    if (body.method === 'eth_getBalance' && slowBalance) return new Promise(() => {}) // a balance read that never answers
     if (body.method === 'meshport_sendRawTransactionAndWait') return { result: { hash: '0x' + 'ab'.repeat(32), status: 'success', blockNumber: '0x1' } }
     return { result: '0x3635c9adc5dea00000' }
   } }
@@ -39,7 +41,7 @@ const { preparePayment, sendUSDC, sendEURC, sendCirBTC } = await import('./arcSe
 const settle = () => new Promise(r => setTimeout(r, 20))
 
 describe('Circle wallet: the signing request prepared during the PIN', () => {
-  beforeEach(() => { prepared.length = 0; signed.length = 0; Object.assign(auth, { signer: circleSigner, walletSource: 'circle', isLocked: false }) })
+  beforeEach(() => { prepared.length = 0; signed.length = 0; slowBalance = false; Object.assign(auth, { signer: circleSigner, walletSource: 'circle', isLocked: false }) })
 
   it('USDC: the prepared transaction is exactly the one signed after the PIN', async () => {
     preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 5, idempotencyKey: 'k-usdc' })
@@ -88,6 +90,15 @@ describe('Circle wallet: the signing request prepared during the PIN', () => {
     expect(prepared.length).toBe(2)
     expect(signed).toEqual([prepared[1]])
     expect(signed[0]).not.toEqual(prepared[0])
+  })
+
+  it('asked for as soon as nonce, gas and fee cap are known - not after the balance read', async () => {
+    slowBalance = true
+    try {
+      preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 2, idempotencyKey: 'k-slow-balance' })
+      await settle()
+      expect(prepared.length).toBe(1) // the balance read is still pending
+    } finally { slowBalance = false }
   })
 
   it('not asked for a private-key wallet, a locked app, or another account', async () => {

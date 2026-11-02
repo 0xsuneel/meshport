@@ -111,7 +111,14 @@ export async function meshportAccount(): Promise<{ uid: string; email: string | 
 // stalled connection to meshport.xyz is hedged through Supabase after
 // HEDGE_AFTER_MS (lib/hedgedApi.ts - field 1 Nov: 9-13 s stalls).
 const HEDGED_ACTIONS = new Set(['sign-message', 'sign-typed', 'sign-transaction'])
-const HEDGE_AFTER_MS = 2_000
+// 0.8 s (was 2 s): /api/circle-wallet answers a challenge in ~0.3 s and a
+// phone round trip adds ~0.3-0.5 s, so a request still unanswered at 0.8 s
+// is usually a stalled connection. Field 2 Nov 19:40-19:42: a prepared Pay
+// challenge's direct request reached the server 2 s late or not at all
+// (arrived 10 s late), so a quick PIN / fingerprint waited 1.5-1.9 s for it.
+// The extra challenge an early relay sometimes makes is never executed and
+// expires at Circle.
+const HEDGE_AFTER_MS = 800
 /** Which road the last hedged call took (wallet_events steps). */
 export let lastCircleApiVia: 'direct' | 'relay' | null = null
 
@@ -454,7 +461,7 @@ export type CircleAccount = WalletAccount & {
 const PREPARED_TTL_MS = 60_000
 // at: when it was asked for; readyAt: when Circle answered (wallet_events
 // sign steps preparedAge / preparedLead - how early it was ready).
-interface Prepared { key: string; at: number; readyAt?: number; challengeId: Promise<string> }
+interface Prepared { key: string; at: number; readyAt?: number; relayed?: boolean; challengeId: Promise<string> }
 const preparedByAccount = new Map<string, Prepared>()
 // The payload a signature already started for without a prepared request (a
 // fingerprint accepted before the payment's preparation finished): asking
@@ -508,6 +515,8 @@ export function circleAccount(address: string, uid: string): CircleAccount {
     const now = Date.now()
     steps.preparedAge = now - p.at
     steps.preparedLead = p.readyAt != null ? now - p.readyAt : -1
+    // Answered through the Supabase relay (the connection to meshport.xyz stalled).
+    void p.challengeId.then(() => { if (p.relayed) steps.preparedRelayed = 1 }, () => {})
     return p.challengeId
   }
   async function signOnce(action: string, body: Record<string, unknown>, steps: Record<string, number>): Promise<ChallengeOutcome> {
@@ -585,7 +594,11 @@ export function circleAccount(address: string, uid: string): CircleAccount {
       const started = signingStartedFor.get(key)
       if (started && started.key === k && Date.now() - started.at < PREPARED_TTL_MS) return
       const entry: Prepared = { key: k, at: Date.now(), challengeId: null as unknown as Promise<string> }
-      entry.challengeId = circleCall<{ challengeId: string }>(uid, 'sign-transaction', body).then(r => { entry.readyAt = Date.now(); return r.challengeId })
+      entry.challengeId = circleCall<{ challengeId: string }>(uid, 'sign-transaction', body).then(r => {
+        entry.readyAt = Date.now()
+        entry.relayed = lastCircleApiVia === 'relay'
+        return r.challengeId
+      })
       entry.challengeId.catch(() => { /* the signature makes its own then */ })
       preparedByAccount.set(key, entry)
     } catch { /* purely a head start */ }
