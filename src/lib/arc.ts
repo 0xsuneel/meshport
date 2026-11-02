@@ -57,6 +57,25 @@ export function arcJsonTransport(opts: { timeout?: number; retryCount?: number }
 // Wallet readiness / startup timing: the first time Arc answered (one event,
 // no import of the readiness store from this low-level module).
 let rpcAnswered = false
+// Startup diagnostics (perfTrace, loaded lazily - this module stays light):
+// when the first request went out, and how the first direct read ended. The
+// field trace showed the first answer at 5-10 s after a cold load while the
+// proxy answered in ~0.2 s, so the open question is whether the request was
+// sent late or the direct read was what waited.
+let rpcSentNoted = false
+function noteRpcSent() {
+  if (rpcSentNoted) return
+  rpcSentNoted = true
+  const at = typeof performance !== 'undefined' ? performance.now() : undefined
+  void import('./perfTrace').then(m => m.markStartup('rpcSent', at)).catch(() => {})
+}
+let directOutcomeNoted = false
+function noteDirectOutcome(outcome: string, startedAt: number) {
+  if (directOutcomeNoted) return
+  directOutcomeNoted = true
+  const ms = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt)
+  void import('./perfTrace').then(m => m.noteStartupDetail('direct', `${outcome}:${ms}ms`)).catch(() => {})
+}
 function noteRpcAnswered() {
   if (rpcAnswered) return
   rpcAnswered = true
@@ -96,7 +115,8 @@ export function isDirectReadable(body: unknown): body is { method: string } {
 }
 
 async function directRead(body: unknown, timeoutMs: number): Promise<any | null> {
-  if (directParkedUntil > Date.now()) return null
+  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  if (directParkedUntil > Date.now()) { noteDirectOutcome('parked', startedAt); return null }
   try {
     const res = await fetch(DIRECT_READ_URL, {
       method: 'POST',
@@ -104,12 +124,14 @@ async function directRead(body: unknown, timeoutMs: number): Promise<any | null>
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(Math.min(timeoutMs, 4000)),
     })
-    if (!res.ok) { if (res.status === 429 || res.status >= 500) directParkedUntil = Date.now() + DIRECT_PARK_MS; return null }
+    if (!res.ok) { noteDirectOutcome(`http${res.status}`, startedAt); if (res.status === 429 || res.status >= 500) directParkedUntil = Date.now() + DIRECT_PARK_MS; return null }
     const json = await res.json()
-    if (json?.error) return null // the proxy gives the authoritative answer (reverts, head lag)
+    if (json?.error) { noteDirectOutcome('node-error', startedAt); return null } // the proxy gives the authoritative answer (reverts, head lag)
+    noteDirectOutcome('ok', startedAt)
     noteRpcAnswered()
     return json
   } catch (e) {
+    noteDirectOutcome(e instanceof TypeError ? 'blocked' : (e as Error)?.name === 'TimeoutError' ? 'timeout' : 'error', startedAt)
     // fetch rejects with a TypeError for network failures and CORS refusals; a timeout only parks briefly.
     directParkedUntil = Date.now() + (e instanceof TypeError ? DIRECT_BLOCKED_PARK_MS : DIRECT_PARK_MS)
     return null
@@ -145,6 +167,7 @@ const isLostRequest = (e: unknown) => e instanceof Error
   && (e.name === 'TimeoutError' || e.name === 'AbortError' || e instanceof TypeError || /^Arc RPC (5\d\d|429) /.test(e.message))
 
 export async function arcRpcJson(body: unknown, timeoutMs = 10000): Promise<any> {
+  noteRpcSent()
   if (isDirectReadable(body)) {
     const fast = await directRead(body, timeoutMs)
     if (fast) return fast

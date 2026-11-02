@@ -13,25 +13,39 @@ export type StartupMark =
   | 'shell'          // first screen painted (splash removed)
   | 'auth'           // signed-in session known (persisted store read)
   | 'provider'       // wallet provider code running (Circle SDK loaded / wallet frame mounted)
+  | 'frameLoaded'    // the wallet frame's page finished loading (iframe load event - also fires for an error page)
   | 'frame'          // wallet frame answered (create / import / old Google wallets)
   | 'discovered'     // the wallet is known to its provider (Circle session found)
   | 'signer'         // the wallet can sign
+  | 'rpcSent'        // first Arc RPC request sent (rpc minus this = network time; this itself = app scheduling)
   | 'rpc'            // first Arc RPC answer
   | 'actionReady'    // signer + network: Pay / Swap can start without waiting
 
 const startup = new Map<StartupMark, number>()
+// Short facts about this page load that aren't times (e.g. how the first
+// direct Arc read ended, how many times the wallet frame was reloaded).
+const startupDetail = new Map<string, string>()
 
 function perfMark(name: string): void {
   try { performance.mark(`mp:${name}`) } catch { /* old browser */ }
 }
 
 /** First time `name` happened since page load (later calls are ignored). */
-export function markStartup(name: StartupMark): void {
+export function markStartup(name: StartupMark, at: number = now()): void {
   if (startup.has(name)) return
-  startup.set(name, now())
+  startup.set(name, at)
   perfMark(name)
   if ((name === 'signer' || name === 'rpc') && startup.has('signer') && startup.has('rpc')) markStartup('actionReady')
   if (name === 'actionReady') scheduleStartupReport()
+}
+
+/** `now()` on the same clock as the marks - for a caller that records a mark later (after a lazy import). */
+export const perfNow = now
+
+/** A non-time fact about this page load; the first value per key is kept, unless `overwrite`. */
+export function noteStartupDetail(key: string, value: string, overwrite = false): void {
+  if (!overwrite && startupDetail.has(key)) return
+  startupDetail.set(key, value.replace(/[^\w .:/-]/g, '').slice(0, 40))
 }
 
 export function startupTimings(): Partial<Record<StartupMark, number>> {
@@ -66,11 +80,12 @@ export function sendStartupReport(): void {
   const t = startupTimings()
   let kind = 'cold'
   try { kind = sessionStorage.getItem('meshport:perf-loaded') ? 'reload' : 'cold'; sessionStorage.setItem('meshport:perf-loaded', '1') } catch { /* private mode */ }
-  const parts = (['shell', 'auth', 'provider', 'frame', 'discovered', 'signer', 'rpc', 'actionReady'] as StartupMark[])
+  const parts = (['shell', 'auth', 'provider', 'frameLoaded', 'frame', 'discovered', 'signer', 'rpcSent', 'rpc', 'actionReady'] as StartupMark[])
     .filter(k => t[k] != null).map(k => `${k} ${s(t[k])}`)
-  void reportPerf(`[perf startup] ${kind}, since page load (s): ${parts.join(', ') || 'nothing'}${t.actionReady == null ? ' - not ready after 30 s' : ''}`)
+  const facts = [...startupDetail].map(([k, v]) => `${k}=${v}`).join(' ')
+  void reportPerf(`[perf startup] ${kind}, since page load (s): ${parts.join(', ') || 'nothing'}${t.actionReady == null ? ' - not ready after 30 s' : ''}${facts ? ` [${facts}]` : ''}`)
   void import('./walletEvents').then(m => m.logWalletEvent({
-    event: 'startup', ok: t.signer != null, ms: t.signer ?? t.actionReady, steps: t as Record<string, number>, detail: `${kind} ${pageLoadInfo()}`,
+    event: 'startup', ok: t.signer != null, ms: t.signer ?? t.actionReady, steps: t as Record<string, number>, detail: `${kind} ${pageLoadInfo()}${facts ? ` ${facts}` : ''}`,
     error: t.signer == null ? 'wallet not able to sign 30 s after page load' : undefined,
   })).catch(() => {})
 }
@@ -131,7 +146,7 @@ async function reportPerf(line: string): Promise<void> {
 
 /** Test hook. */
 export function resetPerfTrace(): void {
-  startup.clear(); startupReported = false; payBefore = null
+  startup.clear(); startupDetail.clear(); startupReported = false; payBefore = null
   if (startupTimer) clearTimeout(startupTimer)
   startupTimer = null
 }
