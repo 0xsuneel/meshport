@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const reports: string[] = []
 vi.mock('./errorReport', () => ({ reportPerf: (l: string) => reports.push(l) }))
 
-import { markStartup, startupTimings, reportPayment, resetPerfTrace, sendStartupReport } from './perfTrace'
+import { markStartup, startupTimings, reportPayment, resetPerfTrace, sendStartupReport, noteStartupDetail } from './perfTrace'
 
 const flush = () => new Promise(r => setTimeout(r, 5))
 
@@ -27,6 +27,16 @@ describe('perf trace', () => {
     markStartup('shell'); sendStartupReport(); sendStartupReport()
     await flush()
     expect(reports.length).toBe(1)
+  })
+
+  it('the startup line carries when the first RPC was sent, the frame load, and non-time facts', async () => {
+    markStartup('frameLoaded', 400); markStartup('rpcSent', 1500); markStartup('rpc', 1700); markStartup('signer', 900)
+    noteStartupDetail('direct', 'timeout:4000ms'); noteStartupDetail('direct', 'ok:80ms')
+    noteStartupDetail('frameReloads', '1:timeout'); noteStartupDetail('frameReloads', '2:timeout', true)
+    await flush()
+    expect(reports[0]).toContain('frameLoaded 0.40')
+    expect(reports[0]).toContain('rpcSent 1.50, rpc 1.70')
+    expect(reports[0]).toContain('[direct=timeout:4000ms frameReloads=2:timeout]')
   })
 
   it('a payment line carries stage durations and the outcome only', async () => {
