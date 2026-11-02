@@ -23,10 +23,10 @@ export function SelfCustody() {
             Your keys. Your money. Your messages.
           </h2>
           <p className="mt-5 text-[18px] leading-relaxed text-text-primary">
-            Every MeshPort wallet is self-custodial, including the ones you open with Google or an email code. The key is made on your device, protected by your passkey and a Recovery QR only you can open, and never stored by MeshPort.
+            Every MeshPort wallet is self-custodial, including the ones you open with Google. The key is made on your device, protected by your passkey and a Recovery QR only you can open, and never stored by MeshPort.
           </p>
           <p className="mt-6 text-[16px] leading-relaxed text-text-secondary">
-            Sign in with Google, an email code or your own wallet; the key is created on this device; add a passkey and save your Recovery QR; then unlock on any device with either one.
+            Sign in with Google or your own wallet; the key is created on this device; add a passkey and save your Recovery QR; then unlock on any device with either one.
           </p>
         </Reveal>
 

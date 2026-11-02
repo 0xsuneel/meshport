@@ -5,7 +5,7 @@ import { useAutoFocus } from '@/hooks/useAutoFocus'
 import { ScreenPush } from '@/components/ui/ScreenPush'
 import { useNavigate, Navigate } from 'react-router-dom'
 import {
-  Mail, ArrowLeft, Eye, EyeOff, CheckCircle,
+  ArrowLeft, Eye, EyeOff, CheckCircle,
   AlertCircle, AlertTriangle, RefreshCw, XCircle, AtSign, Loader2,
   Sparkles, Download, Wallet, Lock, Link2, Zap, FileText, KeyRound, Store, User as UserIcon, ChevronRight,
 } from 'lucide-react'
@@ -279,12 +279,7 @@ export function LoginPage() {
             className="w-full flex items-center justify-center gap-3 bg-text-primary/5 text-text-primary font-semibold py-4 rounded-2xl active:scale-95 transition-transform border border-border disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
             <GoogleIcon size={20} /> Continue with Google
           </button>
-          <button onClick={() => agreed && navigate('/auth/email', { replace: true })}
-            disabled={!agreed}
-            className="w-full flex items-center justify-center gap-3 bg-brand text-white font-semibold py-4 rounded-2xl active:scale-95 transition-transform shadow-elevation-2 border border-black/10 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
-            <Mail className="w-5 h-5" /> Continue with Email OTP
-          </button>
-          {/* Business accounts sign in with Google or email only; creating or
+          {/* Business accounts sign in with Google only; creating or
               importing a wallet is for personal accounts. */}
           {!isBiz && (
             <>
@@ -325,12 +320,8 @@ export function LoginPage() {
 // ─── Google OAuth Callback ───────────────────────────────────────────────────
 // Reached after Google redirects back post-authentication (reuses the
 // existing /auth/google route - this used to just show a "coming soon"
-// toast and bounce back to /auth). Mirrors verifyOTP's existing/new-user
-// logic intentionally, not by accident - Google and Email OTP are two
-// different ways to verify the SAME kind of thing (a real email address),
-// and must produce identical account behavior for the same email: same
-// lookup, same wallet, no duplicate account just because a different
-// button was tapped.
+// toast and bounce back to /auth). Handles the existing/new-user
+// logic. Google is the only email-based sign-in (email codes were removed).
 // Another MeshPort account already uses this email, but this sign-in isn't
 // linked to it - never merged silently (see resolveAccountForSession).
 const ACCOUNT_CONFLICT_MESSAGE =
@@ -452,10 +443,10 @@ export function GoogleAuthPage() {
 
       if (existing) { enterExisting(); return }
 
-      // New user (Create account) - identical starting point to verifyOTP's
+      // New user (Create account).
       // new-user path. No 'next' param here on purpose: PasscodeSetup routes
       // loginType === 'social' straight to AutoWalletPage automatically, same
-      // as the email OTP flow - adding next=create here would incorrectly
+      // as before - adding next=create here would incorrectly
       // route through the manual create-wallet flow instead.
       setLoginType('social')
       setUser(makeUser(supaUser.id, supaUser.email || ''))
@@ -475,233 +466,6 @@ export function GoogleAuthPage() {
           <p className="text-text-secondary">Signing you in…</p>
         </>
       )}
-    </div>
-  )
-}
-
-// ─── Email OTP ────────────────────────────────────────────────────────────────
-export function EmailOTPPage() {
-  const navigate = useNavigate()
-  const setUser = useAuthStore(s => s.setUser)
-  const setLoginType = useAuthStore(s => s.setLoginType)
-  const setUsername = useAuthStore(s => s.setUsername)
-  const { showToastMessage } = useUIStore()
-
-  const [step, setStep] = useState<'email' | 'otp'>('email')
-  const [email, setEmail] = useState('')
-  const [otp, setOtp] = useState(['', '', '', '', '', ''])
-  const [loading, setLoading] = useState(false)
-  const [resendTimer, setResendTimer] = useState(0)
-  const [error, setError] = useState('')
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([])
-  const pending = useRef<(() => void) | null>(null)
-  const { notice, setBlocked } = useSessionRuleNotice(() => pending.current?.())
-
-  useEffect(() => {
-    if (resendTimer <= 0) return
-    const t = setTimeout(() => setResendTimer(r => r - 1), 1000)
-    return () => clearTimeout(t)
-  }, [resendTimer])
-
-  const sendOTP = async () => {
-    const e = email.trim().toLowerCase()
-    if (!e.includes('@') || !e.includes('.')) { setError('Please enter a valid email address'); return }
-    setLoading(true); setError('')
-    const { error: err } = await supabase.auth.signInWithOtp({
-      email: e,
-      options: { shouldCreateUser: true },
-      // No emailRedirectTo = OTP mode (not magic link)
-    })
-    setLoading(false)
-    if (err) { setError(err.message); return }
-    setStep('otp'); setResendTimer(60)
-    showToastMessage('OTP sent to ' + e, 'success')
-  }
-
-  const handleOtpKey = (i: number, val: string) => {
-    // Handle paste of full 6-digit code
-    if (val.length > 1) {
-      const digits = val.replace(/\D/g, '').slice(0, 6).split('')
-      const n = [...otp]
-      digits.forEach((d, j) => { if (i + j < 6) n[i + j] = d })
-      setOtp(n)
-      inputRefs.current[Math.min(i + digits.length, 5)]?.focus()
-      return
-    }
-    const n = [...otp]; n[i] = val.replace(/\D/g, ''); setOtp(n)
-    if (val && i < 5) inputRefs.current[i + 1]?.focus()
-  }
-
-  const verifyOTP = async () => {
-    const token = otp.join('')
-    if (token.length !== 6) { setError('Please enter the 6-digit code'); return }
-    setLoading(true); setError('')
-
-    const { data, error: err } = await supabase.auth.verifyOtp({
-      email: email.trim().toLowerCase(),
-      token,
-      type: 'email',
-    })
-    if (err || !data.user) {
-      setLoading(false)
-      setError(err?.message || 'Invalid OTP. Please try again.')
-      return
-    }
-
-    const supaUser = data.user
-
-    // ── Returning user: restore full account ────────────────────────────────
-    // The account this session is bound to (users.auth_uid). Google and
-    // email-code logins reach the same account when Supabase has linked
-    // them to the same auth user. An account that only has the same email
-    // is never taken over (see resolveAccountForSession).
-    const resolved = await resolveAccountForSession(supaUser.id, supaUser.email)
-    if (resolved.kind === 'error') {
-      setLoading(false)
-      setError("Couldn't reach MeshPort. Please try again.")
-      return
-    }
-    if (resolved.kind === 'conflict') {
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
-      setLoading(false)
-      setError(ACCOUNT_CONFLICT_MESSAGE)
-      return
-    }
-    const existing = resolved.kind === 'existing' ? resolved.user : null
-    // An account whose wallet is its Circle wallet opens with the Circle
-    // signer. On a device without a Circle session, Circle's own email code
-    // signs in to the wallet first (its screen opens over this one). The
-    // account's link says whether its wallet is a Circle wallet (the older
-    // device-kept ones aren't).
-    const circleMod = await import('@/wallet/circle')
-    let circleSigner = existing?.wallet_address
-      ? await circleMod.circleSignerFor(supaUser.id, existing.wallet_address).catch(() => null)
-      : null
-    const isCircle = !!circleSigner || (!!existing?.wallet_address && await circleMod.circleStatus()
-      .then(s => !!s.address && s.address.toLowerCase() === existing.wallet_address!.toLowerCase()).catch(() => false))
-    if (isCircle && !circleSigner && existing?.wallet_address) {
-      showToastMessage('Enter the code Circle emailed you to open your wallet', 'info')
-      try {
-        await circleMod.circleEmailSignIn()
-        circleSigner = await circleMod.circleSignerFor(supaUser.id, existing.wallet_address)
-      } catch (e) {
-        setLoading(false)
-        setError(e instanceof Error ? e.message : "Couldn't open your wallet. Try again.")
-        return
-      }
-    }
-
-    const enterExisting = () => {
-      if (!existing) return
-      setLoginType('social')
-      // Clear any prior wallet's transaction history before restoring this account
-      useWalletStore.getState().setBalance(0)
-      setUser(makeUser(existing.id, supaUser.email || '', {
-        username:      existing.username ? existing.username + '.arc' : '',
-        displayName:   existing.display_name,
-        walletAddress: existing.wallet_address,
-        avatar:        existing.avatar_url || null,
-      }))
-      if (existing.username) setUsername((existing.username || '').replace(/\.arc$/, ''))
-      if (existing.wallet_address) {
-        // Same reasoning as GoogleAuthPage above - tag walletSource so the
-        // server-side key backup fallback is reachable on a fresh device.
-        useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: isCircle ? 'circle' : 'social-auto' })
-        if (circleSigner) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
-      }
-      setLoading(false)
-      showToastMessage(`Welcome back, ${existing.username || existing.display_name}`, 'success')
-      // Returning user - set a new passcode (no old passcode needed), then
-      // unlock the wallet with the passkey or Recovery QR (never a copy left
-      // on this device from before this sign-in).
-      clearSocialDeviceState()
-      clearAuthIntent()
-      markReturningSignIn()
-      navigate('/auth/passcode?returning=1', { replace: true })
-    }
-    pending.current = enterExisting
-
-    // Account-type rules: Log in needs an account of the chosen type; only
-    // Create account makes a new one.
-    const decision = decideForSession(existing)
-    if (decision.kind !== 'allow') { setLoading(false); setBlocked(decision); return }
-
-    // ── Returning user: restore full account ────────────────────────────────
-    if (existing) { enterExisting(); return }
-
-    // ── New user (Create account): start onboarding ─────────────────────────
-    setLoginType('social')
-    setUser(makeUser(supaUser.id, supaUser.email || ''))
-    setLoading(false)
-    showToastMessage('Email verified! Set up your account.', 'success')
-    navigate('/auth/passcode', { replace: true })
-  }
-
-  if (notice) return notice
-
-  return (
-    <div className="flex flex-col h-full bg-bg px-6 py-12">
-      <button onClick={() => step === 'otp' ? setStep('email') : navigate('/auth', { replace: true })}
-        className="back-btn" style={{marginBottom:22}}>
-        <ArrowLeft className="w-5 h-5 text-text-primary" />
-      </button>
-      {/* Email ⇄ code push like pages (no fade-out to an empty screen). */}
-      <ScreenPush screenKey={step} back={step === 'email'}>
-        {step === 'email' ? (
-          <motion.div key="email" initial={false} className="space-y-6">
-            <div>
-              <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">Sign in with Email</h2>
-              <p className="text-text-secondary mt-1 text-[14px] leading-[1.5]">We'll send a 6-digit code to your email</p>
-            </div>
-            <Input label="Email Address" type="email" placeholder="you@gmail.com"
-              value={email} onChange={e => { setEmail(e.target.value); setError('') }}
-              error={error} leftIcon={<Mail className="w-4 h-4" />} />
-            <Button fullWidth loading={loading} onClick={sendOTP}>Send OTP →</Button>
-          </motion.div>
-        ) : (
-          <motion.div key="otp" initial={false} className="space-y-6">
-            <div>
-              <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">Enter your code</h2>
-              <p className="text-text-secondary mt-1 text-[14px] leading-[1.5]">Sent to <span className="text-text-primary font-medium">{email}</span></p>
-            </div>
-            <div className="flex gap-2 justify-center">
-              {otp.map((digit, i) => (
-                <input key={i} ref={el => inputRefs.current[i] = el}
-                  type="text" inputMode="numeric" maxLength={6}
-                  // The first box takes the emailed code from the keyboard's
-                  // suggestion (iOS / Android); handleOtpKey spreads it over all six.
-                  autoComplete={i === 0 ? 'one-time-code' : 'off'}
-                  aria-label={`Digit ${i + 1} of 6`}
-                  value={digit} onChange={e => handleOtpKey(i, e.target.value)}
-                  onKeyDown={e => e.key === 'Backspace' && !otp[i] && i > 0 && inputRefs.current[i - 1]?.focus()}
-                  onFocus={e => e.target.select()}
-                  className={`w-12 h-14 text-center text-xl font-bold bg-surface rounded-2xl text-text-primary focus:outline-none transition-colors border-2 ${digit ? 'border-brand' : 'border-border focus:border-brand'}`} />
-              ))}
-            </div>
-            {error && (
-              <div role="alert" className="flex items-center gap-2 p-3 bg-danger/10 border border-danger/30 rounded-2xl">
-                <AlertCircle className="w-4 h-4 text-danger flex-shrink-0" />
-                <p className="text-sm text-danger">{error}</p>
-              </div>
-            )}
-            <Button fullWidth loading={loading} onClick={verifyOTP} disabled={otp.join('').length !== 6}>
-              {loading ? 'Verifying...' : 'Verify & Continue →'}
-            </Button>
-            <div className="text-center">
-              {resendTimer > 0
-                ? <p className="text-sm text-text-secondary">Resend in {resendTimer}s</p>
-                : <button onClick={() => { sendOTP(); setOtp(['','','','','','']); setError('') }}
-                    className="text-sm text-brand-text flex items-center gap-1 mx-auto">
-                    <RefreshCw className="w-3.5 h-3.5" /> Resend OTP
-                  </button>
-              }
-            </div>
-            <p className="text-xs text-text-muted text-center">
-              Check your inbox and spam folder. Code expires in 10 minutes.
-            </p>
-          </motion.div>
-        )}
-      </ScreenPush>
     </div>
   )
 }

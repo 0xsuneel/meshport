@@ -28,17 +28,16 @@ export function AutoWalletPage() {
       const isSocial = loginType === 'social'
 
       if (isSocial) {
-        // Google / email accounts get a Circle user-controlled wallet
+        // Google accounts get a Circle user-controlled wallet
         // (src/wallet/circle.ts): Circle keeps the key; the person signs in to
-        // Circle the way they sign in to MeshPort (Google - already done at
-        // sign-in - or Circle's email code), and the app's passcode /
+        // Circle with Google (already done at sign-in), and the app's passcode /
         // biometric approves every signature. A failure stays on this screen
         // with Try Again; the reason goes to client_errors.
         const circle = await import('@/wallet/circle')
         if (!circle.circleConfigured()) throw new Error('Wallets are not available right now. Please try again later.')
         try {
           if (!(await circle.hasCircleSession())) {
-            setNote(await circle.meshportProvider() === 'google' ? 'Signing in to your wallet with Google...' : 'Enter the code Circle emailed you to open your wallet.')
+            setNote('Signing in to your wallet with Google...')
             if (await circle.signInToCircle(window.location.pathname) === 'redirected') return // back here after Google
           }
           setNote('Creating your secure Arc wallet...')
@@ -51,10 +50,7 @@ export function AutoWalletPage() {
         } catch (e) {
           void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[circle wallet] ${e instanceof Error ? e.message : String(e)}`))).catch(() => {})
           const m = e instanceof Error ? e.message : ''
-          // Circle 155150/155151/155154/155155: email codes aren't set up in
-          // the Circle Console (SMTP / template) - not the user's connection.
-          if (/SMTP|email template/i.test(m)) throw new Error('Email sign-in for wallets is not available yet. Please sign in with Google, or try again later.')
-          throw new Error(/code|expired|cancel/i.test(m) ? m : "Couldn't set up your wallet. Check your connection and try again.")
+          throw new Error(/Google only|cancel/i.test(m) ? m : "Couldn't set up your wallet. Check your connection and try again.")
         }
       } else {
         // create-wallet accounts: unchanged - generated locally, shown a

@@ -4,7 +4,7 @@
 // generic EVM EOA (EVM-TESTNET): Circle signs, MeshPort broadcasts through
 // its own relay exactly like the app's other wallets - Circle only offers
 // "sign, don't send" for generic EVM wallets. Users sign in to Circle with
-// Google (the same Google sign-in as MeshPort) or an email code; every
+// Google (the same Google sign-in as MeshPort); every
 // signature is a challenge the app runs in Circle's SDK. This file never sees
 // keys or OTP codes.
 //
@@ -201,13 +201,6 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
         { body: { idempotencyKey: crypto.randomUUID(), deviceId: needDevice(deviceId) } }))
     },
 
-    /** For Circle's email-code sign-in: always the MeshPort account's own email, never one from the request. */
-    async emailDeviceToken(deviceId: unknown, accountEmail: string | null) {
-      if (!accountEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(accountEmail)) bad('This MeshPort account has no email address')
-      return call(() => circle.request<{ deviceToken: string; deviceEncryptionKey?: string; otpToken?: string }>('POST', '/v1/w3s/users/email/token',
-        { body: { idempotencyKey: crypto.randomUUID(), deviceId: needDevice(deviceId), email: accountEmail } }))
-    },
-
     async refresh(userToken: unknown, refreshToken: unknown, deviceId: unknown) {
       if (typeof refreshToken !== 'string' || refreshToken.length < 20) bad('refreshToken is missing')
       return call(() => circle.request<{ userToken: string; encryptionKey?: string; refreshToken?: string }>('POST', '/v1/w3s/users/token/refresh',
@@ -218,8 +211,7 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
     /**
      * Whether this MeshPort account has a Circle wallet, and its address -
      * from the account's own link only, no Circle session needed. Lets a
-     * sign-in on a new device know it must sign in to Circle (email code /
-     * Google) before the wallet can open.
+     * sign-in on a new device know it must sign in to Circle (Google) before the wallet can open.
      */
     async status(authUid: string): Promise<{ linked: boolean; address: string | null }> {
       const link = await linkOf(authUid)

@@ -90,12 +90,6 @@ describe('api/circle-wallet (handler, end to end)', () => {
     expect((await call({ action: 'social-device-token', deviceId: 'device-12345678' }, null, '8.8.8.8')).status).toBe(200)
   })
 
-  it('email codes go to the signed-in account email, whatever the request says', async () => {
-    const r = await call({ action: 'email-device-token', deviceId: 'device-12345678', email: 'attacker@evil.test' })
-    expect(r.status).toBe(200)
-    expect(circleBodies['POST /v1/w3s/users/email/token'].email).toBe('alice@example.com')
-  })
-
   it('link → initialize → wallet → sign-transaction, through Supabase and Circle', async () => {
     expect((await call({ action: 'link', userToken: ALICE_CIRCLE })).json).toEqual({ circleUserId: 'circle-alice' })
     expect(rows).toEqual([{ auth_uid: 'uid-alice', circle_user_id: 'circle-alice', wallet_id: null, address: null, blockchain: null }])

@@ -120,7 +120,7 @@ function TermsContent() {
       </Block>
 
       <Block title="4. Your wallet is yours">
-        <p>Every MeshPort wallet is <span className="text-text-primary">self-custodial</span>. Whether you create a wallet, import one, or sign in with Google or an email code, the wallet’s private key is generated or kept on your own device. MeshPort never receives it and never stores it - not in plain form, not encrypted. MeshPort cannot move, freeze, recover or reverse funds in your wallet.</p>
+        <p>Every MeshPort wallet is <span className="text-text-primary">self-custodial</span>. Whether you create a wallet, import one, or sign in with Google, the wallet’s private key is generated or kept on your own device. MeshPort never receives it and never stores it - not in plain form, not encrypted. MeshPort cannot move, freeze, recover or reverse funds in your wallet.</p>
         <p><span className="text-text-primary">Google / email accounts.</span> Signing in proves who you are, but doesn’t open the wallet. On a new device you open it with a <span className="text-text-primary">passkey</span> (Face ID, fingerprint or device PIN) or your <span className="text-text-primary">Recovery QR</span> and its password. Keep at least one of them safe. If you lose access to both, the wallet cannot be recovered - by you or by MeshPort.</p>
         <p><span className="text-text-primary">Created or imported wallets.</span> Your 12 secret words or private key are the only way to restore the wallet. Store them offline and never share them. MeshPort has no copy.</p>
         <p>You’re responsible for your passcode, passkeys, Recovery QR and its password, secret words, and the devices you use MeshPort on.</p>
@@ -168,7 +168,7 @@ function PrivacyContent() {
       </Block>
 
       <Block title="2. What we collect">
-        <p><span className="text-text-primary">Account</span> - your email address (from Google or the email code you sign in with), username, display name and profile photo if you add one.</p>
+        <p><span className="text-text-primary">Account</span> - your email address (from the Google account you sign in with), username, display name and profile photo if you add one.</p>
         <p><span className="text-text-primary">Wallet</span> - your public wallet address. For Google and email accounts we also store your passkeys’ public details (credential id, the device name it was added on, the date) and your wallet key <em>encrypted by your passkey</em>, which only your passkey can unlock. For the Recovery QR we store only the date you made it.</p>
         <p><span className="text-text-primary">Activity</span> - payments, swaps, multichain transfers, claims, bulk payouts, rewards, P2P trades and business bills you make in the app, to show your history, Insights and notifications. Most of this is also public on the blockchain.</p>
         <p><span className="text-text-primary">Chats</span> - messages, photos and files are end-to-end encrypted, so we store and relay them only as ciphertext. We can see who you chat with and when, and the details of payment cards (amount, token, transaction), which are public on the blockchain anyway. Your chat key’s public half and your wallet’s signature over it are stored so others can verify it’s really you.</p>
