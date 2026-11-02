@@ -15,6 +15,9 @@ vi.mock('@/lib/supabase', () => ({
   } },
 }))
 vi.mock('./account', () => ({ plainTransaction: (tx: Record<string, unknown>) => ({ ...tx }) }))
+// wallet_events rows the signer logs (sign timings and steps).
+const walletEvents: Array<{ event: string; steps?: Record<string, number> }> = []
+vi.mock('@/lib/walletEvents', () => ({ logWalletEvent: (e: { event: string; steps?: Record<string, number> }) => { walletEvents.push(e) } }))
 
 // Circle's SDK: the login callback fires with this result; execute() answers from sdkExecute.
 let sdkLoginResult: { error?: unknown; result?: unknown } = { result: { userToken: 'ut-google', encryptionKey: 'ek-google', refreshToken: 'rt-google' } }
@@ -501,5 +504,34 @@ describe('prepared Circle signing requests: PIN / fingerprint timing', () => {
     await settle()
     expect(sent.length).toBe(2)
     expect(await acct.signTransaction(tx(9n))).toBe('0xsigned-prep-next')
+  })
+})
+
+describe('prepared Circle signing requests: timing in wallet_events', () => {
+  beforeEach(() => { saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() }); circle.discardPreparedSignatures(); walletEvents.length = 0 })
+  const tx = { type: 'eip1559' as const, chainId: 5042002, to: '0x2222222222222222222222222222222222222222' as const, value: 5n, nonce: 7, gas: 21000n, maxFeePerGas: 10n, maxPriorityFeePerGas: 1n }
+  const lastSign = async () => { await vi.waitFor(() => expect(walletEvents.some(e => e.event === 'sign')).toBe(true)); const signs = walletEvents.filter(e => e.event === 'sign'); return signs[signs.length - 1] }
+
+  it('records how long before the signature it was asked for and how early it was ready', async () => {
+    replies = [() => [200, { challengeId: 'prep' }]]
+    sdkExecute = () => ({ result: { status: 'COMPLETE', data: { signedTransaction: '0xs' } } })
+    const acct = circleAccount('0xffffffffffffffffffffffffffffffffffffffff', 'uid-alice')
+    acct.prepareTransaction(tx)
+    await new Promise(r => setTimeout(r, 30)) // the person reads Review, types the PIN
+    await acct.signTransaction(tx)
+    const e = await lastSign()
+    expect(e.steps!.prepared).toBe(1)
+    expect(e.steps!.preparedAge).toBeGreaterThanOrEqual(25)
+    expect(e.steps!.preparedLead).toBeGreaterThanOrEqual(0)
+    expect(e.steps!.preparedLead).toBeLessThanOrEqual(e.steps!.preparedAge)
+  })
+
+  it('no prepared request: no prepared timing', async () => {
+    replies = [() => [200, { challengeId: 'own' }]]
+    sdkExecute = () => ({ result: { status: 'COMPLETE', data: { signedTransaction: '0xs' } } })
+    await circleAccount('0xffffffffffffffffffffffffffffffffffffffff', 'uid-alice').signTransaction(tx)
+    const e = await lastSign()
+    expect(e.steps!.prepared).toBeUndefined()
+    expect(e.steps!.preparedAge).toBeUndefined()
   })
 })

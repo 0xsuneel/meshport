@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const reports: string[] = []
 vi.mock('./errorReport', () => ({ reportPerf: (l: string) => reports.push(l) }))
 
-import { markStartup, startupTimings, reportPayment, resetPerfTrace, sendStartupReport, noteStartupDetail } from './perfTrace'
+import { markStartup, startupTimings, reportPayment, resetPerfTrace, sendStartupReport, noteStartupDetail, payApprovedVia } from './perfTrace'
 
 const flush = () => new Promise(r => setTimeout(r, 5))
 
@@ -37,6 +37,22 @@ describe('perf trace', () => {
     expect(reports[0]).toContain('frameLoaded 0.40')
     expect(reports[0]).toContain('rpcSent 1.50, rpc 1.70')
     expect(reports[0]).toContain('[direct=timeout:4000ms frameReloads=2:timeout]')
+  })
+
+  it('a payment line says how it was approved: typed passcode or fingerprint, once', async () => {
+    // One payment at a time, as in the app (vitest delivers only the first of
+    // several same-instant dynamic imports of a mocked module).
+    payApprovedVia(true)
+    reportPayment({ sign: 2900, broadcast: 900 }, 'success')
+    await flush()
+    payApprovedVia(false)
+    reportPayment({ sign: 2700, broadcast: 800 }, 'success')
+    await flush()
+    reportPayment({ sign: 2600, broadcast: 800 }, 'success')
+    await vi.waitFor(() => expect(reports.length).toBe(3))
+    expect(reports[0]).toMatch(/\(success, via fingerprint\)$/)
+    expect(reports[1]).toMatch(/\(success, via pin\)$/)
+    expect(reports[2]).toMatch(/\(success\)$/) // not carried over to the next payment
   })
 
   it('a payment line carries stage durations and the outcome only', async () => {

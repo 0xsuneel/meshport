@@ -452,7 +452,9 @@ export type CircleAccount = WalletAccount & {
 //     unused challenge simply expires at Circle.
 //   - If it fails (expired, refused), the signature is made the normal way.
 const PREPARED_TTL_MS = 60_000
-interface Prepared { key: string; at: number; challengeId: Promise<string> }
+// at: when it was asked for; readyAt: when Circle answered (wallet_events
+// sign steps preparedAge / preparedLead - how early it was ready).
+interface Prepared { key: string; at: number; readyAt?: number; challengeId: Promise<string> }
 const preparedByAccount = new Map<string, Prepared>()
 // The payload a signature already started for without a prepared request (a
 // fingerprint accepted before the payment's preparation finished): asking
@@ -496,15 +498,20 @@ export function circleAccount(address: string, uid: string): CircleAccount {
   }
   // The prepared challenge for exactly this payload, if there is a fresh one
   // (taken: never used twice). null otherwise.
-  function takePrepared(action: string, body: Record<string, unknown>): Promise<string> | null {
+  function takePrepared(action: string, body: Record<string, unknown>, steps: Record<string, number>): Promise<string> | null {
     const p = preparedByAccount.get(key)
     if (!p) return null
     preparedByAccount.delete(key)
     if (Date.now() - p.at > PREPARED_TTL_MS || p.key !== preparedKey(action, body)) return null
+    // wallet_events: asked for this long before the signature started, and
+    // ready this long before it (negative: still on its way - `challenge` is the wait).
+    const now = Date.now()
+    steps.preparedAge = now - p.at
+    steps.preparedLead = p.readyAt != null ? now - p.readyAt : -1
     return p.challengeId
   }
   async function signOnce(action: string, body: Record<string, unknown>, steps: Record<string, number>): Promise<ChallengeOutcome> {
-    let prepared = takePrepared(action, body)
+    let prepared = takePrepared(action, body, steps)
     if (!prepared) signingStartedFor.set(key, { key: preparedKey(action, body), at: Date.now() })
     for (let attempt = 0; ; attempt++) {
       const t0 = performance.now()
@@ -577,9 +584,10 @@ export function circleAccount(address: string, uid: string): CircleAccount {
       // Already being signed (the PIN / fingerprint got there first): it made its own.
       const started = signingStartedFor.get(key)
       if (started && started.key === k && Date.now() - started.at < PREPARED_TTL_MS) return
-      const challengeId = circleCall<{ challengeId: string }>(uid, 'sign-transaction', body).then(r => r.challengeId)
-      challengeId.catch(() => { /* the signature makes its own then */ })
-      preparedByAccount.set(key, { key: k, at: Date.now(), challengeId })
+      const entry: Prepared = { key: k, at: Date.now(), challengeId: null as unknown as Promise<string> }
+      entry.challengeId = circleCall<{ challengeId: string }>(uid, 'sign-transaction', body).then(r => { entry.readyAt = Date.now(); return r.challengeId })
+      entry.challengeId.catch(() => { /* the signature makes its own then */ })
+      preparedByAccount.set(key, entry)
     } catch { /* purely a head start */ }
   }
   const account = Object.assign(base, { meshportWallet: true as const, circleWallet: true as const, prepareTransaction }) as CircleAccount

@@ -50,7 +50,7 @@ import { SearchField } from '@/components/ui/SearchField'
 import { useUserSearch } from '@/hooks/useUserSearch'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { reachCheck, STRANGER_PAY_BLOCKED, BLOCKED_YOU, PAYMENT_REACH_WAIT_MS } from '@/lib/privacy'
-import { payStep, payStepStart } from '@/lib/perfTrace'
+import { payStep, payStepStart, payApprovedVia } from '@/lib/perfTrace'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 
 type Screen = 'search' | 'amount' | 'review'
@@ -1896,7 +1896,7 @@ export function PaySendPage() {
         value={pin}
         onChange={setPin}
         error={pinError ? 'Incorrect passcode. Try again.' : undefined}
-        onComplete={(_, viaBiometric) => { if (!isProcessing) { setPaidViaBiometric(!!viaBiometric); verifyAndSend() } }}
+        onComplete={(_, viaBiometric) => { if (!isProcessing) { setPaidViaBiometric(!!viaBiometric); payApprovedVia(viaBiometric); verifyAndSend() } }}
       />
 
     </div>
