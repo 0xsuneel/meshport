@@ -635,7 +635,7 @@ export function RewardsPage() {
   )
 
   const header = (
-    <div className="header-row sticky top-0 z-20 bg-bg flex-shrink-0 gap-3 px-5 pt-header pb-header">
+    <div className="header-row mp-glass-header sticky top-0 z-20 flex-shrink-0 gap-3 px-5 pt-header pb-header">
       <h1 className="text-xl font-bold text-text-primary">Rewards</h1>
       <button ref={howBtnRef} onClick={() => setShowEarnInfo(o => !o)} aria-expanded={showEarnInfo}
         className="mp-hit mp-hit-sm ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
@@ -668,7 +668,7 @@ export function RewardsPage() {
     <div className="flex flex-col bg-bg overflow-hidden h-full flex-1 min-h-0">
       {overlays}
       {header}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'var(--nav-space)' }}>
         {hero}
         {tasks}
         {history}

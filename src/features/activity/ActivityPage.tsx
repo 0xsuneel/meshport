@@ -1115,7 +1115,7 @@ export function ActivityPage() {
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* Header */}
-      <div className="sticky top-0 z-20" style={{ background: 'var(--bg)' }}>
+      <div className="mp-glass-header sticky top-0 z-20">
         <div className="header-row px-5 pt-header pb-header justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <h1 className="text-xl font-bold text-text-primary">Activity</h1>
@@ -1168,7 +1168,7 @@ export function ActivityPage() {
       </div>
 
       {/* Body */}
-      <div ref={listScrollRef} className="flex-1 overflow-y-auto pb-6">
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto" style={{ paddingBottom: 'var(--nav-space)' }}>
         {activeTab === 'rewards' && (
           <div className="px-4 lg:max-w-[1100px] lg:mx-auto" style={{ display: 'flex', gap: 20, borderBottom: '1px solid var(--border)', marginTop: 4 }}>
             {(['earned', 'claimed'] as const).map(t => (

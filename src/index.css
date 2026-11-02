@@ -932,8 +932,14 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
    balance card) into it as a green band even with nothing underneath. Touch Android draws no other backdrop blur
    (above); these two bars are the exception. While a popup is open the
    popup-open rule above still drops it. */
-.mp-frost { background: transparent; }
-#root .mp-frost::before {
+.mp-frost, .mp-glass-header { background: transparent !important; }
+/* The shared page header (Home and every page's top bar): one class, so
+   every header in the app is the same glass. Positioned so its glass layer
+   sits inside it; its own stacking context keeps that layer under its
+   content. */
+.mp-glass-header { isolation: isolate; }
+.mp-glass-header:not(.sticky, .fixed, .absolute) { position: relative; }
+#root .mp-frost::before, #root .mp-glass-header::before {
   content: ''; position: absolute; left: 0; right: 0; z-index: -1; pointer-events: none;
   /* X-style glass: a see-through tint over a strong blur, so the colours
      of what scrolls underneath show through as soft shapes. */
@@ -944,7 +950,7 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
 /* The header's top edge fades into the plain page colour: the phone's status
    bar above it is that colour (theme-color) and a website can't draw behind
    it, so a frosted top edge met it as a hard line. */
-#root .mp-frost-top::before {
+#root .mp-glass-header::before {
   top: 0; bottom: 0;
   background: linear-gradient(var(--frost-tint, var(--bg)), transparent 28px), color-mix(in srgb, var(--frost-tint, var(--bg)) 65%, transparent);
 }
@@ -952,7 +958,7 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
    it), so the blur's own edge never draws a line along the bottom. */
 #root .mp-frost-bottom::before { top: 0; bottom: -24px; }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  #root .mp-frost::before { background: var(--frost-tint, var(--bg)); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  #root .mp-frost::before, #root .mp-glass-header::before { background: var(--frost-tint, var(--bg)); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 }
 /* Home's header is glass all the time, like the bottom nav (X-style): over
    the bare page it reads as the page colour, and cards blur under it as

@@ -251,7 +251,7 @@ export function ProfilePage() {
   return (
     <div className={isDesktop ? "h-full flex flex-col" : "flex-1 overflow-y-auto"}>
       {/* Header */}
-      <div className="header-row sticky top-0 z-20 bg-bg justify-between px-5 pt-header pb-header">
+      <div className="header-row mp-glass-header sticky top-0 z-20 justify-between px-5 pt-header pb-header">
         <div className="flex items-center gap-3">
           {!isDesktop && (
             <button onClick={() => navigate('/')} className="back-btn">

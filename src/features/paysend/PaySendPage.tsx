@@ -1219,7 +1219,7 @@ export function PaySendPage() {
                 }} />
             )}
 
-            <div className="header-row sticky top-0 z-20 gap-3 px-5 pt-header pb-header flex-shrink-0">
+            <div className="header-row mp-glass-header sticky top-0 z-20 gap-3 px-5 pt-header pb-header flex-shrink-0">
               {!isDesktop && (
                 <button onClick={goBack} className="back-btn">
                   <ArrowLeft className="w-5 h-5 text-text-primary" />
@@ -1405,7 +1405,7 @@ export function PaySendPage() {
         {screen === 'amount' && recipient && (
           <div key="amount" className="flex flex-col h-full">
 
-            <div className="header-row sticky top-0 z-20 gap-3 px-5 pt-header pb-header flex-shrink-0">
+            <div className="header-row mp-glass-header sticky top-0 z-20 gap-3 px-5 pt-header pb-header flex-shrink-0">
               {!isDesktop && (
                 <button onClick={goBack} className="back-btn">
                   <ArrowLeft className="w-5 h-5 text-text-primary" />
@@ -1699,7 +1699,7 @@ export function PaySendPage() {
             })() : (
             <>
             {(!isDone || successPhase === 'flash') && (
-              <div className="header-row sticky top-0 z-20 gap-3 px-5 pt-header pb-header flex-shrink-0">
+              <div className="header-row mp-glass-header sticky top-0 z-20 gap-3 px-5 pt-header pb-header flex-shrink-0">
                 {!isDesktop && (
                   <button onClick={goBack} disabled={isProcessing || isDone} className="back-btn disabled:opacity-30">
                     <ArrowLeft className="w-5 h-5 text-text-primary" />
