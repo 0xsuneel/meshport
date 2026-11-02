@@ -806,7 +806,7 @@ export function SwapPage() {
       signer: activeSigner, walletAddress: walletAddress ?? '',
       tokenIn: tokenInId, tokenOut: tokenOutId, amountIn: amountInStr, slippageBps: slippage,
       attemptId: extraParams?.attemptId, intentId: extraParams?.intentId,
-      minAmountOutBaseUnits: extraParams?.minAmountOutBaseUnits,
+      minAmountOut: extraParams?.minAmountOut,
       onProgress: extraParams?.onProgress,
     }))
   }, [tokenIn, tokenOut, amountIn, slippage, walletAddress])
@@ -1097,6 +1097,15 @@ export function SwapPage() {
       // Down, not to nearest: a minimum rounded up could cancel a swap that met the one shown.
       return BigInt(Math.floor(n * Math.pow(10, decimals))).toString()
     }
+    // The same minimum as a decimal amount, cut (never rounded up) to the
+    // token's decimals - App Kit refuses more decimals than the token has.
+    const toDecimalMinOrNull = (v: string | null, decimals: number) => {
+      const t = (v ?? '').trim()
+      const m = /^(\d+)(?:\.(\d+))?$/.exec(t)
+      if (!m) return null
+      const frac = (m[2] ?? '').slice(0, decimals).replace(/0+$/, '')
+      return frac ? `${m[1]}.${frac}` : m[1]
+    }
 
     let attemptId: string | null = null
 
@@ -1126,8 +1135,9 @@ export function SwapPage() {
       const result = await callProxy('swap', {
         tokenIn: tokenIn.id, tokenOut: tokenOut.id, amountIn: parseFloat(amountIn).toFixed(6),
         onProgress: onSwapProgress, attemptId: intentResult.attemptId, intentId: intentResult.intentId,
-        // The minimum shown on Review ("At least …") is the one enforced.
-        minAmountOutBaseUnits: toAtomicOrNull(minOut, tokenOut.decimals),
+        // The minimum shown on Review ("At least …") is the one enforced -
+        // as a decimal amount (App Kit converts it to base units itself).
+        minAmountOut: toDecimalMinOrNull(minOut, tokenOut.decimals),
       })
       const hash   = result?.txHash ?? ''
       const aOut   = result?.amountOut || estimate?.estimatedOutput?.amount || '0'
@@ -1963,9 +1973,12 @@ export function SwapPage() {
                 { label: 'From',    value: `${trimTrailingZeros(parseFloat(amountIn).toFixed(swapTokenDecimals(tokenIn.id)))} ${tokenIn.id}` },
                 { label: 'To',      value: tokenOut.id },
                 { label: 'Reason',  value: isUncertainFailure ? 'Could not confirm result'
+                    : error?.includes('price moved') ? 'Price moved below your minimum'
                     : error?.includes('route') || error?.includes('liquidity') ? 'No liquidity on Arc' : 'Transaction failed', color: 'var(--danger-text)' },
                 ...(isUncertainFailure
                   ? [{ label: 'Before retrying', value: 'Check your balance or Activity first', color: 'var(--warning-text)' }]
+                  : error?.includes('price moved')
+                  ? [{ label: 'Fix', value: 'Get a new quote and try again', color: 'var(--warning-text)' }]
                   : error?.toLowerCase().includes('route') || error?.toLowerCase().includes('liquidity')
                   ? [{ label: 'Fix', value: 'Try smaller amount or wait a few minutes', color: 'var(--warning-text)' }]
                   : []),

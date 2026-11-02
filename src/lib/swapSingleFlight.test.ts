@@ -18,10 +18,12 @@ describe('swap single-flight', () => {
 })
 
 describe('swap config: the minimum confirmed on Review is enforced', () => {
-  it('stopLimit in base units when valid; never a decimal or zero', async () => {
+  it('stopLimit as a decimal amount when valid; never zero or malformed', async () => {
     const { swapConfig } = await import('./swapService')
-    expect(swapConfig(300, '998500')).toEqual({ slippageBps: 300, stopLimit: '998500' })
-    expect(swapConfig(300, '0.9985')).toEqual({ slippageBps: 300 })  // App Kit rejects decimals
+    // A decimal amount of tokenOut: kit.swap converts it to base units itself.
+    expect(swapConfig(300, '0.9985')).toEqual({ slippageBps: 300, stopLimit: '0.9985' })
+    expect(swapConfig(300, '2')).toEqual({ slippageBps: 300, stopLimit: '2' })
+    expect(swapConfig(300, '1e6')).toEqual({ slippageBps: 300 })
     expect(swapConfig(300, '0')).toEqual({ slippageBps: 300 })
     expect(swapConfig(300, null)).toEqual({ slippageBps: 300 })
   })

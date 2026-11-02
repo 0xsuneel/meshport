@@ -287,6 +287,11 @@ function extractError(err: any, sdkMods: any): { raw: string; userMessage: strin
   if (lower.includes('api key') || lower.includes('not signed in') || lower.includes('swap service')) {
     return { raw, userMessage: 'Swap is temporarily unavailable - please try again shortly.', isLiquidity: false, isUncertain: false }
   }
+  // "No route found that satisfies the requested stop limit": routes exist,
+  // just none paying the minimum confirmed on Review - the price moved.
+  if (lower.includes('stop limit') || lower.includes('stoplimit')) {
+    return { raw, userMessage: 'The price moved below the minimum you confirmed - nothing was sent. Get a new quote and try again.', isLiquidity: false, isUncertain: false }
+  }
   if (lower.includes('no route') || lower.includes('route or resource not found') ||
       lower.includes('unsupported_route') || lower.includes('input_unsupported_route') ||
       lower.includes('no route available') || lower.includes('route not found')) {
@@ -454,13 +459,14 @@ type ExecuteSwapParams = {
   attemptId?: string | null; intentId?: string | null
   /**
    * The minimum output the person confirmed ("At least X, or the swap is
-   * cancelled"), in tokenOut's base units. Passed to the SDK as stopLimit
-   * (Circle's swap-tokens skill: an absolute minimum, it wins over
-   * slippageBps). Without it the SDK set its own minimum from a fresh quote
-   * at execution - possibly below the one shown. Base units: App Kit's
-   * schema rejects a decimal string.
+   * cancelled"), as a decimal amount of tokenOut (e.g. "0.95"). Passed to the
+   * SDK as stopLimit (an absolute minimum, it wins over slippageBps). Without
+   * it the SDK set its own minimum from a fresh quote at execution - possibly
+   * below the one shown. A DECIMAL amount: kit.swap converts stopLimit to
+   * base units itself, so base units here were converted twice (1 USDC asked
+   * for at least 2,012,965 EURC - "no route").
    */
-  minAmountOutBaseUnits?: string | null
+  minAmountOut?: string | null
   /** Real on-chain progress for the checklist - see SwapProgress above. */
   onProgress?: (p: SwapProgress) => void
 }
@@ -528,12 +534,12 @@ async function executeSwapOnce(params: ExecuteSwapParams): Promise<SwapOutcome> 
 
 /**
  * kit.swap's config: slippage, plus the confirmed minimum as stopLimit (it
- * wins over slippage) when it is a positive integer in base units - App
- * Kit's schema rejects anything else. Pure.
+ * wins over slippage) when it is a positive decimal amount of tokenOut. App
+ * Kit converts it to base units with tokenOut's decimals. Pure.
  */
-export function swapConfig(slippageBps: number, minAmountOutBaseUnits?: string | null): { slippageBps: number; stopLimit?: string } {
-  const min = (minAmountOutBaseUnits ?? '').trim()
-  return /^\d+$/.test(min) && BigInt(min) > 0n ? { slippageBps, stopLimit: min } : { slippageBps }
+export function swapConfig(slippageBps: number, minAmountOut?: string | null): { slippageBps: number; stopLimit?: string } {
+  const min = (minAmountOut ?? '').trim()
+  return /^\d+(\.\d+)?$/.test(min) && Number(min) > 0 ? { slippageBps, stopLimit: min } : { slippageBps }
 }
 
 async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
@@ -554,7 +560,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
     tokenIn:  params.tokenIn,
     tokenOut: params.tokenOut,
     amountIn: amountFormatted,
-    config:   swapConfig(slip, params.minAmountOutBaseUnits),
+    config:   swapConfig(slip, params.minAmountOut),
   }
 
   // The swap is on Arc: its Activity row is queued on this device first, so a
