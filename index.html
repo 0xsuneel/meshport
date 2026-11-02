@@ -11,6 +11,12 @@
     <script src="/boot.js"></script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Open the connections the wallet needs while the app itself loads: the
+         wallet frame's own host (private-key wallets sign there) and Circle's
+         Arc node (balance and gas reads go there first - lib/arc.ts). A cold
+         start used to open each only when first used. -->
+    <link rel="preconnect" href="https://wallet.meshport.xyz" />
+    <link rel="preconnect" href="https://rpc.testnet.arc.io" crossorigin="anonymous" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <!-- NO static theme-color meta here on purpose. boot.js creates and keeps
          #mp-theme-color up to date (via themeStore) from the RESOLVED in-app
