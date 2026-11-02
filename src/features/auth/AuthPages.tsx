@@ -443,8 +443,7 @@ export function GoogleAuthPage() {
 
       if (existing) { enterExisting(); return }
 
-      // New user (Create account).
-      // new-user path. No 'next' param here on purpose: PasscodeSetup routes
+      // New user (Create account). No 'next' param here on purpose: PasscodeSetup routes
       // loginType === 'social' straight to AutoWalletPage automatically, same
       // as before - adding next=create here would incorrectly
       // route through the manual create-wallet flow instead.
