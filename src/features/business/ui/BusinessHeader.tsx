@@ -82,7 +82,7 @@ export function BusinessHeader({
     </header>
   )
   return (
-    <header className="flex items-center gap-3 px-5 pb-3" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))' }}>
+    <header className="mp-glass-header sticky top-0 z-20 flex items-center gap-3 px-5 pb-3" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))' }}>
       <button
         type="button"
         onClick={onSwitchStore}
