@@ -957,5 +957,3 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
 /* Home's header is glass all the time, like the bottom nav (X-style): over
    the bare page it reads as the page colour, and cards blur under it as
    soon as they reach it. */
-/* A hairline under it once something has scrolled beneath, like X's. */
-.mp-frost-top[data-scrolled] { box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 70%, transparent); }
