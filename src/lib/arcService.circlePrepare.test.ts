@@ -66,6 +66,30 @@ describe('Circle wallet: the signing request prepared during the PIN', () => {
     expect(signed[0]).toEqual(prepared[0])
   })
 
+  it('wrong PIN, then the right one: one prepared request, used by the payment that goes through', async () => {
+    // Review tap prepares; the 6th digit of each PIN entry calls preparePayment again (PaySendPage verifyAndSend).
+    preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 4, idempotencyKey: 'k-retry' })
+    await settle()
+    preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 4, idempotencyKey: 'k-retry' }) // wrong PIN - nothing sent
+    preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 4, idempotencyKey: 'k-retry' }) // right PIN
+    await settle()
+    expect(prepared.length).toBe(1)
+    await sendUSDC({ signer: circleSigner, to: RECIPIENT, amount: 4, idempotencyKey: 'k-retry' })
+    expect(signed.length).toBe(1)
+    expect(signed[0]).toEqual(prepared[0])
+  })
+
+  it('amount changed after a wrong PIN: the new amount is prepared; the old one is never signed', async () => {
+    preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 4, idempotencyKey: 'k-edit' })
+    await settle()
+    preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 40, idempotencyKey: 'k-edit' })
+    await settle()
+    await sendUSDC({ signer: circleSigner, to: RECIPIENT, amount: 40, idempotencyKey: 'k-edit' })
+    expect(prepared.length).toBe(2)
+    expect(signed).toEqual([prepared[1]])
+    expect(signed[0]).not.toEqual(prepared[0])
+  })
+
   it('not asked for a private-key wallet, a locked app, or another account', async () => {
     auth.walletSource = 'create'
     preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 1, idempotencyKey: 'k-1' })
