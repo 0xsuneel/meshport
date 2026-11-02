@@ -35,7 +35,7 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="header-row sticky top-0 z-20 bg-bg justify-between px-5 pt-header pb-header">
+      <div className="header-row mp-glass-header sticky top-0 z-20 justify-between px-5 pt-header pb-header">
         <div className="flex items-center gap-3">
           {(!isDesktop || isPublic) && (
             <button onClick={() => (isPublic ? navigate('/') : navigate(-1))} className="back-btn" aria-label="Back">

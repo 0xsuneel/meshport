@@ -552,7 +552,7 @@ function OwnerBusinessPage() {
   // Collect payment / Shop QR: the store chip in their title row.
   const screenStorePick = stores.length > 1 && activeStore
     ? { stores: storePickList, value: activeStore.id, onChange: pickStore, onManage: open('team') } : undefined
-  const bodyPad = { paddingBottom: isDesktop ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }
+  const bodyPad = { paddingBottom: isDesktop ? 24 : 'var(--nav-space)' }
   const panelPad = { paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }
   const seeAllPayments = () => { setPayFilter('all'); setPayView('payments'); setTab('payments') }
   // Desktop: the shared 65/35 layout (DesktopTwoColumn) like P2P, Swap and

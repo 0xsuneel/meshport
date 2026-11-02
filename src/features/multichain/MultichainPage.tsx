@@ -1170,7 +1170,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   const page = (
     <div data-flow-scroller className={isDesktop ? undefined : 'lg:max-w-[900px]'} style={{ flex: 1, overflowY: flowFocus === 'processing' ? 'hidden' : 'auto', overscrollBehavior: flowFocus === 'processing' ? 'none' : undefined, background: 'var(--bg)', paddingBottom: isDesktop ? 90 : 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
       {/* Header */}
-      {!chainsOnly && <div data-scroll-header style={{ position: flowFocused ? 'relative' : 'sticky', top: 0, zIndex: 20, background: 'var(--bg)',
+      {!chainsOnly && <div data-scroll-header className="mp-glass-header" style={{ position: flowFocused ? 'relative' : 'sticky', top: 0, zIndex: 20,
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))', paddingBottom: 18,
         paddingLeft: 20, paddingRight: 20, minHeight: 44, boxSizing: 'border-box',
         display: 'flex', alignItems: 'center', gap: 12 }}>

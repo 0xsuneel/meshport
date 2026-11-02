@@ -32,6 +32,12 @@ const noNavRoutes = [
   '/swap', '/insights', '/p2p', '/multichain',
 ]
 
+// Pages that scroll under the frosted bottom nav, like Home (each pads the
+// end of its own scroll box with --nav-space). Every other page with the
+// nav stops above it.
+const UNDER_NAV = /^\/(chat|chat\/new|rewards|activity|business|news|recent-paid|asset\/[^/]+)?\/?$/
+function runsUnderNav(pathname: string) { return UNDER_NAV.test(pathname) }
+
 function isNoNavRoute(pathname: string) {
   if (pathname === '/pay' || pathname === '/pay/') return true // Pay (was /pay-send)
   if (noNavRoutes.some(r => pathname.startsWith(r))) return true
@@ -770,7 +776,10 @@ export function AppLayout() {
       }}>
         {/* Home scrolls under the frosted bottom nav (it pads its own end);
             every other page stops above it. */}
-        <div data-no-scroll="" data-nav-pad="" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', paddingBottom: navVisible && location.pathname !== '/' ? 'calc(65px + env(safe-area-inset-bottom, 0px))' : 0, minHeight: 0 }}>
+        <div data-no-scroll="" data-nav-pad="" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', paddingBottom: navVisible && !runsUnderNav(location.pathname) ? 'calc(65px + env(safe-area-inset-bottom, 0px))' : 0, minHeight: 0,
+          // How far a page's scroll must end above the bottom nav (the nav
+          // pages pad their own scroll box with it, so they scroll under it).
+          ['--nav-space' as string]: navVisible && !navHidden ? 'calc(81px + env(safe-area-inset-bottom, 0px))' : '0px' }}>
           <PageTransition locationKey={location.pathname}>
             <Outlet key={reloadKey} />
           </PageTransition>

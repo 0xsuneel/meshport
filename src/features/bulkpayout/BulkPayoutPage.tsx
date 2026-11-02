@@ -910,7 +910,7 @@ export function BulkPayoutPage() {
     <div className={`flex flex-col bg-bg ${isDesktop ? 'h-full overflow-visible' : 'h-full overflow-y-auto pb-24'}`}>
 
       {/* ── HEADER ── */}
-      <div className="header-row sticky top-0 z-20 bg-bg px-5 pt-header pb-header flex-shrink-0">
+      <div className="header-row mp-glass-header sticky top-0 z-20 px-5 pt-header pb-header flex-shrink-0">
         <div className="flex items-center gap-3">
           {!isDesktop && (
             <button onClick={() => navigate('/')} className="back-btn">

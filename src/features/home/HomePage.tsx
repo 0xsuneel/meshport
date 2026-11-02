@@ -4006,7 +4006,7 @@ export function HomePage() {
     <div ref={scrollContainerRef} style={{
       flex: 1, overflowY: 'auto', overflowX: 'hidden', background: 'var(--glass-wash), var(--bg)', backgroundAttachment: 'local',
       // Phone: the page runs under the frosted bottom nav, so its end clears it.
-      paddingBottom: isDesktop ? undefined : 'calc(65px + env(safe-area-inset-bottom, 0px))',
+      paddingBottom: isDesktop ? undefined : 'var(--nav-space)',
       // Desktop: sized to exactly fill the viewport at 100% browser zoom (see
       // the compact card sizing throughout this column) so nothing scrolls
       // under normal conditions - but overflowY stays 'auto', never 'hidden',
@@ -4020,7 +4020,7 @@ export function HomePage() {
           app-wide, so this block only mounts there while actively searching
           (opened via DesktopHeader's search box, see isDesktop above). */}
       {(!isDesktop || searchOpen) && (
-      <div ref={stickyHeaderRef} data-frost="bg" className="mp-frost mp-frost-top" style={{
+      <div ref={stickyHeaderRef} data-frost="bg" className="mp-glass-header" style={{
         // Above the page's cards while search is open (its results float over them).
         position: 'sticky', top: 0, zIndex: searchOpen ? 40 : 20,
         // Frosted like the bottom nav (index.css, "Frosted bars"): the cards

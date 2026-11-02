@@ -1115,9 +1115,8 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
 
   return (
     <div className="flex-1 min-h-0 relative flex flex-col bg-bg">
-    <div ref={chatListScrollRef} className="flex-1 overflow-y-auto bg-bg">
-      <div className="sticky top-0 z-20 bg-bg px-4 pt-header pb-3"
-        style={{ borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
+    <div ref={chatListScrollRef} className="flex-1 overflow-y-auto bg-bg" style={{ paddingBottom: 'var(--nav-space)' }}>
+      <div className="mp-glass-header sticky top-0 z-20 px-4 pt-header pb-3">
         {/* Selecting (hold a chat): back · count · actions */}
         {selecting ? (
           <div className="header-row justify-between" style={{ marginBottom: 12 }}>
@@ -4530,7 +4529,7 @@ export function ChatConversationPage() {
           wallpaper shows through in the gaps between bubbles. */}
       <ChatWallpaper />
       {/* Header */}
-      <div className="header-row sticky top-0 gap-3 px-4 pt-header pb-3 flex-shrink-0 bg-bg z-10">
+      <div className="header-row mp-glass-header sticky top-0 gap-3 px-4 pt-header pb-3 flex-shrink-0 z-10">
         {selecting ? (
           <>
             <button onClick={clearSelection} className="back-btn" aria-label="Cancel selection">

@@ -59,7 +59,7 @@ export function BusinessScreen({ open, title, onBack, children, footer, step = '
           Pay's steps: in from the right, back to the first view from the left. */}
       <ScreenPush screenKey={step || '·'} back={!step} style={{ width: '100%', maxWidth: isDesktop ? undefined : 448 }}>
         {/* Header — the app's standard page header (Profile, Receive…) */}
-        <header className={`shrink-0 header-row gap-3 px-5 ${isDesktop ? 'pt-0' : 'pt-header'} pb-header bg-bg sticky top-0 z-10`}>
+        <header className={`shrink-0 header-row mp-glass-header gap-3 px-5 ${isDesktop ? 'pt-0' : 'pt-header'} pb-header sticky top-0 z-10`}>
           <button type="button" aria-label="Go back" onClick={onBack} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
