@@ -559,6 +559,18 @@ function OwnerBusinessPage() {
   // Multichain - the hub and every Business page in the main column (a stage
   // its screens push over), Verified payments on the right. One tree for
   // both, so resizing across the breakpoint keeps all state.
+  const hubTop = <>
+    <BusinessHeader desktop={isDesktop} storeName={storeName} handle={handle}
+      status={headerStatus} voiceOn={voice.enabled}
+      onVoice={() => setVoiceOpen(true)} onMenu={open(locked ? 'profile' : 'tools')}
+      avatarName={storeName} avatarUrl={userAvatar ?? undefined} />
+    {stores.length > 1 && activeStore && (
+      <div className="px-5 pb-2">
+        <StorePicker stores={storePickList} value={activeStore.id} onChange={pickStore} onManage={open('team')}
+          label="Showing store" hint="Sales, payments, requests and the QR show this store only" />
+      </div>
+    )}
+  </>
   return (
     <DesktopTwoColumn isDesktop={isDesktop} stage className="bg-bg"
       phoneClassName="relative flex flex-col h-full min-h-0 bg-bg overflow-hidden"
@@ -567,17 +579,11 @@ function OwnerBusinessPage() {
       <div className="flex-1 min-h-0 flex flex-col" style={hubShift}>
         {/* The business, then (several stores) the one store everything below
             is for, with Switch - never every store mixed together. */}
-        <BusinessHeader desktop={isDesktop} storeName={storeName} handle={handle}
-          status={headerStatus} voiceOn={voice.enabled}
-          onVoice={() => setVoiceOpen(true)} onMenu={open(locked ? 'profile' : 'tools')}
-          avatarName={storeName} avatarUrl={userAvatar ?? undefined} />
-        {stores.length > 1 && activeStore && (
-          <div className="px-5 pb-2">
-            <StorePicker stores={storePickList} value={activeStore.id} onChange={pickStore} onManage={open('team')}
-              label="Showing store" hint="Sales, payments, requests and the QR show this store only" />
-          </div>
-        )}
+        {isDesktop && hubTop}
         <div className="flex-1 min-h-0 overflow-y-auto" style={bodyPad}>
+          {/* Phone: the header sits inside the scroll box (sticky glass), so
+              the hub scrolls under it like Home. */}
+          {!isDesktop && hubTop}
           {locked && <LockedHubView banner={banner} terms={terms} />}
           {!locked && (
             <HubView terms={terms} loading={!loaded} banner={banner} periodLabel={period.label} onPeriod={() => setPeriodSheet(true)}

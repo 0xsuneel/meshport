@@ -667,8 +667,10 @@ export function RewardsPage() {
   return (
     <div className="flex flex-col bg-bg overflow-hidden h-full flex-1 min-h-0">
       {overlays}
-      {header}
+      {/* The header sits inside the scroll box (sticky), so the page scrolls
+          under its glass like Home. */}
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'var(--nav-space)' }}>
+        {header}
         {hero}
         {tasks}
         {history}

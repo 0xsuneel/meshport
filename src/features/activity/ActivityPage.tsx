@@ -1114,6 +1114,9 @@ export function ActivityPage() {
     <div className="flex flex-col h-full overflow-hidden bg-bg">
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
+      {/* Header and list share one scroll box: the header is sticky glass,
+          so the list scrolls under it like Home. */}
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto" style={{ paddingBottom: 'var(--nav-space)' }}>
       {/* Header */}
       <div className="mp-glass-header sticky top-0 z-20">
         <div className="header-row px-5 pt-header pb-header justify-between">
@@ -1168,7 +1171,6 @@ export function ActivityPage() {
       </div>
 
       {/* Body */}
-      <div ref={listScrollRef} className="flex-1 overflow-y-auto" style={{ paddingBottom: 'var(--nav-space)' }}>
         {activeTab === 'rewards' && (
           <div className="px-4 lg:max-w-[1100px] lg:mx-auto" style={{ display: 'flex', gap: 20, borderBottom: '1px solid var(--border)', marginTop: 4 }}>
             {(['earned', 'claimed'] as const).map(t => (
