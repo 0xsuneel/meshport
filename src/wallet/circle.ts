@@ -454,12 +454,17 @@ export type CircleAccount = WalletAccount & {
 const PREPARED_TTL_MS = 60_000
 interface Prepared { key: string; at: number; challengeId: Promise<string> }
 const preparedByAccount = new Map<string, Prepared>()
+// The payload a signature already started for without a prepared request (a
+// fingerprint accepted before the payment's preparation finished): asking
+// for it afterwards would only make a second, never-used challenge.
+const signingStartedFor = new Map<string, { key: string; at: number }>()
 function preparedKey(action: string, body: Record<string, unknown>): string {
   return `${action}\n${JSON.stringify(body, (_k, v) => (typeof v === 'bigint' ? v.toString() : v))}`
 }
 /** Lock / sign-out: forget every prepared signing request. */
 export function discardPreparedSignatures(): void {
   preparedByAccount.clear()
+  signingStartedFor.clear()
 }
 export const isCircleAccount = (v: unknown): v is CircleAccount => !!v && typeof v === 'object' && (v as { circleWallet?: unknown }).circleWallet === true
 
@@ -500,6 +505,7 @@ export function circleAccount(address: string, uid: string): CircleAccount {
   }
   async function signOnce(action: string, body: Record<string, unknown>, steps: Record<string, number>): Promise<ChallengeOutcome> {
     let prepared = takePrepared(action, body)
+    if (!prepared) signingStartedFor.set(key, { key: preparedKey(action, body), at: Date.now() })
     for (let attempt = 0; ; attempt++) {
       const t0 = performance.now()
       lastCircleApiVia = null
@@ -568,6 +574,9 @@ export function circleAccount(address: string, uid: string): CircleAccount {
       const k = preparedKey('sign-transaction', body)
       const have = preparedByAccount.get(key)
       if (have && have.key === k && Date.now() - have.at < PREPARED_TTL_MS) return // already asked for this exact one
+      // Already being signed (the PIN / fingerprint got there first): it made its own.
+      const started = signingStartedFor.get(key)
+      if (started && started.key === k && Date.now() - started.at < PREPARED_TTL_MS) return
       const challengeId = circleCall<{ challengeId: string }>(uid, 'sign-transaction', body).then(r => r.challengeId)
       challengeId.catch(() => { /* the signature makes its own then */ })
       preparedByAccount.set(key, { key: k, at: Date.now(), challengeId })

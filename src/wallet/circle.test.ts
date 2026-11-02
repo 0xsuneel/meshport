@@ -455,3 +455,51 @@ describe('prepared Circle signing requests', () => {
     } finally { vi.useRealTimers() }
   })
 })
+
+// PIN and fingerprint: both hand the passcode to the same send, so the order
+// of "preparation finished" and "PIN / fingerprint accepted" is what varies.
+describe('prepared Circle signing requests: PIN / fingerprint timing', () => {
+  beforeEach(() => { saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() }); circle.discardPreparedSignatures() })
+  const tx = (value: bigint) => ({ type: 'eip1559' as const, chainId: 5042002, to: '0x2222222222222222222222222222222222222222' as const, value, nonce: 7, gas: 21000n, maxFeePerGas: 10n, maxPriorityFeePerGas: 1n })
+  const executed: string[] = []
+  beforeEach(() => { executed.length = 0; sdkExecute = id => { executed.push(id); return { result: { status: 'COMPLETE', data: { signedTransaction: '0xsigned-' + id } } } } })
+  const settle = () => new Promise(r => setTimeout(r, 0))
+
+  it('accepted while the prepared request is still on its way: the signature waits for it - no second request', async () => {
+    let answer!: () => void
+    replies = [() => [200, { challengeId: 'slow-prep' }]]
+    const realFetch = globalThis.fetch as any
+    const gate = new Promise<void>(r => { answer = r })
+    vi.stubGlobal('fetch', vi.fn(async (u: string, init: RequestInit) => { await gate; return realFetch(u, init) }))
+    try {
+      const acct = circleAccount('0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', 'uid-alice')
+      acct.prepareTransaction(tx(5n))
+      const signing = acct.signTransaction(tx(5n)) // PIN / fingerprint accepted now
+      await settle()
+      answer()
+      expect(await signing).toBe('0xsigned-slow-prep')
+      expect(sent.length).toBe(1)
+    } finally { vi.stubGlobal('fetch', realFetch) }
+  })
+
+  it('accepted before the preparation even started (instant fingerprint): signs with its own request, and the late preparation asks for nothing', async () => {
+    replies = [() => [200, { challengeId: 'own' }]]
+    const acct = circleAccount('0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', 'uid-alice')
+    const signing = acct.signTransaction(tx(5n))
+    acct.prepareTransaction(tx(5n)) // the payment's preparation finishes a moment later
+    expect(await signing).toBe('0xsigned-own')
+    await settle()
+    expect(sent.length).toBe(1) // no wasted second challenge
+    expect(executed).toEqual(['own'])
+  })
+
+  it('a later, different payment still gets prepared', async () => {
+    replies = [() => [200, { challengeId: 'own' }], () => [200, { challengeId: 'prep-next' }]]
+    const acct = circleAccount('0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', 'uid-alice')
+    await acct.signTransaction(tx(5n))
+    acct.prepareTransaction(tx(9n))
+    await settle()
+    expect(sent.length).toBe(2)
+    expect(await acct.signTransaction(tx(9n))).toBe('0xsigned-prep-next')
+  })
+})
