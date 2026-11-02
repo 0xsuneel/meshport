@@ -1296,7 +1296,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                 <Suspense fallback={<InlineSpinner />}>
                   <ClaimSheetBody key={sheetClaimChain} embedded pushScreens initialChain={sheetClaimChain}
                     initialBalance={bringRows.find(c => c.id === sheetClaimChain)?.balance}
-                    onClose={() => setClaimChain(null)} merchantMode={isMerchant} onFocusChange={setFlowFocus} />
+                    onClose={() => { setClaimChain(null); closeTracking() }} merchantMode={isMerchant} onFocusChange={setFlowFocus} />
                 </Suspense>
               </div>
             )}
@@ -1318,7 +1318,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                 <ClaimSheetBody key={`${bringToken}-${sheetTokenBring.chainId}`} embedded pushScreens
                   initialChain={sheetTokenBring.chainId} initialBalance={sheetTokenBring.balance}
                   token={bringToken as CctpxToken} tokenAddress={sheetTokenBring.tokenAddress}
-                  onClose={() => setTokenBring(null)} onFocusChange={setFlowFocus} />
+                  onClose={() => { setTokenBring(null); closeTracking() }} onFocusChange={setFlowFocus} />
               </Suspense>
             </div>
           )}

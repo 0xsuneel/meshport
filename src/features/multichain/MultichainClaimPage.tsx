@@ -381,10 +381,16 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // hard refresh in every environment this app runs in; the URL is. This
   // is what was causing "Track Progress" to silently drop back to the
   // scan/select ("assets") screen on refresh instead of resuming.
-  const trackClaimIdFromHub =
+  //
+  // Embedded in the Hub: only the trackClaimId prop counts. The Hub reads the
+  // URL / router state itself and passes the id to its Track Progress
+  // instance; a Bring form opened from a chain row must never pick up a
+  // finished bring's ?claim= still in the URL - it opened as "Bring
+  // submitted - 0 USDC" tracking that old bring and replayed its success.
+  const trackClaimIdFromHub = embedded ? trackClaimId : (
     trackClaimId ??
     ((location.state as any)?.trackClaimId as string | undefined) ??
-    (searchParams.get('claim') || undefined)
+    (searchParams.get('claim') || undefined))
 
   // Opened from a Hub chain row that already knows the balance: start right
   // on the amount form (like Transfer) - no "opening…" spinner, no slide-in.
@@ -562,13 +568,22 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
   // Wall-clock duration of the claim, measured start-to-finish, purely for
   // the success screen's "Completed in X Seconds" pill.
+  // Followed from the Hub (Track Progress / resumed) there is no start mark
+  // on this screen: the server's own created → completed times are used, and
+  // with neither the pill is left out (it used to say "0.00 Seconds").
   const claimStartRef = useRef(0)
-  const [claimElapsedSeconds, setClaimElapsedSeconds] = useState('0.00')
+  const [claimElapsedSeconds, setClaimElapsedSeconds] = useState<string | null>(null)
   useEffect(() => {
-    if (confirmPhase === 'done' && claimStartRef.current) {
+    if (confirmPhase !== 'done') return
+    if (claimStartRef.current) {
       setClaimElapsedSeconds((((performance.now() - claimStartRef.current)) / 1000).toFixed(2))
+      return
     }
-  }, [confirmPhase])
+    const c = claimRecords.map(r => claimsByStatus[r.claimId] ?? r.initialClaim).find(Boolean)
+    const start = c?.createdAt ? Date.parse(c.createdAt) : NaN
+    const end = c?.completedAt ? Date.parse(c.completedAt) : NaN
+    if (end > start) setClaimElapsedSeconds(((end - start) / 1000).toFixed(2))
+  }, [confirmPhase, claimRecords, claimsByStatus])
 
   // Traveling checkmark: flash position -> hero card's own checkmark spot
   // (same manual getBoundingClientRect + transform technique SwapPage/
@@ -2171,7 +2186,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   ]}
                   title="Funds Arrived"
                   subtitle={<>From {fromLabel}, now in your Arc wallet</>}
-                  pill={`Completed in ${claimElapsedSeconds} Seconds`}
+                  pill={claimElapsedSeconds ? `Completed in ${claimElapsedSeconds} Seconds` : undefined}
                   rows={[
                     { label: 'Claimed', value: fmtAmount, positive: true },
                     ...(txHash ? [{ label: 'Transaction Hash', value: shortHash, onCopy: () => copyClaimHash(txHash), copied: hashCopied }] : []),
