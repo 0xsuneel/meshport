@@ -191,7 +191,6 @@ export function BottomNav() {
         // the bar runs seamlessly into the phone's gesture-bar strip below
         // it (drawn in the page colour) - a white tint left a visible band.
         ['--frost-tint' as string]: 'var(--bg)',
-        borderTop: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-around',
         height: 65,
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
