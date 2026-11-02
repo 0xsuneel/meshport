@@ -925,11 +925,9 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
 .mp-tick-pop { animation: mpTickPop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1); }
 .mp-icon-spin svg { animation: mpIconSpin 0.6s cubic-bezier(0.3, 1.3, 0.5, 1); }
 
-/* Frosted bars (Home's header, the bottom nav): what scrolls under them turns
-   into a soft blur of colour - text there can't be read. The blur reads only
-   what is under the bar itself: it used to reach 80px past the bar's inner
-   edge, which pulled the colour of the card next to the bar (Home's teal
-   balance card) into it as a green band even with nothing underneath. Touch Android draws no other backdrop blur
+/* Frosted bars (every page's header, the bottom nav): what scrolls under them
+   shows as a soft shadow - text there is visible but can't be read. Touch
+   Android draws no other backdrop blur
    (above); these two bars are the exception. While a popup is open the
    popup-open rule above still drops it. */
 .mp-frost, .mp-glass-header { background: transparent !important; }
@@ -941,22 +939,34 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
 .mp-glass-header:not(.sticky, .fixed, .absolute) { position: relative; }
 #root .mp-frost::before, #root .mp-glass-header::before {
   content: ''; position: absolute; left: 0; right: 0; z-index: -1; pointer-events: none;
-  /* X-style glass: a see-through tint over a strong blur, so the colours
-     of what scrolls underneath show through as soft shapes. */
-  background: color-mix(in srgb, var(--frost-tint, var(--bg)) 65%, transparent);
-  backdrop-filter: blur(20px) saturate(140%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
+  /* X-style glass: a thin tint over a medium blur, so what scrolls
+     underneath shows through as a soft shadow - text there is visible as
+     blurred shapes but can't be read. */
+  background: color-mix(in srgb, var(--frost-tint, var(--bg)) 55%, transparent);
+  backdrop-filter: blur(12px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(140%) !important;
 }
 /* The header's top edge fades into the plain page colour: the phone's status
    bar above it is that colour (theme-color) and a website can't draw behind
    it, so a frosted top edge met it as a hard line. */
 #root .mp-glass-header::before {
-  top: 0; bottom: 0;
-  background: linear-gradient(var(--frost-tint, var(--bg)), transparent 28px), color-mix(in srgb, var(--frost-tint, var(--bg)) 65%, transparent);
+  /* The blur reads 24px past the bar's inner edge and is cut back to the
+     bar: a blur only reads what's under its own box, so text right at the
+     edge stayed readable. 24px, not the old 80px, which pulled the colour of
+     the card below (Home's teal balance card) in as a green band. */
+  top: 0; bottom: -24px;
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 24px), transparent calc(100% - 24px));
+  mask-image: linear-gradient(#000 calc(100% - 24px), transparent calc(100% - 24px));
+  background: linear-gradient(var(--frost-tint, var(--bg)), transparent 28px), color-mix(in srgb, var(--frost-tint, var(--bg)) 55%, transparent);
 }
-/* The nav's glass runs past the bottom of the screen (the app frame clips
-   it), so the blur's own edge never draws a line along the bottom. */
-#root .mp-frost-bottom::before { top: 0; bottom: -24px; }
+/* The nav's glass reads 24px above the bar (cut back to it, as the header
+   does above) so text at its top edge blurs too, and runs past the bottom of
+   the screen (the app frame clips it) so no line shows along the bottom. */
+#root .mp-frost-bottom::before {
+  top: -24px; bottom: -24px;
+  -webkit-mask-image: linear-gradient(transparent 24px, #000 24px);
+  mask-image: linear-gradient(transparent 24px, #000 24px);
+}
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   #root .mp-frost::before, #root .mp-glass-header::before { background: var(--frost-tint, var(--bg)); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 }
