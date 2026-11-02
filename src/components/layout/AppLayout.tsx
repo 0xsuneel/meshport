@@ -98,6 +98,26 @@ export function AppLayout() {
   // A tapped phone notification (sw.ts notificationclick): open its page
   // right here, without reloading the app (a reload would lock it again).
   const openFromNotification = useNavigate()
+
+  // Email sign-in is kept for the admin panel only: a signed-in email account
+  // (no Google) that isn't an admin is signed out of the wallet app.
+  useEffect(() => {
+    if (!userId) return
+    let cancelled = false
+    void (async () => {
+      const u = (await supabase.auth.getSession()).data.session?.user
+      if (!u || u.is_anonymous) return
+      const m = (u.app_metadata ?? {}) as { provider?: string; providers?: string[] }
+      if (m.provider !== 'email' || m.providers?.includes('google')) return
+      const { isAdminUser } = await import('@/lib/adminSupabase')
+      if (cancelled || await isAdminUser(u.id)) return
+      useAuthStore.getState().logout()
+      useUIStore.getState().showToastMessage('Email sign-in is for the admin panel only. Continue with Google.', 'error')
+      openFromNotification('/auth', { replace: true })
+    })().catch(() => {})
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once per signed-in account
+  }, [userId])
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
     const onMessage = (e: MessageEvent) => {

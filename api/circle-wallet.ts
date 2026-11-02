@@ -65,7 +65,7 @@ function getService(): CircleWalletService {
   return service
 }
 
-type Caller = { uid: string; email: string | null; anonymous: boolean }
+type Caller = { uid: string; email: string | null; anonymous: boolean; google: boolean }
 
 // A MeshPort session Supabase has confirmed, remembered briefly per warm
 // instance (keyed by the token's hash, never the token): a payment's
@@ -95,9 +95,11 @@ async function caller(req: VercelRequest): Promise<Caller | null> {
   if (hit && hit.exp > now) return hit.who
   const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` } })
   if (!r.ok) return null
-  const u = await r.json().catch(() => null) as { id?: string; email?: string; is_anonymous?: boolean } | null
+  const u = await r.json().catch(() => null) as { id?: string; email?: string; is_anonymous?: boolean; app_metadata?: { provider?: string; providers?: string[] } } | null
   if (!u?.id) return null
-  const who: Caller = { uid: u.id, email: u.email ?? null, anonymous: u.is_anonymous === true }
+  const m = u.app_metadata ?? {}
+  const google = m.provider === 'google' || (Array.isArray(m.providers) && m.providers.includes('google'))
+  const who: Caller = { uid: u.id, email: u.email ?? null, anonymous: u.is_anonymous === true, google }
   const exp = Math.min(now + CALLER_CACHE_MS, jwtExpiry(token) ?? now + CALLER_CACHE_MS)
   if (exp > now) {
     if (callers.size > 5000) callers.delete(callers.keys().next().value!)
@@ -147,6 +149,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!who) return send(401, { error: 'Sign in to MeshPort first', code: 'meshport-session' })
   // A wallet hangs off the account's id; an anonymous session's id doesn't last.
   if (who.anonymous) return send(403, { error: 'Sign in with Google to use your wallet' })
+  // Wallets are Google-only: an email account (email sign-in is kept for the
+  // admin panel only) never gets a Circle wallet.
+  if (!who.google) return send(403, { error: 'Wallets open with Google only. Sign out and continue with Google.', code: 'google-only' })
   if (!allow(who.uid)) return send(429, { error: 'Too many requests - try again in a minute' })
 
   try {
