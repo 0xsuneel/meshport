@@ -934,9 +934,11 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
 .mp-frost { background: transparent; }
 #root .mp-frost::before {
   content: ''; position: absolute; left: 0; right: 0; z-index: -1; pointer-events: none;
-  background: color-mix(in srgb, var(--frost-tint, var(--bg)) 72%, transparent);
-  backdrop-filter: blur(24px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  /* X-style glass: a see-through tint over a strong blur, so the colours
+     of what scrolls underneath show through as soft shapes. */
+  background: color-mix(in srgb, var(--frost-tint, var(--bg)) 65%, transparent);
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
 }
 /* The header's top edge fades into the plain page colour: the phone's status
    bar above it is that colour (theme-color) and a website can't draw behind
@@ -945,7 +947,7 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
   top: 0; bottom: -80px;
   -webkit-mask-image: linear-gradient(#000 calc(100% - 80px), transparent calc(100% - 80px));
   mask-image: linear-gradient(#000 calc(100% - 80px), transparent calc(100% - 80px));
-  background: linear-gradient(var(--frost-tint, var(--bg)), transparent 28px), color-mix(in srgb, var(--frost-tint, var(--bg)) 72%, transparent);
+  background: linear-gradient(var(--frost-tint, var(--bg)), transparent 28px), color-mix(in srgb, var(--frost-tint, var(--bg)) 65%, transparent);
 }
 #root .mp-frost-bottom::before {
   top: -80px; bottom: 0;
@@ -955,11 +957,8 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   #root .mp-frost::before { background: var(--frost-tint, var(--bg)); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 }
-/* Home's header frosts only while something is under it (HomePage sets
-   data-scrolled): at the top of the page it's the plain page colour. The
-   blur layer only fades - switching backdrop blur on and off made Android
-   flash (above). */
-.mp-frost-top { background: var(--frost-tint, var(--bg)); transition: background-color .2s ease; }
-.mp-frost-top[data-scrolled] { background: transparent; }
-#root .mp-frost-top::before { opacity: 0; transition: opacity .2s ease; }
-#root .mp-frost-top[data-scrolled]::before { opacity: 1; }
+/* Home's header is glass all the time, like the bottom nav (X-style): over
+   the bare page it reads as the page colour, and cards blur under it as
+   soon as they reach it. */
+/* A hairline under it once something has scrolled beneath, like X's. */
+.mp-frost-top[data-scrolled] { box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 70%, transparent); }
