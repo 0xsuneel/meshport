@@ -6,12 +6,12 @@
 // phone that was 5-7 s per step even though Arc confirms in under a second.
 //
 // Same contracts, same calls the SDK makes - Circle's own documented ones:
-//   1. approve(TokenMessengerV2, max) on Arc USDC - ONCE per wallet, skipped
-//      when the allowance already covers it. It used to be the exact amount,
-//      so almost every transfer needed two wallet signatures (approve + burn,
-//      ~4 s each for Google / email wallets - wallet_events 3 Nov). A standing
-//      approval to TokenMessengerV2 is safe to keep: depositForBurn only ever
-//      pulls from msg.sender - the wallet itself - so no one else can use it.
+//   1. approve(TokenMessengerV2, amount) on Arc USDC - EXACTLY the amount,
+//      so the burn uses all of it and nothing stays approved. Skipped only
+//      when the allowance is already exactly the amount. A leftover allowance
+//      (the earlier one-time max approval) is replaced by the exact amount on
+//      the next transfer, so it ends at 0 too. (The Arc router, when deployed,
+//      needs no approval at all.)
 //   2. TokenMessengerV2.depositForBurnWithHook(..., FORWARD_HOOK) (Circle's
 //      forwarder mints) or depositForBurn(...) (MeshPort's relayer mints)
 // Each is signed on this device (the key never leaves the wallet) and sent the
@@ -27,7 +27,7 @@
 // events, and the result has the kit's shape ({ state, steps }), so the
 // Transfer screen's step list, Activity rows and success screen are unchanged.
 
-import { encodeFunctionData, decodeFunctionResult, maxUint256, pad, parseUnits, toHex, type Hex } from 'viem'
+import { encodeFunctionData, decodeFunctionResult, pad, parseUnits, toHex, type Hex } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { arcRpcJson } from './arc'
 import { CCTP_DOMAINS, IRIS, fetchIrisMessage, forwardDone, type IrisMessage } from './cctpTracker'
@@ -136,7 +136,7 @@ export function expectedFeesFromIris(rows: IrisFeeRow[], amount: number, o: { fa
   return { bridgeFee, forwarderFee: (fwd ?? 0) / 1e6 }
 }
 
-// Arc gas the wallet pays (in USDC): the burn, plus the approval when the allowance is short.
+// Arc gas the wallet pays (in USDC): the burn, plus the approval unless the allowance is exactly the amount.
 const APPROVE_GAS = 60_000n
 const BURN_GAS = 200_000n
 
@@ -158,7 +158,7 @@ export async function fastCctpFees(p: { destination: string; amount: number; fas
     // Through the Arc router: its fee (the relayer's gas), whatever the allowance.
     if (arcRouterAddress()) return { ...fees, networkFee: Number(routerFee(BigInt(gasPriceHex), parseUnits(p.amount.toFixed(6), 6))) / 1e6 }
     const allowance = decodeFunctionResult({ abi: ERC20, functionName: 'allowance', data: allowanceHex as Hex }) as bigint
-    const gas = BURN_GAS + (allowance < parseUnits(p.amount.toFixed(6), 6) ? APPROVE_GAS : 0n)
+    const gas = BURN_GAS + (allowance !== parseUnits(p.amount.toFixed(6), 6) ? APPROVE_GAS : 0n)
     // Arc gas is USDC with 18 decimals.
     const networkFee = Number(gas * BigInt(gasPriceHex)) / 1e18
     return { ...fees, networkFee }
@@ -372,7 +372,7 @@ export async function fastCctpTransfer(p: FastCctpParams): Promise<FastCctpResul
   const burnData = p.useForwarder
     ? encodeFunctionData({ abi: MESSENGER, functionName: 'depositForBurnWithHook', args: [amount, dst, pad(p.recipient as Hex, { size: 32 }), ARC_USDC, ZERO32, maxFee, p.speed === 'FAST' ? FAST_FINALITY : SLOW_FINALITY, FORWARD_HOOK] })
     : encodeFunctionData({ abi: MESSENGER, functionName: 'depositForBurn', args: [amount, dst, pad(p.recipient as Hex, { size: 32 }), ARC_USDC, ZERO32, maxFee, p.speed === 'FAST' ? FAST_FINALITY : SLOW_FINALITY] })
-  const approveData = encodeFunctionData({ abi: ERC20, functionName: 'approve', args: [TOKEN_MESSENGER_V2, maxUint256] })
+  const approveData = encodeFunctionData({ abi: ERC20, functionName: 'approve', args: [TOKEN_MESSENGER_V2, amount] })
 
   // MeshPortRouter on Arc: one signature, nothing left approved.
   const router = arcRouterAddress()
@@ -392,9 +392,10 @@ export async function fastCctpTransfer(p: FastCctpParams): Promise<FastCctpResul
   let nonce = Number(BigInt(nonceHex))
   const allowance = decodeFunctionResult({ abi: ERC20, functionName: 'allowance', data: allowanceHex as Hex }) as bigint
 
-  // 1. Approve - once (max); later transfers skip it.
+  // 1. Approve exactly the amount - the burn spends it all, nothing stays
+  //    approved. A leftover allowance (old max approval) is replaced here.
   let approveHash: string | undefined
-  if (allowance < amount) {
+  if (allowance !== amount) {
     const gas = await estimate(from, ARC_USDC, approveData)
     approveHash = await sendStep(p.account, { to: ARC_USDC, data: approveData, gas, nonce }, 'The approval')
     nonce += 1

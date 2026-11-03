@@ -38,7 +38,7 @@ const base = (o: Partial<Parameters<typeof fastCctpTransfer>[0]> = {}) => ({
 describe('fastCctpTransfer', () => {
   beforeEach(() => { rpc.mockReset(); send.mockReset(); iris.mockReset(); finish.mockReset() })
 
-  it('approves once (max - later transfers skip it), burns with the forward hook, and reports the forwarder mint', async () => {
+  it('approves exactly the amount (nothing left approved), burns with the forward hook, and reports the forwarder mint', async () => {
     arc()
     send.mockImplementation(async (_a: any, tx: any) => ({ txHash: tx.to === ARC_USDC ? H(1) : H(2), state: 'success' }))
     iris.mockResolvedValueOnce(null).mockResolvedValueOnce({ status: 'complete', message: '0xab', attestation: '0xcd' })
@@ -51,7 +51,7 @@ describe('fastCctpTransfer', () => {
     expect(approveTx).toMatchObject({ to: ARC_USDC, nonce: 7, gas: 130_000n })
     const approve = decodeFunctionData({ abi: [{ type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ name: 's', type: 'address' }, { name: 'a', type: 'uint256' }], outputs: [{ type: 'bool' }] }] as const, data: approveTx.data })
     expect(String(approve.args[0]).toLowerCase()).toBe(TOKEN_MESSENGER_V2.toLowerCase())
-    expect(approve.args[1]).toBe(2n ** 256n - 1n) // standing approval: TokenMessenger only pulls from the sender itself
+    expect(approve.args[1]).toBe(10_000_000n) // exactly the amount: the burn spends it all
     expect(burnTx).toMatchObject({ to: TOKEN_MESSENGER_V2, nonce: 8 })
     const burn = decodeFunctionData({ abi: BURN_ABI, data: burnTx.data })
     expect(burn.functionName).toBe('depositForBurnWithHook')
@@ -65,8 +65,18 @@ describe('fastCctpTransfer', () => {
     expect(finish).not.toHaveBeenCalled()
   })
 
-  it('skips the approval when the allowance covers it; relayer mints without a forwarder', async () => {
-    arc({ allowance: 50_000_000n })
+  it('a leftover larger allowance (old max approval) is replaced by the exact amount', async () => {
+    arc({ allowance: 2n ** 256n - 1n })
+    send.mockImplementation(async (_a: any, tx: any) => ({ txHash: tx.to === ARC_USDC ? H(1) : H(2), state: 'success' }))
+    iris.mockResolvedValue({ status: 'complete', message: '0xab', attestation: '0xcd', forwardState: 'COMPLETE', forwardTxHash: H(3) })
+    await fastCctpTransfer(base())
+    expect(send).toHaveBeenCalledTimes(2)
+    const approve = decodeFunctionData({ abi: [{ type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ name: 's', type: 'address' }, { name: 'a', type: 'uint256' }], outputs: [{ type: 'bool' }] }] as const, data: send.mock.calls[0][1].data })
+    expect(approve.args[1]).toBe(10_000_000n)
+  })
+
+  it('skips the approval when the allowance is exactly the amount; relayer mints without a forwarder', async () => {
+    arc({ allowance: 10_000_000n })
     send.mockResolvedValue({ txHash: H(2), state: 'success' })
     iris.mockResolvedValue({ status: 'complete', message: '0xab', attestation: '0xcd' })
     finish.mockResolvedValue({ mintTxHash: H(9) })
@@ -79,13 +89,13 @@ describe('fastCctpTransfer', () => {
   })
 
   it('a burn that would revert is never sent', async () => {
-    arc({ allowance: 50_000_000n, revert: true })
+    arc({ allowance: 10_000_000n, revert: true })
     await expect(fastCctpTransfer(base())).rejects.toThrow(/insufficient balance/)
     expect(send).not.toHaveBeenCalled()
   })
 
   it('a reverted burn is "nothing sent", not "settling"', async () => {
-    arc({ allowance: 50_000_000n })
+    arc({ allowance: 10_000_000n })
     send.mockResolvedValue({ txHash: H(2), state: 'failed' })
     const onBurnSent = vi.fn()
     await expect(fastCctpTransfer(base({ onBurnSent }))).rejects.toMatchObject({ kind: 'not_sent' })
@@ -93,7 +103,7 @@ describe('fastCctpTransfer', () => {
   })
 
   it('a burn still confirming hands its hash over (the transfer may settle on its own)', async () => {
-    arc({ allowance: 50_000_000n })
+    arc({ allowance: 10_000_000n })
     send.mockResolvedValue({ txHash: H(2), state: 'pending' })
     const onBurnSent = vi.fn()
     await expect(fastCctpTransfer(base({ onBurnSent }))).rejects.toBeInstanceOf(FastCctpError)
