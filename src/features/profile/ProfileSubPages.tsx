@@ -30,6 +30,7 @@ import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { useAuthStore, useNotificationStore, useUIStore, type AppNotification } from '@/store'
 import { useFeatureEnabled } from '@/store/settingsStore'
+import { fastPayEnabled, setFastPayEnabled, maybeStartFastPay, useFastPay, FAST_PAY_LIMIT_USDC } from '@/lib/fastPay'
 import { useThemeStore, resolveTheme, type ThemeMode } from '@/store/themeStore'
 import { switchTheme } from '@/lib/themeTransition'
 import { Avatar } from '@/components/ui/Avatar'
@@ -71,6 +72,21 @@ export function SecurityPage() {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const storedPasscode = useAuthStore(s => s.passcode)
   const lock = useAuthStore(s => s.lock)
+  // Fast Pay (beta, Google / email Circle wallets - lib/fastPay.ts).
+  const walletSource = useAuthStore(s => s.walletSource)
+  const [fastPayOn, setFastPayOn] = useState(fastPayEnabled)
+  const fastPay = useFastPay()
+  const fastPayStatus = !fastPayOn ? `Pay up to $${FAST_PAY_LIMIT_USDC} in about a second for 2 hours after unlocking. Bigger payments use your wallet as now.`
+    : fastPay.phase === 'starting' ? 'Setting up your Fast Pay session...'
+    : fastPay.phase === 'ready' ? `$${fastPay.remaining.toFixed(2)} left until ${new Date(fastPay.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - passcode still asked every payment`
+    : fastPay.phase === 'error' ? `Couldn't start: ${fastPay.error ?? 'try again'}`
+    : 'On - starts after you unlock'
+  const toggleFastPay = () => {
+    const on = !fastPayOn
+    setFastPayEnabled(on); setFastPayOn(on)
+    if (on) void maybeStartFastPay()
+    showToastMessage(on ? 'Fast Pay on (beta)' : 'Fast Pay off')
+  }
   // Admin Panel → Features → Security. When an admin turns this off, App.tsx
   // (global effect) forces biometricEnabled to false for every session
   // immediately - this local gate additionally locks the toggle itself so
@@ -152,6 +168,10 @@ export function SecurityPage() {
               enabled={biometricAdminEnabled && biometricEnabled}
               disabled={!biometricAdminEnabled}
               onToggle={handleToggle} />
+            {walletSource === 'circle' && (
+              <ToggleItem icon={<KeyRound className="w-5 h-5 text-accent-text" />} label="Fast Pay (beta)"
+                description={fastPayStatus} enabled={fastPayOn} onToggle={toggleFastPay} />
+            )}
             <ToggleItem icon={<Lock className="w-5 h-5 text-accent-text" />} label="Passcode Lock"
               description="Locks when reopened, or after 5 min in the background" enabled={passcodeLockEnabled}
               onToggle={() => { setPasscodeLockEnabled(!passcodeLockEnabled); showToastMessage(`Auto-lock ${!passcodeLockEnabled ? 'enabled' : 'disabled'}`) }} />

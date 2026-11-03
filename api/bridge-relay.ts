@@ -726,6 +726,52 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+// ── Fast Pay gas float (src/lib/fastPay.ts) ─────────────────────────────────
+// A Fast Pay session key is a fresh, empty address; Arc gas is USDC, so it
+// needs a little to send the session's permits and payments (~0.0016 USDC
+// each at 20 gwei). The relayer gives it FASTPAY_GAS_WEI once. Guards: a
+// signed-in account only, the shared relay rate limit, a per-account daily
+// cap, and only an address with no code and less than the float already.
+// The float can only pay gas - the session key's spending power over the
+// user's USDC comes from their own Permit2 grant, not from this.
+const FASTPAY_GAS_WEI = 20_000_000_000_000_000n // 0.02 USDC (18-decimal native)
+const FASTPAY_GAS_PER_DAY = 12
+const _fastPayGasHits = new Map<string, number[]>()
+function allowFastPayGas(wallet: string): boolean {
+  const now = Date.now(), day = 24 * 60 * 60_000
+  const hits = (_fastPayGasHits.get(wallet) || []).filter(t => now - t < day)
+  if (hits.length >= FASTPAY_GAS_PER_DAY) return false
+  hits.push(now)
+  _fastPayGasHits.set(wallet, hits)
+  return true
+}
+
+async function fastPayGas(req: VercelRequest, res: VercelResponse) {
+  const address = String((req.body as any)?.address || '')
+  if (!isHex(address, 20)) return res.status(400).json({ error: 'Malformed address' })
+  const session = await sessionInfo(req)
+  const caller = session?.wallet ?? null
+  if (!caller) return res.status(403).json({ error: 'Not signed in' })
+  if (!allowRelay(caller)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
+  const cl = await callClients('Arc_Testnet')
+  if (!cl) return res.status(400).json({ error: 'Arc is not configured' })
+  if (!cl.wallet) return res.status(503).json({ error: 'Relayer is not configured' })
+  const [code, balance] = await Promise.all([
+    cl.pub.getCode({ address }).catch(() => undefined),
+    cl.pub.getBalance({ address }) as Promise<bigint>,
+  ])
+  if (code && code !== '0x') return res.status(400).json({ error: 'Not a session key' })
+  if (balance >= FASTPAY_GAS_WEI) return res.status(200).json({ funded: false })
+  if (!allowFastPayGas(caller)) return res.status(429).json({ error: 'Fast Pay gas limit reached for today' })
+  const txHash = await cl.wallet.sendTransaction({ to: address, value: FASTPAY_GAS_WEI - balance, ...(await relayFees(cl.pub, cl.pub.chain.id)) })
+  try {
+    const receipt = await cl.pub.waitForTransactionReceipt({ hash: txHash, timeout: 20_000 })
+    if (receipt.status !== 'success') return res.status(502).json({ error: 'Gas transfer reverted', txHash })
+  } catch { return res.status(200).json({ funded: true, txHash, pending: true }) }
+  console.log(`[fastpay gas] funded ${address.slice(0, 10)}… for ${caller.slice(0, 10)}…`)
+  return res.status(200).json({ funded: true, txHash })
+}
+
 type IrisFeeRow = { finalityThreshold: number; minimumFee: number; forwardFee?: number | { low?: number; med?: number; high?: number } }
 
 // Quote inputs that change slowly, kept per warm instance so a quote is one
@@ -1290,6 +1336,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if ((req.body as any)?.action === 'call') return await relayCall(req, res)
+    if ((req.body as any)?.action === 'fastpay_gas') return await fastPayGas(req, res)
     if ((req.body as any)?.action === 'token_relay') return await tokenRelay(req, res)
 
     // ── Relay ────────────────────────────────────────────────────────────

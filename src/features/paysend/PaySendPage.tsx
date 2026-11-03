@@ -660,6 +660,10 @@ export function PaySendPage() {
   // exact username.arc finds yourself, tagged "You" at render time.
   const { results, searching } = useUserSearch(isValidAddress(query.trim()) ? '' : query, savedContacts)
 
+  // Fast Pay (beta, Circle wallets - lib/fastPay.ts): make sure a session is
+  // starting in the background while the payment is being entered.
+  useEffect(() => { import('@/lib/fastPay').then(m => { void m.maybeStartFastPay() }).catch(() => {}) }, [])
+
   // Warm the RPC proxy as soon as the passcode sheet opens.
   useEffect(() => {
     if (showPasscodeSheet) import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
