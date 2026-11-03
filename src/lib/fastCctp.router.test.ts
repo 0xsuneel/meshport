@@ -46,7 +46,7 @@ describe('Transfer from Arc through MeshPortRouter: one signature', () => {
     expect(relayed).toHaveLength(1)
     const { bridge, authorization } = relayed[0]
     expect(relayed[0].action).toBe('arc_transfer')
-    const fee = routerFee(GAS_PRICE)
+    const fee = routerFee(GAS_PRICE, 10_000_000n)
     expect(bridge).toMatchObject({ token: ARC_USDC, destinationDomain: 6, fee: fee.toString(), maxFee: '100000', minFinalityThreshold: 1000, hookData: FORWARD_HOOK })
     expect(bridge.mintRecipient.toLowerCase()).toBe(pad(TO as Hex, { size: 32 }).toLowerCase())
     expect(authorization.value).toBe((10_000_000n + fee).toString())
@@ -67,9 +67,13 @@ describe('Transfer from Arc through MeshPortRouter: one signature', () => {
     expect(r.steps.find(s => s.name === 'burn')?.txHash).toBe(H(9))
   })
 
-  it('the fee is the router call\'s gas at today\'s price, rounded up to whole USDC units', () => {
-    expect(routerFee(GAS_PRICE)).toBe(6000n)  // 300k gas × 20 gwei = 0.006 USDC
-    expect(routerFee(1n)).toBe(1n)            // never 0
+  it('the fee: 0.2% of the amount, min $0.05, cap $5 - never below the gas × 1.15', () => {
+    expect(routerFee(GAS_PRICE, 10_000_000n)).toBe(50_000n)          // $10 → 0.2% = $0.02 → the $0.05 minimum
+    expect(routerFee(GAS_PRICE, 1_000_000_000n)).toBe(2_000_000n)    // $1,000 → $2
+    expect(routerFee(GAS_PRICE, 10_000_000_000n)).toBe(5_000_000n)   // $10,000 → $20 → the $5 cap
+    // Gas alone above the cap (absurd gas price): the fee follows the gas, × 1.15 - never a loss.
+    const hugeGas = 100_000_000_000_000n // 100k gwei: 300k gas = 30 USDC
+    expect(routerFee(hugeGas, 10_000_000_000n)).toBe(34_500_000n)
   })
 
   it('refused by the relayer (bad fee, not signed in…): nothing was sent', async () => {

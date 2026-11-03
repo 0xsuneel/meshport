@@ -48,6 +48,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { EXTERNAL_CHAINS } from '../src/blockchain/chains'
+import { CROSS_CHAIN_FEE, usdRule, meshportFee, feeAcceptable, arcWeiToUsdcUnits } from '../src/lib/feePolicy'
 
 const ARC_DOMAIN = 26
 const FORWARD_HOOK = '0x636374702d666f72776172640000000000000000000000000000000000000000'
@@ -490,7 +491,6 @@ const EXTRA_CHAIN_IDS: Record<string, number> = {
 //     destination, no hook or Circle's forwarding hook;
 //   - the fee must cover this relayer's gas (simulated first - a bad
 //     signature or a changed parameter never costs gas).
-export const ARC_TRANSFER_GAS_SLACK = 80n // the fee may be up to 20% under today's gas cost (price moves since the quote)
 export function arcTransferDomains(): Set<number> {
   return new Set(Object.values(CHAINS).map(c => c.domain).filter(d => d !== ARC_DOMAIN))
 }
@@ -559,8 +559,9 @@ async function arcTransfer(req: VercelRequest, res: VercelResponse) {
     pub.estimateContractGas({ account: wallet.account, address: router, abi: ROUTER_ABI, functionName: 'bridgeWithAuthorization', args: [bridgeArgs, authArgs] }) as Promise<bigint>,
     pub.getGasPrice() as Promise<bigint>,
   ])
-  const gasUnits = (gas * gasPrice + 999_999_999_999n) / 1_000_000_000_000n
-  if (fee * 100n < gasUnits * ARC_TRANSFER_GAS_SLACK) return res.status(400).json({ error: 'Fee too low - please try again' })
+  const gasUnits = arcWeiToUsdcUnits(gas * gasPrice)
+  const required = meshportFee(value - fee, gasUnits, usdRule(CROSS_CHAIN_FEE, 6))
+  if (!feeAcceptable(fee, required, gasUnits)) return res.status(400).json({ error: 'Fee too low - please try again' })
 
   const txHash = await wallet.writeContract({ ...request, ...(await relayFees(pub, pub.chain.id)) })
   try {
@@ -920,19 +921,54 @@ function chainGasPrice(pub: any, chainKey: string): Promise<bigint> {
   return cached(gasPriceCache, chainKey, 'price', GAS_PRICE_TTL_MS, () => pub.getGasPrice() as Promise<bigint>)
 }
 
-/** MeshPort's fee: the relayer's gas for the router call, priced in USDC -
- *  what that gas costs, nothing more (no margin, no minimum). */
-async function relayFee(pub: any, chainKey: string): Promise<bigint> {
-  const gasPrice = await chainGasPrice(pub, chainKey)
-  const nativeUsd = Number(process.env[`BRIDGE_NATIVE_USD_${chainKey.toUpperCase()}`] || CHAINS[chainKey].gasUsd)
-  // wei → USDC units: wei * usd / 1e18 * 1e6 = wei * usd / 1e12
-  const units = (ROUTER_GAS * gasPrice * BigInt(Math.round(nativeUsd * 100))) / 100n / 1_000_000_000_000n
-  // Testnet gas has no real value, but priced at mainnet rates a busy chain
-  // (Ethereum Sepolia) came out over 1 USDC - above the app's 5% fee limit,
-  // so every quote there was rejected. Capped so the fee stays small: the
-  // cap only ever lowers the fee.
-  const cap = BigInt(process.env.BRIDGE_MAX_FEE_UNITS || '100000')
+// ── MeshPort's fee (src/lib/feePolicy.ts) ──────────────────────────────────
+// 0.2% of the amount, min $0.05, cap $5 - never below the relayer's live gas
+// cost × 1.15. The gas cost uses the chain's CURRENT gas price (read at quote
+// and again before sending) and, on mainnet, the gas coin's LIVE price.
+// Testnet gas has no real value: there it is priced at the table's rough
+// gasUsd and capped (BRIDGE_TESTNET_GAS_CAP_UNITS, default 0.10 USDC) so test
+// moves stay cheap; the percentage / minimum / cap still apply.
+const IS_MAINNET = (process.env.BRIDGE_NETWORK || process.env.VITE_NETWORK_ENV || '').toLowerCase() === 'mainnet'
+const GAS_COIN: Record<string, string> = {
+  Avalanche_Fuji: 'AVAX', Polygon_Sepolia: 'POL', Sei_Testnet: 'SEI', Sonic_Testnet: 'S', HyperEVM_Testnet: 'HYPE',
+  Monad_Testnet: 'MON', XDC_Apothem: 'XDC', Plume_Testnet: 'PLUME', Injective_Testnet: 'INJ',
+}
+const nativePriceCache = new Map<string, { at: number; usd: Promise<number> }>()
+/** The chain's gas coin in USD: live on mainnet (Coinbase spot, cached 60 s), the table's rough price on testnet or if the live read fails. */
+export async function nativeUsd(chainKey: string): Promise<number> {
+  const fixed = Number(process.env[`BRIDGE_NATIVE_USD_${chainKey.toUpperCase()}`] || CHAINS[chainKey]?.gasUsd || 3000)
+  if (!IS_MAINNET) return fixed
+  const coin = GAS_COIN[chainKey] ?? 'ETH'
+  const hit = nativePriceCache.get(coin)
+  if (hit && Date.now() - hit.at < 60_000) return hit.usd
+  const usd = fetch(`https://api.coinbase.com/v2/prices/${coin}-USD/spot`, { signal: AbortSignal.timeout(4_000) })
+    .then(r => r.json()).then(j => { const v = Number(j?.data?.amount); if (!(v > 0)) throw new Error('no price'); return v })
+    .catch(() => fixed)
+  nativePriceCache.set(coin, { at: Date.now(), usd })
+  return usd
+}
+
+/** Native-coin wei → USDC units (6 dp) at `usd` dollars per coin, rounded up. */
+function weiToUsdUnits(wei: bigint, usd: number): bigint {
+  return (wei * BigInt(Math.round(usd * 100)) + 100n * 1_000_000_000_000n - 1n) / 100n / 1_000_000_000_000n
+}
+/** Testnet only: gas has no real value - keep the gas part small. */
+function testnetGasCap(units: bigint): bigint {
+  if (IS_MAINNET) return units
+  const cap = BigInt(process.env.BRIDGE_TESTNET_GAS_CAP_UNITS || process.env.BRIDGE_MAX_FEE_UNITS || '100000')
   return units > cap ? cap : units
+}
+
+/** The relayer's gas for the router call on this chain, in USDC units, right now. */
+async function relayGasCost(pub: any, chainKey: string): Promise<bigint> {
+  const [gasPrice, usd] = await Promise.all([chainGasPrice(pub, chainKey), nativeUsd(chainKey)])
+  return testnetGasCap(weiToUsdUnits(ROUTER_GAS * gasPrice, usd))
+}
+
+/** MeshPort's fee on a USDC Bring of `total` units (fee included). */
+async function relayFee(pub: any, chainKey: string, total: bigint): Promise<{ fee: bigint; gasCost: bigint }> {
+  const gasCost = await relayGasCost(pub, chainKey)
+  return { fee: meshportFee(total, gasCost, usdRule(CROSS_CHAIN_FEE, 6)), gasCost }
 }
 
 async function quote(chainKey: string, total: bigint) {
@@ -948,9 +984,9 @@ async function quote(chainKey: string, total: bigint) {
     meta.catch(() => usdcMetaCache.delete(chainKey))
   }
   // All at once: gas price, USDC's signing domain and Circle's fee table.
-  const [fee, [usdcName, usdcVersion], rows] = await Promise.all([relayFee(pub, chainKey), meta, irisFeeRows(c.domain)])
+  const [{ fee, gasCost }, [usdcName, usdcVersion], rows] = await Promise.all([relayFee(pub, chainKey, total), meta, irisFeeRows(c.domain)])
   const maxFee = await cctpMaxFee(c.domain, total > fee ? total - fee : 0n, rows)
-  return { fee, maxFee, usdcName, usdcVersion, pub }
+  return { fee, gasCost, maxFee, usdcName, usdcVersion, pub }
 }
 
 // ── EURC / cirBTC (Circle CCTPx) through MeshPortRouter ────────────────────
@@ -1138,10 +1174,17 @@ export function tokenFeeUnits(totalWei: bigint, gasUsd: number, symbol: string, 
   return BigInt(Math.ceil(usd / tokenUsd * 10 ** t.decimals))
 }
 
-async function tokenFee(pub: any, chainKey: string, symbol: string, nativeFee: bigint): Promise<bigint> {
-  const gasPrice = await chainGasPrice(pub, chainKey)
-  const gasUsd = Number(process.env[`BRIDGE_NATIVE_USD_${chainKey.toUpperCase()}`] || CHAINS[chainKey].gasUsd)
-  return tokenFeeUnits(TOKEN_ROUTER_GAS * gasPrice + nativeFee, gasUsd, symbol)
+/**
+ * MeshPort's fee on a token Bring of `amount` (token units): 0.2%, min $0.05,
+ * cap $5 in the token - never below the relayer's live cost (its gas + Circle's
+ * native CCTPx fee, which it pays) × 1.15.
+ */
+async function tokenFee(pub: any, chainKey: string, symbol: string, nativeFee: bigint, amount: bigint): Promise<{ fee: bigint; gasCost: bigint }> {
+  const [gasPrice, gasUsd] = await Promise.all([chainGasPrice(pub, chainKey), nativeUsd(chainKey)])
+  const t = CCTPX_TOKENS[symbol]
+  const gasCost = tokenFeeUnits(TOKEN_ROUTER_GAS * gasPrice + nativeFee, gasUsd, symbol, IS_MAINNET ? { ...process.env, BRIDGE_TOKEN_MAX_FEE_USD: '1e12' } : process.env)
+  const tokenUsd = Number(process.env[t.usdEnv] || t.usd)
+  return { fee: meshportFee(amount, gasCost, usdRule(CROSS_CHAIN_FEE, t.decimals, tokenUsd)), gasCost }
 }
 
 // How a token is pulled and its EIP-712 domain never change for a deployed
@@ -1194,7 +1237,7 @@ async function tokenQuote(req: VercelRequest, res: VercelResponse) {
     chainGasPrice(pub, chainKey).catch(() => undefined),
   ])
   if (!info.auth) return res.status(400).json({ error: `${symbol} on this chain can't be moved with a signature` })
-  const fee = await tokenFee(pub, chainKey, symbol, q.nativeFee)
+  const { fee } = await tokenFee(pub, chainKey, symbol, q.nativeFee, BigInt(amount))
   return res.status(200).json({
     fee: fee.toString(), nativeFee: q.nativeFee.toString(), finality: q.finality, token, tokenId: CCTPX_TOKENS[symbol].id,
     decimals: CCTPX_TOKENS[symbol].decimals, auth: info.auth, domainName: info.name, domainVersion: info.version,
@@ -1279,8 +1322,8 @@ async function tokenRelay(req: VercelRequest, res: VercelResponse) {
 
   if ('e' in quoted) throw quoted.e
   const q = quoted.v
-  const needed = await tokenFee(pub, chainKey, symbol, q.nativeFee)
-  if (fee * 100n < needed * 80n) return res.status(400).json({ error: 'Fee too low - please try again' })
+  const needed = await tokenFee(pub, chainKey, symbol, q.nativeFee, value)
+  if (!feeAcceptable(fee, needed.fee, needed.gasCost)) return res.status(400).json({ error: 'Fee too low - please try again' })
   if (bal < value) return res.status(400).json({ error: `Not enough ${symbol} on this chain` })
 
   const { parseSignature } = await import('viem')
@@ -1495,8 +1538,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const [now_q, bal] = await Promise.all([quoteP, balP])
-    // The fee must still cover the relayer's gas (some slack for price moves since the quote).
-    if (fee * 100n < now_q.fee * 80n) return res.status(400).json({ error: 'Fee too low - please try again' })
+    // The fee must match today's quote (a little slack for moves since it) and never be below the live gas.
+    if (!feeAcceptable(fee, now_q.fee, now_q.gasCost)) return res.status(400).json({ error: 'Fee too low - please try again' })
     if (maxFee * 100n < now_q.maxFee * 80n) return res.status(400).json({ error: 'Bridge fee too low - please try again' })
 
     if (bal < value) return res.status(400).json({ error: 'Not enough USDC on this chain' })

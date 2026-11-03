@@ -32,6 +32,7 @@ import type { WalletAccount } from '@/wallet'
 import { arcRpcJson } from './arc'
 import { CCTP_DOMAINS, IRIS, fetchIrisMessage, forwardDone, type IrisMessage } from './cctpTracker'
 import { FORWARD_HOOK, FAST_FINALITY, ARC_DOMAIN, bridgeNonce, type BridgeParams } from './gaslessBridge'
+import { CROSS_CHAIN_FEE, usdRule, meshportFee, arcWeiToUsdcUnits } from './feePolicy'
 
 export const TOKEN_MESSENGER_V2 = '0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA' as Hex
 export const ARC_USDC = '0x3600000000000000000000000000000000000000' as Hex // ERC-20 view, 6 decimals
@@ -155,7 +156,7 @@ export async function fastCctpFees(p: { destination: string; amount: number; fas
     const fees = rows ? expectedFeesFromIris(rows, p.amount, p) : null
     if (!fees) return null
     // Through the Arc router: its fee (the relayer's gas), whatever the allowance.
-    if (arcRouterAddress()) return { ...fees, networkFee: Number(routerFee(BigInt(gasPriceHex))) / 1e6 }
+    if (arcRouterAddress()) return { ...fees, networkFee: Number(routerFee(BigInt(gasPriceHex), parseUnits(p.amount.toFixed(6), 6))) / 1e6 }
     const allowance = decodeFunctionResult({ abi: ERC20, functionName: 'allowance', data: allowanceHex as Hex }) as bigint
     const gas = BURN_GAS + (allowance < parseUnits(p.amount.toFixed(6), 6) ? APPROVE_GAS : 0n)
     // Arc gas is USDC with 18 decimals.
@@ -201,16 +202,19 @@ export function arcRouterAddress(): Hex | null {
   const r = String((import.meta.env.VITE_ARC_ROUTER as string | undefined) ?? '').trim()
   return /^0x[0-9a-fA-F]{40}$/.test(r) ? r as Hex : null
 }
-/** The router's fee for one transfer: its gas at today's price, in USDC units (6 dp), rounded up. */
-export function routerFee(gasPrice: bigint): bigint {
-  const units = (ROUTER_TRANSFER_GAS * gasPrice + 999_999_999_999n) / 1_000_000_000_000n
-  return units > 0n ? units : 1n
+/**
+ * MeshPort's fee for one transfer of `amount` (USDC units): 0.2%, min $0.05,
+ * cap $5 - never below the router call's gas at today's price × 1.15
+ * (lib/feePolicy - the relayer checks the same number).
+ */
+export function routerFee(gasPrice: bigint, amount: bigint): bigint {
+  return meshportFee(amount, arcWeiToUsdcUnits(ROUTER_TRANSFER_GAS * gasPrice), usdRule(CROSS_CHAIN_FEE, 6))
 }
 
 async function routerBurn(p: FastCctpParams, router: Hex, amount: bigint, maxFee: bigint, dst: number): Promise<Hex> {
   const { currentGasPrice } = await import('./arcService')
   const gasPrice = await beforeSending(currentGasPrice())
-  const fee = routerFee(gasPrice)
+  const fee = routerFee(gasPrice, amount)
   const params: BridgeParams = {
     token: ARC_USDC, destinationDomain: dst, mintRecipient: pad(p.recipient as Hex, { size: 32 }),
     fee, maxFee, minFinalityThreshold: p.speed === 'FAST' ? FAST_FINALITY : SLOW_FINALITY,
