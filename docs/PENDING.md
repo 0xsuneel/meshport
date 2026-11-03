@@ -1,0 +1,73 @@
+# Pending work - MeshPort
+
+The running list of things decided but not finished. Update it whenever an
+item is done or a new one is agreed. (Started 3 Nov 2026.)
+
+## 1. Circle developer-controlled wallets for the relayer and fees - **do first**
+
+Plan: replace the relayer's private key (`BRIDGE_RELAYER_PRIVATE_KEY` in
+Vercel) with a Circle developer-controlled EOA wallet that signs relayer
+transactions (Circle `signTransaction`) and receives every MeshPort fee.
+
+- [ ] **You:** in Circle's console, create the wallet set and EOA wallets.
+      Confirm the **same address on every EVM chain** (derive wallet), and
+      whether the generic "EVM" wallet type is enabled for chains Circle
+      doesn't list (Sei, Sonic, HyperEVM, XDC, Plume, …).
+- [ ] **You:** give me the EVM wallet ID(s) + address and the Solana wallet ID.
+- [ ] **Me:** `api/_lib/relayerSigner.ts` - a viem account whose
+      `signTransaction` calls Circle, behind `RELAYER_MODE=circle`
+      (`CIRCLE_API_KEY`, `CIRCLE_ENTITY_SECRET`, wallet IDs). Every relayer
+      path in `api/bridge-relay.ts` keeps working; we still broadcast ourselves.
+- [ ] **Me:** the Solana fee payer (`api/solana-fee-payer.ts`) on a Circle Solana wallet.
+- [ ] **Me (optional):** the rewards signer (`rewards-claim-sign`, typed data) on Circle.
+- [ ] **You:** fund the Circle wallet with native gas on each chain; test on testnet;
+      then remove `BRIDGE_RELAYER_PRIVATE_KEY` / `SOLANA_FEE_PAYER_SECRET`.
+
+**Hold until the Circle wallet address exists** (these contracts lock their
+fee address at deploy - deploying now means redeploying later):
+
+- [ ] Deploy **MeshPortRouter on Arc** (`node contracts/deploy-router-all.cjs --chains=Arc_Testnet`)
+      with `FEE_RECIPIENT` = the Circle wallet → set `VITE_ARC_ROUTER` / `ARC_ROUTER`.
+- [ ] Deploy **MeshPortCheckout** (`node contracts/deploy-checkout.cjs`) with
+      `FEE_RECIPIENT` = the Circle wallet → set `VITE_MESHPORT_CHECKOUT` (Vercel)
+      and `MESHPORT_CHECKOUT` (Supabase secrets); then I redeploy `merchant-pay`.
+- [ ] **Redeploy the Bring routers** on the other chains with the new
+      `FEE_RECIPIENT` → update `VITE_BRIDGE_ROUTERS` / `BRIDGE_ROUTERS`.
+- [ ] Set `VITE_FEE_WALLET` = the Circle wallet (swap fee).
+- [ ] Mainnet only: `BRIDGE_NETWORK=mainnet` (live gas-coin prices for fees).
+
+## 2. Fees (agreed list - `src/lib/feePolicy.ts`)
+
+Done: never-a-loss rule, cross-chain 0.2% (Bring + Arc router Transfer),
+swap 0.35%, merchant 0.6% on **order** payments (MeshPortCheckout, ready to
+deploy). Pay and plain receives are free - never add a fee there.
+
+- [ ] Merchant fee line on order / payment details ("MeshPort fee $0.60").
+- [ ] Merchant fee on order payments made on **other chains** and collected
+      with Claim All - only the order payments, never plain receives (needs a
+      record of which payments were already charged).
+- [ ] UB Bring fee (0.2%) - as a second recipient in the signed Gateway spend.
+- [ ] Solana Bring fee (0.2% + new-account rent) - a fee transfer in the
+      Solana transaction, and the fee-payer check allowing it.
+- [ ] P2P trades 0.2% (taker) - escrow contract release change.
+- [ ] Bulk payouts 0.25% (cap $1 per recipient).
+- [ ] First cross-chain move free each month (per-wallet counter).
+
+## 3. Unified Balance
+
+- [x] UB removed from **Transfer** (`TRANSFER_UB_ENABLED = false` in
+      `src/lib/featureFilters.ts`; all code kept). UB chains send over CCTP.
+- [ ] Rebuild UB "on the other side" (your plan), then decide the UB deposit
+      gas: MeshPort pays it, or keep charging the user.
+- [ ] UB in 2 signatures instead of 3 (deposit authorization submitted by
+      the relayer; prepare the signature during the PIN).
+
+## 4. Other open items
+
+- [ ] Wallets that already approved TokenMessengerV2 for unlimited USDC
+      (Transfer before the Arc router): a one-time "remove approval" once
+      the router is live.
+- [ ] Frame-hosted passcode keypad - skipped on web (a compromised page can
+      draw a fake keypad); do it natively in the mobile app (Keystore / Keychain).
+- [ ] Circle signing page reload (~0.7 s per signature) - needs Circle.
+- [ ] Sui - not possible on Arc today (Sui is CCTP V1 only, no Gateway).

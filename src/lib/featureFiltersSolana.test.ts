@@ -6,14 +6,28 @@ import {
 import { canBringOverCctp } from './gaslessBridge'
 
 const row = (enabled: boolean) => ({ enabled }) as any
+const UB = { ub: true } // the Unified Balance Transfer route (off for now - TRANSFER_UB_ENABLED)
+
+describe('Transfer without Unified Balance (TRANSFER_UB_ENABLED off)', () => {
+  it('UB chains send over CCTP - they stay in Transfer', () => {
+    expect(transferRoutes({}, 'eth')).toEqual(['cctp'])
+    expect(transferRoutes({}, 'sol')).toEqual(['cctp'])
+    expect(transferRoutes({ ethereum_ub_enabled: row(true) }, 'eth')).toEqual(['cctp'])
+  })
+  it('the admin switches still decide: chain off, or CCTP turned off = not offered', () => {
+    expect(transferRoutes({ ethereum_transfer_enabled: row(false) }, 'eth')).toEqual([])
+    expect(transferRoutes({ ethereum_cctp_enabled: row(false) }, 'eth')).toEqual([])
+    expect(transferRoutes({}, 'linea')).toEqual(['cctp'])
+  })
+})
 
 describe('Solana routes, like the other chains', () => {
   it('Transfer offers both Unified Balance and CCTP until an admin turns one off', () => {
-    expect(transferRoutes({}, 'sol')).toEqual(['ub', 'cctp'])
-    expect(transferRoutes({ solana_cctp_enabled: row(false) }, 'sol')).toEqual(['ub'])
-    expect(transferRoutes({ solana_ub_enabled: row(false) }, 'sol')).toEqual(['cctp'])
+    expect(transferRoutes({}, 'sol', 'personal', UB)).toEqual(['ub', 'cctp'])
+    expect(transferRoutes({ solana_cctp_enabled: row(false) }, 'sol', 'personal', UB)).toEqual(['ub'])
+    expect(transferRoutes({ solana_ub_enabled: row(false) }, 'sol', 'personal', UB)).toEqual(['cctp'])
     // other Unified Balance chains: CCTP starts off without a row
-    expect(transferRoutes({}, 'eth')).toEqual(['ub'])
+    expect(transferRoutes({}, 'eth', 'personal', UB)).toEqual(['ub'])
   })
   it('admin switches for Transfer and Bring', () => {
     expect(isChainEnabledForTransfer({}, 'sol')).toBe(true)
@@ -29,15 +43,15 @@ describe('Solana routes, like the other chains', () => {
 describe('No override, no fallback', () => {
   it('both Transfer routes off = the chain is off (no silent CCTP)', () => {
     const s = { ethereum_ub_enabled: row(false), ethereum_cctp_enabled: row(false) }
-    expect(transferRoutes(s, 'eth')).toEqual([])
+    expect(transferRoutes(s, 'eth', 'personal', UB)).toEqual([])
     expect(isChainEnabledForTransfer(s, 'eth')).toBe(false)
   })
   it('CCTP on does not hide Unified Balance (both are offered)', () => {
-    expect(transferRoutes({ ethereum_cctp_enabled: row(true) }, 'eth')).toEqual(['ub', 'cctp'])
+    expect(transferRoutes({ ethereum_cctp_enabled: row(true) }, 'eth', 'personal', UB)).toEqual(['ub', 'cctp'])
   })
   it('a CCTP-only chain is controlled by its chain switch alone', () => {
-    expect(transferRoutes({}, 'linea')).toEqual(['cctp'])
-    expect(transferRoutes({ linea_transfer_enabled: row(false) }, 'linea')).toEqual([])
+    expect(transferRoutes({}, 'linea', 'personal', UB)).toEqual(['cctp'])
+    expect(transferRoutes({ linea_transfer_enabled: row(false) }, 'linea', 'personal', UB)).toEqual([])
   })
   it('Bring routes: only what the chain supports and the admin has on', () => {
     expect(bringRoutes({}, 'Base_Sepolia', 'personal', { ub: true, cctp: true })).toEqual(['ub', 'cctp'])
@@ -70,8 +84,8 @@ describe('Personal and business switches are separate', () => {
     expect(isChainEnabledForSettle(businessOff, 'Base_Sepolia')).toBe(false)
   })
   it('business routes are their own', () => {
-    expect(transferRoutes({ biz_ethereum_ub_enabled: row(false), biz_ethereum_cctp_enabled: row(true) }, 'eth', 'business')).toEqual(['cctp'])
-    expect(transferRoutes({ biz_ethereum_ub_enabled: row(false), biz_ethereum_cctp_enabled: row(true) }, 'eth', 'personal')).toEqual(['ub'])
+    expect(transferRoutes({ biz_ethereum_ub_enabled: row(false), biz_ethereum_cctp_enabled: row(true) }, 'eth', 'business', UB)).toEqual(['cctp'])
+    expect(transferRoutes({ biz_ethereum_ub_enabled: row(false), biz_ethereum_cctp_enabled: row(true) }, 'eth', 'personal', UB)).toEqual(['ub'])
   })
   it('balance scan: a business reads chains it can Bring or Settle from', () => {
     const s = { biz_base_claim_enabled: row(false), biz_base_settle_enabled: row(true) }
