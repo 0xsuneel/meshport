@@ -46,7 +46,10 @@ const typedSigned: any[] = []
 const circleSigner = {
   address: OWNER, circleWallet: true,
   signTypedData: async (td: any) => { typedSigned.push(td); events.push('sign:' + td.primaryType); return privateKeyToAccount(generatePrivateKey()).signTypedData(td) },
+  // The Circle wallet's own transaction (turning Fast Pay off: Permit2.lockdown).
+  signTransaction: async (tx: any) => { if (circleRefuses) throw new Error('user cancelled'); events.push('sign:tx'); return privateKeyToAccount(generatePrivateKey()).signTransaction(tx) },
 }
+let circleRefuses = false
 const auth: any = { walletSource: 'circle', isLocked: false, walletAddress: OWNER, signer: circleSigner, passcode: 'frame:v1', setPasscode: (c: string) => { auth.passcode = c } }
 vi.mock('@/store', () => ({ useAuthStore: { getState: () => auth } }))
 vi.mock('@/wallet/circle', () => ({ isCircleAccount: (v: any) => v?.circleWallet === true }))
@@ -139,7 +142,7 @@ describe('Fast Pay session', () => {
     fp._resetFastPay(); mem.clear(); typedSigned.length = 0; sent.length = 0; fetchCalls.length = 0; perf.length = 0; events.length = 0
     usdcAllowanceToPermit2 = 0n; relayFails = false; failNextSetupSend = false; frameSupports = true; frameCalls.length = 0
     framePin = PIN; frameApproved = false; screen.pathname = '/pay'
-    p2Left = 0n; p2Expiration = 0; frameKept.clear()
+    p2Left = 0n; p2Expiration = 0; frameKept.clear(); circleRefuses = false
     for (const k of Object.keys(tokenBalance)) delete tokenBalance[k]
     for (const k of Object.keys(tokenAllowance)) delete tokenAllowance[k]; frameKeys.clear()
     Object.assign(auth, { walletSource: 'circle', isLocked: false, walletAddress: OWNER, signer: circleSigner, passcode: 'frame:v1' })
@@ -299,6 +302,67 @@ describe('Fast Pay session', () => {
     fp.setFastPayEnabled(false)
     expect(fp.fastPayCovers(OWNER, 1)).toBe(false)
     expect(framePin).toBe('654321') // the passcode check stays: it is the unlock check too
+  })
+
+  describe('turning it off: the limit cancelled on-chain', () => {
+    it('the Circle wallet sends Permit2.lockdown for the session key and every granted token; the key is dropped', async () => {
+      usdcAllowanceToPermit2 = maxUint256
+      tokenAllowance[EURC] = maxUint256
+      tokenBalance[EURC] = 50_000_000n
+      fp.setFastPayEnabled(true)
+      await fp.maybeStartFastPay()
+      const keyAddr = [...frameKeys.keys()][0]
+      p2Left = 60_000_000n; p2Expiration = Math.floor(Date.now() / 1000) + 3600 // something left on-chain
+      sent.length = 0
+      const r = await fp.stopFastPay()
+      expect(r.cancelled).toBe(true)
+      // Sent by the wallet itself (one Circle signature), not the key (which only returns its leftover gas).
+      const cancel = sent.find(t => lc(t.from) === lc(OWNER))!
+      expect(lc(cancel.to)).toBe(lc(PERMIT2))
+      const { functionName, args } = decodeFunctionData({ abi: permit2Abi, data: cancel.data! })
+      expect(functionName).toBe('lockdown')
+      expect((args as any)[0].map((a: any) => [lc(a.token), lc(a.spender)])).toEqual([[lc(ARC_USDC), keyAddr], [EURC, keyAddr]])
+      expect(fp.fastPayEnabled()).toBe(false)
+      expect(fp.fastPayCovers(OWNER, 1)).toBe(false)
+      await vi.waitFor(() => expect(frameKeys.size).toBe(0))
+    })
+
+    it('nothing left on-chain (used up or expired): no transaction, no Circle signature', async () => {
+      usdcAllowanceToPermit2 = maxUint256
+      fp.setFastPayEnabled(true)
+      await fp.maybeStartFastPay()
+      p2Left = 0n
+      sent.length = 0; events.length = 0
+      expect(await fp.stopFastPay()).toEqual({ cancelled: false, reason: 'nothing-left' })
+      expect(events).not.toContain('sign:tx')
+      expect(fp.fastPayEnabled()).toBe(false)
+    })
+
+    it('the wallet refuses (or the network fails): still off, and it says when the limit ends by itself', async () => {
+      usdcAllowanceToPermit2 = maxUint256
+      fp.setFastPayEnabled(true)
+      await fp.maybeStartFastPay()
+      const expiresAt = fp.useFastPay.getState().expiresAt
+      p2Left = 60_000_000n; p2Expiration = Math.floor(Date.now() / 1000) + 3600
+      circleRefuses = true
+      const r = await fp.stopFastPay()
+      expect(r).toMatchObject({ cancelled: false, reason: 'failed', expiresAt })
+      expect(fp.fastPayEnabled()).toBe(false)
+      expect(fp.fastPayCovers(OWNER, 1)).toBe(false)
+    })
+
+    it('after an app restart (session not reopened yet): the kept session\'s key is still cancelled', async () => {
+      usdcAllowanceToPermit2 = maxUint256
+      fp.setFastPayEnabled(true)
+      await fp.maybeStartFastPay()
+      const keyAddr = [...frameKeys.keys()][0]
+      fp._resetFastPay() // memory gone; the saved session stays
+      p2Left = 60_000_000n; p2Expiration = Math.floor(Date.now() / 1000) + 3600
+      sent.length = 0
+      expect((await fp.stopFastPay()).cancelled).toBe(true)
+      const { args } = decodeFunctionData({ abi: permit2Abi, data: sent.find(t => lc(t.from) === lc(OWNER))!.data! })
+      expect((args as any)[0].map((a: any) => lc(a.spender))).toEqual([keyAddr])
+    })
   })
 
   describe('EURC and cirBTC', () => {
