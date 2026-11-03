@@ -201,7 +201,7 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
   const PAY = '0x0d58b1db' + '00'.repeat(32)
   let pinSet = false
   async function session(): Promise<string> {
-    if (!pinSet) { expect((await ask('fastpay:set-passcode', { owner: OWNER, passcode: PIN }))!.msg.result).toEqual({ ok: true }); pinSet = true }
+    if (!pinSet) { expect((await ask('circle-passcode:set', { passcode: PIN }))!.msg.result).toEqual({ ok: true }); pinSet = true }
     return (await ask('session:create', { owner: OWNER }))!.msg.result.address
   }
 
@@ -233,10 +233,24 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
     expect(await refused(tx(PERMIT2, '0x0d58b1db'))).toBe('locked')
   })
 
-  it('no session without the passcode check set for that wallet', async () => {
-    const stranger = '0x2222222222222222222222222222222222222222'
-    expect((await ask('session:create', { owner: stranger }))!.msg.error?.code).toBe('not-found')
+  it('no session without the passcode check set on this device, or without the wallet it is for', async () => {
+    await ask('circle-passcode:forget', {})
+    pinSet = false
+    expect((await ask('session:create', { owner: OWNER }))!.msg.error?.code).toBe('not-found')
+    expect((await ask('circle-passcode:check', { passcode: PIN }))!.msg.error?.code).toBe('not-found')
+    await session()
     expect((await ask('session:create', {}))!.msg.error?.code).toBe('invalid')
+  })
+
+  it('unlocking checks the passcode here; an approval is for one wallet\'s payment only', async () => {
+    const address = await session()
+    expect((await ask('circle-passcode:check', { passcode: PIN }))!.msg.result).toEqual({ ok: true })
+    expect((await ask('circle-passcode:check', { passcode: '000000' }))!.msg.error?.code).toBe('bad-passcode')
+    // An unlock check approves no payment.
+    expect((await ask('session:sign', { address, transaction: tx(PERMIT2, PAY) }))!.msg.error?.code).toBe('approval-required')
+    // Approved for another wallet: not for this one's key.
+    await ask('fastpay:approve', { owner: '0x2222222222222222222222222222222222222222', passcode: PIN })
+    expect((await ask('session:sign', { address, transaction: tx(PERMIT2, PAY) }))!.msg.error?.code).toBe('approval-required')
   })
 
   it('a payment needs a passcode approval checked here: one approval, one signature; a wrong passcode approves nothing', async () => {
@@ -252,10 +266,10 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
 
   it('changing the check needs the current passcode; forget drops every session key of that wallet', async () => {
     const address = await session()
-    expect((await ask('fastpay:set-passcode', { owner: OWNER, passcode: '654321' }))!.msg.error?.code).toBe('bad-passcode')
-    expect((await ask('fastpay:set-passcode', { owner: OWNER, passcode: '654321', oldPasscode: PIN }))!.msg.result).toEqual({ ok: true })
+    expect((await ask('circle-passcode:set', { passcode: '654321' }))!.msg.error?.code).toBe('bad-passcode')
+    expect((await ask('circle-passcode:set', { passcode: '654321', oldPasscode: PIN }))!.msg.result).toEqual({ ok: true })
     expect((await ask('fastpay:approve', { owner: OWNER, passcode: PIN }))!.msg.error?.code).toBe('bad-passcode')
-    await ask('fastpay:forget', { owner: OWNER })
+    await ask('circle-passcode:forget', {})
     pinSet = false
     expect((await ask('session:sign', { address, transaction: tx(PERMIT2, '0x2b67b570') }))!.msg.error?.code).toBe('locked')
     expect((await ask('session:create', { owner: OWNER }))!.msg.error?.code).toBe('not-found')
