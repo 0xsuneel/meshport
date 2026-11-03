@@ -536,6 +536,14 @@ export async function enableFastPay(passcode: string): Promise<boolean> {
 }
 
 // ── Pay ───────────────────────────────────────────────────────────────────────
+/** Where a Fast Pay payment's time went (seconds), e.g.
+ *  "[perf fastpay pay] approve 0.02 (fast check), gas 0.15, sign 0.03, send 0.85, confirm 0.10, total 1.15 (success)". */
+function reportFastPayTiming(lap: Record<string, number>, total: number, fullCheck: boolean, state: string): void {
+  const s = (k: string) => lap[k] == null ? '-' : (lap[k] / 1000).toFixed(2)
+  const line = `[perf fastpay pay] approve ${s('approve')} (${fullCheck ? 'full' : 'fast'} check), gas ${s('gas')}, sign ${s('sign')}, send ${s('send')}, confirm ${s('confirm')}, total ${(total / 1000).toFixed(2)} (${state})`
+  void import('./errorReport').then(m => m.reportPerf(line)).catch(() => {})
+}
+
 /** Thrown before anything was broadcast: the caller may pay the normal way. */
 export class FastPayNotSent extends Error {}
 
@@ -565,15 +573,21 @@ export async function sendFastPay(p: { owner: string; to: Hex; amount: number; i
   // This payment's passcode, checked by the frame: one approval, one signature.
   const pin = takePin()
   if (!pin) throw new FastPayNotSent('No passcode for this payment')
+  const t0 = performance.now()
+  const lap: Record<string, number> = {}
+  let fullCheck = false
   try {
     const { callWallet } = await import('@/wallet/frameClient')
-    await callWallet('fastpay:approve', { owner: s.owner, passcode: pin })
+    fullCheck = (await callWallet('fastpay:approve', { owner: s.owner, passcode: pin })).full === true
+    lap.approve = performance.now() - t0
   } catch (e) {
     const code = (e as { code?: string })?.code
     throw new FastPayNotSent(`Frame refused the passcode (${code ?? 'error'})`)
   }
   const { relaySend, sendFeeCap, currentGasPrice } = await import('./arcService')
+  const tGas = performance.now()
   const [feeCap, gasPrice] = await Promise.all([sendFeeCap(), currentGasPrice().catch(() => 0n)])
+  lap.gas = performance.now() - tGas
   const amount = usdcAtomic(p.amount)
   const owed = s.owedGasWei
   const refund = gasPrice > 0n ? refundUnits(s.payGasEstimate, gasPrice, owed) : 0n
@@ -586,9 +600,19 @@ export async function sendFastPay(p: { owner: string; to: Hex; amount: number; i
   publish()
   try {
     const data = batchData(s.owner, p.to, amount, s.key.address, refund)
-    const sent = await relaySend(s.key as any, { to: PERMIT2, data, gas: s.payGas, nonce, maxFeePerGas: feeCap }, h => {
+    // The key's signature (in the frame) timed apart from the send.
+    let signMs = 0
+    const timedKey = { address: s.key.address, signTransaction: async (tx: any) => { const a = performance.now(); try { return await s.key.signTransaction(tx) } finally { signMs += performance.now() - a } } }
+    const tSend = performance.now()
+    let hashAt = 0
+    const sent = await relaySend(timedKey as any, { to: PERMIT2, data, gas: s.payGas, nonce, maxFeePerGas: feeCap }, h => {
+      hashAt = performance.now()
       if (p.idempotencyKey) sentByKey.set(p.idempotencyKey, h)
     })
+    lap.sign = signMs
+    lap.send = (hashAt || performance.now()) - tSend - signMs
+    if (hashAt) lap.confirm = performance.now() - hashAt
+    reportFastPayTiming(lap, performance.now() - t0, fullCheck, sent.state)
     if (sent.state === 'failed') { s.spent -= amount + refund; s.owedGasWei += owed; publish() }
     return { txHash: sent.txHash, state: sent.state, blockNumber: sent.blockNumber }
   } catch (e) {

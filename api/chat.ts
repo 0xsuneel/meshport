@@ -142,13 +142,23 @@ async function verifyPayment(txHash: string, from: string, to: string, token: st
     if (!rc) await new Promise(r => setTimeout(r, 500))
   }
   if (!rc || !tx) return 'pending'
-  if (rc.status !== '0x1') return 'invalid'
-  if (String(tx.from || '').toLowerCase() !== from.toLowerCase()) return 'invalid'
-  // Native USDC (Arc gas token, 18 decimals): plain value transfer.
-  if (token === 'USDC' && String(tx.to || '').toLowerCase() === to.toLowerCase()) {
+  return paymentProof(tx, rc, from, to, token, amount)
+}
+
+/**
+ * Does this mined transaction pay `amount` of `token` from `from` to `to`?
+ * Native USDC (Arc's gas token): a plain value transfer sent by `from`.
+ * ERC-20 (USDC's 6-decimal interface too): a Transfer(from → to) log on the
+ * token's own contract - whoever sent the transaction. Fast Pay payments
+ * (src/lib/fastPay.ts) are sent by a session key through Permit2, so the
+ * log - emitted by the token contract itself - is the proof, not tx.from.
+ */
+export function paymentProof(tx: any, rc: any, from: string, to: string, token: string, amount: number): 'ok' | 'invalid' {
+  const t = PAY_TOKENS[token]
+  if (!t || rc?.status !== '0x1') return 'invalid'
+  if (token === 'USDC' && String(tx?.from || '').toLowerCase() === from.toLowerCase() && String(tx?.to || '').toLowerCase() === to.toLowerCase()) {
     if (BigInt(tx.value || '0x0') >= toUnits(amount, 18)) return 'ok'
   }
-  // ERC-20 Transfer(from → to) on the token's own contract.
   const want = toUnits(amount, t.decimals)
   for (const log of rc.logs || []) {
     if (String(log.address || '').toLowerCase() !== t.contract) continue

@@ -354,6 +354,13 @@ describe('Fast Pay session', () => {
       expect(fp.useFastPay.getState().remaining).toBeCloseTo(98.95)
     })
 
+    it('each payment reports where its time went: passcode check, gas read, signature, send', async () => {
+      perf.length = 0
+      await pay({ owner: OWNER, to: RECIPIENT, amount: 1 })
+      await vi.waitFor(() => expect(perf.some(l => l.startsWith('[perf fastpay pay]'))).toBe(true))
+      expect(perf.find(l => l.startsWith('[perf fastpay pay]'))).toMatch(/^\[perf fastpay pay\] approve \d+\.\d\d \(fast check\), gas \d+\.\d\d, sign \d+\.\d\d, send \d+\.\d\d, confirm \d+\.\d\d, total \d+\.\d\d \(success\)$/)
+    })
+
     it('the same payment retried (same idempotency key) is never sent twice', async () => {
       const a = await pay({ owner: OWNER, to: RECIPIENT, amount: 1, idempotencyKey: 'same' })
       const b = await pay({ owner: OWNER, to: RECIPIENT, amount: 1, idempotencyKey: 'same' })
