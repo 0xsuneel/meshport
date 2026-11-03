@@ -104,3 +104,38 @@ deploy). Pay and plain receives are free - never add a fee there.
 - Not available: a hosted e-commerce checkout - Circle removed Checkout
   Sessions / Pull Crypto Payments from Circle Mint (Apr 2025). MeshPortCheckout
   is our own.
+
+## 6. Build plan for the business products (agreed approach)
+
+Order: Onramp → Global Balance (UB) + Nanopayments together → Mint cash-out
+(after KYB) → Earn → Borrow. Every feature behind an admin switch (Admin →
+Features), reusing the frame passcode check, `relayerSigner` (Circle
+developer wallet) for gas, `feePolicy.ts` for fees, and Activity /
+wallet_events logging.
+
+- [ ] **Onramp** (~1-2 days) - "Add money" on Home / Receive: App Kit Onramp
+      widget in an iframe with the user's Arc address; on completion refresh
+      the balance + Activity. Server: `/api/onramp-session` (Circle API key in
+      Vercel, never in the browser). Allow `frame-src https://onramp.arc.io`.
+      **You:** Onramp API key.
+- [ ] **Global Balance (UB)** - its own screen: "Add money" (one signed
+      authorization, relayer submits the Gateway deposit; fast deposits from
+      slow chains) and "Send anywhere" (one burn-intent signature, Circle's
+      forwarder mints); fee via the kit's `customFee`. Shown apart from the Arc
+      wallet balance, with the 7-day emergency withdrawal explained. Plus
+      **merchant Collect All** - every chain in one signature.
+- [ ] **Nanopayments / x402** (~1 week, with Global Balance) - pay-per-use,
+      tips, metered items: buyer deposits to Gateway once (gasless via the
+      relayer), each payment is an off-chain EIP-3009 signature; a `nanopay`
+      endpoint (MeshPort as facilitator) verifies and forwards to Gateway,
+      which settles in batches to the merchant's Gateway balance.
+- [ ] **Circle Mint cash-out** (~3-5 days after the account) - Business →
+      "Cash out to bank": USDC to MeshPort's Mint deposit address with a
+      reference → Mint payout to the merchant's bank; edge function
+      `business-cashout` + Circle webhook for status (into businessCashOut).
+      **You:** start MeshPort's Circle Mint KYB; merchants' bank details verified.
+- [ ] **Earn** (~2-3 days) - "Savings" for businesses: App Kit Earn vaults
+      (USDC / EURC on Arc), deposit / withdraw in one signature, live value.
+- [ ] **Borrow** (~4-5 days) - USDC against cirBTC with MeshPort's
+      **integrator fee**; clear liquidation-risk warnings.
+- [ ] Earn / Borrow: compliance check before mainnet.
