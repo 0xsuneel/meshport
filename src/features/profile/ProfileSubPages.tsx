@@ -30,7 +30,7 @@ import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { useAuthStore, useNotificationStore, useUIStore, type AppNotification } from '@/store'
 import { useFeatureEnabled } from '@/store/settingsStore'
-import { fastPayEnabled, setFastPayEnabled, maybeStartFastPay, useFastPay, FAST_PAY_LIMIT_USDC } from '@/lib/fastPay'
+import { fastPayEnabled, enableFastPay, disableFastPay, fastPayPasscodeChanged, useFastPay, FAST_PAY_LIMIT_USDC } from '@/lib/fastPay'
 import { useThemeStore, resolveTheme, type ThemeMode } from '@/store/themeStore'
 import { switchTheme } from '@/lib/themeTransition'
 import { Avatar } from '@/components/ui/Avatar'
@@ -81,11 +81,37 @@ export function SecurityPage() {
     : fastPay.phase === 'ready' ? `$${fastPay.remaining.toFixed(2)} left until ${new Date(fastPay.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - passcode still asked every payment`
     : fastPay.phase === 'error' ? `Couldn't start: ${fastPay.error ?? 'try again'}`
     : 'On - starts after you unlock'
-  const toggleFastPay = () => {
-    const on = !fastPayOn
-    setFastPayEnabled(on); setFastPayOn(on)
-    if (on) void maybeStartFastPay()
-    showToastMessage(on ? 'Fast Pay on (beta)' : 'Fast Pay off')
+  // Turning it on asks for the passcode: the wallet frame keeps its own check
+  // of it and signs a Fast Pay payment only after that check passes.
+  const [fastPaySheet, setFastPaySheet] = useState(false)
+  const [fastPayPass, setFastPayPass] = useState('')
+  const [fastPayError, setFastPayError] = useState('')
+  const [fastPayBusy, setFastPayBusy] = useState(false)
+  const toggleFastPay = async () => {
+    if (fastPayOn) {
+      setFastPayOn(false)
+      if (walletAddress) await disableFastPay(walletAddress)
+      showToastMessage('Fast Pay off')
+      return
+    }
+    setFastPayPass(''); setFastPayError(''); setFastPaySheet(true)
+  }
+  const confirmFastPay = async (code: string) => {
+    if (code.length < 6 || !walletAddress || !storedPasscode || fastPayBusy) return
+    setFastPayBusy(true); setFastPayError('')
+    try {
+      const { verifyPasscode } = await import('@/lib/security')
+      let correct = false
+      try { correct = await verifyPasscode(code, storedPasscode) } catch {}
+      if (!correct) { setFastPayError('Incorrect passcode. Try again.'); setFastPayPass(''); return }
+      await enableFastPay(walletAddress, code)
+      setFastPayOn(true); setFastPaySheet(false)
+      showToastMessage('Fast Pay on (beta)')
+    } catch (e) {
+      setFastPayError(e instanceof Error && e.message ? e.message : "Couldn't turn on Fast Pay"); setFastPayPass('')
+    } finally {
+      setFastPayBusy(false)
+    }
   }
   // Admin Panel → Features → Security. When an admin turns this off, App.tsx
   // (global effect) forces biometricEnabled to false for every session
@@ -196,6 +222,13 @@ export function SecurityPage() {
         onComplete={handleConfirmAndRegister} error={confirmError || undefined}
         biometricAvailable={false} autoBiometric={false} locked={registering}
         footer={registering ? <p className="text-xs text-text-secondary text-center mt-3">Verifying…</p> : undefined} />
+
+      <PinSheet open={fastPaySheet} onClose={() => !fastPayBusy && setFastPaySheet(false)} id="fastpay-confirm"
+        title="Confirm Passcode" subtitle="Enter your passcode to turn on Fast Pay"
+        value={fastPayPass} onChange={v => { setFastPayPass(v); setFastPayError('') }}
+        onComplete={pin => confirmFastPay(pin)} error={fastPayError || undefined}
+        biometricAvailable={false} autoBiometric={false} locked={fastPayBusy}
+        footer={fastPayBusy ? <p className="text-xs text-text-secondary text-center mt-3">Verifying…</p> : undefined} />
     </div>
   )
 }
@@ -436,6 +469,8 @@ export function ChangePasscodePage() {
       // (security.ts FRAME_PASSCODE).
       const { FRAME_PASSCODE } = await import('@/lib/security')
       setPasscode(inFrame ? FRAME_PASSCODE : hashed)
+      // Fast Pay's check in the wallet frame follows the new passcode.
+      if (walletAddress && walletSource === 'circle' && storedPasscode) await fastPayPasscodeChanged(walletAddress, oldPass, newPass)
       // Show success immediately - local passcode (and its dependents) are already updated
       showToastMessage('Passcode updated successfully', 'success')
       if (resealPending) {

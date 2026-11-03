@@ -81,7 +81,7 @@ export interface WalletRpc {
    * frame's memory only. It never leaves the frame; its power is the Permit2
    * allowance the user's Circle wallet grants it (amount + expiry on-chain).
    */
-  'session:create': [{ keep?: boolean }, { address: Hex; kept: boolean }]
+  'session:create': [{ keep?: boolean; owner: string }, { address: Hex; kept: boolean }]
   /** After an app restart: reopen a kept session key (sealed to this device). */
   'session:restore': [{ address: string }, { restored: boolean }]
   /**
@@ -92,6 +92,17 @@ export interface WalletRpc {
   'session:sign': [{ address: string; transaction: FrameTransaction }, { serialized: Hex }]
   /** Drop a session key (or all of them). */
   'session:end': [{ address?: string }, { ok: true }]
+  /**
+   * Fast Pay's own passcode check, in the frame (wallet-frame/src/fastPayGate.ts):
+   * set when Fast Pay is turned on (changing it needs the current one);
+   * check verifies only (warms the check at unlock); approve verifies and
+   * allows ONE payment signature for 60 s; forget (Fast Pay off) removes it
+   * and every session key of that wallet.
+   */
+  'fastpay:set-passcode': [{ owner: string; passcode: string; oldPasscode?: string }, { ok: true }]
+  'fastpay:check': [{ owner: string; passcode: string }, { ok: true }]
+  'fastpay:approve': [{ owner: string; passcode: string }, { approved: true; validForMs: number }]
+  'fastpay:forget': [{ owner: string }, { ok: true }]
   /** This wallet's chat identity seed (derived, domain-separated - not the wallet key). */
   'chat:seed': [{ address: string }, { seed: Hex }]
   /** This wallet's Solana public key (32 bytes; derived, domain-separated - lib/solanaKey.ts). */

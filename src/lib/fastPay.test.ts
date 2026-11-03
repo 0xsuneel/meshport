@@ -75,8 +75,12 @@ vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
   return new Response(JSON.stringify({ funded: true, from: RELAYER }), { status: 200 })
 }))
 // The wallet frame: either it supports Fast Pay session keys (a key it keeps,
-// signing for the app), or it's an older frame that answers 'unsupported'.
-let frameSupports = false
+// signing for the app, a payment only with a passcode approval it checked),
+// or it's an older frame that answers 'unsupported'.
+let frameSupports = true
+const PIN = '123456'
+let framePin: string | null = PIN // the frame's Fast Pay passcode check (set when turned on)
+let frameApproved = false
 const frameCalls: string[] = []
 const frameKeys = new Map<string, ReturnType<typeof privateKeyToAccount>>()
 const frameKept = new Set<string>() // sealed to the device: survives an app restart
@@ -84,6 +88,19 @@ vi.mock('@/wallet/frameClient', () => ({
   callWallet: async (method: string, params: any) => {
     frameCalls.push(method)
     if (!frameSupports) throw Object.assign(new Error('Unknown request ' + method), { code: 'unsupported' })
+    if (method === 'fastpay:set-passcode') { if (framePin && params.oldPasscode !== framePin) throw Object.assign(new Error('Wrong passcode'), { code: 'bad-passcode' }); framePin = params.passcode; return { ok: true } }
+    if (method === 'fastpay:check') return { ok: true }
+    if (method === 'fastpay:approve') {
+      if (!framePin) throw Object.assign(new Error('no check'), { code: 'not-found' })
+      if (params.passcode !== framePin) throw Object.assign(new Error('Wrong passcode'), { code: 'bad-passcode' })
+      frameApproved = true; return { approved: true, validForMs: 60_000 }
+    }
+    if (method === 'fastpay:forget') { framePin = null; frameKeys.clear(); frameKept.clear(); return { ok: true } }
+    if (method === 'session:create' && (!framePin || !params.owner)) throw Object.assign(new Error('Turn Fast Pay on again'), { code: 'not-found' })
+    if (method === 'session:sign' && String(params.transaction.data ?? '').startsWith('0x0d58b1db')) {
+      if (!frameApproved) throw Object.assign(new Error('Enter your passcode'), { code: 'approval-required' })
+      frameApproved = false
+    }
     if (method === 'session:create') { const k = privateKeyToAccount(generatePrivateKey()); frameKeys.set(lc(k.address), k); if (params.keep) frameKept.add(lc(k.address)); return { address: k.address, kept: !!params.keep } }
     if (method === 'session:restore') return { restored: frameKeys.has(lc(params.address)) && frameKept.has(lc(params.address)) }
     if (method === 'session:sign') return { serialized: await frameKeys.get(lc(params.address))!.signTransaction(params.transaction) }
@@ -92,6 +109,14 @@ vi.mock('@/wallet/frameClient', () => ({
   },
 }))
 vi.mock('@/wallet/account', () => ({ plainTransaction: (tx: any) => ({ ...tx }) }))
+// Passcodes that pass in the app (security.ts verifyPasscode) reach Fast Pay through this hook.
+const pinHooks: Array<(pin: string) => unknown> = []
+vi.mock('./security', () => ({ onPasscodeVerified: (f: (pin: string) => unknown) => { pinHooks.push(f) } }))
+const screen = { pathname: '/pay' }
+vi.stubGlobal('window', { location: screen, addEventListener: () => {} })
+/** The person types their passcode on the payment's PIN sheet, then it pays. */
+async function enterPin(pin = PIN) { for (const f of pinHooks) await f(pin) }
+async function pay(p: Parameters<typeof fp.sendFastPay>[0]) { await enterPin(); return fp.sendFastPay(p) }
 const mem = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => { mem.set(k, v) }, removeItem: (k: string) => { mem.delete(k) } })
 
@@ -101,7 +126,8 @@ const { PERMIT2, ARC_USDC_ERC20, permit2Abi, usdcAbi } = fp
 describe('Fast Pay session', () => {
   beforeEach(() => {
     fp._resetFastPay(); mem.clear(); typedSigned.length = 0; sent.length = 0; fetchCalls.length = 0; perf.length = 0; events.length = 0
-    usdcAllowanceToPermit2 = 0n; relayFails = false; failNextSetupSend = false; frameSupports = false; frameCalls.length = 0
+    usdcAllowanceToPermit2 = 0n; relayFails = false; failNextSetupSend = false; frameSupports = true; frameCalls.length = 0
+    framePin = PIN; frameApproved = false; screen.pathname = '/pay'
     p2Left = 0n; p2Expiration = 0; frameKept.clear(); frameKeys.clear()
     Object.assign(auth, { walletSource: 'circle', isLocked: false, walletAddress: OWNER, signer: circleSigner })
   })
@@ -167,7 +193,6 @@ describe('Fast Pay session', () => {
 
   it('the session key lives in the wallet frame when the frame supports it; dropped there at the end', async () => {
     usdcAllowanceToPermit2 = maxUint256
-    frameSupports = true
     fp.setFastPayEnabled(true)
     expect(await fp.maybeStartFastPay()).toBe(true)
     expect(frameCalls).toEqual(['session:create', 'session:sign']) // the grant went on-chain, signed in the frame
@@ -177,7 +202,7 @@ describe('Fast Pay session', () => {
     await vi.waitFor(() => expect(perf.length).toBe(1))
     expect(perf[0]).toMatch(/key in frame/)
     // A payment is signed in the frame too.
-    await fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 2 })
+    await pay({ owner: OWNER, to: RECIPIENT, amount: 2 })
     expect(frameCalls.filter(m => m === 'session:sign').length).toBe(2)
     fp.endFastPaySession()
     await vi.waitFor(() => expect(frameKeys.size).toBe(0))
@@ -186,7 +211,6 @@ describe('Fast Pay session', () => {
 
   it('app closed and reopened: the kept session resumes from the frame - no Circle signature, what is left read from the chain', async () => {
     usdcAllowanceToPermit2 = maxUint256
-    frameSupports = true
     fp.setFastPayEnabled(true)
     expect(await fp.maybeStartFastPay()).toBe(true)
     expect(typedSigned.length).toBe(1)
@@ -204,14 +228,13 @@ describe('Fast Pay session', () => {
     expect(perf[0]).toMatch(/^\[perf fastpay setup\] resumed .* 97\.00 left, key in frame/)
     // It pays with the same key, at the chain's next nonce.
     sent.length = 0
-    await fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 3 })
+    await pay({ owner: OWNER, to: RECIPIENT, amount: 3 })
     expect(lc(sent[0].from)).toBe(keyAddr)
     expect(sent[0].nonce).toBe(5)
   })
 
   it('a kept session that has expired (or is nearly used up) is not resumed: it is dropped and a new one set up', async () => {
     usdcAllowanceToPermit2 = maxUint256
-    frameSupports = true
     fp.setFastPayEnabled(true)
     await fp.maybeStartFastPay()
     const oldKey = [...frameKeys.keys()][0]
@@ -226,7 +249,6 @@ describe('Fast Pay session', () => {
 
   it('the lock screen does not end it; logout / switching off does (and the saved copy goes)', async () => {
     usdcAllowanceToPermit2 = maxUint256
-    frameSupports = true
     fp.setFastPayEnabled(true)
     await fp.maybeStartFastPay()
     expect(mem.has(`meshport:fastpay-session:${lc(OWNER)}`)).toBe(true)
@@ -235,17 +257,44 @@ describe('Fast Pay session', () => {
     await vi.waitFor(() => expect(frameKeys.size).toBe(0))
   })
 
-  it('an older frame (no session keys): the proof-of-concept key in app memory, and the set-up says so', async () => {
+  it('an older frame (no session keys, no passcode check): no Fast Pay - never a key out in the app', async () => {
     usdcAllowanceToPermit2 = maxUint256
+    frameSupports = false
     fp.setFastPayEnabled(true)
-    expect(await fp.maybeStartFastPay()).toBe(true)
-    await vi.waitFor(() => expect(perf.length).toBe(1))
-    expect(perf[0]).toMatch(/key in app/)
+    expect(await fp.maybeStartFastPay()).toBe(false)
+    expect(typedSigned).toEqual([]) // Circle never asked
+    expect(fp.fastPayCovers(OWNER, 1)).toBe(false)
+  })
+
+  it('no passcode check in the frame yet (turned on before it existed): no session until turned on again', async () => {
+    usdcAllowanceToPermit2 = maxUint256
+    framePin = null
+    fp.setFastPayEnabled(true)
+    expect(await fp.maybeStartFastPay()).toBe(false)
+    expect(typedSigned).toEqual([])
+  })
+
+  it('turning it on hands the passcode to the frame; off makes the frame forget it and its keys', async () => {
+    usdcAllowanceToPermit2 = maxUint256
+    framePin = null
+    await fp.enableFastPay(OWNER, '654321')
+    expect(framePin).toBe('654321')
+    await vi.waitFor(() => expect(fp.fastPayCovers(OWNER, 1)).toBe(true))
+    // The passcode changed (Change passcode): the frame's check follows it.
+    await fp.fastPayPasscodeChanged(OWNER, '654321', '111222')
+    expect(framePin).toBe('111222')
+    // Turned on again with a check from an older passcode: it starts clean.
+    framePin = '999999'
+    await fp.enableFastPay(OWNER, '111222')
+    expect(framePin).toBe('111222')
+    await fp.disableFastPay(OWNER)
+    expect(framePin).toBeNull()
+    expect(frameKeys.size).toBe(0)
+    expect(fp.fastPayEnabled()).toBe(false)
   })
 
   it('a set-up that fails leaves no key behind in the frame', async () => {
     usdcAllowanceToPermit2 = maxUint256
-    frameSupports = true
     failNextSetupSend = true
     fp.setFastPayEnabled(true)
     expect(await fp.maybeStartFastPay()).toBe(false)
@@ -270,7 +319,7 @@ describe('Fast Pay session', () => {
     })
 
     it('a payment: one Permit2 batch - the amount to the recipient, its gas (and the set-up\'s) back to the key', async () => {
-      const out = await fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 12.34, idempotencyKey: 'k1' })
+      const out = await pay({ owner: OWNER, to: RECIPIENT, amount: 12.34, idempotencyKey: 'k1' })
       expect(out.state).toBe('success')
       expect(sent[0].to).toBe(PERMIT2)
       expect(sent[0].nonce).toBe(2) // after the two set-up transactions
@@ -286,25 +335,44 @@ describe('Fast Pay session', () => {
       const firstRefund = details[1].amount
       expect(firstRefund).toBe(fp.refundUnits(70_000n, GAS_PRICE, 140_000n * GAS_PRICE)) // pay + set-up (2 × 70k)
       // The second payment refunds only its own gas.
-      await fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 1 })
+      await pay({ owner: OWNER, to: RECIPIENT, amount: 1 })
       const [details2] = decodeFunctionData({ abi: permit2Abi, data: sent[1].data! }).args as unknown as [Array<{ amount: bigint }>]
       expect(details2[1].amount).toBe(fp.refundUnits(70_000n, GAS_PRICE, 0n))
       expect(sent[1].nonce).toBe(3)
     })
 
+    it('a payment needs this payment\'s passcode, checked by the frame: none, or a wrong one, sends nothing', async () => {
+      // No passcode typed for it.
+      await expect(fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 1 })).rejects.toBeInstanceOf(fp.FastPayNotSent)
+      // A passcode typed to unlock (not on a payment screen) does not approve a payment.
+      screen.pathname = '/home'
+      await enterPin()
+      await expect(fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 1 })).rejects.toBeInstanceOf(fp.FastPayNotSent)
+      screen.pathname = '/pay'
+      // The frame refuses a passcode that isn't the one it checks.
+      await enterPin('000000')
+      await expect(fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 1 })).rejects.toBeInstanceOf(fp.FastPayNotSent)
+      // One passcode, one payment.
+      await enterPin()
+      await fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 1 })
+      await expect(fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 1 })).rejects.toBeInstanceOf(fp.FastPayNotSent)
+      expect(sent.length).toBe(1)
+      expect(fp.useFastPay.getState().remaining).toBeCloseTo(98.95)
+    })
+
     it('the same payment retried (same idempotency key) is never sent twice', async () => {
-      const a = await fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 1, idempotencyKey: 'same' })
-      const b = await fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 1, idempotencyKey: 'same' })
+      const a = await pay({ owner: OWNER, to: RECIPIENT, amount: 1, idempotencyKey: 'same' })
+      const b = await pay({ owner: OWNER, to: RECIPIENT, amount: 1, idempotencyKey: 'same' })
       expect(b.txHash).toBe(a.txHash)
       expect(sent.length).toBe(1)
     })
 
     it('refused by every node (nothing sent): FastPayNotSent, and the amount and the owed set-up gas are back', async () => {
       relayFails = true
-      await expect(fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 30 })).rejects.toBeInstanceOf(fp.FastPayNotSent)
+      await expect(pay({ owner: OWNER, to: RECIPIENT, amount: 30 })).rejects.toBeInstanceOf(fp.FastPayNotSent)
       expect(fp.useFastPay.getState().remaining).toBe(99.95)
       relayFails = false
-      await fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 1 })
+      await pay({ owner: OWNER, to: RECIPIENT, amount: 1 })
       const [details] = decodeFunctionData({ abi: permit2Abi, data: sent[0].data! }).args as unknown as [Array<{ amount: bigint }>]
       expect(details[1].amount).toBe(fp.refundUnits(70_000n, GAS_PRICE, 140_000n * GAS_PRICE)) // still repays the set-up
     })
