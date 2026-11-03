@@ -34,26 +34,56 @@ async function frame() {
 }
 const permit2Tx = { type: 'eip1559', chainId: 5042002, nonce: 0, to: '0x000000000022D473030F116dDEE9F6B43aC78BA3', value: 0n, data: '0x0d58b1db' + '00'.repeat(32), gas: 100000n, maxFeePerGas: 2n, maxPriorityFeePerGas: 1n }
 
+const OWNER = '0x1111111111111111111111111111111111111111'
+const PIN = '123456'
+async function withPin() {
+  const ask = await frame()
+  if (!storage.getItem('mp.fastpay.pin.' + OWNER)) await ask('fastpay:set-passcode', { owner: OWNER, passcode: PIN })
+  return ask
+}
+
 describe('Fast Pay session key kept across a restart', () => {
   it('kept: sealed in frame storage (never the raw key), reopened by a fresh frame, signs again', async () => {
-    const ask = await frame()
-    const { result } = await ask('session:create', { keep: true })
+    const ask = await withPin()
+    const { result } = await ask('session:create', { keep: true, owner: OWNER })
     expect(result.kept).toBe(true)
-    const stored = storage.getItem('mp.fastpay.session.' + result.address.toLowerCase())!
-    expect(stored.startsWith('dv1:')).toBe(true)          // device-sealed
-    expect(stored).not.toMatch(/[0-9a-f]{64}/i)            // no readable key in it
+    const saved = JSON.parse(storage.getItem('mp.fastpay.session.' + result.address.toLowerCase())!)
+    expect(saved.owner).toBe(OWNER)
+    expect(saved.sealed.startsWith('dv1:')).toBe(true)    // device-sealed
+    expect(saved.sealed).not.toMatch(/[0-9a-f]{64}/i)      // no readable key in it
+    await ask('fastpay:approve', { owner: OWNER, passcode: PIN })
     const before = (await ask('session:sign', { address: result.address, transaction: permit2Tx })).result.serialized
 
     const ask2 = await frame() // the app closed and reopened: a new frame, empty memory
     expect((await ask2('session:sign', { address: result.address, transaction: permit2Tx })).error.code).toBe('locked')
     expect((await ask2('session:restore', { address: result.address })).result).toEqual({ restored: true })
+    // A fresh frame: the approval did not survive; the passcode is checked again.
+    expect((await ask2('session:sign', { address: result.address, transaction: permit2Tx })).error.code).toBe('approval-required')
+    await ask2('fastpay:approve', { owner: OWNER, passcode: PIN })
     const after = (await ask2('session:sign', { address: result.address, transaction: permit2Tx })).result.serialized
     expect(after).toBe(before) // the same key
   })
 
+  it('a key kept before the passcode check existed (no owner) is not reopened, and is removed', async () => {
+    const ask = await withPin()
+    storage.setItem('mp.fastpay.session.0x3333333333333333333333333333333333333333', 'dv1:old')
+    expect((await ask('session:restore', { address: '0x3333333333333333333333333333333333333333' })).result).toEqual({ restored: false })
+    expect(storage.getItem('mp.fastpay.session.0x3333333333333333333333333333333333333333')).toBeNull()
+  })
+
+  it('lockout survives a reload: 5 wrong tries, then it waits', async () => {
+    const ask = await withPin()
+    const codes: string[] = []
+    for (let i = 0; i < 5; i++) codes.push((await ask('fastpay:approve', { owner: OWNER, passcode: '000000' })).error.code)
+    expect(codes).toEqual(['bad-passcode', 'bad-passcode', 'bad-passcode', 'bad-passcode', 'rate-limited'])
+    const ask2 = await frame()
+    expect((await ask2('fastpay:approve', { owner: OWNER, passcode: PIN })).error.code).toBe('rate-limited') // even the right one, for now
+    storage.removeItem('mp.fastpay.lockout.' + OWNER)
+  })
+
   it('ended: removed from storage too - a restart cannot reopen it', async () => {
-    const ask = await frame()
-    const { result } = await ask('session:create', { keep: true })
+    const ask = await withPin()
+    const { result } = await ask('session:create', { keep: true, owner: OWNER })
     await ask('session:end', { address: result.address })
     expect(storage.getItem('mp.fastpay.session.' + result.address.toLowerCase())).toBeNull()
     const ask2 = await frame()
@@ -61,8 +91,8 @@ describe('Fast Pay session key kept across a restart', () => {
   })
 
   it('not asked to keep: memory only', async () => {
-    const ask = await frame()
-    const { result } = await ask('session:create', {})
+    const ask = await withPin()
+    const { result } = await ask('session:create', { owner: OWNER })
     expect(result.kept).toBe(false)
     const ask2 = await frame()
     expect((await ask2('session:restore', { address: result.address })).result).toEqual({ restored: false })

@@ -24,6 +24,7 @@ import { deriveChatSeed } from '@/lib/chatIdentity'
 import { solanaPublicKey, solanaSign, solanaHexToBytes } from '@/lib/solanaKey'
 import * as vault from './vault'
 import { sealForDevice, openFromDevice } from '@/lib/security'
+import * as gate from './fastPayGate'
 import { VaultError } from './vault'
 
 const DEV_PARENTS = 'http://localhost:5173,http://127.0.0.1:5173'
@@ -89,7 +90,21 @@ const SESSION_CALLS: Record<string, ReadonlySet<string>> = {
   [ARC_USDC_ERC20]: new Set(['0xd505accf']),           // permit(owner, spender, value, deadline, v, r, s)
 }
 const sessionKeys = new Map<string, ReturnType<typeof privateKeyToAccount>>()
-const SESSION_STORE = 'mp.fastpay.session.' // + address → device-sealed key
+const sessionOwner = new Map<string, string>() // session key → the wallet it spends for
+const SESSION_STORE = 'mp.fastpay.session.' // + address → { owner, sealed key }
+function dropSessionKey(a: string): void {
+  sessionKeys.delete(a)
+  sessionOwner.delete(a)
+  try { localStorage.removeItem(SESSION_STORE + a) } catch { /* storage blocked */ }
+}
+/** A Fast Pay payment (Permit2 batch transferFrom) - the call that needs the passcode. */
+function isSessionPayment(tx: Record<string, unknown>): boolean {
+  return typeof tx.data === 'string' && tx.data.toLowerCase().startsWith('0x0d58b1db')
+}
+function gateError(e: unknown): RpcError {
+  if (e instanceof gate.GateError) return new RpcError(e.code, e.message, e.lockedForMs)
+  return new RpcError('failed', e instanceof Error ? e.message : 'Fast Pay passcode check failed')
+}
 /** Why a session key must not sign this (null: allowed). Exported for tests. */
 export function sessionTxRefusal(tx: Record<string, unknown>): string | null {
   if (Number(tx.chainId) !== ARC_CHAIN_ID) return 'Fast Pay signs on Arc only'
@@ -252,17 +267,23 @@ const handlers: Handlers = {
   },
 
   // ── Fast Pay session keys (src/lib/fastPay.ts) ──────────────────────────
-  async 'session:create'({ keep } = {}) {
+  // Each key belongs to one wallet (owner). Its payment signatures need a
+  // passcode approval checked here (fastPayGate) - never just the app's word.
+  async 'session:create'({ keep, owner } = {}) {
+    if (typeof owner !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(owner)) throw new RpcError('invalid', 'Which wallet is this Fast Pay session for?')
+    if (!gate.hasPasscode(owner)) throw new RpcError('not-found', 'Turn Fast Pay on again to confirm your passcode')
     const pk = generatePrivateKey()
     const k = privateKeyToAccount(pk)
-    sessionKeys.set(k.address.toLowerCase(), k)
+    const a = k.address.toLowerCase()
+    sessionKeys.set(a, k)
+    sessionOwner.set(a, owner.toLowerCase())
     // Kept across app restarts: sealed with this browser's non-extractable
     // device key (the same protection as the device copies of wallet keys),
-    // in this frame's own storage. The app's page can't read either.
+    // in this frame's own storage, with its owner. The app's page can't read it.
     let kept = false
     if (keep) {
       const sealed = await sealForDevice(pk)
-      if (sealed) { try { localStorage.setItem(SESSION_STORE + k.address.toLowerCase(), sealed); kept = true } catch { /* storage blocked */ } }
+      if (sealed) { try { localStorage.setItem(SESSION_STORE + a, JSON.stringify({ owner: owner.toLowerCase(), sealed })); kept = true } catch { /* storage blocked */ } }
     }
     return { address: k.address, kept }
   },
@@ -270,31 +291,71 @@ const handlers: Handlers = {
   async 'session:restore'({ address }) {
     const a = String(address).toLowerCase()
     if (sessionKeys.has(a)) return { restored: true }
-    let sealed: string | null = null
-    try { sealed = localStorage.getItem(SESSION_STORE + a) } catch { /* storage blocked */ }
-    const pk = sealed ? await openFromDevice(sealed) : null
+    let saved: { owner?: string; sealed?: string } | null = null
+    try { saved = JSON.parse(localStorage.getItem(SESSION_STORE + a) || 'null') } catch { saved = null }
+    // No owner (a key kept before the passcode check existed) or no check value: not reopened.
+    if (!saved?.owner || !saved.sealed || !gate.hasPasscode(saved.owner)) {
+      try { localStorage.removeItem(SESSION_STORE + a) } catch { /* storage blocked */ }
+      return { restored: false }
+    }
+    const pk = await openFromDevice(saved.sealed)
     if (!pk) return { restored: false }
     const k = privateKeyToAccount(pk as Hex)
     if (k.address.toLowerCase() !== a) return { restored: false }
     sessionKeys.set(a, k)
+    sessionOwner.set(a, saved.owner)
     return { restored: true }
   },
 
   async 'session:sign'({ address, transaction }) {
-    const k = sessionKeys.get(String(address).toLowerCase())
+    const a = String(address).toLowerCase()
+    const k = sessionKeys.get(a)
     if (!k) throw new RpcError('locked', 'This Fast Pay session has ended')
     const why = sessionTxRefusal(transaction)
     if (why) throw new RpcError('invalid', why)
+    // A payment (Permit2 batch transferFrom) needs the passcode, checked here.
+    if (isSessionPayment(transaction) && !gate.takeApproval(sessionOwner.get(a) ?? '')) {
+      throw new RpcError('approval-required', 'Enter your passcode to approve this')
+    }
     return { serialized: await k.signTransaction(transaction as any) }
   },
 
   async 'session:end'({ address }) {
-    const drop = (a: string) => { sessionKeys.delete(a); try { localStorage.removeItem(SESSION_STORE + a) } catch { /* storage blocked */ } }
-    if (address) drop(String(address).toLowerCase())
+    if (address) dropSessionKey(String(address).toLowerCase())
     else {
-      for (const a of [...sessionKeys.keys()]) drop(a)
+      for (const a of [...sessionKeys.keys()]) dropSessionKey(a)
       try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k?.startsWith(SESSION_STORE)) localStorage.removeItem(k) } } catch { /* storage blocked */ }
     }
+    return { ok: true as const }
+  },
+
+  // ── Fast Pay passcode (fastPayGate) ───────────────────────────────────────
+  async 'fastpay:set-passcode'({ owner, passcode, oldPasscode }) {
+    try { await gate.setPasscode(owner, passcode, oldPasscode) } catch (e) { throw gateError(e) }
+    return { ok: true as const }
+  },
+
+  async 'fastpay:check'({ owner, passcode }) {
+    try { await gate.checkPasscode(owner, passcode) } catch (e) { throw gateError(e) }
+    return { ok: true as const }
+  },
+
+  async 'fastpay:approve'({ owner, passcode }) {
+    try { return { approved: true as const, validForMs: await gate.approve(owner, passcode) } } catch (e) { throw gateError(e) }
+  },
+
+  async 'fastpay:forget'({ owner }) {
+    const o = String(owner).toLowerCase()
+    gate.forget(o)
+    // Every session key of this wallet goes with it (memory and storage).
+    for (const [a, who] of [...sessionOwner]) if (who === o) dropSessionKey(a)
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i)
+        if (!k?.startsWith(SESSION_STORE)) continue
+        try { if (JSON.parse(localStorage.getItem(k) || 'null')?.owner === o) localStorage.removeItem(k) } catch { localStorage.removeItem(k) }
+      }
+    } catch { /* storage blocked */ }
     return { ok: true as const }
   },
 

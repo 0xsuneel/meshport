@@ -30,12 +30,16 @@
 //   session end (expiry / logout / switched off): the key sends what's left
 //     of its gas back to the relayer, then it is dropped.
 //
+// Passcode: every payment's PIN is checked by the wallet frame itself too
+// (wallet-frame/src/fastPayGate.ts): the frame signs a payment only with an
+// approval from that PIN - not because the app asked.
+//
 // Security: the session key has no execution rights over the Circle wallet.
 // Its only power is Permit2's allowance, capped on-chain by amount AND expiry
 // (Permit2 AllowanceTransfer) - a leaked key can take at most what is left of
 // the limit, only until it expires. Logout / switching off drops the key.
-// PoC: the key lives in this module's memory; the product design moves it to
-// the wallet frame (web) or Android Keystore / iOS Keychain (native).
+// The key lives only in the wallet frame (web); the native app moves it to
+// Android Keystore / iOS Keychain.
 //
 // Facts this relies on, verified 3 Nov on Arc testnet / docs:
 //   Permit2 at the canonical address (Arc docs, contract addresses - Testnet;
@@ -49,13 +53,13 @@ import { create } from 'zustand'
 import {
   decodeFunctionResult, encodeFunctionData, maxUint256, parseSignature, type Hex,
 } from 'viem'
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { arcRpcJson } from './arc'
+import { onPasscodeVerified } from './security'
 
 // ── The session key: in the wallet frame when it can, else in memory here ────
 /** What Fast Pay needs from a session key: its address and transaction signing. */
 export interface SessionAccount { address: Hex; signTransaction: (tx: any) => Promise<Hex> }
-export type KeyHome = 'frame' | 'app'
+export type KeyHome = 'frame'
 /**
  * A fresh session key. Preferred: made and kept inside the wallet frame (its
  * own origin - nothing in this page can read it; the frame only signs Fast
@@ -70,16 +74,15 @@ async function frameKey(address: Hex): Promise<{ key: SessionAccount; end: () =>
     end: () => { void callWallet('session:end', { address }).catch(() => {}) },
   }
 }
-async function newSessionKey(): Promise<{ key: SessionAccount; home: KeyHome; kept: boolean; end: () => void }> {
-  try {
-    const { callWallet } = await import('@/wallet/frameClient')
-    // keep: sealed to this device in the frame, so the session survives the app closing.
-    const { address, kept } = await callWallet('session:create', { keep: true })
-    return { ...(await frameKey(address)), home: 'frame', kept: kept === true }
-  } catch {
-    const k = privateKeyToAccount(generatePrivateKey())
-    return { key: { address: k.address, signTransaction: (tx: any) => k.signTransaction(tx) }, home: 'app', kept: false, end: () => {} }
-  }
+async function newSessionKey(owner: Hex): Promise<{ key: SessionAccount; home: KeyHome; kept: boolean; end: () => void }> {
+  // Only in the wallet frame: there its payment signatures need the passcode,
+  // checked by the frame itself (wallet-frame/src/fastPayGate.ts). A frame
+  // that can't (older, or no passcode confirmed yet) means no Fast Pay - never
+  // a key kept out here, where nothing would check the passcode.
+  const { callWallet } = await import('@/wallet/frameClient')
+  // keep: sealed to this device in the frame, so the session survives the app closing.
+  const { address, kept } = await callWallet('session:create', { keep: true, owner })
+  return { ...(await frameKey(address)), home: 'frame', kept: kept === true }
 }
 
 // ── A session kept across app restarts ───────────────────────────────────────
@@ -392,7 +395,7 @@ async function start(gen: number): Promise<boolean> {
   const live = () => gen === generation && !useAuthStore.getState().isLocked
 
   // 1. The session key: random, in the wallet frame (or, PoC fallback, memory here).
-  const { key, home, kept: keyKept, end: endKey } = await newSessionKey()
+  const { key, home, kept: keyKept, end: endKey } = await newSessionKey(owner)
   let kept = false
   try {
   const now = Date.now()
@@ -491,6 +494,64 @@ async function start(gen: number): Promise<boolean> {
   }
 }
 
+// ── The passcode, checked by the wallet frame too ────────────────────────────
+// Every passcode that passes in the app (lock screen, a payment's PIN sheet -
+// security.ts verifyPasscode) is noted here for a minute; the frame is asked
+// to check it right away (the full check runs once per frame load, so the
+// payment's own check is instant) but that opens nothing. Only a Fast Pay
+// payment hands it to the frame as an approval - one signature, for that
+// payment - so a passcode typed to unlock never approves a payment by itself.
+const PIN_TTL_MS = 60_000
+let pendingPin: { pin: string; at: number } | null = null
+onPasscodeVerified(async pin => {
+  if (!fastPayEnabled()) return
+  const { useAuthStore } = await import('@/store')
+  const { walletSource, walletAddress } = useAuthStore.getState()
+  if (walletSource !== 'circle' || !walletAddress) return
+  // Only a PIN entered on a payment screen can approve a payment; one typed
+  // to unlock, in Security or to reveal a phrase only warms the check.
+  if (onPaymentScreen()) pendingPin = { pin, at: Date.now() }
+  void import('@/wallet/frameClient').then(m => m.callWallet('fastpay:check', { owner: walletAddress, passcode: pin })).catch(() => {})
+})
+/** The screens whose PIN sheet pays with sendUSDC (Pay, chat Pay). */
+const PAYMENT_PATHS = ['/pay', '/chat']
+function onPaymentScreen(): boolean {
+  try { const p = window.location.pathname; return PAYMENT_PATHS.some(x => p === x || p.startsWith(x + '/')) } catch { return false }
+}
+function takePin(): string | null {
+  const p = pendingPin
+  pendingPin = null
+  return p && Date.now() - p.at < PIN_TTL_MS ? p.pin : null
+}
+
+/** Turning Fast Pay on: the person's passcode (already checked by the app) becomes the frame's Fast Pay check. */
+export async function enableFastPay(owner: string, passcode: string): Promise<void> {
+  const { callWallet } = await import('@/wallet/frameClient')
+  try {
+    await callWallet('fastpay:set-passcode', { owner, passcode, oldPasscode: passcode })
+  } catch (e) {
+    // A check from an earlier passcode (it was changed since): start clean -
+    // that also drops every old session key of this wallet.
+    if ((e as { code?: string })?.code !== 'bad-passcode') throw e
+    await callWallet('fastpay:forget', { owner })
+    await callWallet('fastpay:set-passcode', { owner, passcode })
+  }
+  setFastPayEnabled(true)
+  void maybeStartFastPay()
+}
+
+/** Turning Fast Pay off: the session ends and the frame forgets the check and every session key. */
+export async function disableFastPay(owner: string): Promise<void> {
+  setFastPayEnabled(false)
+  try { const { callWallet } = await import('@/wallet/frameClient'); await callWallet('fastpay:forget', { owner }) } catch { /* frame unreachable: its keys still expire on-chain */ }
+}
+
+/** The passcode changed (Security → Change passcode): keep the frame's check in step. */
+export async function fastPayPasscodeChanged(owner: string, oldPasscode: string, passcode: string): Promise<void> {
+  if (!fastPayEnabled()) return
+  try { const { callWallet } = await import('@/wallet/frameClient'); await callWallet('fastpay:set-passcode', { owner, passcode, oldPasscode }) } catch { /* the next enable starts clean */ }
+}
+
 // ── Pay ───────────────────────────────────────────────────────────────────────
 /** Thrown before anything was broadcast: the caller may pay the normal way. */
 export class FastPayNotSent extends Error {}
@@ -517,6 +578,17 @@ export async function sendFastPay(p: { owner: string; to: Hex; amount: number; i
     const { waitForConfirmation } = await import('./arcService')
     const h = sentByKey.get(p.idempotencyKey)! as Hex
     return { txHash: h, ...(await waitForConfirmation(h)) }
+  }
+  // This payment's passcode, checked by the frame: one approval, one signature.
+  const pin = takePin()
+  if (!pin) throw new FastPayNotSent('No passcode for this payment')
+  try {
+    const { callWallet } = await import('@/wallet/frameClient')
+    await callWallet('fastpay:approve', { owner: s.owner, passcode: pin })
+  } catch (e) {
+    const code = (e as { code?: string })?.code
+    if (code === 'bad-passcode' || code === 'not-found') publish('ready', 'Fast Pay needs your passcode again - turn it off and on in Security')
+    throw new FastPayNotSent(`Frame refused the passcode (${code ?? 'error'})`)
   }
   const { relaySend, sendFeeCap, currentGasPrice } = await import('./arcService')
   const [feeCap, gasPrice] = await Promise.all([sendFeeCap(), currentGasPrice().catch(() => 0n)])
