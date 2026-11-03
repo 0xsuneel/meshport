@@ -85,9 +85,10 @@ deploy). Pay and plain receives are free - never add a fee there.
 
 ## 4. Other open items
 
-- [ ] Wallets that already approved TokenMessengerV2 for unlimited USDC
-      (Transfer before the Arc router): a one-time "remove approval" once
-      the router is live.
+- [x] One-time max approval to TokenMessengerV2 removed: Transfer now
+      approves exactly the amount (the burn spends it all). A wallet with the
+      old unlimited approval has it replaced by the exact amount on its next
+      Transfer, so it ends at 0.
 - [ ] Frame-hosted passcode keypad - skipped on web (a compromised page can
       draw a fake keypad); do it natively in the mobile app (Keystore / Keychain).
 - [ ] Circle signing page reload (~0.7 s per signature) - needs Circle.
