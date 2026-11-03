@@ -31,6 +31,7 @@
 //                                UB claim; the ub_claim_intents trigger then
 //                                marks it paid (see the migration).
 
+import { checkoutPaid, CHECKOUT_PAID_TOPIC } from './checkout.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { handleOptionsFor, jsonFor } from '../_shared/cors.ts'
 import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
@@ -468,6 +469,9 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
       if (!(head - parseInt(receipt.blockNumber, 16) >= depth)) return { pending: true }
     }
     ;({ amount, from } = usdcToMerchant(receipt, chain.usdc, i.merchant_wallet, chainId))
+    // Paid through MeshPortCheckout: the order gets the full price, from the real payer.
+    const paid = checkoutPaid(receipt, i.merchant_wallet, MESHPORT_CHECKOUT)
+    if (paid) { amount = paid.price; from = paid.payer }
   }
   if (!(amount > 0) || !from) return { error: `This transaction didn't send USDC to ${i.merchant_name ?? 'the business'} on ${chain.label}.`, status: 409 }
   if (order.amount != null && amount + 0.000001 < order.amount) {
@@ -658,12 +662,22 @@ const ARC_MEMO_CONTRACT = '0x5294e9927c3306dcbadb03fe70b92e01ccede505'
 const MEMO_TOPIC = '0xeb15ee720798341c37739df41be53acfbbf70ae6802dade35457beec6e47a5e4'
 const memoIdOf = (code: string) => '0x' + [...new TextEncoder().encode(code.toLowerCase())].map(b => b.toString(16).padStart(2, '0')).join('').padEnd(64, '0')
 
-/** memoIds the sender attached to this transaction (Memo events). */
+// MeshPortCheckout (contracts/MeshPortCheckout.sol): an order paid through it
+// sends the merchant the price minus MeshPort's fee from the CONTRACT, so the
+// merchant's Transfer log shows the contract as sender and the net amount.
+// Its Paid(payer, merchant, orderRef, price, fee) event says who paid, for
+// which order, and the full price - that is what the order is credited with
+// (the fee is the merchant's cost, not an underpayment).
+const MESHPORT_CHECKOUT = (Deno.env.get('MESHPORT_CHECKOUT') ?? '').trim().toLowerCase()
+
+/** memoIds the sender attached to this transaction (Memo events, or the checkout's order reference). */
 async function txMemoIds(rpcs: string[], tx: string): Promise<string[]> {
   const receipt = await rpc(rpcs, 'eth_getTransactionReceipt', [tx]).catch(() => null)
-  return (receipt?.logs ?? [])
-    .filter((l: any) => String(l.address).toLowerCase() === ARC_MEMO_CONTRACT && String(l.topics?.[0]).toLowerCase() === MEMO_TOPIC)
-    .map((l: any) => String(l.topics?.[3] ?? '').toLowerCase())
+  const logs = receipt?.logs ?? []
+  return [
+    ...logs.filter((l: any) => String(l.address).toLowerCase() === ARC_MEMO_CONTRACT && String(l.topics?.[0]).toLowerCase() === MEMO_TOPIC),
+    ...(MESHPORT_CHECKOUT ? logs.filter((l: any) => String(l.address).toLowerCase() === MESHPORT_CHECKOUT && String(l.topics?.[0]).toLowerCase() === CHECKOUT_PAID_TOPIC) : []),
+  ].map((l: any) => String(l.topics?.[3] ?? '').toLowerCase())
 }
 
 // A payment up to a day after an order expired (or was cancelled) is still
@@ -859,8 +873,18 @@ async function watchDeposits(pick?: (chainId: string) => boolean) {
       let holdBlock: number | null = null
       for (const log of logs ?? []) {
         const to = ('0x' + String(log.topics?.[2]).slice(-40)).toLowerCase()
-        const from = ('0x' + String(log.topics?.[1]).slice(-40)).toLowerCase()
+        let from = ('0x' + String(log.topics?.[1]).slice(-40)).toLowerCase()
         if (from === to) continue // self-sends
+        // MeshPortCheckout's payout to the merchant: the payment is the customer's,
+        // for the full price (its Paid event) - not the contract's net transfer.
+        let checkoutPrice: number | null = null
+        if (isArc && MESHPORT_CHECKOUT && from === MESHPORT_CHECKOUT) {
+          const r = await rpc(chain.rpcs, 'eth_getTransactionReceipt', [log.transactionHash]).catch(() => null)
+          const paid = r ? checkoutPaid(r, to, MESHPORT_CHECKOUT) : null
+          if (!paid) continue // the fee wallet's share, or not a payment to this merchant
+          from = paid.payer
+          checkoutPrice = paid.price
+        }
         if (GATEWAY_CONTRACTS.has(from)) continue // the business's own Unified Balance withdrawals
         // MeshPort's own contracts - a P2P escrow release, a swap's output, a
         // BulkPay payout - are never a customer paying an order.
@@ -874,7 +898,7 @@ async function watchDeposits(pick?: (chainId: string) => boolean) {
         if (minted && (isArc || !merchantWallets.has(to))) continue
         let atomic = 0n
         try { atomic = BigInt(log.data) } catch { continue }
-        const amount = Number(isArc ? atomic / 1_000_000_000_000n : atomic) / 1e6
+        const amount = checkoutPrice ?? Number(isArc ? atomic / 1_000_000_000_000n : atomic) / 1e6
         if (!(amount > 0)) continue
         const tx = String(log.transactionHash).toLowerCase()
 

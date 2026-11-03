@@ -10,7 +10,7 @@ import { arcJsonTransport, arcRpcJson, directSendHedge } from './arc'
 const SEND_HEDGE_MS = 2500
 import { ARC, ARC_TOKENS, ARC_CHAIN_INLINE as REGISTRY_ARC_CHAIN_INLINE } from '@/blockchain/chains'
 import { isSlowNetwork } from './connectivity'
-import { ARC_MEMO_CONTRACT, memoTransferData, type OrderMemo } from './arcMemo'
+import { ARC_MEMO_CONTRACT, memoTransferData, checkoutAddress, checkoutPayData, type OrderMemo } from './arcMemo'
 import { assertAccountUnlocked } from './accountLockRule'
 import { fastPayCovers, sendFastPay, FastPayNotSent } from './fastPay'
 
@@ -154,12 +154,20 @@ const ERC20_TRANSFER_ABI = [{
   stateMutability: 'nonpayable',
 }] as const
 
-function payTx(token: PayToken, destination: `0x${string}`, amount: number, memo?: OrderMemo | null) {
+export function payTx(token: PayToken, destination: `0x${string}`, amount: number, memo?: OrderMemo | null) {
   if (token === 'USDC') {
     const amountAtomic = BigInt(Math.round(amount * 1_000_000)) * (10n ** 12n)
     // An order payment goes through Arc's Memo contract with the order attached
     // (the USDC still moves from the payer to `destination`).
     if (memo) {
+      // Through MeshPortCheckout when it's deployed: the full price is the
+      // transaction's value, sent to the contract, which pays the merchant
+      // (minus MeshPort's fee) in the same transaction. The pay-intent names
+      // the contract as the recipient - that is where the payer's USDC goes.
+      const checkout = checkoutAddress()
+      if (checkout) {
+        return { to: checkout, value: amountAtomic, data: checkoutPayData(destination, memo), amountAtomic, decimals: 18, isNative: true, tokenAddress: null, callTarget: null, intentRecipient: checkout as string }
+      }
       return { to: ARC_MEMO_CONTRACT as `0x${string}`, value: undefined, data: memoTransferData(destination, amount, memo), amountAtomic, decimals: 18, isNative: true, tokenAddress: null, callTarget: ARC_MEMO_CONTRACT as string }
     }
     return { to: destination, value: amountAtomic, data: undefined, amountAtomic, decimals: 18, isNative: true, tokenAddress: null, callTarget: null }
@@ -195,7 +203,7 @@ async function runPreflight(token: PayToken, sender: `0x${string}`, destination:
       isNative: tx.isNative,
       tokenAddress: tx.tokenAddress,
       tokenSymbol: token,
-      recipientAddress: destination,
+      recipientAddress: ('intentRecipient' in tx && tx.intentRecipient) || destination,
       recipientUsername: recipientUsername ?? null,
       callTarget: tx.callTarget,
     }),
