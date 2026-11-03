@@ -12,7 +12,7 @@
 // Payments are only ever confirmed by the merchant-pay Edge Function, which
 // reads the transaction from the chain. Nothing here marks anything paid.
 
-import { ARC_MEMO_CONTRACT, memoTransferData as encodeMemoTransfer } from './arcMemo'
+import { ARC_MEMO_CONTRACT, memoTransferData as encodeMemoTransfer, checkoutAddress, checkoutPayData } from './arcMemo'
 export { ARC_MEMO_CONTRACT, orderMemoId } from './arcMemo'
 import { encodeFunctionData, parseUnits, createPublicClient, http, erc20Abi, type Hex } from 'viem'
 import { supabase } from './supabase'
@@ -654,7 +654,21 @@ export async function payArcFromBrowserWallet(w: BrowserWallet, to: string, amou
   // raised before sending (docs.arc.io/arc/concepts/transaction-memos,
   // "Unsupported wallets"). Those wallets pay with a plain send; the order is
   // still matched by amount and address.
-  if (memo && await isEoaOnArc(from)) {
+  // MeshPortCheckout when deployed: the order's full price to the contract,
+  // which pays the merchant (minus MeshPort's merchant fee) in the same
+  // transaction and records the order (its Paid event). Any wallet can call
+  // it, contract wallets included.
+  const checkout = memo ? checkoutAddress() : null
+  if (memo && checkout) {
+    const value = parseUnits(amount.toFixed(6), 18)
+    try {
+      return await w.provider.request({ method: 'eth_sendTransaction', params: [{ from, to: checkout, value: `0x${value.toString(16)}`, data: checkoutPayData(to, memo) }] })
+    } catch (e: any) {
+      if (e?.code === 4001 || /reject|denied|cancel/i.test(String(e?.message ?? ''))) throw e
+      // A wallet that can't make the call still pays with a plain send below.
+    }
+  }
+  if (memo && !checkout && await isEoaOnArc(from)) {
     // The order rides along on-chain (Arc Memo contract), so the payment is
     // matched to it even if this page closes before it reports back.
     try {

@@ -181,3 +181,27 @@ the approval to 0 - all in one transaction. The fee is the relayer's Arc gas
    fails, the whole transaction reverts and nothing moves.
 
 Until `VITE_ARC_ROUTER` is set, Transfer USDC uses the approve + burn path.
+
+# MeshPortCheckout (merchant order payments, MeshPort's merchant fee)
+
+`contracts/MeshPortCheckout.sol` - an **order payment** (a pay link / QR
+request with an order) on Arc: the customer pays the full price to the
+contract, which in the same transaction sends the merchant the price minus
+MeshPort's fee (0.6%, cap $3 - computed by the contract, can't be skipped)
+and the fee to MeshPort's relayer wallet. No owner, no upgrade, keeps no
+money. **Plain Pay and plain receives are never charged** - only order
+payments go through it.
+
+1. Fund the deploy wallet with a little USDC on Arc testnet, then:
+
+       FEE_RECIPIENT=<relayer wallet address> node contracts/deploy-checkout.cjs --dry-run
+       FEE_RECIPIENT=<relayer wallet address> node contracts/deploy-checkout.cjs
+
+   Optional: `CHECKOUT_FEE_BPS` (default 60), `CHECKOUT_FEE_CAP` (USD, default 3).
+2. Set the printed address as `VITE_MESHPORT_CHECKOUT` (Vercel, Production +
+   Preview) and `MESHPORT_CHECKOUT` (Supabase Edge Function secrets), then
+   redeploy the app and the `merchant-pay` function.
+3. Test with a small order. Until `VITE_MESHPORT_CHECKOUT` is set, orders are
+   paid through Arc's Memo contract as before (no fee).
+
+Tests: `node contracts/compile-solcjs.cjs MeshPortCheckout.sol test-helpers/RevertingReceiver.sol && npx hardhat test --no-compile test/MeshPortCheckout.test.js`

@@ -11,6 +11,27 @@ const MEMO_ABI = [{
   inputs: [{ name: 'target', type: 'address' }, { name: 'data', type: 'bytes' }, { name: 'memoId', type: 'bytes32' }, { name: 'memoData', type: 'bytes' }],
 }] as const
 
+// ── MeshPortCheckout (contracts/MeshPortCheckout.sol) ───────────────────────
+// When deployed (VITE_MESHPORT_CHECKOUT), an order payment goes through it
+// instead of the Memo contract: the customer pays the full price, the contract
+// sends the merchant the price minus MeshPort's merchant fee (0.6%, cap $3 -
+// computed by the contract itself) and the fee to MeshPort's relayer wallet,
+// in the same transaction. The order reference is the same as a memo's
+// (orderMemoId) and is read back from the contract's Paid event by
+// merchant-pay.
+const CHECKOUT_ABI = [{
+  type: 'function', name: 'pay', stateMutability: 'payable', outputs: [],
+  inputs: [{ name: 'merchant', type: 'address' }, { name: 'orderRef', type: 'bytes32' }],
+}] as const
+export function checkoutAddress(): Hex | null {
+  const a = String((import.meta.env.VITE_MESHPORT_CHECKOUT as string | undefined) ?? '').trim()
+  return /^0x[0-9a-fA-F]{40}$/.test(a) ? a as Hex : null
+}
+/** Calldata for MeshPortCheckout.pay(merchant, orderRef) - the price is the transaction's value. */
+export function checkoutPayData(merchant: string, memo: { code: string }): Hex {
+  return encodeFunctionData({ abi: CHECKOUT_ABI, functionName: 'pay', args: [merchant as Hex, orderMemoId(memo.code)] })
+}
+
 /** What an order payment attaches: the order's code (memoId) and its number (memo text). */
 export type OrderMemo = { code: string; label: string }
 
