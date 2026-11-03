@@ -38,7 +38,7 @@ const base = (o: Partial<Parameters<typeof fastCctpTransfer>[0]> = {}) => ({
 describe('fastCctpTransfer', () => {
   beforeEach(() => { rpc.mockReset(); send.mockReset(); iris.mockReset(); finish.mockReset() })
 
-  it('approves the exact amount, burns with the forward hook, and reports the forwarder mint', async () => {
+  it('approves once (max - later transfers skip it), burns with the forward hook, and reports the forwarder mint', async () => {
     arc()
     send.mockImplementation(async (_a: any, tx: any) => ({ txHash: tx.to === ARC_USDC ? H(1) : H(2), state: 'success' }))
     iris.mockResolvedValueOnce(null).mockResolvedValueOnce({ status: 'complete', message: '0xab', attestation: '0xcd' })
@@ -49,6 +49,9 @@ describe('fastCctpTransfer', () => {
     expect(send).toHaveBeenCalledTimes(2)
     const [approveTx, burnTx] = send.mock.calls.map(c => c[1])
     expect(approveTx).toMatchObject({ to: ARC_USDC, nonce: 7, gas: 130_000n })
+    const approve = decodeFunctionData({ abi: [{ type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ name: 's', type: 'address' }, { name: 'a', type: 'uint256' }], outputs: [{ type: 'bool' }] }] as const, data: approveTx.data })
+    expect(String(approve.args[0]).toLowerCase()).toBe(TOKEN_MESSENGER_V2.toLowerCase())
+    expect(approve.args[1]).toBe(2n ** 256n - 1n) // standing approval: TokenMessenger only pulls from the sender itself
     expect(burnTx).toMatchObject({ to: TOKEN_MESSENGER_V2, nonce: 8 })
     const burn = decodeFunctionData({ abi: BURN_ABI, data: burnTx.data })
     expect(burn.functionName).toBe('depositForBurnWithHook')

@@ -459,6 +459,38 @@ describe('prepared Circle signing requests', () => {
   })
 })
 
+describe('prepared Circle signing requests: several typed signatures at once (Bring permits)', () => {
+  beforeEach(() => { saveCircleSession('uid-alice', { userToken: 'ut', encryptionKey: 'ek', refreshToken: 'rt', obtainedAt: Date.now() }); circle.discardPreparedSignatures() })
+  const td = (n: number) => ({
+    domain: { name: 'Tok', version: '2', chainId: 1, verifyingContract: '0x1111111111111111111111111111111111111111' as const },
+    types: { Permit: [{ name: 'value', type: 'uint256' }] }, primaryType: 'Permit' as const, message: { value: BigInt(n) },
+  })
+  const settle = () => new Promise(r => setTimeout(r, 0))
+
+  it('both challenges are asked for together; each signature then uses its own - no request waits in between', async () => {
+    const executed: string[] = []
+    sdkExecute = id => { executed.push(id); return { result: { status: 'COMPLETE', data: { signature: '0xsig-' + id } } } }
+    replies = [() => [200, { challengeId: 'first' }], () => [200, { challengeId: 'second' }]]
+    const acct = circleAccount('0xabababababababababababababababababababab', 'uid-alice')
+    circle.prepareTypedSignatures(acct, [td(1), td(2)])
+    await settle()
+    expect(sent.length).toBe(2) // asked for both up front
+    expect(await acct.signTypedData(td(1))).toBe('0xsig-first')
+    expect(await acct.signTypedData(td(2))).toBe('0xsig-second')
+    expect(sent.length).toBe(2) // no request made while signing
+    expect(executed).toEqual(['first', 'second'])
+  })
+
+  it('a different payload than prepared is never signed with a prepared challenge', async () => {
+    sdkExecute = id => ({ result: { status: 'COMPLETE', data: { signature: '0xsig-' + id } } })
+    replies = [() => [200, { challengeId: 'prep' }], () => [200, { challengeId: 'own' }]]
+    const acct = circleAccount('0xacacacacacacacacacacacacacacacacacacacac', 'uid-alice')
+    circle.prepareTypedSignatures(acct, [td(1)])
+    await settle()
+    expect(await acct.signTypedData(td(9))).toBe('0xsig-own')
+  })
+})
+
 // PIN and fingerprint: both hand the passcode to the same send, so the order
 // of "preparation finished" and "PIN / fingerprint accepted" is what varies.
 describe('prepared Circle signing requests: PIN / fingerprint timing', () => {

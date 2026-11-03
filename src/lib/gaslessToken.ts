@@ -183,23 +183,30 @@ export async function bringTokenGasless(p: {
       address: token, functionName: 'nonces', args: [account.address],
       abi: [{ type: 'function', name: 'nonces', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }],
     }) as bigint
-    const signature = await account.signTypedData({
+    const permitTd = {
       domain: tokenDomain,
       types: { Permit: [
         { name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }, { name: 'value', type: 'uint256' },
         { name: 'nonce', type: 'uint256' }, { name: 'deadline', type: 'uint256' },
       ] },
-      primaryType: 'Permit',
+      primaryType: 'Permit' as const,
       message: { owner: account.address, spender: router, value: total, nonce: permitNonce, deadline: until },
-    })
-    const bridgeSignature = await account.signTypedData({
+    }
+    const bridgeTd = {
       domain: { name: 'MeshPortRouter', version: '1', chainId: chainNum, verifyingContract: router },
       types: { BridgePermit: [
         { name: 'from', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'deadline', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
       ] },
-      primaryType: 'BridgePermit',
+      primaryType: 'BridgePermit' as const,
       message: { from: account.address, value: total, deadline: until, nonce },
-    })
+    }
+    // Two signatures in a row: a Google / email (Circle) wallet asks Circle
+    // for both signing requests now, together, so the second doesn't wait for
+    // its own (~0.5-1.6 s, wallet_events 3 Nov). Signs nothing by itself.
+    const { prepareTypedSignatures } = await import('@/wallet/circle')
+    prepareTypedSignatures(account, [permitTd as any, bridgeTd as any])
+    const signature = await account.signTypedData(permitTd)
+    const bridgeSignature = await account.signTypedData(bridgeTd)
     body = { permit: { from: account.address, value: total.toString(), deadline: until.toString(), signature, bridgeSignature } }
   }
 
