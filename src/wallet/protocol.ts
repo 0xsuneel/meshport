@@ -102,7 +102,8 @@ export interface WalletRpc {
   'circle-passcode:set': [{ passcode: string; oldPasscode?: string }, { ok: true }]
   'circle-passcode:check': [{ passcode: string }, { ok: true }]
   'circle-passcode:forget': [Record<string, never>, { ok: true }]
-  'fastpay:approve': [{ owner: string; passcode: string }, { approved: true; validForMs: number }]
+  /** `full`: the frame ran its full (slow) check - the first since it loaded. */
+  'fastpay:approve': [{ owner: string; passcode: string }, { approved: true; validForMs: number; full?: boolean }]
   /** This wallet's chat identity seed (derived, domain-separated - not the wallet key). */
   'chat:seed': [{ address: string }, { seed: Hex }]
   /** This wallet's Solana public key (32 bytes; derived, domain-separated - lib/solanaKey.ts). */

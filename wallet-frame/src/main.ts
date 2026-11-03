@@ -350,7 +350,7 @@ const handlers: Handlers = {
   },
 
   async 'fastpay:approve'({ owner, passcode }) {
-    try { return { approved: true as const, validForMs: await gate.approve(owner, passcode) } } catch (e) { throw gateError(e) }
+    try { return { approved: true as const, ...(await gate.approve(owner, passcode)) } } catch (e) { throw gateError(e) }
   },
 
   async 'chat:seed'({ address }) {

@@ -70,8 +70,8 @@ async function tag(passcode: string): Promise<string> {
 
 export function hasPasscode(): boolean { return !!get(PIN) }
 
-/** Throws unless `passcode` is this device's Google / email wallet passcode. */
-export async function checkPasscode(passcode: string): Promise<void> {
+/** Throws unless `passcode` is this device's Google / email wallet passcode. True: the full (slow) check ran. */
+export async function checkPasscode(passcode: string): Promise<boolean> {
   const stored = get(PIN)
   if (!stored) throw new GateError('not-found', 'No passcode is set in the wallet yet')
   const wait = lockedForMs()
@@ -79,7 +79,7 @@ export async function checkPasscode(passcode: string): Promise<void> {
   if (typeof passcode !== 'string' || !passcode) throw new GateError('bad-passcode', 'Wrong passcode')
   const t = await tag(passcode)
   if (verified) {
-    if (verified === t) { del(LOCK); return }
+    if (verified === t) { del(LOCK); return false }
     const next = failed()
     throw new GateError(next ? 'rate-limited' : 'bad-passcode', 'Wrong passcode', next)
   }
@@ -90,6 +90,7 @@ export async function checkPasscode(passcode: string): Promise<void> {
   }
   del(LOCK)
   verified = t
+  return true
 }
 
 /** First set, or a change. A check already here needs the current passcode. */
@@ -120,10 +121,11 @@ function dropOldChecks(): void {
 // ── One approval = one payment signature, for one wallet ─────────────────────
 const approvals = new Map<string, number>() // owner → approved until (ms)
 
-export async function approve(owner: string, passcode: string): Promise<number> {
-  await checkPasscode(passcode)
+/** One payment approved. `full`: the slow check ran (first one since the frame loaded). */
+export async function approve(owner: string, passcode: string): Promise<{ validForMs: number; full: boolean }> {
+  const full = await checkPasscode(passcode)
   approvals.set(norm(owner), Date.now() + APPROVAL_MS)
-  return APPROVAL_MS
+  return { validForMs: APPROVAL_MS, full }
 }
 
 /** Use the approval for one payment signature (true), if there is a fresh one. */
