@@ -441,6 +441,21 @@ export type CircleAccount = WalletAccount & {
   readonly circleWallet: true
   /** Ask Circle for this exact transaction's signing request now (see "Prepared signing requests"). Never signs. */
   prepareTransaction(transaction: TransactionSerializable): void
+  /** The same for typed data (permits, authorizations). Never signs. */
+  prepareTypedData(typedData: TypedDataDefinition): void
+}
+
+/** The sign-typed request body - the same for preparing and for signing, so a prepared one matches. */
+function typedBody(typedData: TypedDataDefinition): Record<string, unknown> {
+  const { domain, types, primaryType, message } = typedData
+  const full = { EIP712Domain: getTypesForEIP712Domain({ domain }), ...(types as Record<string, unknown>) }
+  return { typedData: { domain, types: full, primaryType, message } }
+}
+
+/** Head start for a flow that will sign these typed data next, in order (no-op for other wallets). */
+export function prepareTypedSignatures(account: unknown, typedData: TypedDataDefinition[]): void {
+  if (!isCircleAccount(account)) return
+  for (const td of typedData) account.prepareTypedData(td)
 }
 
 // ── Prepared signing requests ───────────────────────────────────────────────
@@ -454,19 +469,22 @@ export type CircleAccount = WalletAccount & {
 //   - Tied to the exact payload: the transaction to sign must be identical
 //     (recipient, amount, token, nonce, gas, fees). Anything else and the
 //     prepared one is not used - a fresh challenge is made, as before.
-//   - One per wallet, used at most once, for PREPARED_TTL_MS; replaced by a
-//     newer one, dropped on lock / sign-out (discardPreparedSignatures). An
-//     unused challenge simply expires at Circle.
+//   - Up to MAX_PREPARED per wallet (a flow that signs several things one
+//     after another - Bring's two permits - prepares them all at once, so
+//     only the first waits for its challenge), each used at most once, for
+//     PREPARED_TTL_MS; dropped on lock / sign-out (discardPreparedSignatures).
+//     An unused challenge simply expires at Circle.
 //   - If it fails (expired, refused), the signature is made the normal way.
 const PREPARED_TTL_MS = 60_000
+const MAX_PREPARED = 4
 // at: when it was asked for; readyAt: when Circle answered (wallet_events
 // sign steps preparedAge / preparedLead - how early it was ready).
 interface Prepared { key: string; at: number; readyAt?: number; relayed?: boolean; challengeId: Promise<string> }
-const preparedByAccount = new Map<string, Prepared>()
+const preparedByAccount = new Map<string, Prepared[]>()
 // The payload a signature already started for without a prepared request (a
 // fingerprint accepted before the payment's preparation finished): asking
 // for it afterwards would only make a second, never-used challenge.
-const signingStartedFor = new Map<string, { key: string; at: number }>()
+const signingStartedFor = new Map<string, number>() // account + payload key → when its signature started
 function preparedKey(action: string, body: Record<string, unknown>): string {
   return `${action}\n${JSON.stringify(body, (_k, v) => (typeof v === 'bigint' ? v.toString() : v))}`
 }
@@ -506,10 +524,11 @@ export function circleAccount(address: string, uid: string): CircleAccount {
   // The prepared challenge for exactly this payload, if there is a fresh one
   // (taken: never used twice). null otherwise.
   function takePrepared(action: string, body: Record<string, unknown>, steps: Record<string, number>): Promise<string> | null {
-    const p = preparedByAccount.get(key)
+    const k = preparedKey(action, body)
+    const fresh = (preparedByAccount.get(key) ?? []).filter(e => Date.now() - e.at <= PREPARED_TTL_MS)
+    const p = fresh.find(e => e.key === k)
+    preparedByAccount.set(key, fresh.filter(e => e !== p))
     if (!p) return null
-    preparedByAccount.delete(key)
-    if (Date.now() - p.at > PREPARED_TTL_MS || p.key !== preparedKey(action, body)) return null
     // wallet_events: asked for this long before the signature started, and
     // ready this long before it (negative: still on its way - `challenge` is the wait).
     const now = Date.now()
@@ -521,7 +540,7 @@ export function circleAccount(address: string, uid: string): CircleAccount {
   }
   async function signOnce(action: string, body: Record<string, unknown>, steps: Record<string, number>): Promise<ChallengeOutcome> {
     let prepared = takePrepared(action, body, steps)
-    if (!prepared) signingStartedFor.set(key, { key: preparedKey(action, body), at: Date.now() })
+    if (!prepared) signingStartedFor.set(`${key}\n${preparedKey(action, body)}`, Date.now())
     for (let attempt = 0; ; attempt++) {
       const t0 = performance.now()
       lastCircleApiVia = null
@@ -577,33 +596,35 @@ export function circleAccount(address: string, uid: string): CircleAccount {
       return r.signedTransaction
     },
     async signTypedData(typedData) {
-      const { domain, types, primaryType, message } = typedData as TypedDataDefinition
-      const full = { EIP712Domain: getTypesForEIP712Domain({ domain }), ...(types as Record<string, unknown>) }
-      const r = await sign('sign-typed', { typedData: { domain, types: full, primaryType, message } })
+      const r = await sign('sign-typed', typedBody(typedData as TypedDataDefinition))
       if (!r.signature) throw new CircleError(502, 'challenge', 'Circle returned no signature')
       return r.signature
     },
   })
-  const prepareTransaction = (transaction: TransactionSerializable) => {
-    try {
-      const body = { transaction: plainTransaction(transaction) }
-      const k = preparedKey('sign-transaction', body)
-      const have = preparedByAccount.get(key)
-      if (have && have.key === k && Date.now() - have.at < PREPARED_TTL_MS) return // already asked for this exact one
-      // Already being signed (the PIN / fingerprint got there first): it made its own.
-      const started = signingStartedFor.get(key)
-      if (started && started.key === k && Date.now() - started.at < PREPARED_TTL_MS) return
-      const entry: Prepared = { key: k, at: Date.now(), challengeId: null as unknown as Promise<string> }
-      entry.challengeId = circleCall<{ challengeId: string }>(uid, 'sign-transaction', body).then(r => {
-        entry.readyAt = Date.now()
-        entry.relayed = lastCircleApiVia === 'relay'
-        return r.challengeId
-      })
-      entry.challengeId.catch(() => { /* the signature makes its own then */ })
-      preparedByAccount.set(key, entry)
-    } catch { /* purely a head start */ }
+  const prepare = (action: string, body: Record<string, unknown>) => {
+    const k = preparedKey(action, body)
+    const now = Date.now()
+    const list = (preparedByAccount.get(key) ?? []).filter(e => now - e.at < PREPARED_TTL_MS)
+    if (list.some(e => e.key === k)) return // already asked for this exact one
+    // Already being signed (the PIN / fingerprint got there first): it made its own.
+    const started = signingStartedFor.get(`${key}\n${k}`)
+    if (started && now - started < PREPARED_TTL_MS) return
+    const entry: Prepared = { key: k, at: now, challengeId: null as unknown as Promise<string> }
+    entry.challengeId = circleCall<{ challengeId: string }>(uid, action, body).then(r => {
+      entry.readyAt = Date.now()
+      entry.relayed = lastCircleApiVia === 'relay'
+      return r.challengeId
+    })
+    entry.challengeId.catch(() => { /* the signature makes its own then */ })
+    preparedByAccount.set(key, [...list, entry].slice(-MAX_PREPARED))
   }
-  const account = Object.assign(base, { meshportWallet: true as const, circleWallet: true as const, prepareTransaction }) as CircleAccount
+  const prepareTransaction = (transaction: TransactionSerializable) => {
+    try { prepare('sign-transaction', { transaction: plainTransaction(transaction) }) } catch { /* purely a head start */ }
+  }
+  const prepareTypedData = (typedData: TypedDataDefinition) => {
+    try { prepare('sign-typed', typedBody(typedData)) } catch { /* purely a head start */ }
+  }
+  const account = Object.assign(base, { meshportWallet: true as const, circleWallet: true as const, prepareTransaction, prepareTypedData }) as CircleAccount
   accounts.set(key, account)
   return account
 }
