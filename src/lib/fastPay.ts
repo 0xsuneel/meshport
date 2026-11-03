@@ -522,8 +522,8 @@ function takePin(): string | null {
   return p && Date.now() - p.at < PIN_TTL_MS ? p.pin : null
 }
 
-/** Turning Fast Pay on, with the passcode the person just confirmed: the frame must hold its check. */
-export async function enableFastPay(passcode: string): Promise<void> {
+/** Turning Fast Pay on, with the passcode the person just confirmed: the frame must hold its check. Resolves when the session is ready (true) or couldn't start. */
+export async function enableFastPay(passcode: string): Promise<boolean> {
   const { useAuthStore } = await import('@/store')
   const { FRAME_PASSCODE } = await import('./security')
   if (useAuthStore.getState().passcode !== FRAME_PASSCODE) {
@@ -532,7 +532,7 @@ export async function enableFastPay(passcode: string): Promise<void> {
     useAuthStore.getState().setPasscode(FRAME_PASSCODE)
   }
   setFastPayEnabled(true)
-  void maybeStartFastPay()
+  return maybeStartFastPay() // true once the session is ready
 }
 
 // ── Pay ───────────────────────────────────────────────────────────────────────
