@@ -7,6 +7,7 @@
 import { callerWallet, attemptOwnedBy, callerCanSpend, ACCOUNT_LOCKED_ERROR } from '../_shared/callerWallet.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { createPayIntent, markPayAttemptSubmitted } from './logic.ts'
+import { hedgedRpc } from './hedgedRpc.ts'
 import type { IntentRepository, NonceFetcher, CreatePayIntentRequest } from './logic.ts'
 
 const corsHeaders = {
@@ -32,25 +33,13 @@ const ARC_RPCS = [
   'https://rpc.quicknode.testnet.arc.io',
 ]
 
+// Hedged across the nodes (hedgedRpc.ts): a rate-limited or stalled node no
+// longer holds the payment for up to 10 s before the next one is tried.
+let lastRpc: { url: string; ms: number } | null = null
 async function rpcCall(method: string, params: unknown[]): Promise<unknown> {
-  let lastErr: unknown = null
-  for (const url of ARC_RPCS) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-        signal: AbortSignal.timeout(10000),
-      })
-      if (!res.ok) { lastErr = new Error(`RPC ${res.status} from ${url}`); continue }
-      const respJson = await res.json()
-      if (respJson.error) { lastErr = respJson.error; continue }
-      return respJson.result
-    } catch (e) {
-      lastErr = e
-    }
-  }
-  throw lastErr ?? new Error(`RPC call ${method} failed on all endpoints`)
+  const answer = await hedgedRpc(ARC_RPCS, method, params)
+  lastRpc = { url: answer.url, ms: answer.ms }
+  return answer.result
 }
 
 function getServiceRoleKey(): string {
@@ -169,6 +158,8 @@ Deno.serve(async (req: Request) => {
   // payment call doesn't pay the cold-start penalty (~500-1500ms).
   if (b.action === 'ping') return json({ success: true, pong: true })
 
+  const startedAt = Date.now()
+  lastRpc = null
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
   // Started alongside the wallet lookup so it adds no wait (checked below).
   const canSpendCheck = callerCanSpend(req, supabase)
@@ -239,6 +230,9 @@ Deno.serve(async (req: Request) => {
 
   try {
     const result = await createPayIntent(repo, nonceFetcher, req_)
+    // Where a slow Pay's time went: the whole request, and the nonce read (which node answered).
+    const nodeHost = lastRpc ? new URL(lastRpc.url).host : '-'
+    console.log(`[pay-intent] ${result.outcome} total ${Date.now() - startedAt}ms, nonce ${lastRpc ? `${lastRpc.ms}ms via ${nodeHost}` : '-'}`)
     if (result.outcome === 'invalid_request') return json({ success: false, error: result.reason }, 400)
     if (result.outcome === 'created') {
       // PERF FIX: transitionIntentToSubmitted is no longer awaited inside
