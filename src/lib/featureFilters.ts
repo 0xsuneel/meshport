@@ -200,12 +200,22 @@ export function isChainEnabledForTransfer(settings: SettingsMap, chainId: string
  * is what the chain itself supports right now (Unified Balance chain, a
  * gasless CCTP router); without it, only the switches are read.
  */
+/**
+ * Unified Balance as a Bring route (other chains → Arc). Off: CCTP is faster
+ * to land, needs fewer signatures and costs far less (a UB spend from
+ * Ethereum pays Gateway's Ethereum burn gas, ~$1-3). All its code stays -
+ * turning this on (or passing { ub: true }) restores the UB route and its
+ * admin switches. Money already in a Unified Balance is still recovered
+ * (Recover / spendUnifiedToArc), and merchants' Claim All is CCTP anyway.
+ */
+export const BRING_UB_ENABLED = false
+
 export function bringRoutes(settings: SettingsMap, sdkChainId: string, kind: AccountKind = 'personal',
-  can: { ub: boolean; cctp: boolean } = { ub: true, cctp: true }): Route[] {
+  can: { ub: boolean; cctp: boolean } = { ub: true, cctp: true }, opts: { ub?: boolean } = {}): Route[] {
   const k = bringKeys(kind, sdkChainId)
   if (!on(settings, k.chain)) return []
   const routes: Route[] = []
-  if (can.ub && on(settings, k.ub)) routes.push('ub')
+  if ((opts.ub ?? BRING_UB_ENABLED) && can.ub && on(settings, k.ub)) routes.push('ub')
   if (can.cctp && on(settings, k.cctp)) routes.push('cctp')
   return routes
 }

@@ -21,6 +21,16 @@ describe('Transfer without Unified Balance (TRANSFER_UB_ENABLED off)', () => {
   })
 })
 
+describe('Bring without Unified Balance (BRING_UB_ENABLED off)', () => {
+  it('a chain that offered UB and CCTP brings over CCTP only', () => {
+    expect(bringRoutes({}, 'Base_Sepolia', 'personal', { ub: true, cctp: true })).toEqual(['cctp'])
+    expect(bringRoutes({ base_claim_ub_enabled: row(true) }, 'Base_Sepolia', 'personal', { ub: true, cctp: true })).toEqual(['cctp'])
+  })
+  it('a UB-only chain (no CCTP router) is not offered for Bring', () => {
+    expect(bringRoutes({}, 'Base_Sepolia', 'personal', { ub: true, cctp: false })).toEqual([])
+  })
+})
+
 describe('Solana routes, like the other chains', () => {
   it('Transfer offers both Unified Balance and CCTP until an admin turns one off', () => {
     expect(transferRoutes({}, 'sol', 'personal', UB)).toEqual(['ub', 'cctp'])
@@ -54,8 +64,8 @@ describe('No override, no fallback', () => {
     expect(transferRoutes({ linea_transfer_enabled: row(false) }, 'linea', 'personal', UB)).toEqual([])
   })
   it('Bring routes: only what the chain supports and the admin has on', () => {
-    expect(bringRoutes({}, 'Base_Sepolia', 'personal', { ub: true, cctp: true })).toEqual(['ub', 'cctp'])
-    expect(bringRoutes({ base_claim_ub_enabled: row(false) }, 'Base_Sepolia', 'personal', { ub: true, cctp: true })).toEqual(['cctp'])
+    expect(bringRoutes({}, 'Base_Sepolia', 'personal', { ub: true, cctp: true }, UB)).toEqual(['ub', 'cctp'])
+    expect(bringRoutes({ base_claim_ub_enabled: row(false) }, 'Base_Sepolia', 'personal', { ub: true, cctp: true }, UB)).toEqual(['cctp'])
     expect(bringRoutes({}, 'Base_Sepolia', 'personal', { ub: false, cctp: true })).toEqual(['cctp'])
     expect(bringRoutes({ base_claim_cctp_enabled: row(false) }, 'Base_Sepolia', 'personal', { ub: false, cctp: true })).toEqual([])
   })

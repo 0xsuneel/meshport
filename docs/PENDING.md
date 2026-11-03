@@ -57,6 +57,14 @@ deploy). Pay and plain receives are free - never add a fee there.
 
 - [x] UB removed from **Transfer** (`TRANSFER_UB_ENABLED = false` in
       `src/lib/featureFilters.ts`; all code kept). UB chains send over CCTP.
+- [x] UB removed from **Bring** (`BRING_UB_ENABLED = false`, same file; code and
+      Recover kept). Merchants' Claim All was CCTP already. Bring is CCTP only:
+      1 signature, ~1 min, ~$0.02 (UB from Ethereum paid ~$1-3 of Gateway's
+      Ethereum burn gas).
+- Decision (3 Nov): MeshPort doesn't need UB today. Bring it back only as a
+  hidden engine for Nanopayments / x402, merchant "receive on any chain" (+
+  Collect All in one signature) and "pay from anywhere" - never as a user-facing
+  "UB vs CCTP" choice.
 - [ ] Rebuild UB "on the other side" (your plan), then decide the UB deposit
       gas: MeshPort pays it, or keep charging the user.
 - [ ] UB in 2 signatures instead of 3 (deposit authorization submitted by
