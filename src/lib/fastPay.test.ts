@@ -39,7 +39,7 @@ const circleSigner = {
   address: OWNER, circleWallet: true,
   signTypedData: async (td: any) => { typedSigned.push(td); events.push('sign:' + td.primaryType); return privateKeyToAccount(generatePrivateKey()).signTypedData(td) },
 }
-const auth: any = { walletSource: 'circle', isLocked: false, walletAddress: OWNER, signer: circleSigner }
+const auth: any = { walletSource: 'circle', isLocked: false, walletAddress: OWNER, signer: circleSigner, passcode: 'frame:v1', setPasscode: (c: string) => { auth.passcode = c } }
 vi.mock('@/store', () => ({ useAuthStore: { getState: () => auth } }))
 vi.mock('@/wallet/circle', () => ({ isCircleAccount: (v: any) => v?.circleWallet === true }))
 vi.mock('./supabase', () => ({ authApiHeaders: async () => ({ 'Content-Type': 'application/json' }) }))
@@ -88,14 +88,14 @@ vi.mock('@/wallet/frameClient', () => ({
   callWallet: async (method: string, params: any) => {
     frameCalls.push(method)
     if (!frameSupports) throw Object.assign(new Error('Unknown request ' + method), { code: 'unsupported' })
-    if (method === 'fastpay:set-passcode') { if (framePin && params.oldPasscode !== framePin) throw Object.assign(new Error('Wrong passcode'), { code: 'bad-passcode' }); framePin = params.passcode; return { ok: true } }
-    if (method === 'fastpay:check') return { ok: true }
+    if (method === 'circle-passcode:set') { if (framePin && params.oldPasscode !== framePin) throw Object.assign(new Error('Wrong passcode'), { code: 'bad-passcode' }); framePin = params.passcode; return { ok: true } }
+    if (method === 'circle-passcode:check') return { ok: true }
     if (method === 'fastpay:approve') {
       if (!framePin) throw Object.assign(new Error('no check'), { code: 'not-found' })
       if (params.passcode !== framePin) throw Object.assign(new Error('Wrong passcode'), { code: 'bad-passcode' })
       frameApproved = true; return { approved: true, validForMs: 60_000 }
     }
-    if (method === 'fastpay:forget') { framePin = null; frameKeys.clear(); frameKept.clear(); return { ok: true } }
+    if (method === 'circle-passcode:forget') { framePin = null; frameKeys.clear(); frameKept.clear(); return { ok: true } }
     if (method === 'session:create' && (!framePin || !params.owner)) throw Object.assign(new Error('Turn Fast Pay on again'), { code: 'not-found' })
     if (method === 'session:sign' && String(params.transaction.data ?? '').startsWith('0x0d58b1db')) {
       if (!frameApproved) throw Object.assign(new Error('Enter your passcode'), { code: 'approval-required' })
@@ -111,7 +111,7 @@ vi.mock('@/wallet/frameClient', () => ({
 vi.mock('@/wallet/account', () => ({ plainTransaction: (tx: any) => ({ ...tx }) }))
 // Passcodes that pass in the app (security.ts verifyPasscode) reach Fast Pay through this hook.
 const pinHooks: Array<(pin: string) => unknown> = []
-vi.mock('./security', () => ({ onPasscodeVerified: (f: (pin: string) => unknown) => { pinHooks.push(f) } }))
+vi.mock('./security', () => ({ FRAME_PASSCODE: 'frame:v1', WALLET_UNAVAILABLE: 'wallet-unavailable', onPasscodeVerified: (f: (pin: string) => unknown) => { pinHooks.push(f) } }))
 const screen = { pathname: '/pay' }
 vi.stubGlobal('window', { location: screen, addEventListener: () => {} })
 /** The person types their passcode on the payment's PIN sheet, then it pays. */
@@ -129,7 +129,7 @@ describe('Fast Pay session', () => {
     usdcAllowanceToPermit2 = 0n; relayFails = false; failNextSetupSend = false; frameSupports = true; frameCalls.length = 0
     framePin = PIN; frameApproved = false; screen.pathname = '/pay'
     p2Left = 0n; p2Expiration = 0; frameKept.clear(); frameKeys.clear()
-    Object.assign(auth, { walletSource: 'circle', isLocked: false, walletAddress: OWNER, signer: circleSigner })
+    Object.assign(auth, { walletSource: 'circle', isLocked: false, walletAddress: OWNER, signer: circleSigner, passcode: 'frame:v1' })
   })
 
   it('does nothing while switched off, or for a non-Circle wallet', async () => {
@@ -274,23 +274,17 @@ describe('Fast Pay session', () => {
     expect(typedSigned).toEqual([])
   })
 
-  it('turning it on hands the passcode to the frame; off makes the frame forget it and its keys', async () => {
+  it('turning it on: a passcode still checked by the app\'s hash moves to the frame first; off ends the session', async () => {
     usdcAllowanceToPermit2 = maxUint256
-    framePin = null
-    await fp.enableFastPay(OWNER, '654321')
+    framePin = '999999' // a check left from an earlier passcode on this device
+    auth.passcode = 'v3:some-hash'
+    await fp.enableFastPay('654321')
     expect(framePin).toBe('654321')
+    expect(auth.passcode).toBe('frame:v1') // no hash kept any more
     await vi.waitFor(() => expect(fp.fastPayCovers(OWNER, 1)).toBe(true))
-    // The passcode changed (Change passcode): the frame's check follows it.
-    await fp.fastPayPasscodeChanged(OWNER, '654321', '111222')
-    expect(framePin).toBe('111222')
-    // Turned on again with a check from an older passcode: it starts clean.
-    framePin = '999999'
-    await fp.enableFastPay(OWNER, '111222')
-    expect(framePin).toBe('111222')
-    await fp.disableFastPay(OWNER)
-    expect(framePin).toBeNull()
-    expect(frameKeys.size).toBe(0)
-    expect(fp.fastPayEnabled()).toBe(false)
+    fp.setFastPayEnabled(false)
+    expect(fp.fastPayCovers(OWNER, 1)).toBe(false)
+    expect(framePin).toBe('654321') // the passcode check stays: it is the unlock check too
   })
 
   it('a set-up that fails leaves no key behind in the frame', async () => {

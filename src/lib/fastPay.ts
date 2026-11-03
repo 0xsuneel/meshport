@@ -494,13 +494,12 @@ async function start(gen: number): Promise<boolean> {
   }
 }
 
-// ── The passcode, checked by the wallet frame too ────────────────────────────
-// Every passcode that passes in the app (lock screen, a payment's PIN sheet -
-// security.ts verifyPasscode) is noted here for a minute; the frame is asked
-// to check it right away (the full check runs once per frame load, so the
-// payment's own check is instant) but that opens nothing. Only a Fast Pay
-// payment hands it to the frame as an approval - one signature, for that
-// payment - so a passcode typed to unlock never approves a payment by itself.
+// ── The passcode, checked by the wallet frame ────────────────────────────────
+// A Google / email wallet's passcode is checked only in the wallet frame
+// (lib/circlePasscode.ts) - unlocking included. A passcode that passes on a
+// payment screen (Pay, chat Pay) is noted here for a minute; a Fast Pay
+// payment hands it to the frame, which checks it again and allows ONE
+// signature - so a passcode typed to unlock never approves a payment.
 const PIN_TTL_MS = 60_000
 let pendingPin: { pin: string; at: number } | null = null
 onPasscodeVerified(async pin => {
@@ -508,10 +507,9 @@ onPasscodeVerified(async pin => {
   const { useAuthStore } = await import('@/store')
   const { walletSource, walletAddress } = useAuthStore.getState()
   if (walletSource !== 'circle' || !walletAddress) return
-  // Only a PIN entered on a payment screen can approve a payment; one typed
-  // to unlock, in Security or to reveal a phrase only warms the check.
+  // Only a PIN entered on a payment screen can approve a payment - not one
+  // typed to unlock, in Security or to reveal a phrase.
   if (onPaymentScreen()) pendingPin = { pin, at: Date.now() }
-  void import('@/wallet/frameClient').then(m => m.callWallet('fastpay:check', { owner: walletAddress, passcode: pin })).catch(() => {})
 })
 /** The screens whose PIN sheet pays with sendUSDC (Pay, chat Pay). */
 const PAYMENT_PATHS = ['/pay', '/chat']
@@ -524,32 +522,17 @@ function takePin(): string | null {
   return p && Date.now() - p.at < PIN_TTL_MS ? p.pin : null
 }
 
-/** Turning Fast Pay on: the person's passcode (already checked by the app) becomes the frame's Fast Pay check. */
-export async function enableFastPay(owner: string, passcode: string): Promise<void> {
-  const { callWallet } = await import('@/wallet/frameClient')
-  try {
-    await callWallet('fastpay:set-passcode', { owner, passcode, oldPasscode: passcode })
-  } catch (e) {
-    // A check from an earlier passcode (it was changed since): start clean -
-    // that also drops every old session key of this wallet.
-    if ((e as { code?: string })?.code !== 'bad-passcode') throw e
-    await callWallet('fastpay:forget', { owner })
-    await callWallet('fastpay:set-passcode', { owner, passcode })
+/** Turning Fast Pay on, with the passcode the person just confirmed: the frame must hold its check. */
+export async function enableFastPay(passcode: string): Promise<void> {
+  const { useAuthStore } = await import('@/store')
+  const { FRAME_PASSCODE } = await import('./security')
+  if (useAuthStore.getState().passcode !== FRAME_PASSCODE) {
+    const { adoptCirclePasscode } = await import('./circlePasscode')
+    if (!(await adoptCirclePasscode(passcode))) throw new Error("Couldn't reach your wallet - try again")
+    useAuthStore.getState().setPasscode(FRAME_PASSCODE)
   }
   setFastPayEnabled(true)
   void maybeStartFastPay()
-}
-
-/** Turning Fast Pay off: the session ends and the frame forgets the check and every session key. */
-export async function disableFastPay(owner: string): Promise<void> {
-  setFastPayEnabled(false)
-  try { const { callWallet } = await import('@/wallet/frameClient'); await callWallet('fastpay:forget', { owner }) } catch { /* frame unreachable: its keys still expire on-chain */ }
-}
-
-/** The passcode changed (Security → Change passcode): keep the frame's check in step. */
-export async function fastPayPasscodeChanged(owner: string, oldPasscode: string, passcode: string): Promise<void> {
-  if (!fastPayEnabled()) return
-  try { const { callWallet } = await import('@/wallet/frameClient'); await callWallet('fastpay:set-passcode', { owner, passcode, oldPasscode }) } catch { /* the next enable starts clean */ }
 }
 
 // ── Pay ───────────────────────────────────────────────────────────────────────
@@ -587,7 +570,6 @@ export async function sendFastPay(p: { owner: string; to: Hex; amount: number; i
     await callWallet('fastpay:approve', { owner: s.owner, passcode: pin })
   } catch (e) {
     const code = (e as { code?: string })?.code
-    if (code === 'bad-passcode' || code === 'not-found') publish('ready', 'Fast Pay needs your passcode again - turn it off and on in Security')
     throw new FastPayNotSent(`Frame refused the passcode (${code ?? 'error'})`)
   }
   const { relaySend, sendFeeCap, currentGasPrice } = await import('./arcService')

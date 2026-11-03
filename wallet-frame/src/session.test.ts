@@ -38,7 +38,7 @@ const OWNER = '0x1111111111111111111111111111111111111111'
 const PIN = '123456'
 async function withPin() {
   const ask = await frame()
-  if (!storage.getItem('mp.fastpay.pin.' + OWNER)) await ask('fastpay:set-passcode', { owner: OWNER, passcode: PIN })
+  if (!storage.getItem('mp.circle.passcode')) await ask('circle-passcode:set', { passcode: PIN })
   return ask
 }
 
@@ -78,7 +78,7 @@ describe('Fast Pay session key kept across a restart', () => {
     expect(codes).toEqual(['bad-passcode', 'bad-passcode', 'bad-passcode', 'bad-passcode', 'rate-limited'])
     const ask2 = await frame()
     expect((await ask2('fastpay:approve', { owner: OWNER, passcode: PIN })).error.code).toBe('rate-limited') // even the right one, for now
-    storage.removeItem('mp.fastpay.lockout.' + OWNER)
+    storage.removeItem('mp.circle.lockout')
   })
 
   it('ended: removed from storage too - a restart cannot reopen it', async () => {

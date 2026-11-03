@@ -1,34 +1,37 @@
 // wallet-frame/src/fastPayGate.ts
 //
-// The passcode check for Fast Pay payments, inside the wallet frame.
+// The passcode check for Google / email (Circle) wallets, inside the wallet
+// frame - for unlocking the app AND for every Fast Pay payment.
 //
-// Google / email (Circle) wallets have no passcode copy in this frame - the
-// app checks their passcode. For Fast Pay that left the frame signing a
-// payment for anything that asked (a script running in the app included),
-// up to the session's on-chain limit. Now the frame holds its own check:
+// Circle wallets have no key in this frame, so their passcode used to be
+// checked only in the app, against a hash in the app's own storage (which a
+// script in the page could read and brute-force offline). Now this frame
+// holds the only check, like it does for create / import wallets:
 //
-//   set     turning Fast Pay on, the person confirms their passcode; the frame
-//           keeps a check value - a fixed marker encrypted under the passcode
-//           (PBKDF2-SHA256 600k → AES-GCM, the same format as wallet passcode
-//           copies), sealed to this device. Never the passcode itself.
-//   approve every Fast Pay payment: the passcode the person just entered is
-//           checked HERE; a right one allows ONE payment signature within
-//           APPROVAL_MS. The first check per frame load is the full one
-//           (~1 s on a phone - normally done at unlock, which sends it too);
-//           after it, an HMAC under a key that exists only in this frame's
-//           memory answers in microseconds.
+//   one     a single check for this device - the app has one passcode per
+//           device (its store), whichever Google / email account signs in.
+//           A fixed marker encrypted under the passcode (PBKDF2-SHA256 600k
+//           → AES-GCM, the same format as wallet passcode copies), sealed to
+//           this device. Never the passcode itself.
+//   check   unlocking (security.ts verifyPasscode → lib/circlePasscode.ts).
+//           The first check per frame load is the full one (~1 s on a
+//           phone); after it, an HMAC under a key that exists only in this
+//           frame's memory answers in microseconds.
+//   approve every Fast Pay payment: the passcode just entered is checked
+//           HERE; a right one allows ONE payment signature, for that wallet,
+//           within APPROVAL_MS.
 //   guess   5 free tries, then 30 s, 60 s, 2 min … up to an hour, kept in
 //           this frame's storage (the app can't reset it).
-//   change  needs the current passcode; forget (Fast Pay off) removes the
-//           check value AND every session key of that wallet - a script that
-//           forgets it to set its own gets no session (a new one needs the
-//           person's Circle signature).
+//   change  needs the current passcode. forget removes the check AND every
+//           Fast Pay session key - a script that forgets it to set its own
+//           gets no session (a new one needs the Circle wallet's signature).
 
 import { encryptPrivateKey, decryptPrivateKey, sealForDevice } from '@/lib/security'
 
-const PIN = 'mp.fastpay.pin.'
-const LOCK = 'mp.fastpay.lockout.'
-const MARKER = 'meshport-fastpay-passcode-v1'
+const PIN = 'mp.circle.passcode'
+const LOCK = 'mp.circle.lockout'
+const OLD_PIN = 'mp.fastpay.pin.' // + owner: the first, per-wallet Fast Pay check (removed on sight)
+const MARKER = 'meshport-circle-passcode-v1'
 export const APPROVAL_MS = 60_000
 const FREE_TRIES = 5
 const BASE_WAIT_MS = 30_000
@@ -45,19 +48,19 @@ const put = (k: string, v: string) => { try { ls()?.setItem(k, v) } catch { /* s
 const del = (k: string) => { try { ls()?.removeItem(k) } catch { /* storage blocked */ } }
 
 // ── Lockout ───────────────────────────────────────────────────────────────────
-function lockState(a: string): { fails: number; until: number } {
-  try { return JSON.parse(get(LOCK + a) ?? '') ?? { fails: 0, until: 0 } } catch { return { fails: 0, until: 0 } }
+function lockState(): { fails: number; until: number } {
+  try { return JSON.parse(get(LOCK) ?? '') ?? { fails: 0, until: 0 } } catch { return { fails: 0, until: 0 } }
 }
-function lockedForMs(a: string): number { return Math.max(0, lockState(a).until - Date.now()) }
-function failed(a: string): number {
-  const fails = lockState(a).fails + 1
+function lockedForMs(): number { return Math.max(0, lockState().until - Date.now()) }
+function failed(): number {
+  const fails = lockState().fails + 1
   const wait = fails < FREE_TRIES ? 0 : Math.min(BASE_WAIT_MS * 2 ** (fails - FREE_TRIES), MAX_WAIT_MS)
-  put(LOCK + a, JSON.stringify({ fails, until: wait ? Date.now() + wait : 0 }))
+  put(LOCK, JSON.stringify({ fails, until: wait ? Date.now() + wait : 0 }))
   return wait
 }
 
 // ── Fast checks after the first full one (this frame load only) ──────────────
-const verified = new Map<string, string>() // owner → HMAC tag of its passcode
+let verified: string | null = null // HMAC tag of the passcode
 let tagKey: Promise<CryptoKey> | null = null
 async function tag(passcode: string): Promise<string> {
   tagKey ??= crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
@@ -65,55 +68,60 @@ async function tag(passcode: string): Promise<string> {
   return Array.from(mac, b => b.toString(16).padStart(2, '0')).join('')
 }
 
-export function hasPasscode(owner: string): boolean { return !!get(PIN + norm(owner)) }
+export function hasPasscode(): boolean { return !!get(PIN) }
 
-/** Throws unless `passcode` is this wallet's Fast Pay passcode. */
-export async function checkPasscode(owner: string, passcode: string): Promise<void> {
-  const a = norm(owner)
-  const stored = get(PIN + a)
-  if (!stored) throw new GateError('not-found', 'Turn Fast Pay on again to confirm your passcode')
-  const wait = lockedForMs(a)
+/** Throws unless `passcode` is this device's Google / email wallet passcode. */
+export async function checkPasscode(passcode: string): Promise<void> {
+  const stored = get(PIN)
+  if (!stored) throw new GateError('not-found', 'No passcode is set in the wallet yet')
+  const wait = lockedForMs()
   if (wait > 0) throw new GateError('rate-limited', 'Too many wrong passcodes - try again shortly', wait)
   if (typeof passcode !== 'string' || !passcode) throw new GateError('bad-passcode', 'Wrong passcode')
   const t = await tag(passcode)
-  const known = verified.get(a)
-  if (known) {
-    if (known === t) { del(LOCK + a); return }
-    const next = failed(a)
+  if (verified) {
+    if (verified === t) { del(LOCK); return }
+    const next = failed()
     throw new GateError(next ? 'rate-limited' : 'bad-passcode', 'Wrong passcode', next)
   }
   const opened = await decryptPrivateKey(stored, passcode).catch(() => null)
   if (opened !== MARKER) {
-    const next = failed(a)
+    const next = failed()
     throw new GateError(next ? 'rate-limited' : 'bad-passcode', 'Wrong passcode', next)
   }
-  del(LOCK + a)
-  verified.set(a, t)
+  del(LOCK)
+  verified = t
 }
 
-/** Turning Fast Pay on / changing the passcode. A check value already here needs the current passcode. */
-export async function setPasscode(owner: string, passcode: string, oldPasscode?: string): Promise<void> {
-  const a = norm(owner)
+/** First set, or a change. A check already here needs the current passcode. */
+export async function setPasscode(passcode: string, oldPasscode?: string): Promise<void> {
   if (typeof passcode !== 'string' || !/^\d{6}$/.test(passcode)) throw new GateError('invalid', 'A 6-digit passcode is needed')
-  if (hasPasscode(a)) await checkPasscode(a, oldPasscode ?? '')
+  if (hasPasscode()) await checkPasscode(oldPasscode ?? '')
   const enc = await encryptPrivateKey(MARKER, passcode)
-  put(PIN + a, (await sealForDevice(enc)) ?? enc)
-  verified.set(a, await tag(passcode))
+  const value = (await sealForDevice(enc)) ?? enc
+  put(PIN, value)
+  if (get(PIN) !== value) throw new GateError('invalid', "This browser blocks the wallet's storage")
+  verified = await tag(passcode)
+  approvals.clear()
+  dropOldChecks()
 }
 
-/** Fast Pay off: the check value goes (the caller drops the wallet's session keys too). */
-export function forget(owner: string): void {
-  const a = norm(owner)
-  del(PIN + a)
-  verified.delete(a)
-  approvals.delete(a)
+/** The check goes (the caller drops every session key too). */
+export function forget(): void {
+  del(PIN)
+  verified = null
+  approvals.clear()
+  dropOldChecks()
 }
 
-// ── One approval = one payment signature ──────────────────────────────────────
+function dropOldChecks(): void {
+  try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k?.startsWith(OLD_PIN)) localStorage.removeItem(k) } } catch { /* storage blocked */ }
+}
+
+// ── One approval = one payment signature, for one wallet ─────────────────────
 const approvals = new Map<string, number>() // owner → approved until (ms)
 
 export async function approve(owner: string, passcode: string): Promise<number> {
-  await checkPasscode(owner, passcode)
+  await checkPasscode(passcode)
   approvals.set(norm(owner), Date.now() + APPROVAL_MS)
   return APPROVAL_MS
 }
@@ -127,4 +135,4 @@ export function takeApproval(owner: string): boolean {
 }
 
 /** Test hook. */
-export function _resetGate(): void { verified.clear(); approvals.clear(); tagKey = null }
+export function _resetGate(): void { verified = null; approvals.clear(); tagKey = null }

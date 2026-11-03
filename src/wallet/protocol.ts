@@ -93,16 +93,16 @@ export interface WalletRpc {
   /** Drop a session key (or all of them). */
   'session:end': [{ address?: string }, { ok: true }]
   /**
-   * Fast Pay's own passcode check, in the frame (wallet-frame/src/fastPayGate.ts):
-   * set when Fast Pay is turned on (changing it needs the current one);
-   * check verifies only (warms the check at unlock); approve verifies and
-   * allows ONE payment signature for 60 s; forget (Fast Pay off) removes it
-   * and every session key of that wallet.
+   * The passcode of Google / email (Circle) wallets, checked only in the
+   * frame (wallet-frame/src/fastPayGate.ts) - one per device, like the app's
+   * passcode. set: first time, or a change (needs the current one). check:
+   * unlocking. forget: removes it and every Fast Pay session key. approve:
+   * checks it and allows ONE Fast Pay payment signature for that wallet, 60 s.
    */
-  'fastpay:set-passcode': [{ owner: string; passcode: string; oldPasscode?: string }, { ok: true }]
-  'fastpay:check': [{ owner: string; passcode: string }, { ok: true }]
+  'circle-passcode:set': [{ passcode: string; oldPasscode?: string }, { ok: true }]
+  'circle-passcode:check': [{ passcode: string }, { ok: true }]
+  'circle-passcode:forget': [Record<string, never>, { ok: true }]
   'fastpay:approve': [{ owner: string; passcode: string }, { approved: true; validForMs: number }]
-  'fastpay:forget': [{ owner: string }, { ok: true }]
   /** This wallet's chat identity seed (derived, domain-separated - not the wallet key). */
   'chat:seed': [{ address: string }, { seed: Hex }]
   /** This wallet's Solana public key (32 bytes; derived, domain-separated - lib/solanaKey.ts). */

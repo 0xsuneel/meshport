@@ -271,7 +271,7 @@ const handlers: Handlers = {
   // passcode approval checked here (fastPayGate) - never just the app's word.
   async 'session:create'({ keep, owner } = {}) {
     if (typeof owner !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(owner)) throw new RpcError('invalid', 'Which wallet is this Fast Pay session for?')
-    if (!gate.hasPasscode(owner)) throw new RpcError('not-found', 'Turn Fast Pay on again to confirm your passcode')
+    if (!gate.hasPasscode()) throw new RpcError('not-found', 'Unlock with your passcode first')
     const pk = generatePrivateKey()
     const k = privateKeyToAccount(pk)
     const a = k.address.toLowerCase()
@@ -294,7 +294,7 @@ const handlers: Handlers = {
     let saved: { owner?: string; sealed?: string } | null = null
     try { saved = JSON.parse(localStorage.getItem(SESSION_STORE + a) || 'null') } catch { saved = null }
     // No owner (a key kept before the passcode check existed) or no check value: not reopened.
-    if (!saved?.owner || !saved.sealed || !gate.hasPasscode(saved.owner)) {
+    if (!saved?.owner || !saved.sealed || !gate.hasPasscode()) {
       try { localStorage.removeItem(SESSION_STORE + a) } catch { /* storage blocked */ }
       return { restored: false }
     }
@@ -329,34 +329,28 @@ const handlers: Handlers = {
     return { ok: true as const }
   },
 
-  // ── Fast Pay passcode (fastPayGate) ───────────────────────────────────────
-  async 'fastpay:set-passcode'({ owner, passcode, oldPasscode }) {
-    try { await gate.setPasscode(owner, passcode, oldPasscode) } catch (e) { throw gateError(e) }
+  // ── Google / email wallet passcode (fastPayGate) ─────────────────────────
+  // The only check of that passcode: unlocking, and every Fast Pay payment.
+  async 'circle-passcode:set'({ passcode, oldPasscode }) {
+    try { await gate.setPasscode(passcode, oldPasscode) } catch (e) { throw gateError(e) }
     return { ok: true as const }
   },
 
-  async 'fastpay:check'({ owner, passcode }) {
-    try { await gate.checkPasscode(owner, passcode) } catch (e) { throw gateError(e) }
+  async 'circle-passcode:check'({ passcode }) {
+    try { await gate.checkPasscode(passcode) } catch (e) { throw gateError(e) }
+    return { ok: true as const }
+  },
+
+  async 'circle-passcode:forget'() {
+    gate.forget()
+    // Every Fast Pay session key goes with it (memory and storage).
+    for (const a of [...sessionKeys.keys()]) dropSessionKey(a)
+    try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k?.startsWith(SESSION_STORE)) localStorage.removeItem(k) } } catch { /* storage blocked */ }
     return { ok: true as const }
   },
 
   async 'fastpay:approve'({ owner, passcode }) {
     try { return { approved: true as const, validForMs: await gate.approve(owner, passcode) } } catch (e) { throw gateError(e) }
-  },
-
-  async 'fastpay:forget'({ owner }) {
-    const o = String(owner).toLowerCase()
-    gate.forget(o)
-    // Every session key of this wallet goes with it (memory and storage).
-    for (const [a, who] of [...sessionOwner]) if (who === o) dropSessionKey(a)
-    try {
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const k = localStorage.key(i)
-        if (!k?.startsWith(SESSION_STORE)) continue
-        try { if (JSON.parse(localStorage.getItem(k) || 'null')?.owner === o) localStorage.removeItem(k) } catch { localStorage.removeItem(k) }
-      }
-    } catch { /* storage blocked */ }
-    return { ok: true as const }
   },
 
   async 'chat:seed'({ address }) {

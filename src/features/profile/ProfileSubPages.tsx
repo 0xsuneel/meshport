@@ -30,7 +30,7 @@ import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { useAuthStore, useNotificationStore, useUIStore, type AppNotification } from '@/store'
 import { useFeatureEnabled } from '@/store/settingsStore'
-import { fastPayEnabled, enableFastPay, disableFastPay, fastPayPasscodeChanged, useFastPay, FAST_PAY_LIMIT_USDC } from '@/lib/fastPay'
+import { fastPayEnabled, setFastPayEnabled, enableFastPay, useFastPay, FAST_PAY_LIMIT_USDC } from '@/lib/fastPay'
 import { useThemeStore, resolveTheme, type ThemeMode } from '@/store/themeStore'
 import { switchTheme } from '@/lib/themeTransition'
 import { Avatar } from '@/components/ui/Avatar'
@@ -90,7 +90,7 @@ export function SecurityPage() {
   const toggleFastPay = async () => {
     if (fastPayOn) {
       setFastPayOn(false)
-      if (walletAddress) await disableFastPay(walletAddress)
+      setFastPayEnabled(false)
       showToastMessage('Fast Pay off')
       return
     }
@@ -104,7 +104,7 @@ export function SecurityPage() {
       let correct = false
       try { correct = await verifyPasscode(code, storedPasscode) } catch {}
       if (!correct) { setFastPayError('Incorrect passcode. Try again.'); setFastPayPass(''); return }
-      await enableFastPay(walletAddress, code)
+      await enableFastPay(code)
       setFastPayOn(true); setFastPaySheet(false)
       showToastMessage('Fast Pay on (beta)')
     } catch (e) {
@@ -440,6 +440,13 @@ export function ChangePasscodePage() {
       const { walletAddress, signer, walletSource, biometricEnabled } = useAuthStore.getState()
       const { setWalletPasscode, keyInWalletFrame } = await import('@/wallet')
       let inFrame = false
+      if (walletAddress && walletSource === 'circle') {
+        // Google / email wallets: the frame holds the only check of the
+        // passcode (lib/circlePasscode) - it changes only with the current
+        // one. Before anything else, so a refusal changes nothing.
+        const { changeCirclePasscode } = await import('@/lib/circlePasscode')
+        inFrame = await changeCirclePasscode(storedPasscode ? oldPass : null, newPass)
+      }
       if (walletAddress && signer && walletSource !== 'social-auto' && keyInWalletFrame(walletSource)) {
         // create / import-seed / import-privkey wallets only - social-auto
         // wallets are never encrypted with the passcode, and Circle
@@ -469,8 +476,6 @@ export function ChangePasscodePage() {
       // (security.ts FRAME_PASSCODE).
       const { FRAME_PASSCODE } = await import('@/lib/security')
       setPasscode(inFrame ? FRAME_PASSCODE : hashed)
-      // Fast Pay's check in the wallet frame follows the new passcode.
-      if (walletAddress && walletSource === 'circle' && storedPasscode) await fastPayPasscodeChanged(walletAddress, oldPass, newPass)
       // Show success immediately - local passcode (and its dependents) are already updated
       showToastMessage('Passcode updated successfully', 'success')
       if (resealPending) {
@@ -481,8 +486,10 @@ export function ChangePasscodePage() {
       }
       // The passcode (even hashed) never leaves this device: a 6-digit PIN's
       // hash can be reversed in seconds by anyone who could read it.
-    } catch {
-      setError('Failed to update passcode')
+    } catch (e) {
+      // The wallet frame's own reasons (lib/circlePasscode) are worth showing.
+      const msg = e instanceof Error ? e.message : ''
+      setError(/^(Current passcode is incorrect|Couldn't reach your wallet|Enter your current passcode)/.test(msg) ? msg : 'Failed to update passcode')
     } finally {
       setSaving(false)
     }
