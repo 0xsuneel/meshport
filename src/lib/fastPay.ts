@@ -24,13 +24,16 @@
 //     the user pays their own network fee, as on any payment.
 //   anything else (bigger, other tokens, order payments, no session yet)
 //     the normal Circle path, unchanged.
-//   session end (lock / logout / switched off): the key sends what's left of
-//     its gas back to the relayer, then it is dropped.
+//   app closed / locked / reopened: the session carries on - the frame keeps
+//     its key sealed to this device and it is reopened (~1 s, no Circle
+//     signature); every payment still needs the passcode.
+//   session end (expiry / logout / switched off): the key sends what's left
+//     of its gas back to the relayer, then it is dropped.
 //
 // Security: the session key has no execution rights over the Circle wallet.
 // Its only power is Permit2's allowance, capped on-chain by amount AND expiry
 // (Permit2 AllowanceTransfer) - a leaked key can take at most what is left of
-// the limit, only until it expires. Lock / logout / reload drops the key.
+// the limit, only until it expires. Logout / switching off drops the key.
 // PoC: the key lives in this module's memory; the product design moves it to
 // the wallet frame (web) or Android Keystore / iOS Keychain (native).
 //
@@ -60,19 +63,45 @@ export type KeyHome = 'frame' | 'app'
  * ('unsupported'): then, for this proof of concept, the key is kept in this
  * module's memory instead (never stored). The set-up line says which.
  */
-async function newSessionKey(): Promise<{ key: SessionAccount; home: KeyHome; end: () => void }> {
+async function frameKey(address: Hex): Promise<{ key: SessionAccount; end: () => void }> {
+  const [{ callWallet }, { plainTransaction }] = await Promise.all([import('@/wallet/frameClient'), import('@/wallet/account')])
+  return {
+    key: { address, signTransaction: async (tx: any) => (await callWallet('session:sign', { address, transaction: plainTransaction(tx) })).serialized },
+    end: () => { void callWallet('session:end', { address }).catch(() => {}) },
+  }
+}
+async function newSessionKey(): Promise<{ key: SessionAccount; home: KeyHome; kept: boolean; end: () => void }> {
   try {
-    const [{ callWallet }, { plainTransaction }] = await Promise.all([import('@/wallet/frameClient'), import('@/wallet/account')])
-    const { address } = await callWallet('session:create', {} as Record<string, never>)
-    const key: SessionAccount = {
-      address,
-      signTransaction: async (tx: any) => (await callWallet('session:sign', { address, transaction: plainTransaction(tx) })).serialized,
-    }
-    return { key, home: 'frame', end: () => { void callWallet('session:end', { address }).catch(() => {}) } }
+    const { callWallet } = await import('@/wallet/frameClient')
+    // keep: sealed to this device in the frame, so the session survives the app closing.
+    const { address, kept } = await callWallet('session:create', { keep: true })
+    return { ...(await frameKey(address)), home: 'frame', kept: kept === true }
   } catch {
     const k = privateKeyToAccount(generatePrivateKey())
-    return { key: { address: k.address, signTransaction: (tx: any) => k.signTransaction(tx) }, home: 'app', end: () => {} }
+    return { key: { address: k.address, signTransaction: (tx: any) => k.signTransaction(tx) }, home: 'app', kept: false, end: () => {} }
   }
+}
+
+// ── A session kept across app restarts ───────────────────────────────────────
+// Field 3 Nov 08:16-08:18: three app opens in three minutes, each one a new
+// set-up (a Circle signature, ~10 s) - and a payment made right after opening
+// always beat it. A session whose key the frame kept (sealed to this device)
+// is reopened instead: only public facts are stored here (no key); what's
+// left and when it ends are read back from Permit2 on-chain.
+interface SavedSession { owner: string; key: string; limit: string; expiresAt: number; payGas: string; payGasEstimate: string; owedGasWei: string; relayer: string | null }
+const sessionStoreKey = (owner: string) => `meshport:fastpay-session:${owner.toLowerCase()}`
+function loadSaved(owner: string): SavedSession | null {
+  try { return JSON.parse(localStorage.getItem(sessionStoreKey(owner)) || 'null') as SavedSession | null } catch { return null }
+}
+function saveSession(s: Session | null, owner: string): void {
+  try {
+    if (!s) { localStorage.removeItem(sessionStoreKey(owner)); return }
+    const saved: SavedSession = {
+      owner: s.owner, key: s.key.address, limit: s.limit.toString(), expiresAt: s.expiresAt,
+      payGas: s.payGas.toString(), payGasEstimate: s.payGasEstimate.toString(), owedGasWei: s.owedGasWei.toString(), relayer: s.relayer,
+    }
+    localStorage.setItem(sessionStoreKey(owner), JSON.stringify(saved))
+  } catch { /* private mode */ }
 }
 
 export const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3' as const
@@ -187,6 +216,7 @@ interface Session {
   owner: Hex
   key: SessionAccount
   home: KeyHome
+  kept: boolean
   endKey: () => void
   limit: bigint          // USDC, 6 decimals
   spent: bigint          // payments + refunds, sent or possibly sent (pending counts)
@@ -227,6 +257,7 @@ export function endFastPaySession(): void {
   starting = null
   publish('off')
   if (!s) return
+  saveSession(null, s.owner)
   // The leftover gas back to the relayer first (the key signs it), then the key is dropped.
   void (s.relayer ? returnLeftover(s) : Promise.resolve()).catch(() => {}).finally(() => s.endKey())
 }
@@ -299,6 +330,52 @@ export function maybeStartFastPay(): Promise<boolean> {
   return starting
 }
 
+/**
+ * Reopen this wallet's kept session after an app restart: the frame unseals
+ * its key; what's left, the expiry and the key's next nonce come from the
+ * chain. No Circle signature. False: none, ended, or the frame lost it.
+ */
+async function resume(owner: Hex, gen: number): Promise<boolean> {
+  const saved = loadSaved(owner)
+  if (!saved || saved.owner.toLowerCase() !== owner.toLowerCase()) return false
+  const t0 = performance.now()
+  const forget = async () => {
+    saveSession(null, owner)
+    try { const { callWallet } = await import('@/wallet/frameClient'); await callWallet('session:end', { address: saved.key }) } catch { /* gone already */ }
+  }
+  if (Date.now() > saved.expiresAt - 10 * 60_000) { await forget(); return false }
+  let restored = false
+  try {
+    const { callWallet } = await import('@/wallet/frameClient')
+    restored = (await callWallet('session:restore', { address: saved.key })).restored
+  } catch { return false }
+  if (!restored) { saveSession(null, owner); return false }
+  const keyAddr = saved.key as Hex
+  const [p2, nonceHex] = await Promise.all([
+    call<readonly [bigint, number, number]>(PERMIT2, permit2Abi, 'allowance', [owner, ARC_USDC_ERC20, keyAddr]),
+    arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionCount', params: [keyAddr, 'pending'] }),
+  ])
+  const left = p2[0]
+  const expiresAt = Number(p2[1]) * 1000
+  if (Date.now() > expiresAt - 10 * 60_000 || left <= REFUND_RESERVE) { await forget(); return false }
+  if (gen !== generation) return false
+  const { useAuthStore } = await import('@/store')
+  const now = useAuthStore.getState()
+  if (now.isLocked || now.walletAddress?.toLowerCase() !== owner.toLowerCase()) return false
+  const limit = BigInt(saved.limit)
+  const { key, end } = await frameKey(keyAddr)
+  session = {
+    owner, key, home: 'frame', kept: true, endKey: end, limit, spent: limit - left, expiresAt,
+    nonce: Number(BigInt(nonceHex?.result ?? '0x0')),
+    payGas: BigInt(saved.payGas), payGasEstimate: BigInt(saved.payGasEstimate), owedGasWei: BigInt(saved.owedGasWei),
+    relayer: saved.relayer as Hex | null,
+  }
+  publish('ready')
+  const secs = ((performance.now() - t0) / 1000).toFixed(2)
+  void import('./errorReport').then(m => m.reportPerf(`[perf fastpay setup] resumed ${secs}, ${(Number(left) / 1e6).toFixed(2)} left, key in frame`)).catch(() => {})
+  return true
+}
+
 async function start(gen: number): Promise<boolean> {
   const { useAuthStore } = await import('@/store')
   const auth = useAuthStore.getState()
@@ -307,6 +384,7 @@ async function start(gen: number): Promise<boolean> {
   if (!isCircleAccount(auth.signer)) return false
   const signer = auth.signer as unknown as CircleSigner
   const owner = auth.walletAddress as Hex
+  if (await resume(owner, gen)) return true
   publish('starting')
   const t0 = performance.now()
   const marks: string[] = []
@@ -314,7 +392,7 @@ async function start(gen: number): Promise<boolean> {
   const live = () => gen === generation && !useAuthStore.getState().isLocked
 
   // 1. The session key: random, in the wallet frame (or, PoC fallback, memory here).
-  const { key, home, end: endKey } = await newSessionKey()
+  const { key, home, kept: keyKept, end: endKey } = await newSessionKey()
   let kept = false
   try {
   const now = Date.now()
@@ -398,10 +476,11 @@ async function start(gen: number): Promise<boolean> {
   if (still.walletAddress?.toLowerCase() !== owner.toLowerCase()) return false
 
   session = {
-    owner, key, home, endKey, limit, spent: 0n, expiresAt, nonce,
+    owner, key, home, kept: keyKept, endKey, limit, spent: 0n, expiresAt, nonce,
     payGas: BigInt(Math.ceil(Number(payGasEstimate) * PAY_GAS_HEADROOM)), payGasEstimate,
     owedGasWei: setupGas * gasPrice, relayer,
   }
+  if (keyKept) saveSession(session, owner)
   kept = true
   publish('ready')
   mark('ready')
@@ -449,6 +528,7 @@ export async function sendFastPay(p: { owner: string; to: Hex; amount: number; i
   s.nonce++
   s.spent += amount + refund // counted up front: a pending payment may still land
   s.owedGasWei = 0n
+  if (s.kept) saveSession(s, s.owner)
   publish()
   try {
     const data = batchData(s.owner, p.to, amount, s.key.address, refund)
@@ -462,6 +542,7 @@ export async function sendFastPay(p: { owner: string; to: Hex; amount: number; i
     s.spent -= amount + refund
     s.owedGasWei += owed
     s.nonce = Math.min(s.nonce, nonce)
+    if (s.kept) saveSession(s, s.owner)
     publish()
     throw new FastPayNotSent(e instanceof Error ? e.message : 'Fast Pay send refused')
   }

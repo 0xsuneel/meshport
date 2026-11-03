@@ -81,7 +81,9 @@ export interface WalletRpc {
    * frame's memory only. It never leaves the frame; its power is the Permit2
    * allowance the user's Circle wallet grants it (amount + expiry on-chain).
    */
-  'session:create': [Record<string, never>, { address: Hex }]
+  'session:create': [{ keep?: boolean }, { address: Hex; kept: boolean }]
+  /** After an app restart: reopen a kept session key (sealed to this device). */
+  'session:restore': [{ address: string }, { restored: boolean }]
   /**
    * Sign with a session key - only what Fast Pay needs on Arc: the USDC
    * permit for Permit2, Permit2 permit / batch transferFrom, and a plain

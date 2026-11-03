@@ -17,14 +17,18 @@ const events: string[] = []
 
 // Chain reads (arcRpcJson): allowances, nonces, gas estimates, balances.
 let usdcAllowanceToPermit2 = 0n
+// Permit2's allowance for a session key (what's left, expiry) - for resumed sessions.
+let p2Left = 0n
+let p2Expiration = 0
 vi.mock('./arc', () => ({
   arcRpcJson: async (body: { method: string; params: any[] }) => {
     if (body.method === 'eth_estimateGas') return { result: '0x11170' } // 70,000
     if (body.method === 'eth_getBalance') return { result: '0x2386f26fc10000' } // 0.01 USDC
+    if (body.method === 'eth_getTransactionCount') return { result: '0x5' }
     const data: string = body.params[0].data
     if (data.startsWith('0xdd62ed3e')) return { result: encodeAbiParameters([{ type: 'uint256' }], [usdcAllowanceToPermit2]) }
     if (data.startsWith('0x7ecebe00')) return { result: encodeAbiParameters([{ type: 'uint256' }], [12n]) }
-    if (data.startsWith('0x927da105')) return { result: encodeAbiParameters([{ type: 'uint160' }, { type: 'uint48' }, { type: 'uint48' }], [0n, 0, 0]) }
+    if (data.startsWith('0x927da105')) return { result: encodeAbiParameters([{ type: 'uint160' }, { type: 'uint48' }, { type: 'uint48' }], [p2Left, p2Expiration, 0]) }
     throw new Error('unexpected read ' + data.slice(0, 10))
   },
 }))
@@ -75,13 +79,15 @@ vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
 let frameSupports = false
 const frameCalls: string[] = []
 const frameKeys = new Map<string, ReturnType<typeof privateKeyToAccount>>()
+const frameKept = new Set<string>() // sealed to the device: survives an app restart
 vi.mock('@/wallet/frameClient', () => ({
   callWallet: async (method: string, params: any) => {
     frameCalls.push(method)
     if (!frameSupports) throw Object.assign(new Error('Unknown request ' + method), { code: 'unsupported' })
-    if (method === 'session:create') { const k = privateKeyToAccount(generatePrivateKey()); frameKeys.set(lc(k.address), k); return { address: k.address } }
+    if (method === 'session:create') { const k = privateKeyToAccount(generatePrivateKey()); frameKeys.set(lc(k.address), k); if (params.keep) frameKept.add(lc(k.address)); return { address: k.address, kept: !!params.keep } }
+    if (method === 'session:restore') return { restored: frameKeys.has(lc(params.address)) && frameKept.has(lc(params.address)) }
     if (method === 'session:sign') return { serialized: await frameKeys.get(lc(params.address))!.signTransaction(params.transaction) }
-    if (method === 'session:end') { frameKeys.delete(lc(params.address)); return { ok: true } }
+    if (method === 'session:end') { frameKeys.delete(lc(params.address)); frameKept.delete(lc(params.address)); return { ok: true } }
     throw new Error('unexpected ' + method)
   },
 }))
@@ -96,6 +102,7 @@ describe('Fast Pay session', () => {
   beforeEach(() => {
     fp._resetFastPay(); mem.clear(); typedSigned.length = 0; sent.length = 0; fetchCalls.length = 0; perf.length = 0; events.length = 0
     usdcAllowanceToPermit2 = 0n; relayFails = false; failNextSetupSend = false; frameSupports = false; frameCalls.length = 0
+    p2Left = 0n; p2Expiration = 0; frameKept.clear(); frameKeys.clear()
     Object.assign(auth, { walletSource: 'circle', isLocked: false, walletAddress: OWNER, signer: circleSigner })
   })
 
@@ -175,6 +182,57 @@ describe('Fast Pay session', () => {
     fp.endFastPaySession()
     await vi.waitFor(() => expect(frameKeys.size).toBe(0))
     expect(frameCalls).toContain('session:end')
+  })
+
+  it('app closed and reopened: the kept session resumes from the frame - no Circle signature, what is left read from the chain', async () => {
+    usdcAllowanceToPermit2 = maxUint256
+    frameSupports = true
+    fp.setFastPayEnabled(true)
+    expect(await fp.maybeStartFastPay()).toBe(true)
+    expect(typedSigned.length).toBe(1)
+    const keyAddr = [...frameKeys.keys()][0]
+    await vi.waitFor(() => expect(perf.length).toBe(1)) // the first set-up's line
+    // On-chain now: 97 USDC left, 90 minutes to go.
+    p2Left = 97_000_000n; p2Expiration = Math.floor(Date.now() / 1000) + 90 * 60
+    fp._resetFastPay() // the app's memory is gone (restart); the frame kept the sealed key
+    typedSigned.length = 0; perf.length = 0
+    expect(await fp.maybeStartFastPay()).toBe(true)
+    expect(typedSigned).toEqual([]) // no Circle signature
+    expect(frameCalls).toContain('session:restore')
+    expect(fp.useFastPay.getState()).toMatchObject({ phase: 'ready', remaining: 96.95 })
+    await vi.waitFor(() => expect(perf.length).toBe(1))
+    expect(perf[0]).toMatch(/^\[perf fastpay setup\] resumed .* 97\.00 left, key in frame/)
+    // It pays with the same key, at the chain's next nonce.
+    sent.length = 0
+    await fp.sendFastPay({ owner: OWNER, to: RECIPIENT, amount: 3 })
+    expect(lc(sent[0].from)).toBe(keyAddr)
+    expect(sent[0].nonce).toBe(5)
+  })
+
+  it('a kept session that has expired (or is nearly used up) is not resumed: it is dropped and a new one set up', async () => {
+    usdcAllowanceToPermit2 = maxUint256
+    frameSupports = true
+    fp.setFastPayEnabled(true)
+    await fp.maybeStartFastPay()
+    const oldKey = [...frameKeys.keys()][0]
+    p2Left = 97_000_000n; p2Expiration = Math.floor(Date.now() / 1000) + 5 * 60 // under 10 minutes left
+    fp._resetFastPay()
+    typedSigned.length = 0
+    p2Left = 0n; p2Expiration = 0
+    expect(await fp.maybeStartFastPay()).toBe(true)
+    expect(typedSigned.map(t => t.primaryType)).toEqual(['PermitSingle']) // a new grant
+    expect(frameKeys.has(oldKey)).toBe(false) // the old key dropped
+  })
+
+  it('the lock screen does not end it; logout / switching off does (and the saved copy goes)', async () => {
+    usdcAllowanceToPermit2 = maxUint256
+    frameSupports = true
+    fp.setFastPayEnabled(true)
+    await fp.maybeStartFastPay()
+    expect(mem.has(`meshport:fastpay-session:${lc(OWNER)}`)).toBe(true)
+    fp.setFastPayEnabled(false)
+    expect(mem.has(`meshport:fastpay-session:${lc(OWNER)}`)).toBe(false)
+    await vi.waitFor(() => expect(frameKeys.size).toBe(0))
   })
 
   it('an older frame (no session keys): the proof-of-concept key in app memory, and the set-up says so', async () => {

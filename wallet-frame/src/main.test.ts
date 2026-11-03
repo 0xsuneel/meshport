@@ -200,7 +200,7 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
   it('creates a key in the frame (only its address comes out) and signs Permit2 / USDC-permit calls with it', async () => {
     const created = await ask('session:create', {})
     const address = created!.msg.result.address
-    expect(Object.keys(created!.msg.result)).toEqual(['address'])
+    expect(Object.keys(created!.msg.result).sort()).toEqual(['address', 'kept']) // never the key
     expect(address).toMatch(/^0x[0-9a-fA-F]{40}$/)
     for (const [to, sel] of [[PERMIT2, '0x0d58b1db'], [PERMIT2, '0x2b67b570'], [USDC, '0xd505accf']]) {
       const r = await ask('session:sign', { address, transaction: tx(to, sel + '00'.repeat(32)) })

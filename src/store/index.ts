@@ -335,12 +335,11 @@ export const useAuthStore = create<AuthStore>()(
         const addr = get().walletAddress
         set({ isLocked: true })
         import('@/lib/security').then(({ clearSessionPrivateKey, forgetVerifiedPasscodes }) => { clearSessionPrivateKey(addr); forgetVerifiedPasscodes() }).catch(() => {})
-        // A Circle wallet's signing requests prepared for a payment (wallet/circle.ts) go too,
-        // and its Fast Pay session key (lib/fastPay.ts - memory only).
-        if (get().walletSource === 'circle') {
-          import('@/wallet/circle').then(m => m.discardPreparedSignatures()).catch(() => {})
-          import('@/lib/fastPay').then(m => m.endFastPaySession()).catch(() => {})
-        }
+        // A Circle wallet's signing requests prepared for a payment (wallet/circle.ts) go too.
+        // Its Fast Pay session stays (lib/fastPay.ts): like a mobile wallet's, it
+        // outlives the lock screen - every payment still needs the passcode, and
+        // the session's own limit and expiry are enforced on-chain.
+        if (get().walletSource === 'circle') import('@/wallet/circle').then(m => m.discardPreparedSignatures()).catch(() => {})
       },
       unlock: () => {
         set({ isLocked: false, lastActivityAt: Date.now() })

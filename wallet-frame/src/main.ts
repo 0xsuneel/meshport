@@ -23,6 +23,7 @@ import * as keys from './keys'
 import { deriveChatSeed } from '@/lib/chatIdentity'
 import { solanaPublicKey, solanaSign, solanaHexToBytes } from '@/lib/solanaKey'
 import * as vault from './vault'
+import { sealForDevice, openFromDevice } from '@/lib/security'
 import { VaultError } from './vault'
 
 const DEV_PARENTS = 'http://localhost:5173,http://127.0.0.1:5173'
@@ -76,7 +77,8 @@ function isNameRegistration(typedData: Record<string, unknown>): boolean {
 }
 
 // ── Fast Pay session keys ───────────────────────────────────────────────────
-// Memory only (a frame reload ends every session). A session key can only
+// In memory, and (keep) sealed to this device so the session survives the app
+// closing - it ends at its on-chain expiry, sign-out or Fast Pay off. A session key can only
 // sign what Fast Pay sends on Arc - nothing that could reach the user's main
 // wallet beyond the Permit2 allowance the user granted it.
 const ARC_CHAIN_ID = 5042002
@@ -87,6 +89,7 @@ const SESSION_CALLS: Record<string, ReadonlySet<string>> = {
   [ARC_USDC_ERC20]: new Set(['0xd505accf']),           // permit(owner, spender, value, deadline, v, r, s)
 }
 const sessionKeys = new Map<string, ReturnType<typeof privateKeyToAccount>>()
+const SESSION_STORE = 'mp.fastpay.session.' // + address → device-sealed key
 /** Why a session key must not sign this (null: allowed). Exported for tests. */
 export function sessionTxRefusal(tx: Record<string, unknown>): string | null {
   if (Number(tx.chainId) !== ARC_CHAIN_ID) return 'Fast Pay signs on Arc only'
@@ -249,10 +252,32 @@ const handlers: Handlers = {
   },
 
   // ── Fast Pay session keys (src/lib/fastPay.ts) ──────────────────────────
-  async 'session:create'() {
-    const k = privateKeyToAccount(generatePrivateKey())
+  async 'session:create'({ keep } = {}) {
+    const pk = generatePrivateKey()
+    const k = privateKeyToAccount(pk)
     sessionKeys.set(k.address.toLowerCase(), k)
-    return { address: k.address }
+    // Kept across app restarts: sealed with this browser's non-extractable
+    // device key (the same protection as the device copies of wallet keys),
+    // in this frame's own storage. The app's page can't read either.
+    let kept = false
+    if (keep) {
+      const sealed = await sealForDevice(pk)
+      if (sealed) { try { localStorage.setItem(SESSION_STORE + k.address.toLowerCase(), sealed); kept = true } catch { /* storage blocked */ } }
+    }
+    return { address: k.address, kept }
+  },
+
+  async 'session:restore'({ address }) {
+    const a = String(address).toLowerCase()
+    if (sessionKeys.has(a)) return { restored: true }
+    let sealed: string | null = null
+    try { sealed = localStorage.getItem(SESSION_STORE + a) } catch { /* storage blocked */ }
+    const pk = sealed ? await openFromDevice(sealed) : null
+    if (!pk) return { restored: false }
+    const k = privateKeyToAccount(pk as Hex)
+    if (k.address.toLowerCase() !== a) return { restored: false }
+    sessionKeys.set(a, k)
+    return { restored: true }
   },
 
   async 'session:sign'({ address, transaction }) {
@@ -264,7 +289,12 @@ const handlers: Handlers = {
   },
 
   async 'session:end'({ address }) {
-    if (address) sessionKeys.delete(String(address).toLowerCase()); else sessionKeys.clear()
+    const drop = (a: string) => { sessionKeys.delete(a); try { localStorage.removeItem(SESSION_STORE + a) } catch { /* storage blocked */ } }
+    if (address) drop(String(address).toLowerCase())
+    else {
+      for (const a of [...sessionKeys.keys()]) drop(a)
+      try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k?.startsWith(SESSION_STORE)) localStorage.removeItem(k) } } catch { /* storage blocked */ }
+    }
     return { ok: true as const }
   },
 
