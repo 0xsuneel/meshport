@@ -28,6 +28,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
+import { MeshLoader } from '@/components/ui/MeshLoader'
 import { useAuthStore, useNotificationStore, useUIStore, type AppNotification } from '@/store'
 import { useFeatureEnabled } from '@/store/settingsStore'
 import { fastPayEnabled, setFastPayEnabled, enableFastPay, useFastPay, FAST_PAY_LIMIT_USDC } from '@/lib/fastPay'
@@ -76,18 +77,21 @@ export function SecurityPage() {
   const walletSource = useAuthStore(s => s.walletSource)
   const [fastPayOn, setFastPayOn] = useState(fastPayEnabled)
   const fastPay = useFastPay()
+  const [fastPaySheet, setFastPaySheet] = useState(false)
+  const [fastPayPass, setFastPayPass] = useState('')
+  const [fastPayError, setFastPayError] = useState('')
+  const [fastPayBusy, setFastPayBusy] = useState(false)
+  // The logo spins from the passcode until the session is ready (or fails).
+  const fastPaySettingUp = fastPayBusy || (fastPayOn && fastPay.phase === 'starting')
   const fastPayStatus = !fastPayOn ? `Pay up to $${FAST_PAY_LIMIT_USDC} in about a second for 2 hours after unlocking. Bigger payments use your wallet as now.`
-    : fastPay.phase === 'starting' ? 'Setting up your Fast Pay session...'
+    : fastPayBusy || fastPay.phase === 'starting' ? 'Turning on Fast Pay… confirm in your wallet if asked'
     : fastPay.phase === 'ready' ? `$${fastPay.remaining.toFixed(2)} left until ${new Date(fastPay.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - passcode still asked every payment`
     : fastPay.phase === 'error' ? `Couldn't start: ${fastPay.error ?? 'try again'}`
     : 'On - starts after you unlock'
   // Turning it on asks for the passcode: the wallet frame keeps its own check
   // of it and signs a Fast Pay payment only after that check passes.
-  const [fastPaySheet, setFastPaySheet] = useState(false)
-  const [fastPayPass, setFastPayPass] = useState('')
-  const [fastPayError, setFastPayError] = useState('')
-  const [fastPayBusy, setFastPayBusy] = useState(false)
   const toggleFastPay = async () => {
+    if (fastPaySettingUp) return
     if (fastPayOn) {
       setFastPayOn(false)
       setFastPayEnabled(false)
@@ -104,11 +108,12 @@ export function SecurityPage() {
       let correct = false
       try { correct = await verifyPasscode(code, storedPasscode) } catch {}
       if (!correct) { setFastPayError('Incorrect passcode. Try again.'); setFastPayPass(''); return }
-      await enableFastPay(code)
-      setFastPayOn(true); setFastPaySheet(false)
-      showToastMessage('Fast Pay on (beta)')
+      setFastPaySheet(false)
+      setFastPayOn(true)
+      if (await enableFastPay(code)) showToastMessage('Fast Pay is ready', 'success')
     } catch (e) {
-      setFastPayError(e instanceof Error && e.message ? e.message : "Couldn't turn on Fast Pay"); setFastPayPass('')
+      setFastPayOn(false)
+      showToastMessage(e instanceof Error && e.message ? e.message : "Couldn't turn on Fast Pay", 'error')
     } finally {
       setFastPayBusy(false)
     }
@@ -195,8 +200,8 @@ export function SecurityPage() {
               disabled={!biometricAdminEnabled}
               onToggle={handleToggle} />
             {walletSource === 'circle' && (
-              <ToggleItem icon={<KeyRound className="w-5 h-5 text-accent-text" />} label="Fast Pay (beta)"
-                description={fastPayStatus} enabled={fastPayOn} onToggle={toggleFastPay} />
+              <ToggleItem icon={fastPaySettingUp ? <span className="text-accent-text"><MeshLoader size={22} color="currentColor" label="Turning on Fast Pay" /></span> : <KeyRound className="w-5 h-5 text-accent-text" />}
+                label="Fast Pay (beta)" description={fastPayStatus} enabled={fastPayOn} busy={fastPaySettingUp} onToggle={toggleFastPay} />
             )}
             <ToggleItem icon={<Lock className="w-5 h-5 text-accent-text" />} label="Passcode Lock"
               description="Locks when reopened, or after 5 min in the background" enabled={passcodeLockEnabled}
@@ -1189,8 +1194,8 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
 }
 
 // ─── Toggle Item ───────────────────────────────────────────────────────────────
-function ToggleItem({ icon, label, description, enabled, onToggle, disabled }: {
-  icon: React.ReactNode; label: string; description: string; enabled: boolean; onToggle: () => void; disabled?: boolean
+function ToggleItem({ icon, label, description, enabled, onToggle, disabled, busy }: {
+  icon: React.ReactNode; label: string; description: string; enabled: boolean; onToggle: () => void; disabled?: boolean; busy?: boolean
 }) {
   return (
     <div className={`flex items-center gap-3 px-4 py-3.5 ${disabled ? 'opacity-50' : ''}`}>
@@ -1199,8 +1204,8 @@ function ToggleItem({ icon, label, description, enabled, onToggle, disabled }: {
         <p className="text-sm font-semibold text-text-primary">{label}</p>
         <p className="text-xs text-text-secondary mt-0.5">{description}</p>
       </div>
-      <button onClick={disabled ? undefined : onToggle} disabled={disabled}
-        className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${enabled ? 'bg-brand' : 'bg-[rgb(var(--text-primary-rgb)/0.12)]'} ${disabled ? 'cursor-not-allowed' : ''}`}>
+      <button onClick={disabled || busy ? undefined : onToggle} disabled={disabled || busy} aria-busy={busy || undefined}
+        className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${enabled ? 'bg-brand' : 'bg-[rgb(var(--text-primary-rgb)/0.12)]'} ${busy ? 'opacity-70' : ''} ${disabled ? 'cursor-not-allowed' : ''}`}>
         <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
       </button>
     </div>
