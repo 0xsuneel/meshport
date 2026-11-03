@@ -477,6 +477,101 @@ const EXTRA_CHAIN_IDS: Record<string, number> = {
 }
 
 /** Public + relayer wallet client for any chain a relayed call can run on. */
+// ── Transfer FROM Arc through MeshPortRouter (one signature) ───────────────
+// The app's Transfer USDC: the wallet signs ONE EIP-3009 authorization for
+// the exact amount + fee to the Arc router (ARC_ROUTER, contracts/
+// MeshPortRouter.sol); this relayer submits bridgeWithAuthorization, which in
+// one transaction pulls exactly that, pays MeshPort's fee, approves exactly
+// the amount to Circle's TokenMessengerV2 and burns it to the recipient. No
+// approval is left behind, and the user's wallet signs no transaction.
+//   - the router binds every parameter into the authorization's nonce, so
+//     nothing here can change the recipient, chain or fees;
+//   - only the signed-in wallet's own authorization, USDC, a known CCTP
+//     destination, no hook or Circle's forwarding hook;
+//   - the fee must cover this relayer's gas (simulated first - a bad
+//     signature or a changed parameter never costs gas).
+export const ARC_TRANSFER_GAS_SLACK = 80n // the fee may be up to 20% under today's gas cost (price moves since the quote)
+export function arcTransferDomains(): Set<number> {
+  return new Set(Object.values(CHAINS).map(c => c.domain).filter(d => d !== ARC_DOMAIN))
+}
+function arcRouter(): `0x${string}` | null {
+  const r = (process.env.ARC_ROUTER || '').trim()
+  return /^0x[0-9a-fA-F]{40}$/.test(r) ? r as `0x${string}` : null
+}
+const ARC_USDC_ERC20 = '0x3600000000000000000000000000000000000000' as const
+
+async function arcTransfer(req: VercelRequest, res: VercelResponse) {
+  const router = arcRouter()
+  if (!router) return res.status(400).json({ error: 'One-signature transfers are not set up on Arc' })
+  const { bridge: b, authorization: a } = (req.body ?? {}) as any
+  if (!b || !a) return res.status(400).json({ error: 'Missing bridge or authorization' })
+  if (!isHex(a.from, 20) || !isUint(a.value) || !isUint(a.validAfter) || !isUint(a.validBefore) || !isHex(a.signature, 65))
+    return res.status(400).json({ error: 'Malformed authorization' })
+  if (!isHex(b.token, 20) || !isHex(b.mintRecipient, 32) || !isUint(b.fee) || !isUint(b.maxFee) || !isHex(b.salt, 32) || !isHex(b.hookData))
+    return res.status(400).json({ error: 'Malformed bridge parameters' })
+  if (String(b.token).toLowerCase() !== ARC_USDC_ERC20) return res.status(400).json({ error: 'Only USDC can be sent this way' })
+  if (!arcTransferDomains().has(Number(b.destinationDomain))) return res.status(400).json({ error: 'Unsupported destination' })
+  const hook = String(b.hookData).toLowerCase()
+  if (hook !== '0x' && hook !== FORWARD_HOOK) return res.status(400).json({ error: 'Unsupported hook' })
+  if (![1000, 2000].includes(Number(b.minFinalityThreshold))) return res.status(400).json({ error: 'Unsupported finality' })
+  if (/^0x0{64}$/i.test(String(b.mintRecipient))) return res.status(400).json({ error: 'Missing recipient' })
+  const now = Math.floor(Date.now() / 1000)
+  const vb = Number(a.validBefore)
+  if (vb <= now + 30 || vb > now + MAX_AUTH_WINDOW_SEC) return res.status(400).json({ error: 'Authorization window is invalid or expired' })
+  const value = BigInt(a.value), fee = BigInt(b.fee), maxFee = BigInt(b.maxFee)
+  if (value < MIN_TOTAL_UNITS) return res.status(400).json({ error: 'Minimum is 1 USDC' })
+
+  const session = await sessionInfo(req)
+  if (!session || session.wallet !== String(a.from).toLowerCase()) return res.status(403).json({ error: 'Not signed in to this wallet' })
+  const block = spendBlock(session.canSpend)
+  if (block) return res.status(block.status).json({ error: block.error })
+  if (!allowRelay(session.wallet)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
+
+  const cl = await callClients('Arc_Testnet')
+  if (!cl) return res.status(400).json({ error: 'Arc is not configured' })
+  if (!cl.wallet) return res.status(503).json({ error: 'Relayer is not configured' })
+  const { pub, wallet } = cl
+  const bridgeArgs = {
+    token: ARC_USDC_ERC20 as `0x${string}`, destinationDomain: Number(b.destinationDomain), mintRecipient: b.mintRecipient as `0x${string}`,
+    fee, maxFee, minFinalityThreshold: Number(b.minFinalityThreshold), hookData: (hook === '0x' ? '0x' : FORWARD_HOOK) as `0x${string}`, salt: b.salt as `0x${string}`,
+  }
+  const nonce = await pub.readContract({ address: router, abi: ROUTER_ABI, functionName: 'bridgeNonce', args: [bridgeArgs] }) as `0x${string}`
+  const used = await pub.readContract({ address: ARC_USDC_ERC20, abi: USDC_ABI, functionName: 'authorizationState', args: [a.from, nonce] })
+  // Already used → the transaction that used it (safe retries).
+  if (used) {
+    const logs = await pub.getContractEvents({ address: router, abi: ROUTER_ABI, eventName: 'Bridged', args: { from: a.from, nonce }, fromBlock: 'earliest' }).catch(() => [])
+    const hit = (logs as any[])[0]
+    return hit ? res.status(200).json({ txHash: hit.transactionHash, alreadySubmitted: true })
+      : res.status(409).json({ error: 'This authorization was already used' })
+  }
+
+  const { parseSignature } = await import('viem')
+  const sig = parseSignature(a.signature)
+  const v = sig.v !== undefined ? Number(sig.v) : 27 + (sig.yParity ?? 0)
+  const authArgs = { from: a.from, value, validAfter: BigInt(a.validAfter), validBefore: BigInt(a.validBefore), v, r: sig.r, s: sig.s }
+
+  // Simulate first: a bad signature, too little USDC or a changed parameter never costs gas.
+  const { request } = await pub.simulateContract({
+    account: wallet.account, address: router, abi: ROUTER_ABI, functionName: 'bridgeWithAuthorization', args: [bridgeArgs, authArgs],
+  }).catch((e: any) => { throw Object.assign(new Error(e?.shortMessage || 'Transfer would fail'), { status: 400 }) })
+  // The fee pays this transaction's gas (Arc gas is USDC: wei / 1e12 = 6-decimal units).
+  const [gas, gasPrice] = await Promise.all([
+    pub.estimateContractGas({ account: wallet.account, address: router, abi: ROUTER_ABI, functionName: 'bridgeWithAuthorization', args: [bridgeArgs, authArgs] }) as Promise<bigint>,
+    pub.getGasPrice() as Promise<bigint>,
+  ])
+  const gasUnits = (gas * gasPrice + 999_999_999_999n) / 1_000_000_000_000n
+  if (fee * 100n < gasUnits * ARC_TRANSFER_GAS_SLACK) return res.status(400).json({ error: 'Fee too low - please try again' })
+
+  const txHash = await wallet.writeContract({ ...request, ...(await relayFees(pub, pub.chain.id)) })
+  try {
+    const receipt = await pub.waitForTransactionReceipt({ hash: txHash, timeout: 40_000 })
+    if (receipt.status !== 'success') return res.status(502).json({ error: 'Transaction reverted', txHash })
+    return res.status(200).json({ txHash })
+  } catch {
+    return res.status(200).json({ txHash, pending: true })
+  }
+}
+
 async function callClients(chainKey: string) {
   const { createPublicClient, createWalletClient, http, defineChain } = await import('viem')
   const rpc = process.env[`BRIDGE_RPC_${chainKey.toUpperCase()}`] || CHAINS[chainKey]?.rpc || EXTRA_RPCS[chainKey]
@@ -1344,6 +1439,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if ((req.body as any)?.action === 'call') return await relayCall(req, res)
     if ((req.body as any)?.action === 'fastpay_gas') return await fastPayGas(req, res)
     if ((req.body as any)?.action === 'token_relay') return await tokenRelay(req, res)
+    if ((req.body as any)?.action === 'arc_transfer') return await arcTransfer(req, res)
 
     // ── Relay ────────────────────────────────────────────────────────────
     const { chain: chainKey, bridge: b, authorization: a } = (req.body ?? {}) as any
