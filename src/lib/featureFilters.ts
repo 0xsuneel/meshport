@@ -170,10 +170,20 @@ export function settleKey(sdkChainId: string): string | null {
  * Balance first. Empty = the chain is off. A chain without a Unified Balance
  * path is CCTP only: its chain switch alone decides.
  */
-export function transferRoutes(settings: SettingsMap, chainId: string, kind: AccountKind = 'personal'): Route[] {
+/**
+ * Unified Balance as a Transfer route (Arc → other chains). Off for now: it is
+ * being rebuilt elsewhere. All its code stays - turning this back on (or
+ * passing { ub: true }) restores the UB route and its admin switches exactly
+ * as they were. While off, a chain that offered UB sends over CCTP instead,
+ * unless an admin turned that chain's CCTP off.
+ */
+export const TRANSFER_UB_ENABLED = false
+
+export function transferRoutes(settings: SettingsMap, chainId: string, kind: AccountKind = 'personal', opts: { ub?: boolean } = {}): Route[] {
   const k = transferKeys(kind, chainId)
   if (!on(settings, k.chain)) return []
   if (!k.ub) return ['cctp']
+  if (!(opts.ub ?? TRANSFER_UB_ENABLED)) return on(settings, k.cctp, true) ? ['cctp'] : []
   const routes: Route[] = []
   if (on(settings, k.ub)) routes.push('ub')
   if (on(settings, k.cctp, CCTP_DEFAULT_ON.has(chainId))) routes.push('cctp')
