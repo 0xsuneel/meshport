@@ -3,6 +3,7 @@ import { createPublicClient, encodeFunctionData, hashDomain, http, maxUint256, p
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import {
   ARC_USDC_ERC20, PERMIT2, permit2Abi, permit2Domain, permitSingleTypes, usdcAbi, usdcPermitDomain, usdcPermitTypes,
+  permitBatchTypes, tokenPermitDomain, FAST_TOKENS, ARC_EURC, ARC_CIRBTC,
 } from './fastPay'
 
 // Read-only checks against Arc testnet: the typed data Fast Pay asks the Circle
@@ -57,6 +58,43 @@ maybe('Fast Pay typed data on Arc testnet (read-only simulation)', () => {
     // Signed by someone else: Permit2 refuses (InvalidSigner).
     const bad = encodeFunctionData({ abi: permit2Abi, functionName: 'permit',
       args: [privateKeyToAccount(generatePrivateKey()).address, permitSingle, sig as Hex] })
+    await expect(arc().call({ account: sessionKey.address, to: PERMIT2, data: bad })).rejects.toThrow()
+  }, 30_000)
+
+  it('EURC and cirBTC: their permit domains hash to the contracts\' own DOMAIN_SEPARATOR, and their permits are accepted', async () => {
+    const abi = [{ type: 'function', name: 'DOMAIN_SEPARATOR', stateMutability: 'view', inputs: [], outputs: [{ type: 'bytes32' }] }] as const
+    for (const t of ['EURC', 'cirBTC'] as const) {
+      const d = tokenPermitDomain(t)
+      const onChain = await (arc() as any).readContract({ address: FAST_TOKENS[t].address, abi, functionName: 'DOMAIN_SEPARATOR' })
+      expect(hashDomain({ domain: d, types: domainTypes(d) as any })).toBe(onChain)
+      const owner = privateKeyToAccount(generatePrivateKey())
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 1800)
+      const sig = await owner.signTypedData({ domain: d, types: usdcPermitTypes, primaryType: 'Permit',
+        message: { owner: owner.address, spender: PERMIT2, value: maxUint256, nonce: 0n, deadline } })
+      const { v, yParity, r, s } = parseSignature(sig)
+      const data = encodeFunctionData({ abi: usdcAbi, functionName: 'permit',
+        args: [owner.address, PERMIT2, maxUint256, deadline, Number(v ?? BigInt(yParity + 27)), r, s] })
+      await expect(arc().call({ to: FAST_TOKENS[t].address, data })).resolves.toBeDefined()
+    }
+  }, 30_000)
+
+  it('one Permit2 PermitBatch grant for USDC + EURC + cirBTC is accepted by Arc\'s Permit2', async () => {
+    const owner = privateKeyToAccount(generatePrivateKey())
+    const sessionKey = privateKeyToAccount(generatePrivateKey())
+    const now = Math.floor(Date.now() / 1000)
+    const permitBatch = {
+      details: [
+        { token: ARC_USDC_ERC20, amount: 100_000_000n, expiration: now + 7200, nonce: 0 },
+        { token: ARC_EURC, amount: 92_000_000n, expiration: now + 7200, nonce: 0 },
+        { token: ARC_CIRBTC, amount: 100_000n, expiration: now + 7200, nonce: 0 },
+      ],
+      spender: sessionKey.address, sigDeadline: BigInt(now + 1800),
+    }
+    const sig = await owner.signTypedData({ domain: permit2Domain, types: permitBatchTypes, primaryType: 'PermitBatch', message: permitBatch })
+    const data = encodeFunctionData({ abi: permit2Abi, functionName: 'permit', args: [owner.address, permitBatch, sig as Hex] })
+    await expect(arc().call({ account: sessionKey.address, to: PERMIT2, data })).resolves.toBeDefined()
+    const bad = encodeFunctionData({ abi: permit2Abi, functionName: 'permit',
+      args: [privateKeyToAccount(generatePrivateKey()).address, permitBatch, sig as Hex] })
     await expect(arc().call({ account: sessionKey.address, to: PERMIT2, data: bad })).rejects.toThrow()
   }, 30_000)
 })

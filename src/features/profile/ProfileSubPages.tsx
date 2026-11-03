@@ -83,9 +83,9 @@ export function SecurityPage() {
   const [fastPayBusy, setFastPayBusy] = useState(false)
   // The logo spins from the passcode until the session is ready (or fails).
   const fastPaySettingUp = fastPayBusy || (fastPayOn && fastPay.phase === 'starting')
-  const fastPayStatus = !fastPayOn ? `Pay up to $${FAST_PAY_LIMIT_USDC} in about a second for 2 hours after unlocking. Bigger payments use your wallet as now.`
+  const fastPayStatus = !fastPayOn ? `Pay up to $${FAST_PAY_LIMIT_USDC} in USDC, EURC or cirBTC in about a second for 2 hours after unlocking. Bigger payments use your wallet as now.`
     : fastPayBusy || fastPay.phase === 'starting' ? 'Turning on Fast Pay… confirm in your wallet if asked'
-    : fastPay.phase === 'ready' ? `$${fastPay.remaining.toFixed(2)} left until ${new Date(fastPay.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - passcode still asked every payment`
+    : fastPay.phase === 'ready' ? `${fastPayLeft(fastPay.remainingBy)} left until ${new Date(fastPay.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - passcode still asked every payment`
     : fastPay.phase === 'error' ? `Couldn't start: ${fastPay.error ?? 'try again'}`
     : 'On - starts after you unlock'
   // Turning it on asks for the passcode: the wallet frame keeps its own check
@@ -236,6 +236,15 @@ export function SecurityPage() {
         footer={fastPayBusy ? <p className="text-xs text-text-secondary text-center mt-3">Verifying…</p> : undefined} />
     </div>
   )
+}
+
+/** "$96.50 · €40.00 · 0.000510 cirBTC" - what is left of each Fast Pay token. */
+function fastPayLeft(by: Partial<Record<'USDC' | 'EURC' | 'cirBTC', number>>): string {
+  const parts: string[] = []
+  if (by.USDC != null) parts.push(`$${by.USDC.toFixed(2)}`)
+  if (by.EURC != null) parts.push(`€${by.EURC.toFixed(2)}`)
+  if (by.cirBTC != null) parts.push(`${by.cirBTC.toFixed(6)} cirBTC`)
+  return parts.join(' · ') || '$0.00'
 }
 
 // ─── Appearance - System / Light / Dark theme picker ───────────────────────────

@@ -270,7 +270,7 @@ export function preparePayment(params: { token: PayToken; from: string; to: stri
     const memo = params.token === 'USDC' ? params.memo ?? null : null
     // Covered by a Fast Pay session: no pay-intent reservation and no Circle
     // signing request to prepare (sendUSDC sends it through the session).
-    if (params.token === 'USDC' && !memo && fastPayCovers(sender, params.amount)) return
+    if (!memo && fastPayCovers(sender, params.amount, params.token)) return
     const sig = preflightSig(params.token, sender, destination, payTx(params.token, destination, params.amount).amountAtomic, memo)
     const existing = preflights.get(params.idempotencyKey)
     if (existing && existing.sig === sig && Date.now() - existing.at < PREFLIGHT_TTL_MS) return
@@ -573,6 +573,30 @@ function assertSendable(to: string, amount: number) {
   if (/^0x0{40}$/i.test(String(to))) throw new Error('Cannot send to the zero address')
 }
 
+/**
+ * Fast Pay (lib/fastPay.ts): a Google / email (Circle) wallet with an open
+ * session pays from its own address through the session key - no Circle
+ * signature. Null: not covered, or nothing was broadcast - pay the normal way.
+ */
+async function tryFastPay(token: 'USDC' | 'EURC' | 'cirBTC', senderAddress: string, destination: `0x${string}`, amount: number, idempotencyKey?: string): Promise<SendResult | null> {
+  if (!fastPayCovers(senderAddress, amount, token)) return null
+  try {
+    const out = await sendFastPay({ owner: senderAddress, to: destination, amount, idempotencyKey, token })
+    return {
+      txHash: out.txHash,
+      explorerUrl: `${ARC_TESTNET.explorerUrl}/tx/${out.txHash}`,
+      state: out.state,
+      blockNumber: out.blockNumber,
+      senderAddress,
+      recipientAddress: destination,
+    }
+  } catch (e) {
+    if (!(e instanceof FastPayNotSent)) throw e
+    console.warn('[Fast Pay] not sent, paying the normal way:', e.message)
+    return null
+  }
+}
+
 export async function sendUSDC(params: {
   signer: WalletAccount
   to: string
@@ -602,21 +626,9 @@ export async function sendUSDC(params: {
   // signature for this payment. Plain USDC transfers within what's left of
   // the session only; anything else continues below unchanged. If nothing
   // was broadcast, it falls through to the normal path.
-  if (!params.memo && fastPayCovers(senderAddress, params.amount)) {
-    try {
-      const out = await sendFastPay({ owner: senderAddress, to: destination, amount: params.amount, idempotencyKey: params.idempotencyKey })
-      return {
-        txHash: out.txHash,
-        explorerUrl: `${ARC_TESTNET.explorerUrl}/tx/${out.txHash}`,
-        state: out.state,
-        blockNumber: out.blockNumber,
-        senderAddress,
-        recipientAddress: destination,
-      }
-    } catch (e) {
-      if (!(e instanceof FastPayNotSent)) throw e
-      console.warn('[Fast Pay] not sent, paying the normal way:', e.message)
-    }
+  if (!params.memo) {
+    const fast = await tryFastPay('USDC', senderAddress, destination, params.amount, params.idempotencyKey)
+    if (fast) return fast
   }
 
   // Gas estimation lives in the shared preflight; signing happens locally in
@@ -791,6 +803,8 @@ export async function sendEURC(params: {
   const destination = getAddress(params.to)
   // Self-transfer is now permitted (previously blocked here) -- same
   // reasoning as sendUSDC above.
+  const fast = await tryFastPay('EURC', senderAddress, destination, params.amount, params.idempotencyKey)
+  if (fast) return fast
 
   // EURC is 6-decimal ERC-20
   const amountWei = parseUnits(toPlainDecimalString(params.amount, 6), 6)
@@ -912,6 +926,8 @@ export async function sendCirBTC(params: {
   if (!isAddress(params.to)) throw new Error(`Invalid destination address: ${params.to}`)
   const destination = getAddress(params.to)
   // Self-transfer is now permitted -- same reasoning as sendUSDC above.
+  const fast = await tryFastPay('cirBTC', senderAddress, destination, params.amount, params.idempotencyKey)
+  if (fast) return fast
 
   // cirBTC is 8-decimal ERC-20
   const amountWei = parseUnits(toPlainDecimalString(params.amount, 8), 8)

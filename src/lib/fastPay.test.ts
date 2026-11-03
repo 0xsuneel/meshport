@@ -7,6 +7,7 @@ import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 // chain, the relay and Circle faked.
 
 const lc = (x: string) => x.toLowerCase()
+const ARC_USDC = '0x3600000000000000000000000000000000000000'
 const OWNER = '0x0baf9b2c44f377208b3c5f833afbab8414d69d5d' as Hex
 const RECIPIENT = '0x2222222222222222222222222222222222222222' as Hex
 const RELAYER = '0x9999999999999999999999999999999999999999' as Hex
@@ -17,6 +18,11 @@ const events: string[] = []
 
 // Chain reads (arcRpcJson): allowances, nonces, gas estimates, balances.
 let usdcAllowanceToPermit2 = 0n
+// EURC / cirBTC: the wallet's balance, and Permit2's ERC-20 allowance for them.
+const tokenBalance: Record<string, bigint> = {}
+const tokenAllowance: Record<string, bigint> = {}
+const EURC = '0x89b50855aa3be2f677cd6303cec089b5f319d72a'
+const CIRBTC = '0xf0c4a4ce82a5746abaad9425360ab04fbba432bf'
 // Permit2's allowance for a session key (what's left, expiry) - for resumed sessions.
 let p2Left = 0n
 let p2Expiration = 0
@@ -26,7 +32,9 @@ vi.mock('./arc', () => ({
     if (body.method === 'eth_getBalance') return { result: '0x2386f26fc10000' } // 0.01 USDC
     if (body.method === 'eth_getTransactionCount') return { result: '0x5' }
     const data: string = body.params[0].data
-    if (data.startsWith('0xdd62ed3e')) return { result: encodeAbiParameters([{ type: 'uint256' }], [usdcAllowanceToPermit2]) }
+    const to = String(body.params[0].to).toLowerCase()
+    if (data.startsWith('0x70a08231')) return { result: encodeAbiParameters([{ type: 'uint256' }], [tokenBalance[to] ?? 0n]) }
+    if (data.startsWith('0xdd62ed3e')) return { result: encodeAbiParameters([{ type: 'uint256' }], [to === lc(ARC_USDC) ? usdcAllowanceToPermit2 : tokenAllowance[to] ?? 0n]) }
     if (data.startsWith('0x7ecebe00')) return { result: encodeAbiParameters([{ type: 'uint256' }], [12n]) }
     if (data.startsWith('0x927da105')) return { result: encodeAbiParameters([{ type: 'uint160' }, { type: 'uint48' }, { type: 'uint48' }], [p2Left, p2Expiration, 0]) }
     throw new Error('unexpected read ' + data.slice(0, 10))
@@ -45,6 +53,9 @@ vi.mock('@/wallet/circle', () => ({ isCircleAccount: (v: any) => v?.circleWallet
 vi.mock('./supabase', () => ({ authApiHeaders: async () => ({ 'Content-Type': 'application/json' }) }))
 const perf: string[] = []
 vi.mock('./errorReport', () => ({ reportPerf: (l: string) => perf.push(l) }))
+// Prices for the EURC / cirBTC caps (worth about $100 each).
+vi.mock('./eurcPrice', () => ({ fetchEurcPriceUsd: async () => 1.08 }))
+vi.mock('./btcPrice', () => ({ fetchBtcPriceUsd: async () => 100_000 }))
 
 // The relay: what the session key sends.
 const sent: Array<{ from: string; to: string; data?: Hex; value?: bigint; nonce: number; gas: bigint }> = []
@@ -128,7 +139,9 @@ describe('Fast Pay session', () => {
     fp._resetFastPay(); mem.clear(); typedSigned.length = 0; sent.length = 0; fetchCalls.length = 0; perf.length = 0; events.length = 0
     usdcAllowanceToPermit2 = 0n; relayFails = false; failNextSetupSend = false; frameSupports = true; frameCalls.length = 0
     framePin = PIN; frameApproved = false; screen.pathname = '/pay'
-    p2Left = 0n; p2Expiration = 0; frameKept.clear(); frameKeys.clear()
+    p2Left = 0n; p2Expiration = 0; frameKept.clear()
+    for (const k of Object.keys(tokenBalance)) delete tokenBalance[k]
+    for (const k of Object.keys(tokenAllowance)) delete tokenAllowance[k]; frameKeys.clear()
     Object.assign(auth, { walletSource: 'circle', isLocked: false, walletAddress: OWNER, signer: circleSigner, passcode: 'frame:v1' })
   })
 
@@ -143,15 +156,16 @@ describe('Fast Pay session', () => {
   it('first session: gas float first, then each Circle signature goes on-chain at once', async () => {
     fp.setFastPayEnabled(true)
     expect(await fp.maybeStartFastPay()).toBe(true)
-    expect(events).toEqual(['gas', 'sign:Permit', `send:${ARC_USDC_ERC20}`, 'sign:PermitSingle', `send:${PERMIT2}`])
+    expect(events).toEqual(['gas', 'sign:Permit', `send:${ARC_USDC_ERC20}`, 'sign:PermitBatch', `send:${PERMIT2}`])
     // USDC EIP-2612 permit: owner → Permit2, the wallet's current nonce.
     expect(typedSigned[0].domain).toEqual({ name: 'USDC', version: '2', chainId: 5042002, verifyingContract: ARC_USDC_ERC20 })
     expect(typedSigned[0].message).toMatchObject({ owner: OWNER, spender: PERMIT2, value: maxUint256, nonce: 12n })
     // Permit2 grant: USDC, $100, expiring in 2 h, to the session key.
     const grant = typedSigned[1]
     expect(grant.domain).toEqual({ name: 'Permit2', chainId: 5042002, verifyingContract: PERMIT2 })
-    expect(grant.message.details).toMatchObject({ token: ARC_USDC_ERC20, amount: 100_000_000n, nonce: 0 })
-    const ttl = grant.message.details.expiration - Date.now() / 1000
+    expect(grant.message.details).toHaveLength(1) // no EURC / cirBTC held: USDC only
+    expect(grant.message.details[0]).toMatchObject({ token: ARC_USDC_ERC20, amount: 100_000_000n, nonce: 0 })
+    const ttl = grant.message.details[0].expiration - Date.now() / 1000
     expect(ttl).toBeGreaterThan(7100); expect(ttl).toBeLessThanOrEqual(7200)
     expect(fetchCalls[0]).toEqual({ action: 'fastpay_gas', address: grant.message.spender })
     expect(sent.map(t => t.nonce)).toEqual([0, 1])
@@ -170,7 +184,7 @@ describe('Fast Pay session', () => {
     expect(typedSigned.map(t => t.primaryType)).toEqual(['Permit'])
     expect(mem.has(`meshport:fastpay-usdc-permit:${lc(OWNER)}`)).toBe(true)
     expect(await fp.maybeStartFastPay()).toBe(true)
-    expect(typedSigned.map(t => t.primaryType)).toEqual(['Permit', 'PermitSingle']) // only the new grant
+    expect(typedSigned.map(t => t.primaryType)).toEqual(['Permit', 'PermitBatch']) // only the new grant
     expect(decodeFunctionData({ abi: usdcAbi, data: sent[0].data! }).functionName).toBe('permit')
   })
 
@@ -178,7 +192,7 @@ describe('Fast Pay session', () => {
     usdcAllowanceToPermit2 = maxUint256
     fp.setFastPayEnabled(true)
     await fp.maybeStartFastPay()
-    expect(typedSigned.map(t => t.primaryType)).toEqual(['PermitSingle'])
+    expect(typedSigned.map(t => t.primaryType)).toEqual(['PermitBatch'])
     expect(sent.map(t => t.to)).toEqual([PERMIT2])
   })
 
@@ -243,7 +257,7 @@ describe('Fast Pay session', () => {
     typedSigned.length = 0
     p2Left = 0n; p2Expiration = 0
     expect(await fp.maybeStartFastPay()).toBe(true)
-    expect(typedSigned.map(t => t.primaryType)).toEqual(['PermitSingle']) // a new grant
+    expect(typedSigned.map(t => t.primaryType)).toEqual(['PermitBatch']) // a new grant
     expect(frameKeys.has(oldKey)).toBe(false) // the old key dropped
   })
 
@@ -285,6 +299,68 @@ describe('Fast Pay session', () => {
     fp.setFastPayEnabled(false)
     expect(fp.fastPayCovers(OWNER, 1)).toBe(false)
     expect(framePin).toBe('654321') // the passcode check stays: it is the unlock check too
+  })
+
+  describe('EURC and cirBTC', () => {
+    it('held tokens join the session: one-time permits, then ONE Circle signature grants all three, each capped at about $100', async () => {
+      usdcAllowanceToPermit2 = maxUint256
+      tokenBalance[EURC] = 50_000_000n; tokenBalance[CIRBTC] = 20_000n
+      fp.setFastPayEnabled(true)
+      expect(await fp.maybeStartFastPay()).toBe(true)
+      // EURC and cirBTC: their one-time Permit2 permits (USDC was done before), then the one grant.
+      expect(typedSigned.map(t => t.primaryType)).toEqual(['Permit', 'Permit', 'PermitBatch'])
+      expect(typedSigned[0].domain).toEqual({ name: 'EURC', version: '2', chainId: 5042002, verifyingContract: fp.ARC_EURC })
+      expect(typedSigned[1].domain).toEqual({ name: 'Circle Wrapped Bitcoin', version: '2', chainId: 5042002, verifyingContract: fp.ARC_CIRBTC })
+      const details = typedSigned[2].message.details
+      expect(details.map((d: any) => lc(d.token))).toEqual([lc(ARC_USDC), EURC, CIRBTC])
+      expect(details.map((d: any) => d.amount)).toEqual([100_000_000n, 92_592_592n, 100_000n]) // $100, 100/1.08 EURC, 100/100k BTC
+      expect(new Set(details.map((d: any) => d.expiration)).size).toBe(1)
+      expect(fp.useFastPay.getState().remainingBy).toEqual({ USDC: 99.95, EURC: 92.592592, cirBTC: 0.001 })
+    })
+
+    it('a token the wallet doesn\'t hold is not granted, and its payments go the normal way', async () => {
+      usdcAllowanceToPermit2 = maxUint256
+      tokenBalance[EURC] = 50_000_000n
+      fp.setFastPayEnabled(true)
+      await fp.maybeStartFastPay()
+      expect(fp.fastPayCovers(OWNER, 1, 'EURC')).toBe(true)
+      expect(fp.fastPayCovers(OWNER, 0.0001, 'cirBTC')).toBe(false)
+      expect(fp.fastPayCovers(OWNER, 93, 'EURC')).toBe(false) // over its cap
+      expect(fp.fastPayCovers(OWNER, 1, 'DAI')).toBe(false)
+    })
+
+    it('an EURC payment: EURC to the recipient, the gas refund in USDC, in one batch; each cap counts down on its own', async () => {
+      usdcAllowanceToPermit2 = maxUint256
+      tokenAllowance[EURC] = maxUint256
+      tokenBalance[EURC] = 50_000_000n
+      fp.setFastPayEnabled(true)
+      await fp.maybeStartFastPay()
+      sent.length = 0
+      await pay({ owner: OWNER, to: RECIPIENT, amount: 10, token: 'EURC' })
+      const [details] = decodeFunctionData({ abi: permit2Abi, data: sent[0].data! }).args as unknown as [Array<{ from: string; to: string; amount: bigint; token: string }>]
+      expect(details.map(d => [lc(d.token), lc(d.to), d.amount])).toEqual([
+        [EURC, lc(RECIPIENT), 10_000_000n],
+        [lc(ARC_USDC), lc(sent[0].from), fp.refundUnits(70_000n, GAS_PRICE, 70_000n * GAS_PRICE)], // + the set-up's one transaction (the grant)
+      ])
+      const left = fp.useFastPay.getState().remainingBy
+      expect(left.EURC).toBeCloseTo(82.592592)
+      expect(left.USDC).toBeCloseTo(99.95 - Number(fp.refundUnits(70_000n, GAS_PRICE, 70_000n * GAS_PRICE)) / 1e6)
+      await vi.waitFor(() => expect(perf.some(l => /^\[perf fastpay pay\] .*\(success, EURC\)$/.test(l))).toBe(true))
+    })
+
+    it('resumed after a restart: every token\'s cap and what is left come back from the chain', async () => {
+      usdcAllowanceToPermit2 = maxUint256
+      tokenAllowance[EURC] = maxUint256
+      tokenBalance[EURC] = 50_000_000n
+      fp.setFastPayEnabled(true)
+      await fp.maybeStartFastPay()
+      p2Left = 40_000_000n; p2Expiration = Math.floor(Date.now() / 1000) + 90 * 60 // the mock answers this for every token
+      fp._resetFastPay()
+      typedSigned.length = 0
+      expect(await fp.maybeStartFastPay()).toBe(true)
+      expect(typedSigned).toEqual([])
+      expect(fp.useFastPay.getState().remainingBy).toEqual({ USDC: 39.95, EURC: 40 })
+    })
   })
 
   it('a set-up that fails leaves no key behind in the frame', async () => {
