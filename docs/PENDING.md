@@ -154,3 +154,41 @@ wallet_events logging.
 - [ ] **Borrow** (~4-5 days) - USDC against cirBTC with MeshPort's
       **integrator fee**; clear liquidation-risk warnings.
 - [ ] Earn / Borrow: compliance check before mainnet.
+
+## 7. Merchant app like PhonePe / Paytm Business (plan agreed 3 Nov)
+
+Principle (from UPI apps): receiving is **free and dead simple** (scan → pay →
+hear "received"); revenue comes from everything around it.
+
+Build order:
+- [ ] **Voice "payment received"** (~1-2 days) - on each confirmed payment
+      (merchant-pay live feed) the app speaks "25 dollars received from Ravi"
+      (Web Speech API); settings: on/off, language, volume, only above X.
+      Push with a sound when the app is closed (native app can speak it).
+- [ ] **Staff notifications** (~2 days) - per-payment push to the owner AND
+      staff who opted in (businessTeam.ts roles); roles: cashier (see / receive),
+      manager (+ refunds, reports), owner (all).
+- [ ] **Pay from any chain** (option 2, ~4-5 days) - pay page: an external
+      wallet on Base / Polygon / Ethereum… signs ONE authorization to
+      MeshPortRouter with the **merchant's Arc address** as recipient; relayer
+      action `order_pay` (only an open order's merchant wallet, amount checked);
+      Circle's forwarder mints on Arc (~15-45 s); status "Paid, arriving →
+      Received".
+- [ ] **Khata reminders by link** (~2-3 days) - "Send reminder" on a credit
+      entry (businessKhata.ts): a pay link for the exact amount, shared by
+      WhatsApp / SMS / MeshPort chat; paying it settles the entry; optional
+      auto-reminders.
+- [ ] **Onramp** (see section 6).
+- [ ] **Checkout fee line** - after MeshPortCheckout is deployed (section 1).
+- [ ] **Cash-out** - now: "send to your exchange / Mint account" (saved
+      address, ~1 day); later CPN (section 6).
+- [ ] **Premium merchant plan** (~4-5 days) - e.g. $5/month USDC via a capped
+      Permit2 allowance (auto-renew, cancel anytime): multiple stores, more
+      staff, advanced reports / exports, custom QR, priority instant routes.
+- [ ] **Earn / Borrow** (section 6).
+- [ ] **Mainnet: intent fillers** (~3-4 days) - Across / Relay quote first
+      (~2-12 s to the merchant's Arc balance), CCTP Fast fallback (~40 s);
+      later the Commerce Payments Protocol (authorize / capture / refund) for
+      refundable e-commerce orders.
+- [ ] **Later: soundbox device** - a cheap Wi-Fi speaker listening to one
+      merchant's payment feed, or a soundbox partner.
