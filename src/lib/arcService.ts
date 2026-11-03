@@ -12,6 +12,7 @@ import { ARC, ARC_TOKENS, ARC_CHAIN_INLINE as REGISTRY_ARC_CHAIN_INLINE } from '
 import { isSlowNetwork } from './connectivity'
 import { ARC_MEMO_CONTRACT, memoTransferData, type OrderMemo } from './arcMemo'
 import { assertAccountUnlocked } from './accountLockRule'
+import { fastPayCovers, sendFastPay, FastPayNotSent } from './fastPay'
 
 // ─── Chain/token constants re-exported from the shared registry ─────────────
 // Definitions moved to src/blockchain/chains.ts (Phase 0 of
@@ -265,6 +266,9 @@ export function preparePayment(params: { token: PayToken; from: string; to: stri
     const sender = getAddress(params.from)
     const destination = getAddress(params.to)
     const memo = params.token === 'USDC' ? params.memo ?? null : null
+    // Covered by a Fast Pay session: no pay-intent reservation and no Circle
+    // signing request to prepare (sendUSDC sends it through the session).
+    if (params.token === 'USDC' && !memo && fastPayCovers(sender, params.amount)) return
     const sig = preflightSig(params.token, sender, destination, payTx(params.token, destination, params.amount).amountAtomic, memo)
     const existing = preflights.get(params.idempotencyKey)
     if (existing && existing.sig === sig && Date.now() - existing.at < PREFLIGHT_TTL_MS) return
@@ -486,7 +490,7 @@ export async function relaySend(
 /** relaySend for a non-Pay flow (Transfer's CCTP steps): same send, not counted in Pay's timings. */
 export async function relayArcSend(
   account: WalletAccount,
-  tx: { to: `0x${string}`; value?: bigint; data?: `0x${string}`; gas: bigint; nonce: number },
+  tx: SendTx,
   onSent: (hash: `0x${string}`) => void = () => {},
 ): Promise<{ txHash: `0x${string}`; state: SendResult['state']; blockNumber?: string }> {
   return relaySendTimed(account, tx, onSent, {})
@@ -590,6 +594,28 @@ export async function sendUSDC(params: {
   // Self-transfer is now permitted (previously blocked here). A self-send
   // still costs real gas with no net balance change -- that tradeoff is now
   // the user's own choice, not something this function decides for them.
+
+  // Fast Pay (lib/fastPay.ts): a Google / email (Circle) wallet with an open
+  // session pays from its own address through the session key - no Circle
+  // signature for this payment. Plain USDC transfers within what's left of
+  // the session only; anything else continues below unchanged. If nothing
+  // was broadcast, it falls through to the normal path.
+  if (!params.memo && fastPayCovers(senderAddress, params.amount)) {
+    try {
+      const out = await sendFastPay({ owner: senderAddress, to: destination, amount: params.amount, idempotencyKey: params.idempotencyKey })
+      return {
+        txHash: out.txHash,
+        explorerUrl: `${ARC_TESTNET.explorerUrl}/tx/${out.txHash}`,
+        state: out.state,
+        blockNumber: out.blockNumber,
+        senderAddress,
+        recipientAddress: destination,
+      }
+    } catch (e) {
+      if (!(e instanceof FastPayNotSent)) throw e
+      console.warn('[Fast Pay] not sent, paying the normal way:', e.message)
+    }
+  }
 
   // Gas estimation lives in the shared preflight; signing happens locally in
   // relaySend (no wallet client / RPC round trips needed to sign).
