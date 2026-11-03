@@ -27,11 +27,11 @@
 // events, and the result has the kit's shape ({ state, steps }), so the
 // Transfer screen's step list, Activity rows and success screen are unchanged.
 
-import { encodeFunctionData, decodeFunctionResult, maxUint256, pad, parseUnits, type Hex } from 'viem'
+import { encodeFunctionData, decodeFunctionResult, maxUint256, pad, parseUnits, toHex, type Hex } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { arcRpcJson } from './arc'
 import { CCTP_DOMAINS, IRIS, fetchIrisMessage, forwardDone, type IrisMessage } from './cctpTracker'
-import { FORWARD_HOOK, FAST_FINALITY, ARC_DOMAIN } from './gaslessBridge'
+import { FORWARD_HOOK, FAST_FINALITY, ARC_DOMAIN, bridgeNonce, type BridgeParams } from './gaslessBridge'
 
 export const TOKEN_MESSENGER_V2 = '0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA' as Hex
 export const ARC_USDC = '0x3600000000000000000000000000000000000000' as Hex // ERC-20 view, 6 decimals
@@ -154,6 +154,8 @@ export async function fastCctpFees(p: { destination: string; amount: number; fas
     ])
     const fees = rows ? expectedFeesFromIris(rows, p.amount, p) : null
     if (!fees) return null
+    // Through the Arc router: its fee (the relayer's gas), whatever the allowance.
+    if (arcRouterAddress()) return { ...fees, networkFee: Number(routerFee(BigInt(gasPriceHex))) / 1e6 }
     const allowance = decodeFunctionResult({ abi: ERC20, functionName: 'allowance', data: allowanceHex as Hex }) as bigint
     const gas = BURN_GAS + (allowance < parseUnits(p.amount.toFixed(6), 6) ? APPROVE_GAS : 0n)
     // Arc gas is USDC with 18 decimals.
@@ -179,6 +181,81 @@ export async function estimate(from: string, to: Hex, data: Hex, value = 0n): Pr
 
 export class FastCctpError extends Error {
   constructor(message: string, readonly kind: 'rejected' | 'not_sent' | 'settling') { super(message) }
+}
+
+// ── One signature through MeshPortRouter on Arc (when it is deployed) ───────
+// contracts/MeshPortRouter.sol at VITE_ARC_ROUTER: the wallet signs ONE
+// EIP-3009 authorization (USDC "ReceiveWithAuthorization") for exactly
+// amount + fee to the router; MeshPort's relayer submits it
+// (api/bridge-relay arc_transfer). The router pulls exactly that, approves
+// exactly the amount to TokenMessengerV2, burns it, and resets the approval to
+// 0 - in one transaction. No approval is ever left with TokenMessenger, and
+// the wallet signs no transaction (one signature every time, first included).
+// Every parameter (recipient, chain, fees, finality, hook) is bound into the
+// authorization's nonce, so the relayer can't change any of them.
+const ARC_CHAIN_ID = 5042002
+/** Gas the relayer's router call uses, at most (simulated 3 Nov: ~210k); the fee is this × today's gas price. */
+export const ROUTER_TRANSFER_GAS = 300_000n
+const ROUTER_AUTH_WINDOW_SEC = 60 * 60
+export function arcRouterAddress(): Hex | null {
+  const r = String((import.meta.env.VITE_ARC_ROUTER as string | undefined) ?? '').trim()
+  return /^0x[0-9a-fA-F]{40}$/.test(r) ? r as Hex : null
+}
+/** The router's fee for one transfer: its gas at today's price, in USDC units (6 dp), rounded up. */
+export function routerFee(gasPrice: bigint): bigint {
+  const units = (ROUTER_TRANSFER_GAS * gasPrice + 999_999_999_999n) / 1_000_000_000_000n
+  return units > 0n ? units : 1n
+}
+
+async function routerBurn(p: FastCctpParams, router: Hex, amount: bigint, maxFee: bigint, dst: number): Promise<Hex> {
+  const { currentGasPrice } = await import('./arcService')
+  const gasPrice = await beforeSending(currentGasPrice())
+  const fee = routerFee(gasPrice)
+  const params: BridgeParams = {
+    token: ARC_USDC, destinationDomain: dst, mintRecipient: pad(p.recipient as Hex, { size: 32 }),
+    fee, maxFee, minFinalityThreshold: p.speed === 'FAST' ? FAST_FINALITY : SLOW_FINALITY,
+    hookData: p.useForwarder ? FORWARD_HOOK : '0x',
+    salt: toHex(crypto.getRandomValues(new Uint8Array(32))),
+  }
+  const nonce = bridgeNonce(params, ARC_CHAIN_ID, router)
+  const value = amount + fee
+  const validBefore = BigInt(Math.floor(Date.now() / 1000) + ROUTER_AUTH_WINDOW_SEC)
+  const from = p.account.address
+  const signature = await p.account.signTypedData({
+    domain: { name: 'USDC', version: '2', chainId: ARC_CHAIN_ID, verifyingContract: ARC_USDC },
+    types: { ReceiveWithAuthorization: [
+      { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
+      { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
+    ] },
+    primaryType: 'ReceiveWithAuthorization',
+    message: { from, to: router, value, validAfter: 0n, validBefore, nonce },
+  })
+  const { authApiHeaders } = await import('@/lib/supabase')
+  const body = JSON.stringify({
+    action: 'arc_transfer',
+    bridge: { ...params, fee: fee.toString(), maxFee: maxFee.toString() },
+    authorization: { from, value: value.toString(), validAfter: '0', validBefore: validBefore.toString(), signature },
+  })
+  // The relayer answers a repeat of the same authorization with the
+  // transaction it already sent, so one retry after a lost answer is safe.
+  let out: { txHash?: string; error?: string } | null = null
+  let status = 0
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const r = await fetch('/api/bridge-relay', { method: 'POST', headers: await authApiHeaders(), body, signal: AbortSignal.timeout(45_000) })
+      status = r.status
+      out = await r.json().catch(() => null)
+      break
+    } catch (e) {
+      if (attempt === 1) throw Object.assign(new FastCctpError("Couldn't reach MeshPort - your transfer may still go through. Check Activity in a minute before trying again.", 'settling'), { cause: e })
+    }
+  }
+  const hash = out?.txHash
+  if (hash && /^0x[0-9a-fA-F]{64}$/.test(hash)) {
+    if (status >= 500) throw Object.assign(new FastCctpError('The transfer failed on Arc. Nothing was sent.', 'not_sent'), { txHash: hash })
+    return hash as Hex
+  }
+  throw new FastCctpError(`${out?.error || 'The transfer was refused'}. Nothing was sent.`, 'not_sent')
 }
 
 export const ARC_UNREACHABLE = "Couldn't reach Arc - your connection dropped. Nothing was sent. Try again."
@@ -293,6 +370,16 @@ export async function fastCctpTransfer(p: FastCctpParams): Promise<FastCctpResul
     : encodeFunctionData({ abi: MESSENGER, functionName: 'depositForBurn', args: [amount, dst, pad(p.recipient as Hex, { size: 32 }), ARC_USDC, ZERO32, maxFee, p.speed === 'FAST' ? FAST_FINALITY : SLOW_FINALITY] })
   const approveData = encodeFunctionData({ abi: ERC20, functionName: 'approve', args: [TOKEN_MESSENGER_V2, maxUint256] })
 
+  // MeshPortRouter on Arc: one signature, nothing left approved.
+  const router = arcRouterAddress()
+  if (router) {
+    p.onStep('approve', { values: { state: 'success' } }) // no approval: the router's one transaction covers it
+    const burnHash = await routerBurn(p, router, amount, maxFee, dst)
+    p.onBurnSent?.(burnHash)
+    p.onStep('burn', { values: { state: 'success', txHash: burnHash } })
+    return settle(p, burnHash, undefined, pollMs)
+  }
+
   // Nonce and allowance together (one round trip each, in parallel).
   const [nonceHex, allowanceHex] = await beforeSending(Promise.all([
     rpc('eth_getTransactionCount', [from, 'pending']),
@@ -320,7 +407,11 @@ export async function fastCctpTransfer(p: FastCctpParams): Promise<FastCctpResul
     throw e
   }
   p.onStep('burn', { values: { state: 'success', txHash: burnHash } })
+  return settle(p, burnHash, approveHash, pollMs)
+}
 
+/** 3 and 4: Circle's attestation, then the mint - the same for both ways of burning. */
+async function settle(p: FastCctpParams, burnHash: string, approveHash: string | undefined, pollMs: number): Promise<FastCctpResult> {
   // 3. Circle's attestation.
   const attestDeadline = Date.now() + (p.attestationTimeoutMs ?? 10 * 60_000)
   let msg: IrisMessage | null = null

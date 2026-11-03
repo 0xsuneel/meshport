@@ -5,6 +5,7 @@
 //   node contracts/deploy-router-all.cjs            check + deploy
 //   node contracts/deploy-router-all.cjs --dry-run  checks only, no transactions
 //   node contracts/deploy-router-all.cjs --chains=Base_Sepolia,Ethereum_Sepolia
+//   node contracts/deploy-router-all.cjs --chains=Arc_Testnet   Arc only (Transfer FROM Arc)
 //
 // Reads from .env (or the environment):
 //   ADMIN_PRIVATE_KEY   wallet that pays the deploy gas on each chain
@@ -53,6 +54,16 @@ const CHAINS = {
   Ink_Testnet:       { chainId: 763373,   usdc: '0xFabab97dCE620294D2B0b0e46C68964e326300Ac', rpc: 'https://rpc-gel-sepolia.inkonchain.com' },
   Edge_Testnet:      { chainId: 33431,    usdc: '0x2d9F7CAD728051AA35Ecdc472a14cf8cDF5CFD6B', rpc: 'https://edge-testnet.g.alchemy.com/public' },
   Injective_Testnet: { chainId: 1439,     usdc: '0x0C382e685bbeeFE5d3d9C29e29E341fEE8E84C5d', rpc: 'https://k8s.testnet.json-rpc.injective.network' },
+}
+
+// Arc: not a Bring source - the router there sends Transfers OUT of Arc in
+// one signature (an EIP-3009 authorization for the exact amount; nothing
+// stays approved). Kept apart from CHAINS (the Bring chains, which the app
+// and relayer tables must match). Same router address (CREATE2), same
+// constructor: Arc has Circle's TokenMessengerV2 and CCTPx service at the
+// same testnet addresses (checked 3 Nov). Arc's gas is USDC.
+const ARC_CHAINS = {
+  Arc_Testnet:       { chainId: 5042002,  usdc: '0x3600000000000000000000000000000000000000', rpc: 'https://rpc.testnet.arc.io' },
 }
 
 const ROUTER_ABI = [
@@ -126,16 +137,23 @@ async function main() {
   console.log(`Fee recipient: ${feeRecipient}   Deploy wallet: ${account.address}${dryRun ? '   (dry run)' : ''}\n`)
 
   const enabled = {}
-  for (const [key, cfg] of Object.entries(CHAINS)) {
+  let arcRouter = null
+  for (const [key, cfg] of Object.entries({ ...CHAINS, ...ARC_CHAINS })) {
     if (only.length && !only.includes(key)) continue
     let r
     try { r = await deployOn(key, cfg, account, feeRecipient, router, dryRun) }
     catch (e) { r = { ok: false, reason: (e && (e.shortMessage || e.message)) || String(e) } }
     console.log(`${r.ok ? '✔' : '✗'} ${key.padEnd(18)} ${r.ok ? r.status : `skipped — ${r.reason}`}`)
-    if (r.ok && !r.dry) enabled[key] = router
+    if (r.ok && !r.dry) { if (ARC_CHAINS[key]) arcRouter = router; else enabled[key] = router }
   }
 
   if (dryRun) return console.log('\nDry run only — nothing was deployed.')
+  if (arcRouter) {
+    console.log('\nArc (Transfer from Arc in one signature) - set BOTH in Vercel (Production + Preview), then redeploy:')
+    console.log(`  VITE_ARC_ROUTER=${arcRouter}`)
+    console.log(`  ARC_ROUTER=${arcRouter}`)
+  }
+  if (!Object.keys(enabled).length) return
   const json = JSON.stringify(enabled)
   console.log(`\n${Object.keys(enabled).length} chain(s) ready. Set BOTH in Vercel (Production + Preview), then redeploy:`)
   console.log(`  VITE_BRIDGE_ROUTERS=${json}`)
@@ -144,4 +162,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch(e => { console.error(e.message || e); process.exit(1) })
-module.exports = { CHAINS }
+module.exports = { CHAINS, ARC_CHAINS }

@@ -153,3 +153,31 @@ fee is taken in the coin being moved, in the same transaction.
    native cost into the token fee), `BRIDGE_TOKEN_MAX_FEE_USD` (cap, default 0.50).
 
 Tests: `npx hardhat test test/MeshPortRouter.test.js test/MeshPortRouter.tokens.test.js`.
+
+## On Arc: Transfer USDC out of Arc in one signature
+
+The same router, at the same address, deployed on Arc lets **Transfer USDC**
+(Arc → another chain) use one signature instead of an approve + a burn, and
+leaves **no approval** with Circle's TokenMessengerV2. The user signs one
+EIP-3009 authorization for exactly amount + fee; MeshPort's relayer submits
+`bridgeWithAuthorization` (`api/bridge-relay.ts`, action `arc_transfer`); the
+router pulls exactly that, approves exactly the amount, burns it and resets
+the approval to 0 - all in one transaction. The fee is the relayer's Arc gas
+(paid in USDC).
+
+1. Fund the deploy wallet with a little USDC on Arc testnet (Arc's gas), then:
+
+       node contracts/deploy-router-all.cjs --dry-run --chains=Arc_Testnet
+       node contracts/deploy-router-all.cjs --chains=Arc_Testnet
+
+   Use the **same** `FEE_RECIPIENT` as for the other chains - it is part of
+   the address. The dry run checks Arc's chain id, TokenMessengerV2, USDC's
+   EIP-3009 support and the CREATE2 deployer (all present on Arc, 3 Nov).
+2. Set the two printed values in Vercel (Production + Preview), then redeploy:
+   `VITE_ARC_ROUTER` (app) and `ARC_ROUTER` (relayer).
+3. Keep the relayer wallet funded with USDC on Arc (its gas; the user's fee
+   pays it back).
+4. Test with a small Transfer (≥ 1 USDC). If anything in the router call
+   fails, the whole transaction reverts and nothing moves.
+
+Until `VITE_ARC_ROUTER` is set, Transfer USDC uses the approve + burn path.
