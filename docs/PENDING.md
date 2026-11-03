@@ -61,6 +61,19 @@ deploy). Pay and plain receives are free - never add a fee there.
       gas: MeshPort pays it, or keep charging the user.
 - [ ] UB in 2 signatures instead of 3 (deposit authorization submitted by
       the relayer; prepare the signature during the PIN).
+- Notes from Arc / Circle docs (3 Nov) for the rebuild:
+  - UB fee: use the kit's built-in **custom spend fee** (`customFee` on
+    `unifiedBalance.spend`) - it adds burn intents to our fee recipient in the
+    same user signature; Arc keeps 10%. Only on spends, not deposits.
+  - **Fast deposits** (`transferSpeed: 'FAST'`, USDC, EVM sources): a CCTP
+    fast burn via TokenMessengerWithFees (testnet 0x8745D906…0C0A) lands in
+    the Arc Gateway in ~60 s instead of 13-19 min from Ethereum/Base/Arbitrum/OP.
+  - UB now covers **USDC, EURC and cirBTC** (EURC/cirBTC: standard deposits only;
+    the forwarder supports USDC and cirBTC).
+  - Deposit wait before spendable: Arc ~0.5 s; Avalanche/Polygon/Sonic ~8 s;
+    HyperEVM/Sei ~5 s; Ethereum/Base/Arbitrum/OP/Unichain/World ~13-19 min.
+  - Delegates can sign spends for a user, but per chain and for the whole
+    balance (no cap) - not for user funds.
 
 ## 4. Other open items
 
