@@ -211,7 +211,8 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
     const address = created!.msg.result.address
     expect(Object.keys(created!.msg.result).sort()).toEqual(['address', 'kept']) // never the key
     expect(address).toMatch(/^0x[0-9a-fA-F]{40}$/)
-    for (const [to, sel] of [[PERMIT2, '0x2b67b570'], [USDC, '0xd505accf']]) {
+    const EURC = '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a', CIRBTC = '0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF'
+    for (const [to, sel] of [[PERMIT2, '0x2b67b570'], [PERMIT2, '0x2a2d80d1'], [USDC, '0xd505accf'], [EURC, '0xd505accf'], [CIRBTC, '0xd505accf']]) {
       const r = await ask('session:sign', { address, transaction: tx(to, sel + '00'.repeat(32)) })
       expect(r!.msg.result.serialized).toMatch(/^0x02/)
     }
@@ -227,6 +228,7 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
     expect(await refused(tx('0x2222222222222222222222222222222222222222', '0xa9059cbb' + '00'.repeat(64)))).toBe('invalid') // ERC-20 transfer elsewhere
     expect(await refused(tx(USDC, '0xa9059cbb' + '00'.repeat(64)))).toBe('invalid')   // USDC.transfer
     expect(await refused(tx(USDC, '0x095ea7b3' + '00'.repeat(64)))).toBe('invalid')   // USDC.approve
+    expect(await refused(tx('0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a', '0xa9059cbb' + '00'.repeat(64)))).toBe('invalid') // EURC.transfer
     expect(await refused(tx(PERMIT2, '0x87517c45' + '00'.repeat(64)))).toBe('invalid') // Permit2.approve
     expect(await refused(tx(PERMIT2, '0x0d58b1db', 1))).toBe('invalid')               // not Arc
     await ask('session:end', { address })
@@ -279,6 +281,7 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
     const { toFunctionSelector } = await import('viem')
     expect(toFunctionSelector('transferFrom((address,address,uint160,address)[])')).toBe('0x0d58b1db')
     expect(toFunctionSelector('permit(address,((address,uint160,uint48,uint48),address,uint256),bytes)')).toBe('0x2b67b570')
+    expect(toFunctionSelector('permit(address,((address,uint160,uint48,uint48)[],address,uint256),bytes)')).toBe('0x2a2d80d1')
     expect(toFunctionSelector('permit(address,address,uint256,uint256,uint8,bytes32,bytes32)')).toBe('0xd505accf')
   })
 })

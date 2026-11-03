@@ -7,22 +7,22 @@
 //   session start (after unlock / opening Pay / app load, in the background)
 //     1. a fresh random session key, in memory only (never stored or sent)
 //     2. MeshPort's relayer gives the key a small gas float (Arc gas is USDC)
-//     3. once per wallet: the Circle wallet signs a USDC EIP-2612 permit that
-//        lets Permit2 move USDC (typed data - no transaction, no nonce clash
+//     3. once per wallet and token (USDC; EURC / cirBTC when held): the Circle
+//        wallet signs an EIP-2612 permit that lets Permit2 move it (typed data - no transaction, no nonce clash
 //        with pay-intent's reservations); the key puts it on-chain at once.
 //        The signature is kept (localStorage) until it is on-chain, so a
 //        reload / lock in the middle doesn't ask Circle for it again - it
 //        grants nothing by itself (Permit2 still needs a per-key permit).
-//     4. the Circle wallet signs a Permit2 PermitSingle: "this session key may
-//        spend up to LIMIT USDC until EXPIRY" (typed data); the key puts it
-//        on-chain
-//   each payment ≤ what's left (USDC, no order memo), after the PIN
+//     4. the Circle wallet signs ONE Permit2 PermitBatch: "this session key may
+//        spend up to ~$100 of each of these tokens until EXPIRY" (typed data);
+//        the key puts it on-chain
+//   each payment ≤ what's left of its token (USDC, EURC, cirBTC; no order memo), after the PIN
 //     the session key signs Permit2.transferFrom([owner → recipient,
 //     owner → key: this payment's gas, plus the setup's on the first one])
 //     locally (~0.01 s); it goes out through the same relay as every Pay send.
 //     The USDC moves FROM the Circle wallet - same address, same balance - and
 //     the user pays their own network fee, as on any payment.
-//   anything else (bigger, other tokens, order payments, no session yet)
+//   anything else (bigger, swaps / bridges, order payments, no session yet)
 //     the normal Circle path, unchanged.
 //   app closed / locked / reopened: the session carries on - the frame keeps
 //     its key sealed to this device and it is reopened (~1 s, no Circle
@@ -91,7 +91,12 @@ async function newSessionKey(owner: Hex): Promise<{ key: SessionAccount; home: K
 // always beat it. A session whose key the frame kept (sealed to this device)
 // is reopened instead: only public facts are stored here (no key); what's
 // left and when it ends are read back from Permit2 on-chain.
-interface SavedSession { owner: string; key: string; limit: string; expiresAt: number; payGas: string; payGasEstimate: string; owedGasWei: string; relayer: string | null }
+interface SavedSession {
+  owner: string; key: string; expiresAt: number; payGas: string; payGasEstimate: string; owedGasWei: string; relayer: string | null
+  /** Each token's cap (atomic). Saved before EURC / cirBTC: `limit` = the USDC cap. */
+  limits?: Partial<Record<FastToken, string>>
+  limit?: string
+}
 const sessionStoreKey = (owner: string) => `meshport:fastpay-session:${owner.toLowerCase()}`
 function loadSaved(owner: string): SavedSession | null {
   try { return JSON.parse(localStorage.getItem(sessionStoreKey(owner)) || 'null') as SavedSession | null } catch { return null }
@@ -100,7 +105,8 @@ function saveSession(s: Session | null, owner: string): void {
   try {
     if (!s) { localStorage.removeItem(sessionStoreKey(owner)); return }
     const saved: SavedSession = {
-      owner: s.owner, key: s.key.address, limit: s.limit.toString(), expiresAt: s.expiresAt,
+      owner: s.owner, key: s.key.address, expiresAt: s.expiresAt,
+      limits: Object.fromEntries(Object.entries(s.grants).map(([t, g]) => [t, g!.limit.toString()])),
       payGas: s.payGas.toString(), payGasEstimate: s.payGasEstimate.toString(), owedGasWei: s.owedGasWei.toString(), relayer: s.relayer,
     }
     localStorage.setItem(sessionStoreKey(owner), JSON.stringify(saved))
@@ -111,7 +117,30 @@ export const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3' as const
 export const ARC_USDC_ERC20 = '0x3600000000000000000000000000000000000000' as const
 export const ARC_CHAIN_ID = 5042002
 
-export const FAST_PAY_LIMIT_USDC = 100
+export const ARC_EURC = '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a' as const
+export const ARC_CIRBTC = '0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF' as const
+
+/**
+ * The tokens Fast Pay pays in. Each has its own on-chain cap in the session
+ * grant, worth about FAST_PAY_LIMIT_USD at set-up. All three are Circle
+ * FiatToken-style ERC-20s with EIP-2612 permit, version "2" (DOMAIN_SEPARATOR
+ * checked on Arc testnet 3 Nov - fastPay.arc.integration.test.ts).
+ * Gas refunds are always paid in USDC (Arc's gas token).
+ */
+export type FastToken = 'USDC' | 'EURC' | 'cirBTC'
+export const FAST_TOKENS: Record<FastToken, { address: Hex; decimals: number; permitName: string }> = {
+  USDC:   { address: '0x3600000000000000000000000000000000000000', decimals: 6, permitName: 'USDC' },
+  EURC:   { address: ARC_EURC, decimals: 6, permitName: 'EURC' },
+  cirBTC: { address: ARC_CIRBTC, decimals: 8, permitName: 'Circle Wrapped Bitcoin' },
+}
+const TOKEN_ORDER: FastToken[] = ['USDC', 'EURC', 'cirBTC']
+export function isFastToken(t: string): t is FastToken { return t === 'USDC' || t === 'EURC' || t === 'cirBTC' }
+const atomic = (token: FastToken, amount: number) => BigInt(Math.round(amount * 10 ** FAST_TOKENS[token].decimals))
+const fromAtomic = (token: FastToken, units: bigint) => Number(units) / 10 ** FAST_TOKENS[token].decimals
+
+export const FAST_PAY_LIMIT_USD = 100
+/** @deprecated the USDC cap; see FAST_PAY_LIMIT_USD. */
+export const FAST_PAY_LIMIT_USDC = FAST_PAY_LIMIT_USD
 export const FAST_PAY_SESSION_MS = 2 * 60 * 60_000
 /** A payment isn't started on a session about to expire. */
 const EXPIRY_MARGIN_MS = 60_000
@@ -126,6 +155,7 @@ const NATIVE_TRANSFER_GAS = 21_000n
 
 // ── EIP-712 (exported for tests: they must hash to the on-chain domains) ─────
 export const usdcPermitDomain = { name: 'USDC', version: '2', chainId: ARC_CHAIN_ID, verifyingContract: ARC_USDC_ERC20 } as const
+export const tokenPermitDomain = (t: FastToken) => ({ name: FAST_TOKENS[t].permitName, version: '2', chainId: ARC_CHAIN_ID, verifyingContract: FAST_TOKENS[t].address }) as const
 export const usdcPermitTypes = {
   Permit: [
     { name: 'owner', type: 'address' }, { name: 'spender', type: 'address' },
@@ -142,11 +172,19 @@ export const permitSingleTypes = {
     { name: 'details', type: 'PermitDetails' }, { name: 'spender', type: 'address' }, { name: 'sigDeadline', type: 'uint256' },
   ],
 } as const
+/** One signature, every token's cap: the session grant. */
+export const permitBatchTypes = {
+  PermitDetails: permitSingleTypes.PermitDetails,
+  PermitBatch: [
+    { name: 'details', type: 'PermitDetails[]' }, { name: 'spender', type: 'address' }, { name: 'sigDeadline', type: 'uint256' },
+  ],
+} as const
 
 // ── ABIs ──────────────────────────────────────────────────────────────────────
 export const usdcAbi = [
   { type: 'function', name: 'allowance', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'nonces', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }], outputs: [{ type: 'uint256' }] },
   {
     type: 'function', name: 'permit', stateMutability: 'nonpayable', outputs: [],
     inputs: [
@@ -170,6 +208,16 @@ export const permit2Abi = [
       { name: 'owner', type: 'address' },
       { name: 'permitSingle', type: 'tuple', components: [
         { name: 'details', ...permitDetailsTuple }, { name: 'spender', type: 'address' }, { name: 'sigDeadline', type: 'uint256' },
+      ] },
+      { name: 'signature', type: 'bytes' },
+    ],
+  },
+  {
+    type: 'function', name: 'permit', stateMutability: 'nonpayable', outputs: [],
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'permitBatch', type: 'tuple', components: [
+        { name: 'details', type: 'tuple[]', components: permitDetailsTuple.components }, { name: 'spender', type: 'address' }, { name: 'sigDeadline', type: 'uint256' },
       ] },
       { name: 'signature', type: 'bytes' },
     ],
@@ -202,16 +250,16 @@ export function setFastPayEnabled(on: boolean): void {
 // for it twice. Bound to the wallet and to its USDC permit nonce: once used
 // (or replaced by any other permit) it is invalid, and it is dropped.
 interface SavedPermit { owner: string; nonce: string; deadline: string; sig: Hex }
-const permitKey = (owner: string) => `meshport:fastpay-usdc-permit:${owner.toLowerCase()}`
-function loadPermit(owner: string, nonce: bigint): SavedPermit | null {
+const permitKey = (owner: string, token: FastToken = 'USDC') => `meshport:fastpay-${token === 'USDC' ? 'usdc' : token}-permit:${owner.toLowerCase()}`
+function loadPermit(owner: string, nonce: bigint, token: FastToken = 'USDC'): SavedPermit | null {
   try {
-    const p = JSON.parse(localStorage.getItem(permitKey(owner)) || 'null') as SavedPermit | null
+    const p = JSON.parse(localStorage.getItem(permitKey(owner, token)) || 'null') as SavedPermit | null
     if (!p || p.nonce !== nonce.toString() || Number(p.deadline) * 1000 < Date.now() + 120_000) return null
     return p
   } catch { return null }
 }
-function savePermit(p: SavedPermit | null, owner: string): void {
-  try { if (p) localStorage.setItem(permitKey(owner), JSON.stringify(p)); else localStorage.removeItem(permitKey(owner)) } catch { /* private mode */ }
+function savePermit(p: SavedPermit | null, owner: string, token: FastToken = 'USDC'): void {
+  try { if (p) localStorage.setItem(permitKey(owner, token), JSON.stringify(p)); else localStorage.removeItem(permitKey(owner, token)) } catch { /* private mode */ }
 }
 
 // ── Session state ─────────────────────────────────────────────────────────────
@@ -221,8 +269,8 @@ interface Session {
   home: KeyHome
   kept: boolean
   endKey: () => void
-  limit: bigint          // USDC, 6 decimals
-  spent: bigint          // payments + refunds, sent or possibly sent (pending counts)
+  /** Each granted token's cap and what is spent of it (atomic; payments + USDC refunds, pending counts). USDC always. */
+  grants: Partial<Record<FastToken, { limit: bigint; spent: bigint }>>
   expiresAt: number      // ms
   nonce: number          // the session key's next transaction nonce
   payGas: bigint         // gas limit for one payment
@@ -235,14 +283,30 @@ let starting: Promise<boolean> | null = null
 let generation = 0
 
 export type FastPayPhase = 'off' | 'starting' | 'ready' | 'error'
-export const useFastPay = create<{ phase: FastPayPhase; remaining: number; expiresAt: number; error: string | null }>(() => ({
-  phase: 'off', remaining: 0, expiresAt: 0, error: null,
-}))
+export const useFastPay = create<{
+  phase: FastPayPhase
+  /** USDC left (what payments can use: the refund reserve kept back). */
+  remaining: number
+  /** What is left of each granted token. */
+  remainingBy: Partial<Record<FastToken, number>>
+  expiresAt: number
+  error: string | null
+}>(() => ({ phase: 'off', remaining: 0, remainingBy: {}, expiresAt: 0, error: null }))
+/** What a payment in `token` can still use (USDC keeps the refund reserve back). */
+function leftFor(s: Session, token: FastToken): bigint {
+  const g = s.grants[token]
+  if (!g) return 0n
+  const left = g.limit - g.spent - (token === 'USDC' ? REFUND_RESERVE : 0n)
+  return left > 0n ? left : 0n
+}
 function publish(phase?: FastPayPhase, error: string | null = null) {
   const s = session
+  const remainingBy: Partial<Record<FastToken, number>> = {}
+  if (s) for (const t of TOKEN_ORDER) if (s.grants[t]) remainingBy[t] = fromAtomic(t, leftFor(s, t))
   useFastPay.setState({
     phase: phase ?? (s ? 'ready' : 'off'),
-    remaining: s ? Number(s.limit - s.spent > REFUND_RESERVE ? s.limit - s.spent - REFUND_RESERVE : 0n) / 1e6 : 0,
+    remaining: remainingBy.USDC ?? 0,
+    remainingBy,
     expiresAt: s?.expiresAt ?? 0,
     error,
   })
@@ -277,19 +341,22 @@ async function returnLeftover(s: Session): Promise<void> {
   await relayArcSend(s.key as any, { to: s.relayer!, value, gas: NATIVE_TRANSFER_GAS, nonce: s.nonce, maxFeePerGas: feeCap })
 }
 
-const usdcAtomic = (amount: number) => BigInt(Math.round(amount * 1e6))
 
 /**
  * Whether this payment goes the fast way: a ready session for this wallet,
- * not about to expire, with enough left (keeping a little for the gas
- * refunds). Synchronous - the screens' decisions must not wait.
+ * not about to expire, this token granted, with enough left of it - and of
+ * USDC for the gas refund. Synchronous - the screens' decisions must not wait.
  */
-export function fastPayCovers(owner: string, amount: number): boolean {
+export function fastPayCovers(owner: string, amount: number, token: string = 'USDC'): boolean {
   const s = session
-  if (!s || !(amount > 0)) return false
+  if (!s || !(amount > 0) || !isFastToken(token)) return false
   if (s.owner.toLowerCase() !== owner.toLowerCase()) return false
   if (Date.now() > s.expiresAt - EXPIRY_MARGIN_MS) return false
-  return usdcAtomic(amount) + REFUND_RESERVE <= s.limit - s.spent
+  const units = atomic(token, amount)
+  if (!(units > 0n) || units > leftFor(s, token)) return false
+  // The refund is USDC: a non-USDC payment needs the reserve still there.
+  if (token !== 'USDC') { const u = s.grants.USDC; if (!u || u.limit - u.spent < REFUND_RESERVE) return false }
+  return true
 }
 
 // ── Chain reads (Circle's Arc node first, the proxy as fallback - lib/arc) ───
@@ -305,10 +372,23 @@ async function estimate(from: Hex, to: Hex, data: Hex): Promise<bigint> {
   return BigInt(j.result)
 }
 /** The payment + refund batch (Permit2 transferFrom(AllowanceTransferDetails[])). */
-function batchData(owner: Hex, to: Hex, amount: bigint, key: Hex, refund: bigint): Hex {
-  const details = [{ from: owner, to, amount, token: ARC_USDC_ERC20 }]
+function batchData(owner: Hex, to: Hex, amount: bigint, key: Hex, refund: bigint, token: FastToken = 'USDC'): Hex {
+  const details: Array<{ from: Hex; to: Hex; amount: bigint; token: Hex }> = [{ from: owner, to, amount, token: FAST_TOKENS[token].address }]
   if (refund > 0n) details.push({ from: owner, to: key, amount: refund, token: ARC_USDC_ERC20 })
   return encodeFunctionData({ abi: permit2Abi, functionName: 'transferFrom', args: [details] })
+}
+
+/**
+ * Each token's cap for a new session: worth about FAST_PAY_LIMIT_USD now.
+ * USDC exactly; EURC and cirBTC at today's price (no price: not granted).
+ */
+async function tokenCaps(): Promise<Partial<Record<FastToken, bigint>>> {
+  const [eur, btc] = await Promise.all([
+    import('./eurcPrice').then(m => m.fetchEurcPriceUsd()).catch(() => 0),
+    import('./btcPrice').then(m => m.fetchBtcPriceUsd()).catch(() => 0),
+  ])
+  const cap = (t: FastToken, usdPerToken: number) => usdPerToken > 0 ? atomic(t, Math.floor(FAST_PAY_LIMIT_USD / usdPerToken * 10 ** FAST_TOKENS[t].decimals) / 10 ** FAST_TOKENS[t].decimals) : 0n
+  return { USDC: atomic('USDC', FAST_PAY_LIMIT_USD), EURC: cap('EURC', eur), cirBTC: cap('cirBTC', btc) }
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
@@ -354,28 +434,35 @@ async function resume(owner: Hex, gen: number): Promise<boolean> {
   } catch { return false }
   if (!restored) { saveSession(null, owner); return false }
   const keyAddr = saved.key as Hex
-  const [p2, nonceHex] = await Promise.all([
-    call<readonly [bigint, number, number]>(PERMIT2, permit2Abi, 'allowance', [owner, ARC_USDC_ERC20, keyAddr]),
+  const limits: Partial<Record<FastToken, bigint>> = {}
+  for (const [t, v] of Object.entries(saved.limits ?? (saved.limit ? { USDC: saved.limit } : {}))) if (isFastToken(t) && v) limits[t] = BigInt(v)
+  const tokens = TOKEN_ORDER.filter(t => limits[t] != null)
+  if (!limits.USDC) { await forget(); return false }
+  const [nonceHex, ...p2s] = await Promise.all([
     arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionCount', params: [keyAddr, 'pending'] }),
+    ...tokens.map(t => call<readonly [bigint, number, number]>(PERMIT2, permit2Abi, 'allowance', [owner, FAST_TOKENS[t].address, keyAddr])),
   ])
-  const left = p2[0]
-  const expiresAt = Number(p2[1]) * 1000
+  const grants: Session['grants'] = {}
+  tokens.forEach((t, i) => { const left = p2s[i][0]; grants[t] = { limit: limits[t]!, spent: limits[t]! > left ? limits[t]! - left : 0n } })
+  const usdc = p2s[0]
+  const left = usdc[0]
+  const expiresAt = Number(usdc[1]) * 1000
   if (Date.now() > expiresAt - 10 * 60_000 || left <= REFUND_RESERVE) { await forget(); return false }
   if (gen !== generation) return false
   const { useAuthStore } = await import('@/store')
   const now = useAuthStore.getState()
   if (now.isLocked || now.walletAddress?.toLowerCase() !== owner.toLowerCase()) return false
-  const limit = BigInt(saved.limit)
   const { key, end } = await frameKey(keyAddr)
   session = {
-    owner, key, home: 'frame', kept: true, endKey: end, limit, spent: limit - left, expiresAt,
+    owner, key, home: 'frame', kept: true, endKey: end, grants, expiresAt,
     nonce: Number(BigInt(nonceHex?.result ?? '0x0')),
     payGas: BigInt(saved.payGas), payGasEstimate: BigInt(saved.payGasEstimate), owedGasWei: BigInt(saved.owedGasWei),
     relayer: saved.relayer as Hex | null,
   }
   publish('ready')
   const secs = ((performance.now() - t0) / 1000).toFixed(2)
-  void import('./errorReport').then(m => m.reportPerf(`[perf fastpay setup] resumed ${secs}, ${(Number(left) / 1e6).toFixed(2)} left, key in frame`)).catch(() => {})
+  const extra = tokens.filter(t => t !== 'USDC').map(t => ` + ${t}`).join('')
+  void import('./errorReport').then(m => m.reportPerf(`[perf fastpay setup] resumed ${secs}, ${(Number(left) / 1e6).toFixed(2)} left${extra}, key in frame`)).catch(() => {})
   return true
 }
 
@@ -400,7 +487,6 @@ async function start(gen: number): Promise<boolean> {
   try {
   const now = Date.now()
   const expiresAt = now + FAST_PAY_SESSION_MS
-  const limit = usdcAtomic(FAST_PAY_LIMIT_USDC)
 
   // On-chain state + 2. the gas float - in parallel, before anything is signed,
   // so whatever Circle signs can go on-chain at once.
@@ -415,11 +501,21 @@ async function start(gen: number): Promise<boolean> {
     return /^0x[0-9a-fA-F]{40}$/.test(out?.from ?? '') ? out!.from as Hex : null
   })()
   gasP.catch(() => {})
-  const [permit2Allowance, usdcNonce, p2] = await Promise.all([
-    call<bigint>(ARC_USDC_ERC20, usdcAbi, 'allowance', [owner, PERMIT2]),
-    call<bigint>(ARC_USDC_ERC20, usdcAbi, 'nonces', [owner]),
-    call<readonly [bigint, number, number]>(PERMIT2, permit2Abi, 'allowance', [owner, ARC_USDC_ERC20, key.address]),
-  ])
+  // Per token: Permit2's ERC-20 allowance, the permit nonce, the balance, and
+  // Permit2's nonce for this key - plus the prices for the caps.
+  const reads = await Promise.all(TOKEN_ORDER.map(async t => {
+    const addr = FAST_TOKENS[t].address
+    const [allowance, permitNonce, balance, p2] = await Promise.all([
+      call<bigint>(addr, usdcAbi, 'allowance', [owner, PERMIT2]),
+      call<bigint>(addr, usdcAbi, 'nonces', [owner]),
+      t === 'USDC' ? Promise.resolve(1n) : call<bigint>(addr, usdcAbi, 'balanceOf', [owner]).catch(() => 0n),
+      call<readonly [bigint, number, number]>(PERMIT2, permit2Abi, 'allowance', [owner, addr, key.address]),
+    ])
+    return { t, allowance, permitNonce, balance, p2nonce: Number(p2[2]) }
+  }))
+  const caps = await tokenCaps()
+  // USDC always (it pays the gas refunds); EURC / cirBTC when the wallet holds some.
+  const granted = reads.filter(r => r.t === 'USDC' || (r.balance > 0n && (caps[r.t] ?? 0n) > 0n))
   mark('reads')
   const relayer = await gasP
   mark('gas')
@@ -436,41 +532,47 @@ async function start(gen: number): Promise<boolean> {
     if (sent.state !== 'success') throw new Error(`setup transaction ${sent.state}`)
   }
 
-  // 3. Once per wallet: let Permit2 move this wallet's USDC (EIP-2612, typed
-  // data) - reusing one Circle already signed if a set-up was interrupted.
-  let firstTime = false
-  if (permit2Allowance < limit) {
-    firstTime = true
-    let saved = loadPermit(owner, usdcNonce)
+  // 3. Once per wallet and token: let Permit2 move it (EIP-2612, typed data) -
+  // reusing one Circle already signed if a set-up was interrupted.
+  const firstTime: FastToken[] = []
+  for (const r of granted) {
+    if (r.allowance >= caps[r.t]!) continue
+    firstTime.push(r.t)
+    let saved = loadPermit(owner, r.permitNonce, r.t)
     if (!saved) {
       const deadline = BigInt(Math.floor(now / 1000) + SIG_DEADLINE_S)
       const sig = await signer.signTypedData({
-        domain: usdcPermitDomain, types: usdcPermitTypes, primaryType: 'Permit',
-        message: { owner, spender: PERMIT2, value: maxUint256, nonce: usdcNonce, deadline },
+        domain: tokenPermitDomain(r.t), types: usdcPermitTypes, primaryType: 'Permit',
+        message: { owner, spender: PERMIT2, value: maxUint256, nonce: r.permitNonce, deadline },
       })
-      saved = { owner, nonce: usdcNonce.toString(), deadline: deadline.toString(), sig }
-      savePermit(saved, owner)
-      mark('usdc-permit')
-    } else mark('usdc-permit-reused')
-    const { v, yParity, r, s } = parseSignature(saved.sig)
-    await sendAsKey(ARC_USDC_ERC20, encodeFunctionData({ abi: usdcAbi, functionName: 'permit',
-      args: [owner, PERMIT2, maxUint256, BigInt(saved.deadline), Number(v ?? BigInt(yParity + 27)), r, s] }))
-    savePermit(null, owner) // used: the nonce moved on
-    mark('usdc-permit-onchain')
+      saved = { owner, nonce: r.permitNonce.toString(), deadline: deadline.toString(), sig }
+      savePermit(saved, owner, r.t)
+      mark(`${r.t.toLowerCase()}-permit`)
+    } else mark(`${r.t.toLowerCase()}-permit-reused`)
+    const { v, yParity, r: rr, s: ss } = parseSignature(saved.sig)
+    await sendAsKey(FAST_TOKENS[r.t].address, encodeFunctionData({ abi: usdcAbi, functionName: 'permit',
+      args: [owner, PERMIT2, maxUint256, BigInt(saved.deadline), Number(v ?? BigInt(yParity + 27)), rr, ss] }))
+    savePermit(null, owner, r.t) // used: the nonce moved on
+    mark(`${r.t.toLowerCase()}-permit-onchain`)
+    if (!live()) return false
   }
   if (!live()) return false
 
-  // 4. The session grant (Permit2 PermitSingle, typed data): amount + expiry, on-chain.
-  const permitSingle = {
-    details: { token: ARC_USDC_ERC20, amount: limit, expiration: Math.floor(expiresAt / 1000), nonce: Number(p2[2]) },
+  // 4. The session grant - ONE Circle signature for every token (Permit2
+  // PermitBatch, typed data): each token's cap + the expiry, on-chain.
+  const expiration = Math.floor(expiresAt / 1000)
+  const permitBatch = {
+    details: granted.map(r => ({ token: FAST_TOKENS[r.t].address, amount: caps[r.t]!, expiration, nonce: r.p2nonce })),
     spender: key.address,
     sigDeadline: BigInt(Math.floor(now / 1000) + SIG_DEADLINE_S),
   }
-  const grantSig = await signer.signTypedData({ domain: permit2Domain, types: permitSingleTypes, primaryType: 'PermitSingle', message: permitSingle })
+  const grantSig = await signer.signTypedData({ domain: permit2Domain, types: permitBatchTypes, primaryType: 'PermitBatch', message: permitBatch })
   mark('grant')
   if (!live()) return false
-  await sendAsKey(PERMIT2, encodeFunctionData({ abi: permit2Abi, functionName: 'permit', args: [owner, permitSingle, grantSig] }))
+  await sendAsKey(PERMIT2, encodeFunctionData({ abi: permit2Abi, functionName: 'permit', args: [owner, permitBatch, grantSig] }))
   mark('grant-onchain')
+  const grants: Session['grants'] = {}
+  for (const r of granted) grants[r.t] = { limit: caps[r.t]!, spent: 0n }
 
   // Gas for one payment + refund (1-unit transfers, now that the allowance exists).
   const payGasEstimate = await estimate(key.address, PERMIT2, batchData(owner, owner, 1n, key.address, 1n))
@@ -479,7 +581,7 @@ async function start(gen: number): Promise<boolean> {
   if (still.walletAddress?.toLowerCase() !== owner.toLowerCase()) return false
 
   session = {
-    owner, key, home, kept: keyKept, endKey, limit, spent: 0n, expiresAt, nonce,
+    owner, key, home, kept: keyKept, endKey, grants, expiresAt, nonce,
     payGas: BigInt(Math.ceil(Number(payGasEstimate) * PAY_GAS_HEADROOM)), payGasEstimate,
     owedGasWei: setupGas * gasPrice, relayer,
   }
@@ -487,7 +589,8 @@ async function start(gen: number): Promise<boolean> {
   kept = true
   publish('ready')
   mark('ready')
-  void import('./errorReport').then(m => m.reportPerf(`[perf fastpay setup] ${marks.join(', ')}, key in ${home}${firstTime ? ' (first-time Permit2 approval)' : ''}`)).catch(() => {})
+  const tokensNote = granted.length > 1 ? `, tokens ${granted.map(r => r.t).join('+')}` : ''
+  void import('./errorReport').then(m => m.reportPerf(`[perf fastpay setup] ${marks.join(', ')}, key in ${home}${tokensNote}${firstTime.length ? ` (first-time Permit2 approval: ${firstTime.join(', ')})` : ''}`)).catch(() => {})
   return true
   } finally {
     if (!kept) endKey() // a set-up that didn't finish leaves no key behind
@@ -562,9 +665,10 @@ export function refundUnits(payGasEstimate: bigint, gasPriceWei: bigint, owedGas
  * A USDC payment through the session (call only after fastPayCovers and the PIN).
  * Returns what sendUSDC returns. FastPayNotSent: nothing went out.
  */
-export async function sendFastPay(p: { owner: string; to: Hex; amount: number; idempotencyKey?: string }): Promise<{ txHash: Hex; state: 'success' | 'failed' | 'pending'; blockNumber?: string }> {
+export async function sendFastPay(p: { owner: string; to: Hex; amount: number; idempotencyKey?: string; token?: FastToken }): Promise<{ txHash: Hex; state: 'success' | 'failed' | 'pending'; blockNumber?: string }> {
   const s = session
-  if (!s || !fastPayCovers(p.owner, p.amount)) throw new FastPayNotSent('No Fast Pay session for this payment')
+  const token: FastToken = p.token ?? 'USDC'
+  if (!s || !fastPayCovers(p.owner, p.amount, token)) throw new FastPayNotSent('No Fast Pay session for this payment')
   if (p.idempotencyKey && sentByKey.has(p.idempotencyKey)) {
     const { waitForConfirmation } = await import('./arcService')
     const h = sentByKey.get(p.idempotencyKey)! as Hex
@@ -588,18 +692,23 @@ export async function sendFastPay(p: { owner: string; to: Hex; amount: number; i
   const tGas = performance.now()
   const [feeCap, gasPrice] = await Promise.all([sendFeeCap(), currentGasPrice().catch(() => 0n)])
   lap.gas = performance.now() - tGas
-  const amount = usdcAtomic(p.amount)
+  const amount = atomic(token, p.amount)
   const owed = s.owedGasWei
   const refund = gasPrice > 0n ? refundUnits(s.payGasEstimate, gasPrice, owed) : 0n
   if (refund > REFUND_RESERVE) throw new FastPayNotSent('Gas refund above the reserve')
+  const usdc = s.grants.USDC!
+  const grant = s.grants[token]!
+  if (token !== 'USDC' && refund > usdc.limit - usdc.spent) throw new FastPayNotSent('No USDC left for the gas refund')
+  // Counted up front: a pending payment may still land. Undone below if nothing was sent.
+  const count = (sign: 1n | -1n) => { grant.spent += sign * amount; usdc.spent += sign * refund }
   const nonce = s.nonce
   s.nonce++
-  s.spent += amount + refund // counted up front: a pending payment may still land
+  count(1n)
   s.owedGasWei = 0n
   if (s.kept) saveSession(s, s.owner)
   publish()
   try {
-    const data = batchData(s.owner, p.to, amount, s.key.address, refund)
+    const data = batchData(s.owner, p.to, amount, s.key.address, refund, token)
     // The key's signature (in the frame) timed apart from the send.
     let signMs = 0
     const timedKey = { address: s.key.address, signTransaction: async (tx: any) => { const a = performance.now(); try { return await s.key.signTransaction(tx) } finally { signMs += performance.now() - a } } }
@@ -612,12 +721,12 @@ export async function sendFastPay(p: { owner: string; to: Hex; amount: number; i
     lap.sign = signMs
     lap.send = (hashAt || performance.now()) - tSend - signMs
     if (hashAt) lap.confirm = performance.now() - hashAt
-    reportFastPayTiming(lap, performance.now() - t0, fullCheck, sent.state)
-    if (sent.state === 'failed') { s.spent -= amount + refund; s.owedGasWei += owed; publish() }
+    reportFastPayTiming(lap, performance.now() - t0, fullCheck, token === 'USDC' ? sent.state : `${sent.state}, ${token}`)
+    if (sent.state === 'failed') { count(-1n); s.owedGasWei += owed; publish() }
     return { txHash: sent.txHash, state: sent.state, blockNumber: sent.blockNumber }
   } catch (e) {
     // relaySend throws only when every node refused it - nothing was sent.
-    s.spent -= amount + refund
+    count(-1n)
     s.owedGasWei += owed
     s.nonce = Math.min(s.nonce, nonce)
     if (s.kept) saveSession(s, s.owner)

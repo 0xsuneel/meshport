@@ -44,7 +44,7 @@ describe('Pay with Fast Pay', () => {
 
   it('covered: sent through the session - no pay-intent, no wallet signature', async () => {
     const res = await sendUSDC({ signer, to: RECIPIENT, amount: 5, idempotencyKey: 'k1' })
-    expect(fastSends).toEqual([{ owner: SENDER, to: RECIPIENT, amount: 5, idempotencyKey: 'k1' }])
+    expect(fastSends).toEqual([{ owner: SENDER, to: RECIPIENT, amount: 5, idempotencyKey: 'k1', token: 'USDC' }])
     expect(createPayIntent).not.toHaveBeenCalled()
     expect(signed).toEqual([])
     expect(res).toMatchObject({ state: 'success', senderAddress: SENDER, recipientAddress: RECIPIENT })
