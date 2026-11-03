@@ -76,6 +76,20 @@ export interface WalletRpc {
   'sign:message': [{ address: string; message: string | { raw: Hex } }, { signature: Hex }]
   'sign:typed-data': [{ address: string; typedData: Record<string, unknown> }, { signature: Hex }]
   'sign:transaction': [{ address: string; transaction: FrameTransaction }, { serialized: Hex }]
+  /**
+   * Fast Pay (src/lib/fastPay.ts): a fresh session key, made and kept in this
+   * frame's memory only. It never leaves the frame; its power is the Permit2
+   * allowance the user's Circle wallet grants it (amount + expiry on-chain).
+   */
+  'session:create': [Record<string, never>, { address: Hex }]
+  /**
+   * Sign with a session key - only what Fast Pay needs on Arc: the USDC
+   * permit for Permit2, Permit2 permit / batch transferFrom, and a plain
+   * value transfer (the leftover gas going back). Anything else is refused.
+   */
+  'session:sign': [{ address: string; transaction: FrameTransaction }, { serialized: Hex }]
+  /** Drop a session key (or all of them). */
+  'session:end': [{ address?: string }, { ok: true }]
   /** This wallet's chat identity seed (derived, domain-separated - not the wallet key). */
   'chat:seed': [{ address: string }, { seed: Hex }]
   /** This wallet's Solana public key (32 bytes; derived, domain-separated - lib/solanaKey.ts). */

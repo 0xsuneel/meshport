@@ -4,22 +4,28 @@
 // servers, wallet_events 2 Nov). Fast Pay asks Circle for ONE signature per
 // session instead of one per payment:
 //
-//   session start (after unlock, in the background)
+//   session start (after unlock / opening Pay / app load, in the background)
 //     1. a fresh random session key, in memory only (never stored or sent)
-//     2. once per wallet: the Circle wallet signs a USDC EIP-2612 permit that
+//     2. MeshPort's relayer gives the key a small gas float (Arc gas is USDC)
+//     3. once per wallet: the Circle wallet signs a USDC EIP-2612 permit that
 //        lets Permit2 move USDC (typed data - no transaction, no nonce clash
-//        with pay-intent's reservations)
-//     3. the Circle wallet signs a Permit2 PermitSingle: "this session key may
-//        spend up to LIMIT USDC until EXPIRY" (typed data)
-//     4. MeshPort's relayer gives the session key a tiny gas float (Arc gas is
-//        USDC; ~0.0016 per payment)
-//     5. the session key submits the permit(s) on-chain
+//        with pay-intent's reservations); the key puts it on-chain at once.
+//        The signature is kept (localStorage) until it is on-chain, so a
+//        reload / lock in the middle doesn't ask Circle for it again - it
+//        grants nothing by itself (Permit2 still needs a per-key permit).
+//     4. the Circle wallet signs a Permit2 PermitSingle: "this session key may
+//        spend up to LIMIT USDC until EXPIRY" (typed data); the key puts it
+//        on-chain
 //   each payment ≤ what's left (USDC, no order memo), after the PIN
-//     the session key signs Permit2.transferFrom(owner → recipient) locally
-//     (~0.01 s) and it goes out through the same relay as every Pay send.
-//     The USDC moves FROM the Circle wallet - same address, same balance.
+//     the session key signs Permit2.transferFrom([owner → recipient,
+//     owner → key: this payment's gas, plus the setup's on the first one])
+//     locally (~0.01 s); it goes out through the same relay as every Pay send.
+//     The USDC moves FROM the Circle wallet - same address, same balance - and
+//     the user pays their own network fee, as on any payment.
 //   anything else (bigger, other tokens, order payments, no session yet)
 //     the normal Circle path, unchanged.
+//   session end (lock / logout / switched off): the key sends what's left of
+//     its gas back to the relayer, then it is dropped.
 //
 // Security: the session key has no execution rights over the Circle wallet.
 // Its only power is Permit2's allowance, capped on-chain by amount AND expiry
@@ -34,13 +40,40 @@
 //   allowance / transferFrom (Arc docs) and EIP-2612 (name "USDC", version "2",
 //   nonces()); Circle user-controlled wallets sign EIP-712 typed data
 //   (/user/sign/typedData; Permit2 approvals are a documented use).
+//   Field 3 Nov 05:53: setup 12.8 s, a payment 0.55 s after the PIN.
 
 import { create } from 'zustand'
 import {
   decodeFunctionResult, encodeFunctionData, maxUint256, parseSignature, type Hex,
 } from 'viem'
-import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts'
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { arcRpcJson } from './arc'
+
+// ── The session key: in the wallet frame when it can, else in memory here ────
+/** What Fast Pay needs from a session key: its address and transaction signing. */
+export interface SessionAccount { address: Hex; signTransaction: (tx: any) => Promise<Hex> }
+export type KeyHome = 'frame' | 'app'
+/**
+ * A fresh session key. Preferred: made and kept inside the wallet frame (its
+ * own origin - nothing in this page can read it; the frame only signs Fast
+ * Pay's own calls). A frame from before Fast Pay doesn't know these requests
+ * ('unsupported'): then, for this proof of concept, the key is kept in this
+ * module's memory instead (never stored). The set-up line says which.
+ */
+async function newSessionKey(): Promise<{ key: SessionAccount; home: KeyHome; end: () => void }> {
+  try {
+    const [{ callWallet }, { plainTransaction }] = await Promise.all([import('@/wallet/frameClient'), import('@/wallet/account')])
+    const { address } = await callWallet('session:create', {} as Record<string, never>)
+    const key: SessionAccount = {
+      address,
+      signTransaction: async (tx: any) => (await callWallet('session:sign', { address, transaction: plainTransaction(tx) })).serialized,
+    }
+    return { key, home: 'frame', end: () => { void callWallet('session:end', { address }).catch(() => {}) } }
+  } catch {
+    const k = privateKeyToAccount(generatePrivateKey())
+    return { key: { address: k.address, signTransaction: (tx: any) => k.signTransaction(tx) }, home: 'app', end: () => {} }
+  }
+}
 
 export const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3' as const
 export const ARC_USDC_ERC20 = '0x3600000000000000000000000000000000000000' as const
@@ -51,8 +84,13 @@ export const FAST_PAY_SESSION_MS = 2 * 60 * 60_000
 /** A payment isn't started on a session about to expire. */
 const EXPIRY_MARGIN_MS = 60_000
 const SIG_DEADLINE_S = 30 * 60
-/** Gas limit for one transferFrom: the estimate × 1.5 (only gas used is paid). */
+/** Gas limit for one payment: the estimate × 1.5 (only gas used is paid). */
 const PAY_GAS_HEADROOM = 1.5
+/** Kept back from the limit for the payments' own gas refunds (USDC 6-dec): 0.05 USDC. */
+const REFUND_RESERVE = 50_000n
+/** 1 USDC unit of the ERC-20 interface (6 dec) in native wei (18 dec). */
+const WEI_PER_UNIT = 1_000_000_000_000n
+const NATIVE_TRANSFER_GAS = 21_000n
 
 // ── EIP-712 (exported for tests: they must hash to the on-chain domains) ─────
 export const usdcPermitDomain = { name: 'USDC', version: '2', chainId: ARC_CHAIN_ID, verifyingContract: ARC_USDC_ERC20 } as const
@@ -108,6 +146,13 @@ export const permit2Abi = [
     type: 'function', name: 'transferFrom', stateMutability: 'nonpayable', outputs: [],
     inputs: [{ name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'amount', type: 'uint160' }, { name: 'token', type: 'address' }],
   },
+  {
+    // Batch: the payment and the key's gas refund in one transaction.
+    type: 'function', name: 'transferFrom', stateMutability: 'nonpayable', outputs: [],
+    inputs: [{ name: 'transferDetails', type: 'tuple[]', components: [
+      { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'amount', type: 'uint160' }, { name: 'token', type: 'address' },
+    ] }],
+  },
 ] as const
 
 // ── On/off (per device; the proof of concept's switch) ───────────────────────
@@ -120,15 +165,37 @@ export function setFastPayEnabled(on: boolean): void {
   if (!on) endFastPaySession()
 }
 
+// ── The one-time USDC permit, kept until it is on-chain ──────────────────────
+// Survives a reload / lock in the middle of the set-up, so Circle isn't asked
+// for it twice. Bound to the wallet and to its USDC permit nonce: once used
+// (or replaced by any other permit) it is invalid, and it is dropped.
+interface SavedPermit { owner: string; nonce: string; deadline: string; sig: Hex }
+const permitKey = (owner: string) => `meshport:fastpay-usdc-permit:${owner.toLowerCase()}`
+function loadPermit(owner: string, nonce: bigint): SavedPermit | null {
+  try {
+    const p = JSON.parse(localStorage.getItem(permitKey(owner)) || 'null') as SavedPermit | null
+    if (!p || p.nonce !== nonce.toString() || Number(p.deadline) * 1000 < Date.now() + 120_000) return null
+    return p
+  } catch { return null }
+}
+function savePermit(p: SavedPermit | null, owner: string): void {
+  try { if (p) localStorage.setItem(permitKey(owner), JSON.stringify(p)); else localStorage.removeItem(permitKey(owner)) } catch { /* private mode */ }
+}
+
 // ── Session state ─────────────────────────────────────────────────────────────
 interface Session {
   owner: Hex
-  key: PrivateKeyAccount
+  key: SessionAccount
+  home: KeyHome
+  endKey: () => void
   limit: bigint          // USDC, 6 decimals
-  spent: bigint          // sent or possibly sent (pending counts)
+  spent: bigint          // payments + refunds, sent or possibly sent (pending counts)
   expiresAt: number      // ms
   nonce: number          // the session key's next transaction nonce
-  payGas: bigint
+  payGas: bigint         // gas limit for one payment
+  payGasEstimate: bigint // its estimate (what the refund is based on)
+  owedGasWei: bigint     // the setup's gas, repaid by the first payment
+  relayer: Hex | null    // where the key's leftover gas goes at the end
 }
 let session: Session | null = null
 let starting: Promise<boolean> | null = null
@@ -142,33 +209,53 @@ function publish(phase?: FastPayPhase, error: string | null = null) {
   const s = session
   useFastPay.setState({
     phase: phase ?? (s ? 'ready' : 'off'),
-    remaining: s ? Number(s.limit - s.spent) / 1e6 : 0,
+    remaining: s ? Number(s.limit - s.spent > REFUND_RESERVE ? s.limit - s.spent - REFUND_RESERVE : 0n) / 1e6 : 0,
     expiresAt: s?.expiresAt ?? 0,
     error,
   })
 }
 
-/** Lock / logout / switched off: the key is dropped (memory only). Its on-chain allowance runs out at expiry. */
+/**
+ * Lock / logout / switched off: the key is dropped (memory only). Before that
+ * it sends its leftover gas back to the relayer (best effort). Its on-chain
+ * allowance runs out at expiry.
+ */
 export function endFastPaySession(): void {
+  const s = session
   generation++
   session = null
   starting = null
   publish('off')
+  if (!s) return
+  // The leftover gas back to the relayer first (the key signs it), then the key is dropped.
+  void (s.relayer ? returnLeftover(s) : Promise.resolve()).catch(() => {}).finally(() => s.endKey())
+}
+
+async function returnLeftover(s: Session): Promise<void> {
+  const [{ relayArcSend, sendFeeCap }, bal] = await Promise.all([
+    import('./arcService'),
+    arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [s.key.address, 'latest'] }),
+  ])
+  const balance = BigInt(bal?.result ?? '0x0')
+  const feeCap = await sendFeeCap()
+  const value = balance - NATIVE_TRANSFER_GAS * feeCap
+  if (value <= NATIVE_TRANSFER_GAS * feeCap) return // not worth a transaction
+  await relayArcSend(s.key as any, { to: s.relayer!, value, gas: NATIVE_TRANSFER_GAS, nonce: s.nonce, maxFeePerGas: feeCap })
 }
 
 const usdcAtomic = (amount: number) => BigInt(Math.round(amount * 1e6))
 
 /**
  * Whether this payment goes the fast way: a ready session for this wallet,
- * not about to expire, with enough left. Synchronous - the screens' decisions
- * (skip the Circle preparation) must not wait.
+ * not about to expire, with enough left (keeping a little for the gas
+ * refunds). Synchronous - the screens' decisions must not wait.
  */
 export function fastPayCovers(owner: string, amount: number): boolean {
   const s = session
   if (!s || !(amount > 0)) return false
   if (s.owner.toLowerCase() !== owner.toLowerCase()) return false
   if (Date.now() > s.expiresAt - EXPIRY_MARGIN_MS) return false
-  return usdcAtomic(amount) <= s.limit - s.spent
+  return usdcAtomic(amount) + REFUND_RESERVE <= s.limit - s.spent
 }
 
 // ── Chain reads (Circle's Arc node first, the proxy as fallback - lib/arc) ───
@@ -182,6 +269,12 @@ async function estimate(from: Hex, to: Hex, data: Hex): Promise<bigint> {
   const j = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_estimateGas', params: [{ from, to, data }] })
   if (j?.error) throw new Error(j.error.message || 'estimateGas failed')
   return BigInt(j.result)
+}
+/** The payment + refund batch (Permit2 transferFrom(AllowanceTransferDetails[])). */
+function batchData(owner: Hex, to: Hex, amount: bigint, key: Hex, refund: bigint): Hex {
+  const details = [{ from: owner, to, amount, token: ARC_USDC_ERC20 }]
+  if (refund > 0n) details.push({ from: owner, to: key, amount: refund, token: ARC_USDC_ERC20 })
+  return encodeFunctionData({ abi: permit2Abi, functionName: 'transferFrom', args: [details] })
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
@@ -218,35 +311,75 @@ async function start(gen: number): Promise<boolean> {
   const t0 = performance.now()
   const marks: string[] = []
   const mark = (name: string) => marks.push(`${name} ${((performance.now() - t0) / 1000).toFixed(2)}`)
+  const live = () => gen === generation && !useAuthStore.getState().isLocked
 
-  // 1. The session key: random, memory only.
-  const key = privateKeyToAccount(generatePrivateKey())
+  // 1. The session key: random, in the wallet frame (or, PoC fallback, memory here).
+  const { key, home, end: endKey } = await newSessionKey()
+  let kept = false
+  try {
   const now = Date.now()
   const expiresAt = now + FAST_PAY_SESSION_MS
   const limit = usdcAtomic(FAST_PAY_LIMIT_USDC)
 
-  // What's on-chain already (the Permit2 approval is once per wallet).
+  // On-chain state + 2. the gas float - in parallel, before anything is signed,
+  // so whatever Circle signs can go on-chain at once.
+  const { authApiHeaders } = await import('./supabase')
+  const gasP = (async () => {
+    const r = await fetch('/api/bridge-relay', {
+      method: 'POST', headers: await authApiHeaders(),
+      body: JSON.stringify({ action: 'fastpay_gas', address: key.address }),
+    })
+    const out = await r.json().catch(() => null) as { from?: string; error?: string } | null
+    if (!r.ok) throw new Error(out?.error || `gas float refused (${r.status})`)
+    return /^0x[0-9a-fA-F]{40}$/.test(out?.from ?? '') ? out!.from as Hex : null
+  })()
+  gasP.catch(() => {})
   const [permit2Allowance, usdcNonce, p2] = await Promise.all([
     call<bigint>(ARC_USDC_ERC20, usdcAbi, 'allowance', [owner, PERMIT2]),
     call<bigint>(ARC_USDC_ERC20, usdcAbi, 'nonces', [owner]),
     call<readonly [bigint, number, number]>(PERMIT2, permit2Abi, 'allowance', [owner, ARC_USDC_ERC20, key.address]),
   ])
   mark('reads')
+  const relayer = await gasP
+  mark('gas')
 
-  // 2. Once per wallet: let Permit2 move this wallet's USDC (EIP-2612, typed data).
-  let usdcPermit: { deadline: bigint; v: number; r: Hex; s: Hex } | null = null
-  if (permit2Allowance < limit) {
-    const deadline = BigInt(Math.floor(now / 1000) + SIG_DEADLINE_S)
-    const sig = await signer.signTypedData({
-      domain: usdcPermitDomain, types: usdcPermitTypes, primaryType: 'Permit',
-      message: { owner, spender: PERMIT2, value: maxUint256, nonce: usdcNonce, deadline },
-    })
-    const { v, yParity, r, s } = parseSignature(sig)
-    usdcPermit = { deadline, v: Number(v ?? BigInt(yParity + 27)), r, s }
-    mark('usdc-permit')
+  const { relayArcSend, sendFeeCap, currentGasPrice } = await import('./arcService')
+  const [feeCap, gasPrice] = await Promise.all([sendFeeCap(), currentGasPrice().catch(() => 0n)])
+  let nonce = 0
+  let setupGas = 0n
+  const sendAsKey = async (to: Hex, data: Hex) => {
+    const est = await estimate(key.address, to, data)
+    const sent = await relayArcSend(key as any, { to, data, gas: est * 13n / 10n, nonce, maxFeePerGas: feeCap })
+    nonce++
+    setupGas += est
+    if (sent.state !== 'success') throw new Error(`setup transaction ${sent.state}`)
   }
 
-  // 3. The session grant (Permit2 PermitSingle, typed data): amount + expiry, on-chain.
+  // 3. Once per wallet: let Permit2 move this wallet's USDC (EIP-2612, typed
+  // data) - reusing one Circle already signed if a set-up was interrupted.
+  let firstTime = false
+  if (permit2Allowance < limit) {
+    firstTime = true
+    let saved = loadPermit(owner, usdcNonce)
+    if (!saved) {
+      const deadline = BigInt(Math.floor(now / 1000) + SIG_DEADLINE_S)
+      const sig = await signer.signTypedData({
+        domain: usdcPermitDomain, types: usdcPermitTypes, primaryType: 'Permit',
+        message: { owner, spender: PERMIT2, value: maxUint256, nonce: usdcNonce, deadline },
+      })
+      saved = { owner, nonce: usdcNonce.toString(), deadline: deadline.toString(), sig }
+      savePermit(saved, owner)
+      mark('usdc-permit')
+    } else mark('usdc-permit-reused')
+    const { v, yParity, r, s } = parseSignature(saved.sig)
+    await sendAsKey(ARC_USDC_ERC20, encodeFunctionData({ abi: usdcAbi, functionName: 'permit',
+      args: [owner, PERMIT2, maxUint256, BigInt(saved.deadline), Number(v ?? BigInt(yParity + 27)), r, s] }))
+    savePermit(null, owner) // used: the nonce moved on
+    mark('usdc-permit-onchain')
+  }
+  if (!live()) return false
+
+  // 4. The session grant (Permit2 PermitSingle, typed data): amount + expiry, on-chain.
   const permitSingle = {
     details: { token: ARC_USDC_ERC20, amount: limit, expiration: Math.floor(expiresAt / 1000), nonce: Number(p2[2]) },
     spender: key.address,
@@ -254,49 +387,29 @@ async function start(gen: number): Promise<boolean> {
   }
   const grantSig = await signer.signTypedData({ domain: permit2Domain, types: permitSingleTypes, primaryType: 'PermitSingle', message: permitSingle })
   mark('grant')
-  if (gen !== generation) return false
-
-  // 4. Gas float for the session key, from MeshPort's relayer.
-  const { authApiHeaders } = await import('./supabase')
-  const r = await fetch('/api/bridge-relay', {
-    method: 'POST', headers: await authApiHeaders(),
-    body: JSON.stringify({ action: 'fastpay_gas', address: key.address }),
-  })
-  const out = await r.json().catch(() => null) as { txHash?: string; error?: string } | null
-  if (!r.ok) throw new Error(out?.error || `gas float refused (${r.status})`)
-  mark('gas')
-
-  // 5. The session key puts the permit(s) on-chain.
-  const { relayArcSend, sendFeeCap } = await import('./arcService')
-  const feeCap = await sendFeeCap()
-  let nonce = 0
-  const sendAsKey = async (to: Hex, data: Hex) => {
-    const gas = (await estimate(key.address, to, data)) * 13n / 10n
-    const sent = await relayArcSend(key as any, { to, data, gas, nonce: nonce, maxFeePerGas: feeCap })
-    nonce++
-    if (sent.state !== 'success') throw new Error(`setup transaction ${sent.state}`)
-  }
-  if (usdcPermit) {
-    await sendAsKey(ARC_USDC_ERC20, encodeFunctionData({ abi: usdcAbi, functionName: 'permit',
-      args: [owner, PERMIT2, maxUint256, usdcPermit.deadline, usdcPermit.v, usdcPermit.r, usdcPermit.s] }))
-    mark('usdc-permit-onchain')
-  }
+  if (!live()) return false
   await sendAsKey(PERMIT2, encodeFunctionData({ abi: permit2Abi, functionName: 'permit', args: [owner, permitSingle, grantSig] }))
   mark('grant-onchain')
 
-  // Gas for one payment (a 1-unit transfer to the owner, now that the allowance exists).
-  const payGas = BigInt(Math.ceil(Number(await estimate(key.address, PERMIT2, encodeFunctionData({
-    abi: permit2Abi, functionName: 'transferFrom', args: [owner, owner, 1n, ARC_USDC_ERC20],
-  }))) * PAY_GAS_HEADROOM))
-  if (gen !== generation) return false
+  // Gas for one payment + refund (1-unit transfers, now that the allowance exists).
+  const payGasEstimate = await estimate(key.address, PERMIT2, batchData(owner, owner, 1n, key.address, 1n))
+  if (!live()) return false
   const still = useAuthStore.getState()
-  if (still.isLocked || still.walletAddress?.toLowerCase() !== owner.toLowerCase()) return false
+  if (still.walletAddress?.toLowerCase() !== owner.toLowerCase()) return false
 
-  session = { owner, key, limit, spent: 0n, expiresAt, nonce, payGas }
+  session = {
+    owner, key, home, endKey, limit, spent: 0n, expiresAt, nonce,
+    payGas: BigInt(Math.ceil(Number(payGasEstimate) * PAY_GAS_HEADROOM)), payGasEstimate,
+    owedGasWei: setupGas * gasPrice, relayer,
+  }
+  kept = true
   publish('ready')
   mark('ready')
-  void import('./errorReport').then(m => m.reportPerf(`[perf fastpay setup] ${marks.join(', ')}${usdcPermit ? ' (first-time Permit2 approval)' : ''}`)).catch(() => {})
+  void import('./errorReport').then(m => m.reportPerf(`[perf fastpay setup] ${marks.join(', ')}, key in ${home}${firstTime ? ' (first-time Permit2 approval)' : ''}`)).catch(() => {})
   return true
+  } finally {
+    if (!kept) endKey() // a set-up that didn't finish leaves no key behind
+  }
 }
 
 // ── Pay ───────────────────────────────────────────────────────────────────────
@@ -304,6 +417,15 @@ async function start(gen: number): Promise<boolean> {
 export class FastPayNotSent extends Error {}
 
 const sentByKey = new Map<string, string>() // idempotency key → tx hash (a retry never pays twice)
+
+/**
+ * The gas refund for one payment (USDC 6-dec units, rounded up): its gas at
+ * today's price, plus the setup's gas on the first payment. Pure (tests).
+ */
+export function refundUnits(payGasEstimate: bigint, gasPriceWei: bigint, owedGasWei: bigint): bigint {
+  const wei = payGasEstimate * gasPriceWei + owedGasWei
+  return (wei + WEI_PER_UNIT - 1n) / WEI_PER_UNIT
+}
 
 /**
  * A USDC payment through the session (call only after fastPayCovers and the PIN).
@@ -317,34 +439,45 @@ export async function sendFastPay(p: { owner: string; to: Hex; amount: number; i
     const h = sentByKey.get(p.idempotencyKey)! as Hex
     return { txHash: h, ...(await waitForConfirmation(h)) }
   }
+  const { relaySend, sendFeeCap, currentGasPrice } = await import('./arcService')
+  const [feeCap, gasPrice] = await Promise.all([sendFeeCap(), currentGasPrice().catch(() => 0n)])
   const amount = usdcAtomic(p.amount)
+  const owed = s.owedGasWei
+  const refund = gasPrice > 0n ? refundUnits(s.payGasEstimate, gasPrice, owed) : 0n
+  if (refund > REFUND_RESERVE) throw new FastPayNotSent('Gas refund above the reserve')
   const nonce = s.nonce
   s.nonce++
-  s.spent += amount // counted up front: a pending payment may still land
+  s.spent += amount + refund // counted up front: a pending payment may still land
+  s.owedGasWei = 0n
   publish()
-  const { relaySend, sendFeeCap } = await import('./arcService')
   try {
-    const data = encodeFunctionData({ abi: permit2Abi, functionName: 'transferFrom', args: [s.owner, p.to, amount, ARC_USDC_ERC20] })
-    const sent = await relaySend(s.key as any, { to: PERMIT2, data, gas: s.payGas, nonce, maxFeePerGas: await sendFeeCap() }, h => {
+    const data = batchData(s.owner, p.to, amount, s.key.address, refund)
+    const sent = await relaySend(s.key as any, { to: PERMIT2, data, gas: s.payGas, nonce, maxFeePerGas: feeCap }, h => {
       if (p.idempotencyKey) sentByKey.set(p.idempotencyKey, h)
     })
-    if (sent.state === 'failed') { s.spent -= amount; publish() }
+    if (sent.state === 'failed') { s.spent -= amount + refund; s.owedGasWei += owed; publish() }
     return { txHash: sent.txHash, state: sent.state, blockNumber: sent.blockNumber }
   } catch (e) {
     // relaySend throws only when every node refused it - nothing was sent.
-    s.spent -= amount
+    s.spent -= amount + refund
+    s.owedGasWei += owed
     s.nonce = Math.min(s.nonce, nonce)
     publish()
     throw new FastPayNotSent(e instanceof Error ? e.message : 'Fast Pay send refused')
   }
 }
 
-// A wallet provider's unlock (store.unlock): start in the background.
+// A wallet provider's unlock (store.unlock), and this module loading (the app
+// loads it a moment after start - a reload that didn't lock): start in the
+// background.
 if (typeof window !== 'undefined') {
-  try { window.addEventListener('meshport:wallet-unlocked', () => { void maybeStartFastPay() }) } catch { /* no window */ }
+  try {
+    window.addEventListener('meshport:wallet-unlocked', () => { void maybeStartFastPay() })
+    if (import.meta.env?.MODE !== 'test') setTimeout(() => { void maybeStartFastPay() }, 2_000)
+  } catch { /* no window */ }
 }
 
 /** Test hook. */
-export function _resetFastPay(): void { endFastPaySession(); sentByKey.clear() }
+export function _resetFastPay(): void { generation++; session = null; starting = null; publish('off'); sentByKey.clear() }
 /** Test hook: install a session directly. */
 export function _setSessionForTest(s: Session | null): void { session = s; publish() }

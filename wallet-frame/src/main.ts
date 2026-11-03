@@ -75,6 +75,29 @@ function isNameRegistration(typedData: Record<string, unknown>): boolean {
   return domain?.name === 'MeshPortNames' && typedData.primaryType === 'Register'
 }
 
+// ── Fast Pay session keys ───────────────────────────────────────────────────
+// Memory only (a frame reload ends every session). A session key can only
+// sign what Fast Pay sends on Arc - nothing that could reach the user's main
+// wallet beyond the Permit2 allowance the user granted it.
+const ARC_CHAIN_ID = 5042002
+const PERMIT2 = '0x000000000022d473030f116ddee9f6b43ac78ba3'
+const ARC_USDC_ERC20 = '0x3600000000000000000000000000000000000000'
+const SESSION_CALLS: Record<string, ReadonlySet<string>> = {
+  [PERMIT2]: new Set(['0x2b67b570', '0x0d58b1db']),   // permit(owner, PermitSingle, sig), transferFrom(AllowanceTransferDetails[])
+  [ARC_USDC_ERC20]: new Set(['0xd505accf']),           // permit(owner, spender, value, deadline, v, r, s)
+}
+const sessionKeys = new Map<string, ReturnType<typeof privateKeyToAccount>>()
+/** Why a session key must not sign this (null: allowed). Exported for tests. */
+export function sessionTxRefusal(tx: Record<string, unknown>): string | null {
+  if (Number(tx.chainId) !== ARC_CHAIN_ID) return 'Fast Pay signs on Arc only'
+  const to = typeof tx.to === 'string' ? tx.to.toLowerCase() : ''
+  const data = typeof tx.data === 'string' ? tx.data.toLowerCase() : '0x'
+  if (data === '0x' || data === '') return to ? null : 'No recipient' // a plain value transfer (the leftover gas back)
+  const allowed = SESSION_CALLS[to]
+  if (!allowed || !allowed.has(data.slice(0, 10))) return 'Not a Fast Pay call'
+  return null
+}
+
 // ── One-time reveal tickets (reveal.html) ───────────────────────────────────
 // The app asks for a ticket; reveal.html (same origin as this frame, shown
 // inside the app as a visible iframe) redeems it over a BroadcastChannel,
@@ -223,6 +246,26 @@ const handlers: Handlers = {
   async 'sign:transaction'({ address, transaction }) {
     if (!isSelfCancel(address, transaction)) requireApproval(address)
     return { serialized: await signer(address).signTransaction(transaction as any) }
+  },
+
+  // ── Fast Pay session keys (src/lib/fastPay.ts) ──────────────────────────
+  async 'session:create'() {
+    const k = privateKeyToAccount(generatePrivateKey())
+    sessionKeys.set(k.address.toLowerCase(), k)
+    return { address: k.address }
+  },
+
+  async 'session:sign'({ address, transaction }) {
+    const k = sessionKeys.get(String(address).toLowerCase())
+    if (!k) throw new RpcError('locked', 'This Fast Pay session has ended')
+    const why = sessionTxRefusal(transaction)
+    if (why) throw new RpcError('invalid', why)
+    return { serialized: await k.signTransaction(transaction as any) }
+  },
+
+  async 'session:end'({ address }) {
+    if (address) sessionKeys.delete(String(address).toLowerCase()); else sessionKeys.clear()
+    return { ok: true as const }
   },
 
   async 'chat:seed'({ address }) {

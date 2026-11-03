@@ -191,3 +191,41 @@ describe('approval: value-moving signatures need the passcode, checked by the fr
     expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.result.serialized).toMatch(/^0x/)
   })
 })
+
+describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on Arc', () => {
+  const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3'
+  const USDC = '0x3600000000000000000000000000000000000000'
+  const tx = (to: string, data?: string, chainId = 5042002) => ({ type: 'eip1559', chainId, nonce: 0, to, value: 0n, data, gas: 100000n, maxFeePerGas: 2n, maxPriorityFeePerGas: 1n })
+
+  it('creates a key in the frame (only its address comes out) and signs Permit2 / USDC-permit calls with it', async () => {
+    const created = await ask('session:create', {})
+    const address = created!.msg.result.address
+    expect(Object.keys(created!.msg.result)).toEqual(['address'])
+    expect(address).toMatch(/^0x[0-9a-fA-F]{40}$/)
+    for (const [to, sel] of [[PERMIT2, '0x0d58b1db'], [PERMIT2, '0x2b67b570'], [USDC, '0xd505accf']]) {
+      const r = await ask('session:sign', { address, transaction: tx(to, sel + '00'.repeat(32)) })
+      expect(r!.msg.result.serialized).toMatch(/^0x02/)
+    }
+    // A plain value transfer (the leftover gas going back).
+    expect((await ask('session:sign', { address, transaction: { ...tx('0x9999999999999999999999999999999999999999'), value: 5n } }))!.msg.result.serialized).toMatch(/^0x02/)
+  })
+
+  it('refuses anything else: another contract, another function, another chain, an ended session', async () => {
+    const address = (await ask('session:create', {}))!.msg.result.address
+    const refused = async (t: unknown) => (await ask('session:sign', { address, transaction: t }))!.msg.error?.code
+    expect(await refused(tx('0x2222222222222222222222222222222222222222', '0xa9059cbb' + '00'.repeat(64)))).toBe('invalid') // ERC-20 transfer elsewhere
+    expect(await refused(tx(USDC, '0xa9059cbb' + '00'.repeat(64)))).toBe('invalid')   // USDC.transfer
+    expect(await refused(tx(USDC, '0x095ea7b3' + '00'.repeat(64)))).toBe('invalid')   // USDC.approve
+    expect(await refused(tx(PERMIT2, '0x87517c45' + '00'.repeat(64)))).toBe('invalid') // Permit2.approve
+    expect(await refused(tx(PERMIT2, '0x0d58b1db', 1))).toBe('invalid')               // not Arc
+    await ask('session:end', { address })
+    expect(await refused(tx(PERMIT2, '0x0d58b1db'))).toBe('locked')
+  })
+
+  it('the selectors it allows are exactly Fast Pay\'s calls', async () => {
+    const { toFunctionSelector } = await import('viem')
+    expect(toFunctionSelector('transferFrom((address,address,uint160,address)[])')).toBe('0x0d58b1db')
+    expect(toFunctionSelector('permit(address,((address,uint160,uint48,uint48),address,uint256),bytes)')).toBe('0x2b67b570')
+    expect(toFunctionSelector('permit(address,address,uint256,uint256,uint8,bytes32,bytes32)')).toBe('0xd505accf')
+  })
+})

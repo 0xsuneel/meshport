@@ -123,6 +123,8 @@ function arcClient(retryCount: number, timeout: number, pollingInterval?: number
 // basis of the fee cap every send signs (sendFeeCap).
 const GAS_PRICE_TTL_MS = 15_000
 let gasPriceCache: { at: number; price: Promise<bigint> } | null = null
+/** Arc's current gas price (wei per gas, USDC 18-dec), cached briefly - for Fast Pay's gas refund (lib/fastPay.ts). */
+export function currentGasPrice(): Promise<bigint> { return estimateGasPrice() }
 function estimateGasPrice(): Promise<bigint> {
   if (gasPriceCache && Date.now() - gasPriceCache.at < GAS_PRICE_TTL_MS) return gasPriceCache.price
   const price = arcClient(0, 10000).getGasPrice()

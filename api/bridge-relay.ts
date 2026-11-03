@@ -733,8 +733,13 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
 // signed-in account only, the shared relay rate limit, a per-account daily
 // cap, and only an address with no code and less than the float already.
 // The float can only pay gas - the session key's spending power over the
-// user's USDC comes from their own Permit2 grant, not from this.
-const FASTPAY_GAS_WEI = 20_000_000_000_000_000n // 0.02 USDC (18-decimal native)
+// user's USDC comes from their own Permit2 grant, not from this. It is a
+// loan: each payment refunds its own gas (and the first one the set-up's)
+// from the user's allowance, and the key sends what's left back to this
+// relayer when the session ends (src/lib/fastPay.ts). 0.015 covers the
+// set-up (~0.003) and a payment's upfront gas reservation (~0.0066 at the
+// fee cap) before the first refund arrives.
+const FASTPAY_GAS_WEI = 15_000_000_000_000_000n // 0.015 USDC (18-decimal native)
 const FASTPAY_GAS_PER_DAY = 12
 const _fastPayGasHits = new Map<string, number[]>()
 function allowFastPayGas(wallet: string): boolean {
@@ -761,15 +766,16 @@ async function fastPayGas(req: VercelRequest, res: VercelResponse) {
     cl.pub.getBalance({ address }) as Promise<bigint>,
   ])
   if (code && code !== '0x') return res.status(400).json({ error: 'Not a session key' })
-  if (balance >= FASTPAY_GAS_WEI) return res.status(200).json({ funded: false })
+  const from = cl.wallet.account.address as string // where the leftover goes back
+  if (balance >= FASTPAY_GAS_WEI) return res.status(200).json({ funded: false, from })
   if (!allowFastPayGas(caller)) return res.status(429).json({ error: 'Fast Pay gas limit reached for today' })
   const txHash = await cl.wallet.sendTransaction({ to: address, value: FASTPAY_GAS_WEI - balance, ...(await relayFees(cl.pub, cl.pub.chain.id)) })
   try {
     const receipt = await cl.pub.waitForTransactionReceipt({ hash: txHash, timeout: 20_000 })
     if (receipt.status !== 'success') return res.status(502).json({ error: 'Gas transfer reverted', txHash })
-  } catch { return res.status(200).json({ funded: true, txHash, pending: true }) }
+  } catch { return res.status(200).json({ funded: true, txHash, pending: true, from }) }
   console.log(`[fastpay gas] funded ${address.slice(0, 10)}… for ${caller.slice(0, 10)}…`)
-  return res.status(200).json({ funded: true, txHash })
+  return res.status(200).json({ funded: true, txHash, from })
 }
 
 type IrisFeeRow = { finalityThreshold: number; minimumFee: number; forwardFee?: number | { low?: number; med?: number; high?: number } }
