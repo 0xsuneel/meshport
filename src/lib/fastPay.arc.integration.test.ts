@@ -97,4 +97,14 @@ maybe('Fast Pay typed data on Arc testnet (read-only simulation)', () => {
       args: [privateKeyToAccount(generatePrivateKey()).address, permitBatch, sig as Hex] })
     await expect(arc().call({ account: sessionKey.address, to: PERMIT2, data: bad })).rejects.toThrow()
   }, 30_000)
+
+  it('Permit2.lockdown (turning Fast Pay off) is accepted from the wallet itself', async () => {
+    const owner = privateKeyToAccount(generatePrivateKey())
+    const sessionKey = privateKeyToAccount(generatePrivateKey())
+    const data = encodeFunctionData({ abi: permit2Abi, functionName: 'lockdown', args: [[
+      { token: ARC_USDC_ERC20, spender: sessionKey.address }, { token: ARC_EURC, spender: sessionKey.address },
+    ]] })
+    expect(data.slice(0, 10)).toBe('0xcc53287f')
+    await expect(arc().call({ account: owner.address, to: PERMIT2, data })).resolves.toBeDefined()
+  }, 30_000)
 })

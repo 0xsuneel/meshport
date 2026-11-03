@@ -31,7 +31,7 @@ import { Card } from '@/components/ui/Card'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { useAuthStore, useNotificationStore, useUIStore, type AppNotification } from '@/store'
 import { useFeatureEnabled } from '@/store/settingsStore'
-import { fastPayEnabled, setFastPayEnabled, enableFastPay, useFastPay, FAST_PAY_LIMIT_USDC } from '@/lib/fastPay'
+import { fastPayEnabled, enableFastPay, stopFastPay, useFastPay, FAST_PAY_LIMIT_USDC } from '@/lib/fastPay'
 import { useThemeStore, resolveTheme, type ThemeMode } from '@/store/themeStore'
 import { switchTheme } from '@/lib/themeTransition'
 import { Avatar } from '@/components/ui/Avatar'
@@ -81,9 +81,11 @@ export function SecurityPage() {
   const [fastPayPass, setFastPayPass] = useState('')
   const [fastPayError, setFastPayError] = useState('')
   const [fastPayBusy, setFastPayBusy] = useState(false)
+  const [fastPayStopping, setFastPayStopping] = useState(false)
   // The logo spins from the passcode until the session is ready (or fails).
-  const fastPaySettingUp = fastPayBusy || (fastPayOn && fastPay.phase === 'starting')
-  const fastPayStatus = !fastPayOn ? `Pay up to $${FAST_PAY_LIMIT_USDC} in USDC, EURC or cirBTC in about a second for 2 hours after unlocking. Bigger payments use your wallet as now.`
+  const fastPaySettingUp = fastPayBusy || fastPayStopping || (fastPayOn && fastPay.phase === 'starting')
+  const fastPayStatus = fastPayStopping ? 'Turning off Fast Pay… cancelling its limit on-chain'
+    : !fastPayOn ? `Pay up to $${FAST_PAY_LIMIT_USDC} in USDC, EURC or cirBTC in about a second for 2 hours after unlocking. Bigger payments use your wallet as now.`
     : fastPayBusy || fastPay.phase === 'starting' ? 'Turning on Fast Pay… confirm in your wallet if asked'
     : fastPay.phase === 'ready' ? `${fastPayLeft(fastPay.remainingBy)} left until ${new Date(fastPay.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - passcode still asked every payment`
     : fastPay.phase === 'error' ? `Couldn't start: ${fastPay.error ?? 'try again'}`
@@ -93,9 +95,20 @@ export function SecurityPage() {
   const toggleFastPay = async () => {
     if (fastPaySettingUp) return
     if (fastPayOn) {
-      setFastPayOn(false)
-      setFastPayEnabled(false)
-      showToastMessage('Fast Pay off')
+      // Off = the key dropped AND its limit cancelled on-chain (one wallet
+      // confirmation), so even a leaked key can't spend what was left.
+      setFastPayStopping(true)
+      try {
+        const r = await stopFastPay()
+        setFastPayOn(false)
+        if (!('reason' in r)) showToastMessage('Fast Pay off - its limit is cancelled on-chain', 'success')
+        else if (r.reason === 'failed') {
+          const until = r.expiresAt ? ` - it ends by itself at ${new Date(r.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''
+          showToastMessage(`Fast Pay off, but its limit couldn't be cancelled on-chain${until}`, 'warning')
+        } else showToastMessage('Fast Pay off')
+      } finally {
+        setFastPayStopping(false)
+      }
       return
     }
     setFastPayPass(''); setFastPayError(''); setFastPaySheet(true)

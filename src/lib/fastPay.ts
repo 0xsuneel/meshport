@@ -227,6 +227,11 @@ export const permit2Abi = [
     inputs: [{ name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'amount', type: 'uint160' }, { name: 'token', type: 'address' }],
   },
   {
+    // The owner cancels allowances at once (amount → 0): Fast Pay's "turn off".
+    type: 'function', name: 'lockdown', stateMutability: 'nonpayable', outputs: [],
+    inputs: [{ name: 'approvals', type: 'tuple[]', components: [{ name: 'token', type: 'address' }, { name: 'spender', type: 'address' }] }],
+  },
+  {
     // Batch: the payment and the key's gas refund in one transaction.
     type: 'function', name: 'transferFrom', stateMutability: 'nonpayable', outputs: [],
     inputs: [{ name: 'transferDetails', type: 'tuple[]', components: [
@@ -594,6 +599,57 @@ async function start(gen: number): Promise<boolean> {
   return true
   } finally {
     if (!kept) endKey() // a set-up that didn't finish leaves no key behind
+  }
+}
+
+// ── Turning it off: the limit cancelled on-chain ─────────────────────────────
+// Dropping the key (endFastPaySession) is not enough if it had leaked: its
+// Permit2 allowance would stay valid until it expires. Turning Fast Pay off
+// therefore also has the Circle wallet send Permit2.lockdown for the session
+// key and every token it was granted - its allowance becomes 0 at once. One
+// Circle signature; skipped when nothing is left on-chain.
+export type StopResult = { cancelled: true; txHash: Hex } | { cancelled: false; reason: 'nothing-left' | 'no-wallet' | 'failed'; error?: string; expiresAt?: number }
+
+export async function stopFastPay(): Promise<StopResult> {
+  const { useAuthStore } = await import('@/store')
+  const auth = useAuthStore.getState()
+  const owner = (session?.owner ?? auth.walletAddress) as Hex | null
+  // The spender and its tokens: the live session, else the one kept for a restart.
+  let spender: Hex | null = session?.key.address ?? null
+  let tokens: FastToken[] = session ? TOKEN_ORDER.filter(t => session!.grants[t]) : []
+  const expiresAt = session?.expiresAt
+  if (!spender && owner) {
+    const saved = loadSaved(owner)
+    if (saved) {
+      spender = saved.key as Hex
+      tokens = TOKEN_ORDER.filter(t => (saved.limits ?? (saved.limit ? { USDC: saved.limit } : {}))[t])
+    }
+  }
+  setFastPayEnabled(false) // ends the session: the key is dropped (its leftover gas goes back)
+  if (!owner || !spender || !tokens.length) return { cancelled: false, reason: 'nothing-left' }
+  if (auth.walletSource !== 'circle' || !auth.signer || auth.walletAddress?.toLowerCase() !== owner.toLowerCase()) return { cancelled: false, reason: 'no-wallet', expiresAt }
+  try {
+    // Only what still has something to cancel (amount left, not expired).
+    const nowS = Math.floor(Date.now() / 1000)
+    const live = (await Promise.all(tokens.map(async t => {
+      const [amount, exp] = await call<readonly [bigint, number, number]>(PERMIT2, permit2Abi, 'allowance', [owner, FAST_TOKENS[t].address, spender])
+      return amount > 0n && Number(exp) > nowS ? t : null
+    }))).filter((t): t is FastToken => !!t)
+    if (!live.length) return { cancelled: false, reason: 'nothing-left' }
+    const data = encodeFunctionData({ abi: permit2Abi, functionName: 'lockdown', args: [live.map(t => ({ token: FAST_TOKENS[t].address, spender: spender! }))] })
+    const [nonceHex, gas] = await Promise.all([
+      arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionCount', params: [owner, 'pending'] }),
+      estimate(owner, PERMIT2, data),
+    ])
+    const { relayArcSend } = await import('./arcService')
+    const sent = await relayArcSend(auth.signer as any, { to: PERMIT2, data, gas: gas * 13n / 10n, nonce: Number(BigInt(nonceHex?.result ?? '0x0')) })
+    if (sent.state === 'failed') throw new Error('cancel transaction failed')
+    void import('./errorReport').then(m => m.reportPerf(`[perf fastpay stop] limit cancelled on-chain (${live.join('+')}) ${sent.txHash.slice(0, 12)}`)).catch(() => {})
+    return { cancelled: true, txHash: sent.txHash }
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e)
+    void import('./errorReport').then(m => m.reportPerf(`[perf fastpay stop] cancel failed: ${error.slice(0, 160)}`)).catch(() => {})
+    return { cancelled: false, reason: 'failed', error, expiresAt }
   }
 }
 
