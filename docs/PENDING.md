@@ -84,3 +84,23 @@ deploy). Pay and plain receives are free - never add a fee there.
       draw a fake keypad); do it natively in the mobile app (Keystore / Keychain).
 - [ ] Circle signing page reload (~0.7 s per signature) - needs Circle.
 - [ ] Sui - not possible on Arc today (Sui is CCTP V1 only, no Gateway).
+
+## 5. Circle / Arc products to consider for business (checked 3 Nov)
+
+- **Onramp** (App Kit): embeddable widget - buy USDC on Arc with fiat, KYC and
+  payments handled by Arc. Needs a Circle API key; some methods need KYB.
+- **Earn** (App Kit): USDC / EURC vaults on Arc (DeFi lending) - idle business
+  balances. **Borrow** (App Kit): USDC against cirBTC on Arc, with a
+  configurable **integrator fee** (revenue).
+- **Gateway Nanopayments (x402)**: buyer deposits to Gateway once, then every
+  payment is an off-chain EIP-3009 signature (zero gas, down to $0.000001);
+  Gateway settles in batches to the seller's Gateway balance. Fits pay-per-use,
+  tips, metered services.
+- **Circle Mint** (qualified businesses, KYB): USD ↔ USDC at no cost, Crypto
+  Deposits (payment intents) and Crypto Payouts APIs - merchant cash-out.
+- **StableFX** (permissioned, via Circle sales): RFQ USDC ↔ EURC FX settled on
+  Arc (FxEscrow) - better rates for larger swaps / business FX.
+- **Paymaster**: gas in USDC for ERC-4337 smart accounts on other chains.
+- Not available: a hosted e-commerce checkout - Circle removed Checkout
+  Sessions / Pull Crypto Payments from Circle Mint (Apr 2025). MeshPortCheckout
+  is our own.
