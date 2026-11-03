@@ -107,8 +107,8 @@ deploy). Pay and plain receives are free - never add a fee there.
 
 ## 6. Build plan for the business products (agreed approach)
 
-Order: Onramp → Global Balance (UB) + Nanopayments together → Mint cash-out
-(after KYB) → Earn → Borrow. Every feature behind an admin switch (Admin →
+Order: Onramp → Global Balance (UB) + Nanopayments together → merchant
+cash-out (CPN, after onboarding) → Earn → Borrow. Every feature behind an admin switch (Admin →
 Features), reusing the frame passcode check, `relayerSigner` (Circle
 developer wallet) for gas, `feePolicy.ts` for fees, and Activity /
 wallet_events logging.
@@ -129,11 +129,18 @@ wallet_events logging.
       relayer), each payment is an off-chain EIP-3009 signature; a `nanopay`
       endpoint (MeshPort as facilitator) verifies and forwards to Gateway,
       which settles in batches to the merchant's Gateway balance.
-- [ ] **Circle Mint cash-out** (~3-5 days after the account) - Business →
-      "Cash out to bank": USDC to MeshPort's Mint deposit address with a
-      reference → Mint payout to the merchant's bank; edge function
-      `business-cashout` + Circle webhook for status (into businessCashOut).
-      **You:** start MeshPort's Circle Mint KYB; merchants' bank details verified.
+- [ ] **Merchant cash-out to bank** - corrected 3 Nov: **Circle Mint can't pay
+      a merchant's bank** (Mint = MeshPort's own account: USDC ↔ USD to
+      MeshPort's own linked bank; its Payouts API sends USDC to addresses).
+      Paying merchants from MeshPort's bank would make MeshPort a money
+      transmitter (licences). The product for this is **Circle Payments Network
+      (CPN)**: MeshPort as an **OFI** → quote (`POST /v1/cpn/quotes`) → payment
+      with encrypted beneficiary / travel-rule data (`POST /v1/cpn/payments`) →
+      USDC sent on-chain to the beneficiary institution → it pays the merchant's
+      bank in local currency → webhooks for status; answer RFIs via the API.
+      - [ ] Now (no licence): "Send to your own Mint / exchange deposit address".
+      - [ ] **You:** apply to Circle as a CPN OFI; then ~1-2 weeks to build.
+      - [ ] Circle Mint (KYB): MeshPort's own fee revenue / treasury to bank.
 - [ ] **Earn** (~2-3 days) - "Savings" for businesses: App Kit Earn vaults
       (USDC / EURC on Arc), deposit / withdraw in one signature, live value.
 - [ ] **Borrow** (~4-5 days) - USDC against cirBTC with MeshPort's
