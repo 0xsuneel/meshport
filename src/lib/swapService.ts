@@ -417,6 +417,37 @@ async function recordCompletion(params: {
   }
 }
 
+// ── MeshPort's swap fee (lib/feePolicy SWAP_FEE: 0.35%, cap $10) ───────────
+// Charged through Circle's own swap fee option (customFee): it comes out of
+// what the swap delivers, so the estimate - the rate the user sees - already
+// includes it, and it is paid to MeshPort's relayer wallet (VITE_FEE_WALLET)
+// in the same transaction. Circle keeps 10% of a custom fee. Not set: no fee.
+const TOKEN_DECIMALS: Record<string, number> = { USDC: 6, EURC: 6, cirBTC: 8 }
+function feeWallet(): string | null {
+  const w = String((import.meta.env.VITE_FEE_WALLET as string | undefined) ?? '').trim()
+  return /^0x[0-9a-fA-F]{40}$/.test(w) ? w : null
+}
+async function tokenUsd(symbol: string): Promise<number> {
+  if (symbol === 'USDC') return 1
+  if (symbol === 'EURC') return (await import('./eurcPrice')).lastKnownEurcPrice() || 0
+  if (symbol === 'cirBTC') return (await import('./btcPrice')).lastKnownBtcPrice() || 0
+  return 0
+}
+/** Circle's customFee for this swap, or undefined (no fee wallet set, or an unknown price for a capped one). */
+export async function swapCustomFee(tokenIn: string, tokenOut: string, amountIn: string): Promise<{ percentageBps?: number; amount?: string; recipientAddress: string } | undefined> {
+  const recipientAddress = feeWallet()
+  if (!recipientAddress) return undefined
+  const { SWAP_FEE } = await import('./feePolicy')
+  const inUsd = Number(amountIn) * (await tokenUsd(tokenIn))
+  // Under the cap (or the price unknown): the plain percentage.
+  if (!(inUsd > 0) || inUsd * SWAP_FEE.bps / 10_000 <= SWAP_FEE.capUsd) return { percentageBps: SWAP_FEE.bps, recipientAddress }
+  // Over it: exactly the cap, in tokenOut (the fee is taken from the output).
+  const outUsd = await tokenUsd(tokenOut)
+  const dec = TOKEN_DECIMALS[tokenOut]
+  if (!(outUsd > 0) || dec == null) return { percentageBps: SWAP_FEE.bps, recipientAddress }
+  return { amount: String(Math.floor(SWAP_FEE.capUsd / outUsd * 10 ** dec)), recipientAddress }
+}
+
 export async function estimateSwapLocal(params: {
   signer: WalletAccount
   tokenIn: string; tokenOut: string; amountIn: string; slippageBps: number
@@ -431,7 +462,7 @@ export async function estimateSwapLocal(params: {
     tokenIn:  params.tokenIn,
     tokenOut: params.tokenOut,
     amountIn: params.amountIn,
-    config:   { slippageBps: slip },
+    config:   { slippageBps: slip, customFee: await swapCustomFee(params.tokenIn, params.tokenOut, params.amountIn) },
   }
 
   try {
@@ -574,7 +605,8 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
     tokenIn:  params.tokenIn,
     tokenOut: params.tokenOut,
     amountIn: amountFormatted,
-    config:   swapConfig(slip, params.minAmountOut),
+    // The same MeshPort fee the estimate included (so the confirmed minimum still holds).
+    config:   { ...swapConfig(slip, params.minAmountOut), customFee: await swapCustomFee(params.tokenIn, params.tokenOut, amountFormatted) },
   }
 
   // The swap is on Arc: its Activity row is queued on this device first, so a
