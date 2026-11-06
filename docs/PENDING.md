@@ -23,11 +23,13 @@ transactions (Circle `signTransaction`) and receives every MeshPort fee.
       (signer, nonce, chain, to, value, data, gas, fee) before broadcast. P2P
       offers made before the switch name the old relayer as operator, so
       registerTrade / cancelTrade fall back to the key wallet when needed.
-- [ ] **You (Vercel, Production + Preview):** `CIRCLE_API_KEY`,
-      `CIRCLE_ENTITY_SECRET` (secrets), `CIRCLE_RELAYER_WALLET_ID=3077130c-ef06-5204-aa4c-b46e1a9aeb3d`,
-      `CIRCLE_RELAYER_ADDRESS=0x7218ec7dd868444a7655599551520ac5bcca7c0d`,
-      then `RELAYER_MODE=circle` (remove it to switch back instantly).
-      Keep `BRIDGE_RELAYER_PRIVATE_KEY` for now (3 chains + old P2P offers).
+- [x] **Me (Vercel, 6 Nov):** `CIRCLE_RELAYER_WALLET_ID`, `CIRCLE_RELAYER_ADDRESS`,
+      `RELAYER_MODE=circle` (Production + Preview).
+- [ ] **You (Vercel):** `CIRCLE_ENTITY_SECRET` (Sensitive, Production + Preview) -
+      this is what actually switches the relayer to Circle, so fund
+      `0x7218…7c0d` first. `CIRCLE_API_KEY` exists but is Production-only: it
+      must be the key of the Circle account the wallets were made with; add it
+      to Preview too. Keep `BRIDGE_RELAYER_PRIVATE_KEY` (3 chains + old P2P offers).
 - [ ] **Me:** the Solana fee payer (`api/solana-fee-payer.ts`) on a Circle Solana wallet.
 - [ ] **Me (optional):** the rewards signer (`rewards-claim-sign`, typed data) on Circle.
 - [ ] **You:** fund the Circle wallet with native gas on each chain; test on testnet;
