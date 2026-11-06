@@ -40,6 +40,12 @@
 //
 // Env:
 //   BRIDGE_RELAYER_PRIVATE_KEY  relayer key (pays gas; never holds user funds)
+//   RELAYER_MODE=circle         sign with MeshPort's Circle developer-controlled
+//                               wallet instead (api/_lib/relayerSigner.ts):
+//                               CIRCLE_API_KEY, CIRCLE_ENTITY_SECRET,
+//                               CIRCLE_RELAYER_WALLET_ID, CIRCLE_RELAYER_ADDRESS.
+//                               The key above then only covers chains Circle
+//                               can't sign on and pre-switch P2P operator offers.
 //   BRIDGE_ROUTERS              {"Base_Sepolia":"0x…","Ethereum_Sepolia":"0x…"}
 //   BRIDGE_RPC_<CHAIN>          optional RPC override per chain
 //   BRIDGE_NATIVE_USD_<CHAIN>   optional gas-token USD price per chain (defaults in CHAINS)
@@ -48,6 +54,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { EXTERNAL_CHAINS } from '../src/blockchain/chains'
+import { relayerAccount, relayerAddress, keyRelayerAccount, relayerMode } from './_lib/relayerSigner'
 import { CROSS_CHAIN_FEE, usdRule, meshportFee, feeAcceptable, arcWeiToUsdcUnits } from '../src/lib/feePolicy'
 
 const ARC_DOMAIN = 26
@@ -335,13 +342,9 @@ async function clients(chainKey: string) {
   // repeated request with the transaction already sent.
   const transport = await rpcTransport(chainKey, rpc)
   const pub: any = createPublicClient({ chain, transport, pollingInterval: pollMsFor(c.id) })
-  let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
-  if (key && !key.startsWith('0x')) key = '0x' + key
-  let wallet: any = null
-  if (/^0x[0-9a-fA-F]{64}$/.test(key)) {
-    const { privateKeyToAccount } = await import('viem/accounts')
-    wallet = createWalletClient({ chain, transport, account: privateKeyToAccount(key as `0x${string}`) })
-  }
+  // The relayer account: Circle's wallet (RELAYER_MODE=circle) or the private key.
+  const account = await relayerAccount(c.id)
+  const wallet: any = account ? createWalletClient({ chain, transport, account }) : null
   return { pub, wallet }
 }
 
@@ -590,12 +593,15 @@ async function callClients(chainKey: string) {
   const chain = defineChain({ id, name: chainKey, nativeCurrency: { name: 'Native', symbol: 'NATIVE', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } })
   const transport = await rpcTransport(chainKey, rpc)
   const pub: any = createPublicClient({ chain, transport, pollingInterval: pollMsFor(id) })
-  let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
-  if (key && !key.startsWith('0x')) key = '0x' + key
-  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) return { pub, wallet: null as any }
-  const { privateKeyToAccount } = await import('viem/accounts')
-  const wallet: any = createWalletClient({ chain, transport, account: privateKeyToAccount(key as `0x${string}`) })
-  return { pub, wallet }
+  const account = await relayerAccount(id)
+  if (!account) return { pub, wallet: null as any, keyWallet: null as any }
+  const wallet: any = createWalletClient({ chain, transport, account })
+  // Circle mode: the private-key wallet too, when set and different - P2P
+  // offers made before the switch name the OLD relayer address as operator.
+  const key = relayerMode() === 'circle' ? await keyRelayerAccount() : null
+  const keyWallet: any = key && key.address.toLowerCase() !== account.address.toLowerCase()
+    ? createWalletClient({ chain, transport, account: key }) : null
+  return { pub, wallet, keyWallet }
 }
 
 // Per-wallet limit on relayed calls (per warm instance): a real bridge needs
@@ -792,9 +798,18 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
   // Simulate first: an already-used or invalid signature/attestation never costs gas.
   // The chain head is read alongside (no added wait) so `blocks` can be counted.
   let headBlock: number | undefined
+  // P2P operator calls must come from the offer's named operator: an offer
+  // made before the switch to Circle names the old (private-key) relayer, so
+  // if the Circle wallet can't make the call, the key wallet tries.
+  let sender: any = cl.wallet
+  const operatorCall = fnName === 'registerTrade' || fnName === 'cancelTrade'
   try {
     const [, head] = await Promise.all([
-      cl.pub.call({ account: cl.wallet.account, to, data }),
+      cl.pub.call({ account: cl.wallet.account, to, data }).catch(async (e: any) => {
+        if (!operatorCall || !cl.keyWallet) throw e
+        await cl.pub.call({ account: cl.keyWallet.account, to, data })
+        sender = cl.keyWallet
+      }),
       cl.pub.getBlockNumber().then((b: bigint) => Number(b)).catch(() => undefined),
     ])
     headBlock = head
@@ -805,7 +820,7 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
   const simulatedAt = Date.now()
   const fees = await relayFees(cl.pub, cl.pub.chain.id)
   const tipGwei = fees.maxPriorityFeePerGas != null ? Number(fees.maxPriorityFeePerGas) / 1e9 : undefined
-  const txHash = await cl.wallet.sendTransaction({ to, data, ...fees })
+  const txHash = await sender.sendTransaction({ to, data, ...fees })
   const sentAt = Date.now()
   const base = { simulateMs: simulatedAt - checksDoneAt, sendMs: sentAt - simulatedAt, headBlock, tipGwei }
   try {
@@ -1362,12 +1377,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // ── p2p_operator: the relayer's PUBLIC address, which sellers name as
       // their sell ad's auto-accept operator (escrow V3). Address only.
       if (req.query.p2p_operator) {
-        let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
-        if (key && !key.startsWith('0x')) key = '0x' + key
-        if (!/^0x[0-9a-fA-F]{64}$/.test(key)) return res.status(503).json({ error: 'Relayer is not configured' })
-        const { privateKeyToAccount } = await import('viem/accounts')
+        const operator = await relayerAddress()
+        if (!operator) return res.status(503).json({ error: 'Relayer is not configured' })
         res.setHeader('Cache-Control', 'public, max-age=300')
-        return res.status(200).json({ operator: privateKeyToAccount(key as `0x${string}`).address })
+        return res.status(200).json({ operator })
       }
       // ── ub_intent_status: replaces supabase.from('ub_claim_intents') in client ──
       // MultichainPage used to hit Supabase directly with the anon key just to

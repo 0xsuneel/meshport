@@ -15,13 +15,19 @@ transactions (Circle `signTransaction`) and receives every MeshPort fee.
       address `0x7218ec7dd868444a7655599551520ac5bcca7c0d`;
       Solana fee payer `6b01cdd1-417c-5eea-9fe6-3c886997e446` (SOL-DEVNET),
       address `3FCjnsPHrjtJnM2Gei1RxKYbBFc2hHqDkWeKAjciXBN8`.
-- [ ] **You:** run `node scripts/circle-sign-check.mjs` - Circle's documented
-      EVM-TESTNET signing list does not include Arc Testnet (5042002) or
-      several relayer chains; the check shows which chains really sign.
-- [ ] **Me:** `api/_lib/relayerSigner.ts` - a viem account whose
-      `signTransaction` calls Circle, behind `RELAYER_MODE=circle`
-      (`CIRCLE_API_KEY`, `CIRCLE_ENTITY_SECRET`, wallet IDs). Every relayer
-      path in `api/bridge-relay.ts` keeps working; we still broadcast ourselves.
+- [x] **You:** signing check (6 Nov): 16 of 19 relayer chains sign, Arc
+      included. Refused: Sonic 14601, Sei 1328, HyperEVM 998 - they keep the
+      private key (`CIRCLE_SIGN_UNSUPPORTED_CHAINS`, default "998,1328,14601").
+- [x] **Me:** `api/_lib/relayerSigner.ts` - viem account that signs through
+      Circle, behind `RELAYER_MODE=circle`; every signed transaction is checked
+      (signer, nonce, chain, to, value, data, gas, fee) before broadcast. P2P
+      offers made before the switch name the old relayer as operator, so
+      registerTrade / cancelTrade fall back to the key wallet when needed.
+- [ ] **You (Vercel, Production + Preview):** `CIRCLE_API_KEY`,
+      `CIRCLE_ENTITY_SECRET` (secrets), `CIRCLE_RELAYER_WALLET_ID=3077130c-ef06-5204-aa4c-b46e1a9aeb3d`,
+      `CIRCLE_RELAYER_ADDRESS=0x7218ec7dd868444a7655599551520ac5bcca7c0d`,
+      then `RELAYER_MODE=circle` (remove it to switch back instantly).
+      Keep `BRIDGE_RELAYER_PRIVATE_KEY` for now (3 chains + old P2P offers).
 - [ ] **Me:** the Solana fee payer (`api/solana-fee-payer.ts`) on a Circle Solana wallet.
 - [ ] **Me (optional):** the rewards signer (`rewards-claim-sign`, typed data) on Circle.
 - [ ] **You:** fund the Circle wallet with native gas on each chain; test on testnet;
