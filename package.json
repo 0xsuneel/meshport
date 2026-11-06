@@ -35,6 +35,7 @@
     "@stripe/stripe-js": "1.54.2",
     "@supabase/supabase-js": "^2.50.0",
     "@tanstack/react-query": "^5.17.19",
+    "@vercel/functions": "^3.11.0",
     "buffer": "^6.0.3",
     "clsx": "^2.1.0",
     "date-fns": "^3.3.1",

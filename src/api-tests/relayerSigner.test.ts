@@ -70,7 +70,7 @@ describe('relayerSigner', () => {
     const account = await relayerAccount(5042002)
     expect(account.address.toLowerCase()).toBe(circleSigner.address.toLowerCase())
     const wallet = createWalletClient({ chain: ARC, transport, account })
-    await wallet.sendTransaction(TX)
+    await wallet.sendTransaction(TX as any)
     expect(signed).toEqual([{ nonce: 7, to: TX.to, value: '5', data: '0x1234', gas: '100000', maxFeePerGas: '30', maxPriorityFeePerGas: '2', chainId: 5042002 }])
     const p: any = parseTransaction(sent[0])
     expect(p).toMatchObject({ chainId: 5042002, nonce: 7, value: 5n, data: '0x1234', gas: 100_000n })
@@ -80,7 +80,7 @@ describe('relayerSigner', () => {
     tamper = (tx) => ({ ...tx, to: '0x000000000000000000000000000000000000bEEF' })
     const { relayerAccount } = await import('../../api/_lib/relayerSigner')
     const wallet = createWalletClient({ chain: ARC, transport, account: await relayerAccount(5042002) })
-    await expect(wallet.sendTransaction(TX)).rejects.toThrow(/does not match/)
+    await expect(wallet.sendTransaction(TX as any)).rejects.toThrow(/does not match/)
     expect(sent).toEqual([])
   })
 

@@ -56,6 +56,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { EXTERNAL_CHAINS } from '../src/blockchain/chains'
 import { relayerAccount, relayerAddress, keyRelayerAccount, relayerMode } from './_lib/relayerSigner'
 import { CROSS_CHAIN_FEE, usdRule, meshportFee, feeAcceptable, arcWeiToUsdcUnits } from '../src/lib/feePolicy'
+import { waitUntil } from '@vercel/functions'
 
 const ARC_DOMAIN = 26
 const FORWARD_HOOK = '0x636374702d666f72776172640000000000000000000000000000000000000000'
@@ -919,16 +920,20 @@ function irisFeeRows(srcDomain: number): Promise<IrisFeeRow[]> {
   })
 }
 
-/** Circle's CCTP fee for a burn of `burn` units to Arc via the forwarder, with margin. */
-async function cctpMaxFee(srcDomain: number, burn: bigint, rowsIn?: IrisFeeRow[]): Promise<bigint> {
+/**
+ * Circle's CCTP fee for a burn of `burn` units to Arc, with margin: the fast
+ * protocol fee, plus Circle's forwarding fee when Circle's forwarder mints
+ * (`forward`), not when MeshPort's relayer mints.
+ */
+async function cctpMaxFee(srcDomain: number, burn: bigint, rowsIn?: IrisFeeRow[], forward = true): Promise<bigint> {
   const rows = rowsIn ?? await irisFeeRows(srcDomain)
   const fast = rows.find(x => x.finalityThreshold === 1000) ?? rows[0]
   if (!fast) throw new Error('No CCTP fee for this route')
   // minimumFee is in basis points (may be fractional); forwardFee in USDC base units.
   const protocol = (burn * BigInt(Math.ceil((fast.minimumFee ?? 0) * 100))) / 1_000_000n
   const ff = fast.forwardFee
-  const forward = BigInt(Math.ceil(typeof ff === 'number' ? ff : (ff?.high ?? ff?.med ?? ff?.low ?? 0)))
-  return ((protocol + forward) * 120n) / 100n + 1n
+  const fwd = forward ? BigInt(Math.ceil(typeof ff === 'number' ? ff : (ff?.high ?? ff?.med ?? ff?.low ?? 0))) : 0n
+  return ((protocol + fwd) * 120n) / 100n + 1n
 }
 
 /** The chain's gas price, cached 10 s (a quote and the relay right after it share one read). */
@@ -999,9 +1004,94 @@ async function quote(chainKey: string, total: bigint) {
     meta.catch(() => usdcMetaCache.delete(chainKey))
   }
   // All at once: gas price, USDC's signing domain and Circle's fee table.
-  const [{ fee, gasCost }, [usdcName, usdcVersion], rows] = await Promise.all([relayFee(pub, chainKey, total), meta, irisFeeRows(c.domain)])
+  const [{ fee, gasCost }, [usdcName, usdcVersion], rows, relayerMint] = await Promise.all([
+    relayFee(pub, chainKey, total), meta, irisFeeRows(c.domain), relayerMintQuote(total, chainKey),
+  ])
   const maxFee = await cctpMaxFee(c.domain, total > fee ? total - fee : 0n, rows)
-  return { fee, gasCost, maxFee, usdcName, usdcVersion, pub }
+  // MeshPort's relayer mints on Arc instead of Circle's forwarder: no
+  // forwarding fee (~$0.02 a Bring); the Arc mint gas (~$0.005) is in
+  // MeshPort's fee instead. Null when the relayer can't mint right now.
+  const direct = relayerMint
+    ? { fee: relayerMint.fee, gasCost: relayerMint.gasCost, maxFee: await cctpMaxFee(c.domain, total > relayerMint.fee ? total - relayerMint.fee : 0n, rows, false) }
+    : null
+  return { fee, gasCost, maxFee, direct, usdcName, usdcVersion, pub }
+}
+
+// ── Bring: MeshPort's relayer mints on Arc (no Circle forwarding fee) ──────
+// The burn carries no hook; once Circle attests it, the relayer submits
+// receiveMessage on Arc (api/bridge-relay waitUntil, below - the user can
+// close the app). The attested message fixes recipient and amount, and a
+// message mints only once. If the relayer can't mint (BRING_ARC_MINT=circle,
+// or its Arc gas is low), quotes fall back to Circle's forwarder.
+const ARC_MINT_GAS = 220_000n // seen: 181k
+const ARC_MINT_MIN_BALANCE = 500_000_000_000_000_000n // 0.5 USDC (18 decimals) of Arc gas
+let _arcMintHealth: { at: number; ok: Promise<boolean> } | null = null
+async function relayerCanMintOnArc(): Promise<boolean> {
+  if ((process.env.BRING_ARC_MINT || '').toLowerCase() === 'circle') return false
+  if (_arcMintHealth && Date.now() - _arcMintHealth.at < 60_000) return _arcMintHealth.ok
+  const ok = (async () => {
+    const cl = await callClients('Arc_Testnet')
+    if (!cl?.wallet) return false
+    const bal = await cl.pub.getBalance({ address: cl.wallet.account.address }) as bigint
+    return bal >= ARC_MINT_MIN_BALANCE
+  })().catch(() => false)
+  _arcMintHealth = { at: Date.now(), ok }
+  return ok
+}
+/** MeshPort's fee for a Bring when the relayer mints on Arc: its gas covers both legs. Null when it can't. */
+async function relayerMintQuote(total: bigint, chainKey: string): Promise<{ fee: bigint; gasCost: bigint } | null> {
+  if (!(await relayerCanMintOnArc())) return null
+  const cl = await callClients('Arc_Testnet')
+  if (!cl) return null
+  const { pub } = await clients(chainKey)
+  const [src, arcGasPrice] = await Promise.all([relayGasCost(pub, chainKey), cl.pub.getGasPrice() as Promise<bigint>])
+  const gasCost = src + arcWeiToUsdcUnits(ARC_MINT_GAS * arcGasPrice)
+  return { fee: meshportFee(total, gasCost, usdRule(CROSS_CHAIN_FEE, 6)), gasCost }
+}
+
+const RECEIVE_MESSAGE_ABI = [{
+  type: 'function', name: 'receiveMessage', stateMutability: 'nonpayable', outputs: [{ type: 'bool' }],
+  inputs: [{ name: 'message', type: 'bytes' }, { name: 'attestation', type: 'bytes' }],
+}] as const
+
+/**
+ * After a hookless Bring burn: wait for Circle's attestation, then mint on
+ * Arc from the relayer. Runs after the response (waitUntil), within the
+ * function's time limit; if it runs out, the app's own follow-up
+ * (finishCctpMintViaRelayer) or Recover finishes it - the mint is open to anyone.
+ */
+export async function mintOnArcAfterBurn(chainKey: string, burnTx: string, deadlineMs: number): Promise<string | null> {
+  const started = Date.now()
+  const domain = CHAINS[chainKey]?.domain
+  if (domain === undefined) return null
+  let msg: any = null
+  while (Date.now() < deadlineMs) {
+    try {
+      const r = await fetch(`${IRIS}/v2/messages/${domain}?transactionHash=${burnTx}`, { signal: AbortSignal.timeout(5_000) })
+      msg = r.ok ? (await r.json())?.messages?.[0] : null
+    } catch { msg = null }
+    if (msg?.status === 'complete' && msg.message && msg.attestation && msg.attestation !== 'PENDING') break
+    await new Promise(res => setTimeout(res, 1_500))
+  }
+  if (!(msg?.status === 'complete' && msg.message && msg.attestation && msg.attestation !== 'PENDING')) {
+    console.warn('[bridge-relay] arc mint: no attestation in time', chainKey, burnTx, `${Date.now() - started}ms`)
+    return null
+  }
+  const attestedAt = Date.now()
+  const cl = await callClients('Arc_Testnet')
+  if (!cl?.wallet) return null
+  const { encodeFunctionData } = await import('viem')
+  const data = encodeFunctionData({ abi: RECEIVE_MESSAGE_ABI, functionName: 'receiveMessage', args: [msg.message, msg.attestation] })
+  try {
+    // Simulated first: already minted (the app's follow-up, Recover) costs nothing.
+    await cl.pub.call({ account: cl.wallet.account, to: MESSAGE_TRANSMITTER_V2 as `0x${string}`, data })
+  } catch (e: any) {
+    console.log('[bridge-relay] arc mint: not needed', chainKey, burnTx, e?.shortMessage || e?.message || e)
+    return null
+  }
+  const txHash = await cl.wallet.sendTransaction({ to: MESSAGE_TRANSMITTER_V2 as `0x${string}`, data, ...(await relayFees(cl.pub, cl.pub.chain.id)) })
+  console.log('[bridge-relay] arc mint', JSON.stringify({ chain: chainKey, burnTx, mintTx: txHash, attestMs: attestedAt - started, sendMs: Date.now() - attestedAt }))
+  return txHash
 }
 
 // ── EURC / cirBTC (Circle CCTPx) through MeshPortRouter ────────────────────
@@ -1448,7 +1538,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!CHAINS[chainKey] || !routers()[chainKey]) return res.status(400).json({ error: 'Gasless bridging is not available for this chain' })
       if (!isUint(total) || BigInt(total) < MIN_TOTAL_UNITS) return res.status(400).json({ error: 'Minimum is 1 USDC' })
       const q = await quote(chainKey, BigInt(total))
-      return res.status(200).json({ fee: q.fee.toString(), maxFee: q.maxFee.toString(), usdcName: q.usdcName, usdcVersion: q.usdcVersion })
+      // fee / maxFee: Circle's forwarder mints (what older app builds sign).
+      // relayerMint: MeshPort's relayer mints on Arc - no forwarding fee.
+      return res.status(200).json({
+        fee: q.fee.toString(), maxFee: q.maxFee.toString(), usdcName: q.usdcName, usdcVersion: q.usdcVersion,
+        ...(q.direct ? { relayerMint: { fee: q.direct.fee.toString(), maxFee: q.direct.maxFee.toString() } } : {}),
+      })
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -1498,6 +1593,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if ((req.body as any)?.action === 'arc_transfer') return await arcTransfer(req, res)
 
     // ── Relay ────────────────────────────────────────────────────────────
+    const RELAY_STARTED_AT = Date.now()
     const { chain: chainKey, bridge: b, authorization: a } = (req.body ?? {}) as any
     const router = routers()[chainKey]
     if (!CHAINS[chainKey] || !router) return res.status(400).json({ error: 'Gasless bridging is not available for this chain' })
@@ -1508,10 +1604,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Malformed bridge parameters' })
     if (String(b.token).toLowerCase() !== CHAINS[chainKey].usdc.toLowerCase()) return res.status(400).json({ error: 'Only USDC can be bridged' })
 
-    // Only self-bridges to Arc through Circle's forwarder.
+    // Only self-bridges to Arc: through Circle's forwarder (forwarding hook),
+    // or minted on Arc by this relayer (no hook - see mintOnArcAfterBurn).
     const { pad, parseSignature } = await import('viem')
     if (Number(b.destinationDomain) !== ARC_DOMAIN) return res.status(400).json({ error: 'Only bridging to Arc is supported' })
-    if (String(b.hookData).toLowerCase() !== FORWARD_HOOK) return res.status(400).json({ error: 'Forwarding hook required' })
+    const hook = String(b.hookData).toLowerCase()
+    if (hook !== FORWARD_HOOK && hook !== '0x') return res.status(400).json({ error: 'Unsupported hook' })
+    const relayerMints = hook === '0x'
     if (![1000, 2000].includes(Number(b.minFinalityThreshold))) return res.status(400).json({ error: 'Unsupported finality' })
     if (String(b.mintRecipient).toLowerCase() !== String(pad(a.from, { size: 32 })).toLowerCase())
       return res.status(400).json({ error: 'Funds can only be bridged to your own wallet' })
@@ -1533,7 +1632,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const bridgeArgs = {
       token: c.usdc,
       destinationDomain: ARC_DOMAIN, mintRecipient: b.mintRecipient as `0x${string}`, fee, maxFee,
-      minFinalityThreshold: Number(b.minFinalityThreshold), hookData: FORWARD_HOOK as `0x${string}`, salt: b.salt as `0x${string}`,
+      minFinalityThreshold: Number(b.minFinalityThreshold), hookData: (relayerMints ? '0x' : FORWARD_HOOK) as `0x${string}`, salt: b.salt as `0x${string}`,
     }
     // The quote and the balance don't depend on the nonce: started now, they
     // run while the nonce and its "already used" check are read (two rounds).
@@ -1551,9 +1650,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const [now_q, bal] = await Promise.all([quoteP, balP])
+    // The relayer must be able to mint on Arc for a hookless burn (else its quote said Circle's forwarder).
+    if (relayerMints && !now_q.direct) return res.status(409).json({ error: 'Please try again', retryQuote: true })
+    const want = relayerMints && now_q.direct ? now_q.direct : now_q
     // The fee must match today's quote (a little slack for moves since it) and never be below the live gas.
-    if (!feeAcceptable(fee, now_q.fee, now_q.gasCost)) return res.status(400).json({ error: 'Fee too low - please try again' })
-    if (maxFee * 100n < now_q.maxFee * 80n) return res.status(400).json({ error: 'Bridge fee too low - please try again' })
+    if (!feeAcceptable(fee, want.fee, want.gasCost)) return res.status(400).json({ error: 'Fee too low - please try again' })
+    if (maxFee * 100n < want.maxFee * 80n) return res.status(400).json({ error: 'Bridge fee too low - please try again' })
 
     if (bal < value) return res.status(400).json({ error: 'Not enough USDC on this chain' })
 
@@ -1566,14 +1668,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       account: wallet.account, address: router, abi: ROUTER_ABI, functionName: 'bridgeWithAuthorization', args: [bridgeArgs, authArgs],
     }).catch((e: any) => { throw Object.assign(new Error(e?.shortMessage || 'Transfer would fail'), { status: 400 }) })
     const txHash = await wallet.writeContract({ ...request, ...(await relayFees(pub, pub.chain.id)) })
+    // Hookless: mint on Arc once Circle attests, after this response (the
+    // function's 60 s limit; the app follows up if it runs out).
+    const startMint = () => { if (relayerMints) waitUntil(mintOnArcAfterBurn(chainKey, txHash, RELAY_STARTED_AT + 55_000).catch(e => console.error('[bridge-relay] arc mint failed', e?.shortMessage || e?.message || e))) }
 
     // Wait briefly for the burn; if it's slow, it's submitted (not failed) - tracking takes over.
     try {
       const receipt = await pub.waitForTransactionReceipt({ hash: txHash, timeout: 40_000 })
       if (receipt.status !== 'success') return res.status(502).json({ error: 'Transaction reverted', txHash })
-      return res.status(200).json({ txHash })
+      startMint()
+      return res.status(200).json({ txHash, mint: relayerMints ? 'relayer' : 'circle' })
     } catch {
-      return res.status(200).json({ txHash, pending: true })
+      startMint()
+      return res.status(200).json({ txHash, pending: true, mint: relayerMints ? 'relayer' : 'circle' })
     }
   } catch (e: any) {
     console.error('[bridge-relay]', e?.message || e)
