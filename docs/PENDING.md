@@ -67,10 +67,11 @@ fee address at deploy - deploying now means redeploying later):
 - [x] Express Swap: session key runs Circle's swap kit (approve strategy), output to the owner.
 - [x] Express Bring built (router expressBring + setBringKey, frame Bring key,
       relayer express_setup / express_bring, app setup-once-per-chain).
-- [ ] **You:** redeploy MeshPortRouter (new address 0x60EDB201D34C504ee2B2795B31112CB55E7d1B0C):
-      `node contracts/deploy-router-all.cjs` (+ `--chains=HyperEVM_Testnet` with
-      `BRIDGE_RPC_HYPEREVM_TESTNET`), then I switch VITE_BRIDGE_ROUTERS / BRIDGE_ROUTERS /
-      VITE_ARC_ROUTER / ARC_ROUTER. Until then Bring uses the old router (normal way).
+- [x] MeshPortRouter with Express Bring deployed 6 Nov at 0x3010518F036eE1BF95Da787eEe3AafFAD95a1794
+      (Arc + 16 Bring chains, checked on Arc: bringKeys answers, fee to 0x7218…7c0d); Vercel
+      VITE_BRIDGE_ROUTERS / BRIDGE_ROUTERS / VITE_ARC_ROUTER / ARC_ROUTER switched, redeployed.
+- [ ] **You:** re-run `node contracts/deploy-router-all.cjs --chains=Unichain_Sepolia,World_Chain_Sepolia,Ink_Testnet`
+      ("no code after deploy" - probably just slow); until then they stay on 0x4B53…b377 (normal Bring).
 - [ ] Test on testnet after "push to main" (wallet frame deploys from main too).
 
 ## 2. Fees (agreed list - `src/lib/feePolicy.ts`)
