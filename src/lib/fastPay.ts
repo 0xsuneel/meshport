@@ -950,6 +950,100 @@ export async function expressTransfer(p: { owner: string; amount: bigint; fee: b
   }
 }
 
+// ── Express Swap (on Arc) ─────────────────────────────────────────────────────
+// After the passcode check, the session key pulls tokenIn (+ its gas refund)
+// to itself; Circle's swap kit then runs with the session key as the wallet
+// ("approve" strategy: approve the adapter, then execute), the output going
+// straight to the owner (to). No Circle signature. If the swap doesn't go
+// through, the key returns tokenIn to the owner and it swaps the normal way.
+const SWAP_GAS = 800_000n // seen: 612k
+const transferAbi = [{ type: 'function', name: 'transfer', stateMutability: 'nonpayable', inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ type: 'bool' }] }] as const
+
+async function pendingNonce(addr: Hex): Promise<number> {
+  const j = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionCount', params: [addr, 'pending'] })
+  return Number(BigInt(j?.result ?? '0x0'))
+}
+
+/** A viem account for the session key (signs transactions in the frame only). */
+async function sessionWalletAccount(s: Session): Promise<any> {
+  const { toAccount } = await import('viem/accounts')
+  const refuse = async () => { throw new Error('An Express key signs transactions only') }
+  return Object.assign(toAccount({ address: s.key.address, signTransaction: (tx: any) => s.key.signTransaction(tx), signMessage: refuse as any, signTypedData: refuse as any }), { meshportWallet: true as const })
+}
+
+export type ExpressSwap = {
+  /** The session key as a wallet, for Circle's swap kit. */
+  account: any
+  /** After the kit ran: refreshes the key's nonce. `returnFunds`: the swap didn't happen - tokenIn back to the owner. */
+  finish: (returnFunds: boolean) => Promise<boolean>
+}
+
+/** Whether Express can make this swap (`amount` of tokenIn). */
+export function expressCoversSwap(owner: string, amount: number, token: string): boolean {
+  return isFastToken(token) && fastPayCovers(owner, amount, token)
+}
+
+/** Starts an Express swap: the passcode-approved pull. ExpressNotSent: nothing moved - swap the normal way. */
+export async function expressSwapBegin(p: { owner: string; token: FastToken; amount: number }): Promise<ExpressSwap> {
+  const s = session
+  if (!s || !expressCoversSwap(p.owner, p.amount, p.token)) throw new FastPayNotSent('Express does not cover this swap')
+  if (!(await frameCan('swap'))) throw new FastPayNotSent('This wallet frame cannot do Express swaps yet')
+  const pin = takePin()
+  if (!pin) throw new FastPayNotSent('No passcode for this swap')
+  try {
+    const { callWallet } = await import('@/wallet/frameClient')
+    await callWallet('fastpay:approve', { owner: s.owner, passcode: pin })
+  } catch (e) {
+    throw new FastPayNotSent(`Frame refused the passcode (${(e as { code?: string })?.code ?? 'error'})`)
+  }
+  const { relaySend, sendFeeCap, currentGasPrice } = await import('./arcService')
+  const [feeCap, gasPrice] = await Promise.all([sendFeeCap(), currentGasPrice().catch(() => 0n)])
+  const owed = s.owedGasWei
+  const refund = gasPrice > 0n ? refundUnits(s.payGasEstimate + APPROVE_GAS + SWAP_GAS, gasPrice, owed) : 0n
+  const amount = atomic(p.token, p.amount)
+  const usdc = s.grants.USDC!, grant = s.grants[p.token]!
+  if (refund > REFUND_RESERVE * 2n) throw new FastPayNotSent('Gas refund above the reserve')
+  const usdIn = p.amount * expressUsdPrice(p.token)
+  const usdRefund = fromAtomic('USDC', refund)
+  grant.spent += amount; usdc.spent += refund; s.spentUsd += usdIn + usdRefund
+  s.owedGasWei = 0n
+  const undo = () => { grant.spent -= amount; usdc.spent -= refund; s.spentUsd -= usdIn + usdRefund; s.owedGasWei += owed; if (s.kept) saveSession(s, s.owner); publish() }
+  if (s.kept) saveSession(s, s.owner)
+  publish()
+  const details: Array<{ from: Hex; to: Hex; amount: bigint; token: Hex }> = p.token === 'USDC'
+    ? [{ from: s.owner, to: s.key.address, amount: amount + refund, token: ARC_USDC_ERC20 }]
+    : [{ from: s.owner, to: s.key.address, amount, token: FAST_TOKENS[p.token].address }, { from: s.owner, to: s.key.address, amount: refund, token: ARC_USDC_ERC20 }]
+  const nonce = s.nonce
+  let pulled
+  try {
+    pulled = await relaySend(s.key as any, { to: PERMIT2, data: encodeFunctionData({ abi: permit2Abi, functionName: 'transferFrom', args: [details] }), gas: s.payGas * 2n, nonce, maxFeePerGas: feeCap }, () => {})
+  } catch (e) {
+    undo()
+    throw new FastPayNotSent(e instanceof Error ? e.message : 'Express pull refused')
+  }
+  if (pulled.state === 'failed') { undo(); throw new FastPayNotSent('Express pull failed on-chain') }
+  s.nonce = nonce + 1
+  const account = await sessionWalletAccount(s)
+  const finish = async (returnFunds: boolean): Promise<boolean> => {
+    let returned = false
+    if (returnFunds) {
+      try {
+        const n = await pendingNonce(s.key.address)
+        const back = p.token === 'USDC'
+          ? await relaySend(s.key as any, { to: s.owner, value: amount * WEI_PER_UNIT, gas: NATIVE_TRANSFER_GAS, nonce: n, maxFeePerGas: feeCap }, () => {})
+          : await relaySend(s.key as any, { to: FAST_TOKENS[p.token].address, data: encodeFunctionData({ abi: transferAbi, functionName: 'transfer', args: [s.owner, amount] }), gas: APPROVE_GAS, nonce: n, maxFeePerGas: feeCap }, () => {})
+        returned = back.state !== 'failed'
+        if (returned) { grant.spent -= amount; s.spentUsd -= usdIn }
+      } catch { returned = false }
+    }
+    try { s.nonce = await pendingNonce(s.key.address) } catch { /* next send reads it */ }
+    if (s.kept) saveSession(s, s.owner)
+    publish()
+    return returned
+  }
+  return { account, finish }
+}
+
 // A wallet provider's unlock (store.unlock), and this module loading (the app
 // loads it a moment after start - a reload that didn't lock): start in the
 // background.

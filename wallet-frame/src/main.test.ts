@@ -299,7 +299,17 @@ describe('Express Transfer: what a session key may sign', () => {
     expect(sessionTxRefusal(t(TM, '0x8e0250ee' + '00'.repeat(32)))).toBeNull()
     expect(sessionTxRefusal(t(TM, '0x779b432d' + '00'.repeat(32)))).toBeNull()
     expect(sessionTxRefusal(t(TM, '0xdeadbeef'))).not.toBeNull()
-    // A USDC transfer() is still not something a session key signs.
-    expect(sessionTxRefusal(t(USDC, '0xa9059cbb' + '00'.repeat(64)))).not.toBeNull()
+    // A token transfer() only back to the session's own owner.
+    const OWNER_ = '0x0baf9b2c44f377208b3c5f833afbab8414d69d5d'
+    const xfer = (to: string) => '0xa9059cbb' + to.slice(2).padStart(64, '0') + '00'.repeat(32)
+    expect(sessionTxRefusal(t(USDC, xfer(OWNER_)), OWNER_)).toBeNull()
+    expect(sessionTxRefusal(t(USDC, xfer('0x9999999999999999999999999999999999999999')), OWNER_)).not.toBeNull()
+    expect(sessionTxRefusal(t(USDC, xfer(OWNER_)))).not.toBeNull() // no owner known: refused
+    // Express Swap: approve only to Circle's swap adapter, and its execute.
+    const ADAPTER = '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b'
+    expect(SESSION_CAPABILITIES).toContain('swap')
+    expect(sessionTxRefusal(t('0x89b50855aa3be2f677cd6303cec089b5f319d72a', approve(ADAPTER)))).toBeNull()
+    expect(sessionTxRefusal(t(ADAPTER, '0xaa3e079c' + '00'.repeat(32)))).toBeNull()
+    expect(sessionTxRefusal(t(ADAPTER, '0x12345678'))).not.toBeNull()
   })
 })
