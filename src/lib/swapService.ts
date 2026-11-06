@@ -642,7 +642,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
       result = await kit.swap({
         ...baseParams,
         from: { adapter: keyAdapter, chain: ARC_CHAIN_KEY as any },
-        to: params.walletAddress, // the output straight to the wallet
+        to: { recipientAddress: params.walletAddress }, // the output straight to the wallet (same chain)
         config: { ...baseParams.config, allowanceStrategy: 'approve' },
       } as any)
     } catch (e) {
