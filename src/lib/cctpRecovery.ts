@@ -143,10 +143,12 @@ export async function finishCctpMintViaRelayer(p: {
   }
 
   const { encodeFunctionData } = await import('viem')
-  const { authApiHeaders } = await import('./supabase')
+  const sb = await import('./supabase')
   const requestStartedAt = performance.now()
+  const headers = await sb.authApiHeaders()
+  const headersMs = performance.now() - requestStartedAt
   const r = await fetch('/api/bridge-relay', {
-    method: 'POST', headers: await authApiHeaders(),
+    method: 'POST', headers,
     body: JSON.stringify({
       action: 'call', chain: p.destinationChain, to: MESSAGE_TRANSMITTER_V2,
       data: encodeFunctionData({ abi: RECEIVE_MESSAGE_ABI, functionName: 'receiveMessage', args: [msg.message as Hex, msg.attestation as Hex] }),
@@ -154,7 +156,7 @@ export async function finishCctpMintViaRelayer(p: {
   })
   const out = await r.json().catch(() => null) as { txHash?: string; error?: string; pending?: boolean; timing?: import('./relayTiming').RelayServerTiming } | null
   void import('./relayTiming').then(m => m.reportRelayTiming('cctp-mint', p.destinationChain, {
-    waitMs: requestStartedAt - waitStartedAt, requestMs: performance.now() - requestStartedAt, server: out?.timing, ok: r.ok && !!out?.txHash,
+    waitMs: requestStartedAt - waitStartedAt, requestMs: performance.now() - requestStartedAt, headersMs, server: out?.timing, ok: r.ok && !!out?.txHash,
   })).catch(() => {})
   if (r.ok && out?.txHash) return { mintTxHash: out.txHash }
   // The relayer simulates first, so a refusal usually means it was already
