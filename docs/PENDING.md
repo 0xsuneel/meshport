@@ -9,11 +9,15 @@ Plan: replace the relayer's private key (`BRIDGE_RELAYER_PRIVATE_KEY` in
 Vercel) with a Circle developer-controlled EOA wallet that signs relayer
 transactions (Circle `signTransaction`) and receives every MeshPort fee.
 
-- [ ] **You:** in Circle's console, create the wallet set and EOA wallets.
-      Confirm the **same address on every EVM chain** (derive wallet), and
-      whether the generic "EVM" wallet type is enabled for chains Circle
-      doesn't list (Sei, Sonic, HyperEVM, XDC, Plume, …).
-- [ ] **You:** give me the EVM wallet ID(s) + address and the Solana wallet ID.
+- [x] **You:** wallets created (scripts/circle-create-wallets.mjs, 6 Nov):
+      wallet set `6c7e36d8-92f6-581e-b350-caa73814ac4d`;
+      relayer + fee wallet `3077130c-ef06-5204-aa4c-b46e1a9aeb3d` (EVM-TESTNET),
+      address `0x7218ec7dd868444a7655599551520ac5bcca7c0d`;
+      Solana fee payer `6b01cdd1-417c-5eea-9fe6-3c886997e446` (SOL-DEVNET),
+      address `3FCjnsPHrjtJnM2Gei1RxKYbBFc2hHqDkWeKAjciXBN8`.
+- [ ] **You:** run `node scripts/circle-sign-check.mjs` - Circle's documented
+      EVM-TESTNET signing list does not include Arc Testnet (5042002) or
+      several relayer chains; the check shows which chains really sign.
 - [ ] **Me:** `api/_lib/relayerSigner.ts` - a viem account whose
       `signTransaction` calls Circle, behind `RELAYER_MODE=circle`
       (`CIRCLE_API_KEY`, `CIRCLE_ENTITY_SECRET`, wallet IDs). Every relayer
