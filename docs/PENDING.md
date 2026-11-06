@@ -70,8 +70,7 @@ fee address at deploy - deploying now means redeploying later):
 - [x] MeshPortRouter with Express Bring deployed 6 Nov at 0x3010518F036eE1BF95Da787eEe3AafFAD95a1794
       (Arc + 16 Bring chains, checked on Arc: bringKeys answers, fee to 0x7218…7c0d); Vercel
       VITE_BRIDGE_ROUTERS / BRIDGE_ROUTERS / VITE_ARC_ROUTER / ARC_ROUTER switched, redeployed.
-- [ ] **You:** re-run `node contracts/deploy-router-all.cjs --chains=Unichain_Sepolia,World_Chain_Sepolia,Ink_Testnet`
-      ("no code after deploy" - probably just slow); until then they stay on 0x4B53…b377 (normal Bring).
+- [x] Unichain, World Chain, Ink confirmed on 0x3010…1794 too - all 19 Bring chains switched.
 - [ ] Test on testnet after "push to main" (wallet frame deploys from main too).
 
 ## 2. Fees (agreed list - `src/lib/feePolicy.ts`)
