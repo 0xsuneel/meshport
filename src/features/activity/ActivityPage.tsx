@@ -1,3 +1,4 @@
+import { isExpressKeyAddress } from '@/lib/fastPay'
 import { DESKTOP_QUERY } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
@@ -301,7 +302,8 @@ export function deriveActivityRow(record: ActivityRecord) {
   const merchantOrder = (isReceive || isSend) && metadata.merchantOrder && !shopPay ? String(metadata.merchantOrder) : null
   // Which of the business's stores took it (merchant side).
   const orderStore = isReceive && metadata.merchantStore ? String(metadata.merchantStore) : ''
-  const subtitle = merchantOrder || shopPay ? (isSend && metadata.merchantName ? String(metadata.merchantName) : `${counterpartyLabel}${orderStore ? ` · ${orderStore}` : ''}`)
+  const subtitle = isReceive && isExpressKeyAddress(counterparty) ? 'Returned - it went the normal way'
+                 : merchantOrder || shopPay ? (isSend && metadata.merchantName ? String(metadata.merchantName) : `${counterpartyLabel}${orderStore ? ` · ${orderStore}` : ''}`)
                  : isSelfTransfer && (isSend || isReceive) ? 'Self'
                  : isSend     ? counterpartyLabel
                  : isReceive  ? counterpartyLabel
@@ -315,7 +317,10 @@ export function deriveActivityRow(record: ActivityRecord) {
                  : ''
 
   const recoveredTitle = recoveredViaLabel(record)
-  const title = isClaim && metadata.auto_convert ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
+  // An Express move that didn't go through: the amount came back from this device's own Express key.
+  const expressRefund = isReceive && isExpressKeyAddress(counterparty)
+  const title = expressRefund ? 'Express refund'
+              : isClaim && metadata.auto_convert ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
               : isClaim && isMerchantClaim(record as any) ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
               : merchantOrder ? paidOrderTitle(metadata, merchantOrder, isReceive, true)
               : shopPay && isReceive ? 'Payment Received'
