@@ -113,7 +113,41 @@ const SESSION_CALLS: Record<string, ReadonlySet<string>> = {
 // passcode-approved Permit2 pull just moved to it for this one move.
 const APPROVE_SPENDERS = new Set([TOKEN_MESSENGER_V2, SWAP_ADAPTER])
 /** What this frame lets a session key do (the app checks before relying on it). */
-export const SESSION_CAPABILITIES = ['pay', 'transfer', 'swap'] as const
+export const SESSION_CAPABILITIES = ['pay', 'transfer', 'swap', 'bring'] as const
+
+// ── Express Bring keys ───────────────────────────────────────────────────────
+// One per wallet, kept (sealed to this device) for weeks: MeshPortRouter on
+// each Bring chain accepts its signature once the owner registered it there
+// (setBringKey). It signs ONLY an ExpressBring for its own owner, and only
+// after a passcode approval checked here - and the router itself sends such
+// a Bring only to the owner's own Arc wallet, with a capped fee.
+const BRING_STORE = 'mp.bring.key.' // + owner → sealed key
+const bringKeys = new Map<string, ReturnType<typeof privateKeyToAccount>>()
+async function bringKeyFor(owner: string, create: boolean): Promise<ReturnType<typeof privateKeyToAccount> | null> {
+  const o = owner.toLowerCase()
+  const hit = bringKeys.get(o)
+  if (hit) return hit
+  let sealed: string | null = null
+  try { sealed = localStorage.getItem(BRING_STORE + o) } catch { sealed = null }
+  if (sealed) {
+    const pk = await openFromDevice(sealed)
+    if (pk) { const k = privateKeyToAccount(pk as Hex); bringKeys.set(o, k); return k }
+  }
+  if (!create) return null
+  const pk = generatePrivateKey()
+  const k = privateKeyToAccount(pk)
+  // Kept sealed to this device; where that can't be done (storage blocked),
+  // for this visit only - the per-chain setup is then asked again next time.
+  const seal = await sealForDevice(pk).catch(() => null)
+  if (seal) { try { localStorage.setItem(BRING_STORE + o, seal) } catch { /* memory only */ } }
+  bringKeys.set(o, k)
+  return k
+}
+const EXPRESS_BRING_TYPES = { ExpressBring: [
+  { name: 'owner', type: 'address' }, { name: 'token', type: 'address' }, { name: 'amount', type: 'uint256' },
+  { name: 'fee', type: 'uint256' }, { name: 'maxFee', type: 'uint256' }, { name: 'minFinalityThreshold', type: 'uint32' },
+  { name: 'hookDataHash', type: 'bytes32' }, { name: 'salt', type: 'bytes32' }, { name: 'deadline', type: 'uint256' },
+] } as const
 const sessionKeys = new Map<string, ReturnType<typeof privateKeyToAccount>>()
 const sessionOwner = new Map<string, string>() // session key → the wallet it spends for
 const SESSION_STORE = 'mp.fastpay.session.' // + address → { owner, sealed key }
@@ -347,6 +381,41 @@ const handlers: Handlers = {
       throw new RpcError('approval-required', 'Enter your passcode to approve this')
     }
     return { serialized: await k.signTransaction(transaction as any) }
+  },
+
+  async 'bring:key'({ owner, create }) {
+    if (typeof owner !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(owner)) throw new RpcError('invalid', 'Which wallet?')
+    if (!gate.hasPasscode()) throw new RpcError('not-found', 'Unlock with your passcode first')
+    const k = await bringKeyFor(owner, create === true)
+    return { address: k?.address ?? null }
+  },
+
+  async 'bring:sign'({ owner, chainId, router, bring }) {
+    const o = String(owner ?? '').toLowerCase()
+    const b = (bring ?? {}) as Record<string, string | number>
+    if (!/^0x[0-9a-f]{40}$/.test(o) || String(b.owner ?? '').toLowerCase() !== o) throw new RpcError('invalid', 'A Bring key signs only for its own wallet')
+    if (!/^0x[0-9a-fA-F]{40}$/.test(String(router)) || !(Number(chainId) > 0)) throw new RpcError('invalid', 'Unknown router')
+    const k = await bringKeyFor(o, false)
+    if (!k) throw new RpcError('not-found', 'No Express Bring key on this device')
+    // Every Bring needs the passcode, checked here.
+    if (!gate.takeApproval(o)) throw new RpcError('approval-required', 'Enter your passcode to approve this')
+    const signature = await k.signTypedData({
+      domain: { name: 'MeshPortRouter', version: '1', chainId: Number(chainId), verifyingContract: String(router) as Hex },
+      types: EXPRESS_BRING_TYPES, primaryType: 'ExpressBring',
+      message: {
+        owner: o as Hex, token: String(b.token) as Hex, amount: BigInt(b.amount), fee: BigInt(b.fee), maxFee: BigInt(b.maxFee),
+        minFinalityThreshold: Number(b.minFinalityThreshold), hookDataHash: String(b.hookDataHash) as Hex, salt: String(b.salt) as Hex,
+        deadline: BigInt(b.deadline),
+      },
+    })
+    return { signature }
+  },
+
+  async 'bring:forget'({ owner }) {
+    const o = String(owner ?? '').toLowerCase()
+    bringKeys.delete(o)
+    try { localStorage.removeItem(BRING_STORE + o) } catch { /* storage blocked */ }
+    return { ok: true as const }
   },
 
   async 'session:capabilities'() {
