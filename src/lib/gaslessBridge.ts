@@ -210,6 +210,16 @@ export async function bringFundsGasless(p: {
   p.onStatus?.('Getting fee…')
   const { quote, fee, maxFee, hookData } = await fetchCheckedQuote(p.chainId, total)
 
+  // Express (lib/expressBring): the passcode only, no Circle signature per
+  // Bring, within the shared Express limit. Null: not covered - below as now.
+  const express = await import('./expressBring').then(m => m.bringExpress({
+    chainId: p.chainId, amountUsdc: p.amountUsdc, signer: p.signer, walletAddress: p.walletAddress,
+    usdc: chain.usdc, chainNum: chain.chainId,
+    quote: { fee, maxFee, hookData, usdcName: quote.usdcName, usdcVersion: quote.usdcVersion },
+    onStatus: p.onStatus,
+  })).catch(e => { throw e })
+  if (express) return express
+
   const account = p.signer
   if (account.address.toLowerCase() !== p.walletAddress.toLowerCase()) throw new Error('Wallet key does not match this account')
 

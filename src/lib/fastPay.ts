@@ -1044,6 +1044,33 @@ export async function expressSwapBegin(p: { owner: string; token: FastToken; amo
   return { account, finish }
 }
 
+// ── Shared-limit helpers for Express Bring (lib/expressBring.ts) ─────────────
+/** Whether the shared Express limit still has `usd` for this wallet (a ready session needed). */
+export function expressCoversUsd(owner: string, usd: number): boolean {
+  const s = session
+  if (!s || !(usd > 0) || s.owner.toLowerCase() !== owner.toLowerCase()) return false
+  if (Date.now() > s.expiresAt - EXPIRY_MARGIN_MS) return false
+  return usd <= leftUsd(s) + 1e-9
+}
+/** Counts `usd` against the shared limit (negative: gives it back). */
+export function expressCountUsd(owner: string, usd: number): void {
+  const s = session
+  if (!s || s.owner.toLowerCase() !== owner.toLowerCase()) return
+  s.spentUsd = Math.max(0, s.spentUsd + usd)
+  if (s.kept) saveSession(s, s.owner)
+  publish()
+}
+/** This action's passcode (typed on its screen) handed to the frame: one approval. False: none / refused. */
+export async function expressApprove(owner: string): Promise<boolean> {
+  const pin = takePin()
+  if (!pin) return false
+  try {
+    const { callWallet } = await import('@/wallet/frameClient')
+    await callWallet('fastpay:approve', { owner, passcode: pin })
+    return true
+  } catch { return false }
+}
+
 // A wallet provider's unlock (store.unlock), and this module loading (the app
 // loads it a moment after start - a reload that didn't lock): start in the
 // background.
