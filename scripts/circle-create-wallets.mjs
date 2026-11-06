@@ -39,9 +39,20 @@ function ask(question) {
   return new Promise((resolve) => {
     const stdin = process.stdin
     process.stdout.write(question)
+    // The first non-empty line. Empty lines are skipped: on Windows the Enter
+    // after one answer can leave a stray newline for the next prompt.
+    const takeLine = () => {
+      for (;;) {
+        const nl = pending.search(/[\r\n]/)
+        if (nl < 0) return null
+        const line = clean(pending.slice(0, nl))
+        pending = pending.slice(nl + 1)
+        if (line) return line
+      }
+    }
     const finish = (line) => {
-      stdin.setRawMode?.(false); stdin.pause(); stdin.off('data', onData)
-      process.stdout.write('\n'); resolve(clean(line))
+      stdin.off('data', onData); stdin.setRawMode?.(false); stdin.pause()
+      process.stdout.write('\n'); resolve(line)
     }
     const onData = (chunk) => {
       for (const ch of chunk) {
@@ -49,15 +60,11 @@ function ask(question) {
         if (ch === '\u0008' || ch === '\u007f') pending = pending.slice(0, -1)
         else pending += ch
       }
-      const nl = pending.search(/[\r\n]/)
-      if (nl >= 0) {
-        const line = pending.slice(0, nl)
-        pending = pending.slice(nl + 1).replace(/^\n/, '')
-        finish(line)
-      }
+      const line = takeLine()
+      if (line) finish(line)
     }
-    const nl = pending.search(/[\r\n]/)
-    if (nl >= 0) { const line = pending.slice(0, nl); pending = pending.slice(nl + 1).replace(/^\n/, ''); return finish(line) }
+    const ready = takeLine()
+    if (ready) return finish(ready)
     stdin.setRawMode?.(true)
     stdin.setEncoding('utf8')
     stdin.on('data', onData)
