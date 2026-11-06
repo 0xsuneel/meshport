@@ -84,6 +84,7 @@ async function newSessionKey(owner: Hex): Promise<{ key: SessionAccount; home: K
   const { callWallet } = await import('@/wallet/frameClient')
   // keep: sealed to this device in the frame, so the session survives the app closing.
   const { address, kept } = await callWallet('session:create', { keep: true, owner })
+  rememberExpressKey(address)
   return { ...(await frameKey(address)), home: 'frame', kept: kept === true }
 }
 
@@ -103,6 +104,22 @@ interface SavedSession {
   spentUsd?: number
 }
 const sessionStoreKey = (owner: string) => `meshport:fastpay-session:${owner.toLowerCase()}`
+// Every Express key this device made (addresses only): Activity shows a
+// transfer from one as "Express refund" - an Express move that didn't go
+// through sends the amount back from its key.
+const KEYS_SEEN = 'meshport:express-keys'
+function rememberExpressKey(addr: string): void {
+  try {
+    const list: string[] = JSON.parse(localStorage.getItem(KEYS_SEEN) || '[]')
+    const a = addr.toLowerCase()
+    if (!list.includes(a)) localStorage.setItem(KEYS_SEEN, JSON.stringify([...list, a].slice(-50)))
+  } catch { /* private mode */ }
+}
+/** Whether `addr` is one of this device's Express keys (sync - for Activity labels). */
+export function isExpressKeyAddress(addr: string | null | undefined): boolean {
+  if (!addr) return false
+  try { return (JSON.parse(localStorage.getItem(KEYS_SEEN) || '[]') as string[]).includes(addr.toLowerCase()) } catch { return false }
+}
 function loadSaved(owner: string): SavedSession | null {
   try { return JSON.parse(localStorage.getItem(sessionStoreKey(owner)) || 'null') as SavedSession | null } catch { return null }
 }
@@ -488,6 +505,7 @@ async function resume(owner: Hex, gen: number): Promise<boolean> {
   } catch { return false }
   if (!restored) { saveSession(null, owner); return false }
   const keyAddr = saved.key as Hex
+  rememberExpressKey(keyAddr)
   const limits: Partial<Record<FastToken, bigint>> = {}
   for (const [t, v] of Object.entries(saved.limits ?? (saved.limit ? { USDC: saved.limit } : {}))) if (isFastToken(t) && v) limits[t] = BigInt(v)
   const tokens = TOKEN_ORDER.filter(t => limits[t] != null)

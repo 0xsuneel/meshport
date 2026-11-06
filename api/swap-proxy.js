@@ -199,6 +199,43 @@ async function sessionInfo(req) {
   return info
 }
 
+// Express: is `key` one of `owner`'s live session keys? Permit2 allowance
+// (owner, token, key) with an amount left and not expired, for USDC, EURC or
+// cirBTC on Arc. Cached briefly per pair.
+const PERMIT2 = '0x000000000022d473030f116ddee9f6b43ac78ba3'
+const EXPRESS_TOKENS = ['0x3600000000000000000000000000000000000000', '0x89b50855aa3be2f677cd6303cec089b5f319d72a', '0xf0c4a4ce82a5746abaad9425360ab04fbba432bf']
+const ARC_RPCS = [(process.env.ARC_RPC_URL || '').trim(), 'https://rpc.testnet.arc.io'].filter(Boolean)
+const expressKeyCache = new Map()
+async function isExpressKeyOf(owner, key) {
+  if (!/^0x[0-9a-f]{40}$/.test(owner) || !/^0x[0-9a-f]{40}$/.test(key)) return false
+  const ck = owner + ':' + key
+  const hit = expressKeyCache.get(ck)
+  if (hit && hit.exp > Date.now()) return hit.ok
+  const pad = (a) => a.slice(2).padStart(64, '0')
+  const nowS = Math.floor(Date.now() / 1000)
+  let ok = false
+  for (const token of EXPRESS_TOKENS) {
+    // allowance(address owner, address token, address spender) → (uint160 amount, uint48 expiration, uint48 nonce)
+    const data = '0x927da105' + pad(owner) + pad(token) + pad(key)
+    for (const url of ARC_RPCS) {
+      try {
+        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: PERMIT2, data }, 'latest'] }), signal: AbortSignal.timeout(4000) })
+        const j = await r.json()
+        const out = String(j && j.result || '')
+        if (out.length >= 2 + 64 * 2) {
+          const amount = BigInt('0x' + out.slice(2, 66))
+          const expiration = Number(BigInt('0x' + out.slice(66, 130)))
+          if (amount > 0n && expiration > nowS) ok = true
+          break
+        }
+      } catch { /* next RPC */ }
+    }
+    if (ok) break
+  }
+  expressKeyCache.set(ck, { ok, exp: Date.now() + (ok ? 60_000 : 10_000) })
+  return ok
+}
+
 async function relayStablecoinService(req, res, svcPath) {
   if (!KIT_KEY) return res.status(503).json({ message: 'Swap service key is not configured' })
   // Only the two swap endpoints the App Kit SDK calls. Resolve the URL first
@@ -219,9 +256,16 @@ async function relayStablecoinService(req, res, svcPath) {
   let body
   if (req.method === 'POST') {
     body = req.body && typeof req.body === 'object' ? req.body : {}
-    // A quote/transaction may only be prepared for the caller's own wallet.
+    // A quote/transaction may only be prepared for the caller's own wallet -
+    // or for the caller's Express key (lib/fastPay: the session key swaps
+    // and the output goes to the wallet), when the output goes to the
+    // caller's wallet AND Arc shows the wallet granted that key a live
+    // Permit2 allowance.
     const from = String(body.fromAddress || '').toLowerCase()
-    if (from && from !== wallet) return res.status(403).json({ message: 'Wallet mismatch' })
+    if (from && from !== wallet) {
+      const to = String(body.toAddress || '').toLowerCase()
+      if (to !== wallet || !(await isExpressKeyOf(wallet, from))) return res.status(403).json({ message: 'Wallet mismatch' })
+    }
     body = JSON.stringify(body)
   }
   const r = await fetch(target.href, {
