@@ -165,3 +165,20 @@ describe('relayed provider selectors match the relayer\'s ABI', () => {
     expect(new Set(sigs.map(s => toFunctionSelector(s)))).toEqual(RELAYABLE_SELECTORS)
   })
 })
+
+describe('pickMint (who mints on Arc)', () => {
+  const base = { fee: '50000', maxFee: '120000', usdcName: 'USDC', usdcVersion: '2' }
+  const amount = 10_000_000n
+  it('the relayer when it offers to: no hook, its own (lower) maxFee', async () => {
+    const { pickMint } = await import('./gaslessBridge')
+    expect(pickMint({ ...base, relayerMint: { fee: '50000', maxFee: '1200' } }, amount)).toEqual({ fee: 50000n, maxFee: 1200n, hookData: '0x' })
+  })
+  it("Circle's forwarder when the relayer doesn't offer", async () => {
+    const { pickMint } = await import('./gaslessBridge')
+    expect(pickMint(base, amount)).toEqual({ fee: 50000n, maxFee: 120000n, hookData: FORWARD_HOOK })
+  })
+  it("Circle's forwarder when the relayer's offer breaks the app's limits", async () => {
+    const { pickMint } = await import('./gaslessBridge')
+    expect(pickMint({ ...base, relayerMint: { fee: '9000000', maxFee: '0' } }, amount)).toEqual({ fee: 50000n, maxFee: 120000n, hookData: FORWARD_HOOK })
+  })
+})

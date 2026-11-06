@@ -23,6 +23,11 @@ transactions (Circle `signTransaction`) and receives every MeshPort fee.
       (signer, nonce, chain, to, value, data, gas, fee) before broadcast. P2P
       offers made before the switch name the old relayer as operator, so
       registerTrade / cancelTrade fall back to the key wallet when needed.
+- [x] **Bring: relayer mints on Arc** (6 Nov) instead of Circle's forwarder - saves the
+      ~$0.0236 forwarding fee per Bring (Arc mint gas ~$0.0045, in MeshPort's fee).
+      Server mints after the burn (waitUntil); the app re-checks after 60 s; quotes fall
+      back to Circle's forwarder if the relayer's Arc gas is < 0.5 USDC or
+      `BRING_ARC_MINT=circle`. EURC / cirBTC still use CCTPx's own flow.
 - [x] **Live (6 Nov):** Circle relayer on. First Bring (Ethereum Sepolia → Arc, 1 USDC,
       38.4 s) sent from 0x7218…7c0d through router 0x4B53…b377; fee $0.05 to 0x7218…7c0d.
 - [x] **Me (Vercel, 6 Nov):** `CIRCLE_RELAYER_WALLET_ID`, `CIRCLE_RELAYER_ADDRESS`,

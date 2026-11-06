@@ -7,13 +7,15 @@
 //   2. sign ONE USDC ReceiveWithAuthorization locally - the wallet key never
 //      leaves the device, and the user needs no gas on the source chain
 //   3. /api/bridge-relay submits it; in one transaction the router pulls the
-//      USDC, pays MeshPort's fee, and burns the rest with Circle's
-//      forwarding hook so Circle mints on Arc
+//      USDC, pays MeshPort's fee, and burns the rest. When the relayer offers
+//      it (quote.relayerMint), the burn has no hook and MeshPort's relayer
+//      mints on Arc - no Circle forwarding fee (~$0.02 a Bring); otherwise
+//      Circle's forwarding hook, and Circle mints on Arc
 //   4. the returned burn hash goes to the normal tracking (lib/cctpTracker)
 //
 // SECURITY: what gets signed is built HERE from values compiled into the app
 // - the router and USDC addresses, the chain id, Arc's domain, the user's
-// own address as recipient and Circle's forwarding hook. Only the fee and
+// own address as recipient and the hook (none, or Circle's). Only the fee and
 // maxFee come from the server, and both are capped below. A wrong or
 // malicious server can therefore at most make the signature useless, never
 // redirect the funds.
@@ -116,6 +118,8 @@ export interface BridgeQuote {
   maxFee: string         // CCTP maxFee (protocol + forwarding), base units
   usdcName: string       // USDC's EIP-712 domain name on that chain
   usdcVersion: string
+  /** MeshPort's relayer mints on Arc (no hook, no forwarding fee) - absent when it can't right now. */
+  relayerMint?: { fee: string; maxFee: string }
 }
 
 /** Checks a quote against the app's own limits. Throws with a readable reason. */
@@ -135,10 +139,25 @@ const toUnits = (usdc: number) => BigInt(Math.round(usdc * 1e6))
 // and could show one fee on Review and sign a different one. The relayer still
 // re-prices at submit time and refuses a fee that has fallen too far behind.
 const QUOTE_REUSE_MS = 20_000
-const recentQuotes = new Map<string, { at: number; value: { quote: BridgeQuote; fee: bigint; maxFee: bigint } }>()
+type CheckedQuote = { quote: BridgeQuote; fee: bigint; maxFee: bigint; hookData: Hex }
+const recentQuotes = new Map<string, { at: number; value: CheckedQuote }>()
+
+/**
+ * Which way the Arc mint goes for this quote: MeshPort's relayer when it
+ * offers to (cheaper - no forwarding fee), else Circle's forwarder.
+ */
+export function pickMint(q: BridgeQuote, amount: bigint): { fee: bigint; maxFee: bigint; hookData: Hex } {
+  if (q.relayerMint) {
+    try {
+      const r = checkQuote({ ...q, fee: q.relayerMint.fee, maxFee: q.relayerMint.maxFee }, amount)
+      return { ...r, hookData: '0x' }
+    } catch { /* fall back to Circle's forwarder */ }
+  }
+  return { ...checkQuote(q, amount), hookData: FORWARD_HOOK }
+}
 
 /** Fetches the relayer's quote for moving `total` units and checks it against the app's limits. */
-async function fetchCheckedQuote(chainId: string, total: bigint): Promise<{ quote: BridgeQuote; fee: bigint; maxFee: bigint }> {
+async function fetchCheckedQuote(chainId: string, total: bigint): Promise<CheckedQuote> {
   const key = `${chainId}|${total}`
   const hit = recentQuotes.get(key)
   if (hit && Date.now() - hit.at < QUOTE_REUSE_MS) return hit.value
@@ -146,10 +165,10 @@ async function fetchCheckedQuote(chainId: string, total: bigint): Promise<{ quot
   const qr = await fetch(`/api/bridge-relay?action=quote&chain=${encodeURIComponent(chainId)}&amount=${total}`, { headers: await authApiHeaders() })
   const quote = await qr.json().catch(() => null) as (BridgeQuote & { error?: string }) | null
   if (!qr.ok || !quote) throw new Error(quote?.error || 'Could not get a fee quote')
-  const { fee, maxFee } = checkQuote(quote, total)
+  const { fee, maxFee, hookData } = pickMint(quote, total)
   if (fee >= total) throw new Error('Amount too small to cover the network fee')
   if (maxFee >= total - fee) throw new Error('Amount too small to cover the bridge fee')
-  const value = { quote, fee, maxFee }
+  const value = { quote, fee, maxFee, hookData }
   recentQuotes.set(key, { at: Date.now(), value })
   if (recentQuotes.size > 20) recentQuotes.delete(recentQuotes.keys().next().value as string)
   return value
@@ -181,7 +200,7 @@ export async function bringFundsGasless(p: {
   signer: WalletAccount
   walletAddress: string
   onStatus?: (msg: string) => void
-}): Promise<{ txHash: Hex; fee: number; maxFee: number }> {
+}): Promise<{ txHash: Hex; fee: number; maxFee: number; mint: 'relayer' | 'circle' }> {
   assertAccountUnlocked() // business not approved yet: nothing moves
   const chain = GASLESS_CHAINS[p.chainId]
   const router = gaslessRouter(p.chainId)
@@ -189,7 +208,7 @@ export async function bringFundsGasless(p: {
   const total = toUnits(p.amountUsdc)
 
   p.onStatus?.('Getting fee…')
-  const { quote, fee, maxFee } = await fetchCheckedQuote(p.chainId, total)
+  const { quote, fee, maxFee, hookData } = await fetchCheckedQuote(p.chainId, total)
 
   const account = p.signer
   if (account.address.toLowerCase() !== p.walletAddress.toLowerCase()) throw new Error('Wallet key does not match this account')
@@ -200,7 +219,7 @@ export async function bringFundsGasless(p: {
     mintRecipient: pad(account.address, { size: 32 }),
     fee, maxFee,
     minFinalityThreshold: FAST_FINALITY,
-    hookData: FORWARD_HOOK,
+    hookData,
     salt: toHex(crypto.getRandomValues(new Uint8Array(32))),
   }
   const nonce = bridgeNonce(params, chain.chainId, router)
@@ -242,5 +261,20 @@ export async function bringFundsGasless(p: {
     } catch { /* RPC trouble - the claim worker still tracks this burn */ }
     if (receipt?.status === 'reverted') throw new Error('The transfer failed on-chain - nothing was moved')
   }
-  return { txHash: out.txHash, fee: Number(fee) / 1e6, maxFee: Number(maxFee) / 1e6 }
+  const mint = hookData === '0x' ? 'relayer' as const : 'circle' as const
+  // The relayer mints on Arc right after the burn (server side). As a backup
+  // - its function ran out of time, a hiccup - the app asks again a minute
+  // later; a message mints only once, so an already-minted one is refused at
+  // simulation and costs nothing.
+  if (mint === 'relayer') {
+    const burnTxHash = out.txHash
+    setTimeout(() => {
+      void import('./cctpRecovery').then(m => m.finishCctpMintViaRelayer({ sourceChain: p.chainId, destinationChain: 'Arc_Testnet', burnTxHash, timeoutMs: 120_000 }))
+        .catch(() => { /* already minted, or Recover finishes it */ })
+    }, RELAYER_MINT_BACKUP_MS)
+  }
+  return { txHash: out.txHash, fee: Number(fee) / 1e6, maxFee: Number(maxFee) / 1e6, mint }
 }
+
+/** When the app double-checks a relayer mint on Arc (the relayer itself mints within seconds of the attestation). */
+export const RELAYER_MINT_BACKUP_MS = 60_000
