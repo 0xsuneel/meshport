@@ -43,9 +43,13 @@ fee address at deploy - deploying now means redeploying later):
       `BRIDGE_ROUTERS` / `VITE_ARC_ROUTER` / `ARC_ROUTER` / `VITE_FEE_WALLET` set.
 - [x] HyperEVM router deployed too (with `BRIDGE_RPC_HYPEREVM_TESTNET`) - all 19 Bring
       chains on `0x4B53…b377`. Codex / Edge: no router (deploy wallet had no gas).
-- [ ] Deploy **MeshPortCheckout** (`node contracts/deploy-checkout.cjs`) with
-      `FEE_RECIPIENT` = the Circle wallet → set `VITE_MESHPORT_CHECKOUT` (Vercel)
-      and `MESHPORT_CHECKOUT` (Supabase secrets); then I redeploy `merchant-pay`.
+- [x] **MeshPortCheckout** `0xda51a32edfc723e3de9aaf0a452fd2f71e6019f1` deployed 6 Nov
+      (checked on Arc: fee recipient 0x7218…7c0d, 60 bps, cap $3); Vercel
+      `VITE_MESHPORT_CHECKOUT` set.
+- [ ] **You:** Supabase secret `MESHPORT_CHECKOUT` + deploy `merchant-pay`
+      (`npx supabase secrets set …` / `npx supabase functions deploy merchant-pay
+      --no-verify-jwt`) - BEFORE the next Vercel redeploy, or order payments made
+      through the checkout aren't credited the full price.
 - [ ] Mainnet only: `BRIDGE_NETWORK=mainnet` (live gas-coin prices for fees).
 
 ## 2. Fees (agreed list - `src/lib/feePolicy.ts`)
