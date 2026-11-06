@@ -724,7 +724,7 @@ onPasscodeVerified(async pin => {
   if (onPaymentScreen()) pendingPin = { pin, at: Date.now() }
 })
 /** The screens whose PIN sheet pays with sendUSDC (Pay, chat Pay). */
-const PAYMENT_PATHS = ['/pay', '/chat']
+const PAYMENT_PATHS = ['/pay', '/chat', '/multichain', '/swap']
 function onPaymentScreen(): boolean {
   try { const p = window.location.pathname; return PAYMENT_PATHS.some(x => p === x || p.startsWith(x + '/')) } catch { return false }
 }
@@ -842,6 +842,111 @@ export async function sendFastPay(p: { owner: string; to: Hex; amount: number; i
     if (s.kept) saveSession(s, s.owner)
     publish()
     throw new FastPayNotSent(e instanceof Error ? e.message : 'Fast Pay send refused')
+  }
+}
+
+// ── Express Transfer (Arc → another chain over CCTP) ─────────────────────────
+// No Circle signature: after the passcode check (one approval), the session
+// key pulls the amount (+ its gas refund) to itself and MeshPort's fee to the
+// fee wallet in ONE Permit2 batch, then approves exactly the amount to
+// Circle's TokenMessengerV2 and burns it to the recipient - three Arc
+// transactions signed in the wallet frame, sent back to back. If anything
+// fails after the pull, the key sends the amount straight back to the owner
+// and the transfer goes the normal way (ExpressNotSent).
+const TOKEN_MESSENGER_V2_ARC = '0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA' as Hex
+const APPROVE_GAS = 70_000n
+const BURN_GAS = 260_000n
+const approveAbi = [{ type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ type: 'bool' }] }] as const
+
+let _frameCaps: Promise<string[]> | null = null
+/** Whether the wallet frame lets session keys do `cap` ('pay', 'transfer') - older frames: pay only. */
+export async function frameCan(cap: string): Promise<boolean> {
+  _frameCaps ??= import('@/wallet/frameClient').then(m => m.callWallet('session:capabilities', {} as Record<string, never>))
+    .then(r => r.capabilities).catch(() => { _frameCaps = null; return ['pay'] })
+  return (await _frameCaps).includes(cap)
+}
+
+/** Whether Express can make this transfer: `totalUsdc` = burn + MeshPort's fee. */
+export function expressCoversTransfer(owner: string, totalUsdc: number): boolean {
+  return fastPayCovers(owner, totalUsdc, 'USDC')
+}
+
+/**
+ * Send a Transfer's burn through the Express session. `burnData` is the
+ * TokenMessengerV2 call (depositForBurn / WithHook) for exactly `amount`.
+ * ExpressNotSent: nothing moved (or it was returned) - transfer the normal way.
+ */
+export async function expressTransfer(p: { owner: string; amount: bigint; fee: bigint; feeWallet: Hex | null; burnData: Hex }): Promise<{ burnHash: Hex }> {
+  const s = session
+  const total = p.amount + (p.feeWallet ? p.fee : 0n)
+  if (!s || !expressCoversTransfer(p.owner, fromAtomic('USDC', total))) throw new FastPayNotSent('Express does not cover this transfer')
+  if (!(await frameCan('transfer'))) throw new FastPayNotSent('This wallet frame cannot do Express transfers yet')
+  const pin = takePin()
+  if (!pin) throw new FastPayNotSent('No passcode for this transfer')
+  const t0 = performance.now()
+  const lap: Record<string, number> = {}
+  let fullCheck = false
+  try {
+    const { callWallet } = await import('@/wallet/frameClient')
+    fullCheck = (await callWallet('fastpay:approve', { owner: s.owner, passcode: pin })).full === true
+    lap.approve = performance.now() - t0
+  } catch (e) {
+    throw new FastPayNotSent(`Frame refused the passcode (${(e as { code?: string })?.code ?? 'error'})`)
+  }
+  const { relaySend, sendFeeCap, currentGasPrice } = await import('./arcService')
+  const [feeCap, gasPrice] = await Promise.all([sendFeeCap(), currentGasPrice().catch(() => 0n)])
+  const owed = s.owedGasWei
+  // The key's gas for all three transactions, refunded in USDC with the pull.
+  const refund = gasPrice > 0n ? refundUnits(s.payGasEstimate + APPROVE_GAS + BURN_GAS, gasPrice, owed) : 0n
+  const usdc = s.grants.USDC!
+  if (total + refund > leftFor(s, 'USDC') + REFUND_RESERVE) throw new FastPayNotSent('Not enough left of the Express limit')
+  const usd = fromAtomic('USDC', total + refund)
+  const count = (sign: 1n | -1n) => { usdc.spent += sign * (total + refund); s.spentUsd += Number(sign) * usd }
+  const nonce0 = s.nonce
+  count(1n)
+  s.owedGasWei = 0n
+  s.nonce += 3
+  if (s.kept) saveSession(s, s.owner)
+  publish()
+  const details: Array<{ from: Hex; to: Hex; amount: bigint; token: Hex }> = [{ from: s.owner, to: s.key.address, amount: p.amount + refund, token: ARC_USDC_ERC20 }]
+  if (p.feeWallet && p.fee > 0n) details.push({ from: s.owner, to: p.feeWallet, amount: p.fee, token: ARC_USDC_ERC20 })
+  const pullData = encodeFunctionData({ abi: permit2Abi, functionName: 'transferFrom', args: [details] })
+  const approveData = encodeFunctionData({ abi: approveAbi, functionName: 'approve', args: [TOKEN_MESSENGER_V2_ARC, p.amount] })
+  const undo = () => { count(-1n); s.owedGasWei += owed; s.nonce = Math.min(s.nonce, nonce0); if (s.kept) saveSession(s, s.owner); publish() }
+  // 1. The pull (the passcode-approved signature).
+  let pulled
+  try {
+    pulled = await relaySend(s.key as any, { to: PERMIT2, data: pullData, gas: s.payGas + (p.feeWallet ? s.payGas / 3n : 0n), nonce: nonce0, maxFeePerGas: feeCap }, () => {})
+  } catch (e) {
+    undo()
+    throw new FastPayNotSent(e instanceof Error ? e.message : 'Express pull refused')
+  }
+  if (pulled.state !== 'success') {
+    if (pulled.state === 'failed') { undo(); throw new FastPayNotSent('Express pull failed on-chain') }
+    throw new Error('The transfer is still confirming - check Activity before trying again')
+  }
+  lap.pull = performance.now() - t0
+  // 2-3. Approve exactly the amount, then the burn.
+  try {
+    const a = await relaySend(s.key as any, { to: ARC_USDC_ERC20, data: approveData, gas: APPROVE_GAS, nonce: nonce0 + 1, maxFeePerGas: feeCap }, () => {})
+    if (a.state === 'failed') throw new Error('approve failed')
+    const b = await relaySend(s.key as any, { to: TOKEN_MESSENGER_V2_ARC, data: p.burnData, gas: BURN_GAS, nonce: nonce0 + 2, maxFeePerGas: feeCap }, () => {})
+    if (b.state === 'failed') throw new Error('burn failed')
+    lap.burn = performance.now() - t0
+    void import('./errorReport').then(m => m.reportPerf(`[perf express transfer] approve ${(lap.approve / 1000).toFixed(2)} (${fullCheck ? 'full' : 'fast'} check), pull ${(lap.pull / 1000).toFixed(2)}, burn ${(lap.burn / 1000).toFixed(2)} (${b.state})`)).catch(() => {})
+    return { burnHash: b.txHash }
+  } catch (e) {
+    // The amount came to the key but wasn't burned: straight back to the owner
+    // (the fee and the gas refund stay - those transactions ran).
+    try {
+      const back = await relaySend(s.key as any, { to: s.owner, value: p.amount * WEI_PER_UNIT, gas: NATIVE_TRANSFER_GAS, nonce: nonce0 + 3, maxFeePerGas: feeCap }, () => {})
+      s.nonce = nonce0 + 4
+      usdc.spent -= p.amount; s.spentUsd -= fromAtomic('USDC', p.amount)
+      if (s.kept) saveSession(s, s.owner)
+      publish()
+      if (back.state !== 'failed') throw new FastPayNotSent(`Express transfer stopped (${e instanceof Error ? e.message : 'error'}) - the amount was returned`)
+    } catch (r) { if (r instanceof FastPayNotSent) throw r }
+    throw new Error("The transfer couldn't finish and the amount is held for you - open Recover or contact support")
   }
 }
 

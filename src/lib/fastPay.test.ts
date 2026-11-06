@@ -92,6 +92,7 @@ vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
 // signing for the app, a payment only with a passcode approval it checked),
 // or it's an older frame that answers 'unsupported'.
 let frameSupports = true
+let frameCaps = ['pay', 'transfer']
 const PIN = '123456'
 let framePin: string | null = PIN // the frame's Fast Pay passcode check (set when turned on)
 let frameApproved = false
@@ -119,6 +120,7 @@ vi.mock('@/wallet/frameClient', () => ({
     if (method === 'session:restore') return { restored: frameKeys.has(lc(params.address)) && frameKept.has(lc(params.address)) }
     if (method === 'session:sign') return { serialized: await frameKeys.get(lc(params.address))!.signTransaction(params.transaction) }
     if (method === 'session:end') { frameKeys.delete(lc(params.address)); frameKept.delete(lc(params.address)); return { ok: true } }
+    if (method === 'session:capabilities') return { capabilities: frameCaps }
     throw new Error('unexpected ' + method)
   },
 }))
@@ -362,6 +364,49 @@ describe('Fast Pay session', () => {
       expect((await fp.stopFastPay()).cancelled).toBe(true)
       const { args } = decodeFunctionData({ abi: permit2Abi, data: sent.find(t => lc(t.from) === lc(OWNER))!.data! })
       expect((args as any)[0].map((a: any) => lc(a.spender))).toEqual([keyAddr])
+    })
+  })
+
+  describe('Express Transfer (no Circle signature)', () => {
+    const TM = '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa'
+    const FEE_WALLET = '0x7218ec7dd868444a7655599551520ac5bcca7c0d' as Hex
+    const BURN = '0x8e0250ee' + '00'.repeat(32) as Hex
+    async function ready() {
+      usdcAllowanceToPermit2 = maxUint256
+      fp.setFastPayEnabled(true)
+      expect(await fp.maybeStartFastPay()).toBe(true)
+      sent.length = 0
+    }
+    it('pull (amount + gas to the key, fee to the fee wallet), approve exactly the amount, burn - all signed by the session key', async () => {
+      await ready()
+      await enterPin()
+      const { burnHash } = await fp.expressTransfer({ owner: OWNER, amount: 10_000_000n, fee: 50_000n, feeWallet: FEE_WALLET, burnData: BURN })
+      expect(burnHash).toMatch(/^0x/)
+      expect(sent.map(t => lc(t.to))).toEqual([lc(PERMIT2), lc(ARC_USDC), TM])
+      const pull = decodeFunctionData({ abi: permit2Abi, data: sent[0].data! }) as any
+      const [toKey, toFee] = pull.args[0]
+      expect(lc(toKey.from)).toBe(lc(OWNER)); expect(lc(toKey.to)).toBe(lc(sent[0].from)); expect(toKey.amount).toBeGreaterThan(10_000_000n) // + gas refund
+      expect(lc(toFee.to)).toBe(lc(FEE_WALLET)); expect(toFee.amount).toBe(50_000n)
+      const approve = decodeFunctionData({ abi: [{ type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ name: 's', type: 'address' }, { name: 'a', type: 'uint256' }], outputs: [{ type: 'bool' }] }] as const, data: sent[1].data! }) as any
+      expect(approve.functionName).toBe('approve'); expect(lc(approve.args[0])).toBe(TM); expect(approve.args[1]).toBe(10_000_000n)
+      expect(sent[2].data).toBe(BURN)
+      expect(sent.map(t => t.nonce)).toEqual([sent[0].nonce, sent[0].nonce + 1, sent[0].nonce + 2])
+      // The shared limit counts the whole move.
+      expect(fp.useFastPay.getState().remainingUsd).toBeLessThan(100 - 10.05)
+    })
+    it('no passcode, or more than is left: the normal way, nothing sent', async () => {
+      await ready()
+      await expect(fp.expressTransfer({ owner: OWNER, amount: 1_000_000n, fee: 0n, feeWallet: null, burnData: BURN })).rejects.toBeInstanceOf(fp.FastPayNotSent)
+      await enterPin()
+      await expect(fp.expressTransfer({ owner: OWNER, amount: 150_000_000n, fee: 0n, feeWallet: null, burnData: BURN })).rejects.toBeInstanceOf(fp.FastPayNotSent)
+      expect(sent).toEqual([])
+    })
+    it('an older wallet frame (pay only): the normal way, nothing sent', async () => {
+      frameCaps = ['pay']
+      vi.resetModules()
+      const fresh = await import('./fastPay')
+      expect(await fresh.frameCan('transfer')).toBe(false)
+      frameCaps = ['pay', 'transfer']
     })
   })
 

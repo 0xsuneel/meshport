@@ -92,6 +92,8 @@ export interface WalletRpc {
   'session:sign': [{ address: string; transaction: FrameTransaction }, { serialized: Hex }]
   /** Drop a session key (or all of them). */
   'session:end': [{ address?: string }, { ok: true }]
+  /** What session keys may do in this frame (Express): 'pay', 'transfer'. Older frames don't answer. */
+  'session:capabilities': [Record<string, never>, { capabilities: string[] }]
   /**
    * The passcode of Google / email (Circle) wallets, checked only in the
    * frame (wallet-frame/src/fastPayGate.ts) - one per device, like the app's

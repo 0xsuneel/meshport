@@ -285,3 +285,21 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
     expect(toFunctionSelector('permit(address,address,uint256,uint256,uint8,bytes32,bytes32)')).toBe('0xd505accf')
   })
 })
+
+describe('Express Transfer: what a session key may sign', () => {
+  it('approve only to TokenMessengerV2, and the CCTP burn - nothing else new', async () => {
+    const { sessionTxRefusal, SESSION_CAPABILITIES } = await import('./main')
+    const USDC = '0x3600000000000000000000000000000000000000'
+    const TM = '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa'
+    const approve = (spender: string) => '0x095ea7b3' + spender.slice(2).padStart(64, '0') + '00'.repeat(32)
+    const t = (to: string, data: string) => ({ chainId: 5042002, to, data })
+    expect(SESSION_CAPABILITIES).toContain('transfer')
+    expect(sessionTxRefusal(t(USDC, approve(TM)))).toBeNull()
+    expect(sessionTxRefusal(t(USDC, approve('0x9999999999999999999999999999999999999999')))).not.toBeNull()
+    expect(sessionTxRefusal(t(TM, '0x8e0250ee' + '00'.repeat(32)))).toBeNull()
+    expect(sessionTxRefusal(t(TM, '0x779b432d' + '00'.repeat(32)))).toBeNull()
+    expect(sessionTxRefusal(t(TM, '0xdeadbeef'))).not.toBeNull()
+    // A USDC transfer() is still not something a session key signs.
+    expect(sessionTxRefusal(t(USDC, '0xa9059cbb' + '00'.repeat(64)))).not.toBeNull()
+  })
+})
