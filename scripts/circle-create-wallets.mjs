@@ -1,7 +1,9 @@
 // Create MeshPort's Circle developer-controlled wallets (relayer + fee wallet,
 // Solana fee payer). No packages needed - Circle's REST API + Node's crypto.
 //
-//   CIRCLE_API_KEY=... CIRCLE_ENTITY_SECRET=... node scripts/circle-create-wallets.mjs
+//   node scripts/circle-create-wallets.mjs
+//   (asks for the API key and the Entity Secret - typing is hidden; or set
+//    CIRCLE_API_KEY / CIRCLE_ENTITY_SECRET in the environment)
 //   (add --wallet-set-id=<id> to reuse a wallet set you already have)
 //   (add --mainnet to create EVM / SOL instead of EVM-TESTNET / SOL-DEVNET;
 //    use a mainnet API key for that)
@@ -21,8 +23,41 @@
 import crypto from 'node:crypto'
 
 const API = 'https://api.circle.com/v1/w3s'
-const apiKey = (process.env.CIRCLE_API_KEY || '').trim()
-const entitySecret = (process.env.CIRCLE_ENTITY_SECRET || '').trim()
+
+// Hidden prompt (nothing echoed, nothing saved in shell history). Text typed
+// or pasted past the first line is kept for the next prompt.
+let pending = ''
+function ask(question) {
+  return new Promise((resolve) => {
+    const stdin = process.stdin
+    process.stdout.write(question)
+    const finish = (line) => {
+      stdin.setRawMode?.(false); stdin.pause(); stdin.off('data', onData)
+      process.stdout.write('\n'); resolve(line.trim())
+    }
+    const onData = (chunk) => {
+      for (const ch of chunk) {
+        if (ch === '\u0003') { process.stdout.write('\n'); process.exit(1) } // Ctrl+C
+        if (ch === '\u0008' || ch === '\u007f') pending = pending.slice(0, -1)
+        else pending += ch
+      }
+      const nl = pending.search(/[\r\n]/)
+      if (nl >= 0) {
+        const line = pending.slice(0, nl)
+        pending = pending.slice(nl + 1).replace(/^\n/, '')
+        finish(line)
+      }
+    }
+    const nl = pending.search(/[\r\n]/)
+    if (nl >= 0) { const line = pending.slice(0, nl); pending = pending.slice(nl + 1).replace(/^\n/, ''); return finish(line) }
+    stdin.setRawMode?.(true)
+    stdin.setEncoding('utf8')
+    stdin.on('data', onData)
+    stdin.resume()
+  })
+}
+const apiKey = (process.env.CIRCLE_API_KEY || '').trim() || await ask('Circle API key (hidden): ')
+const entitySecret = (process.env.CIRCLE_ENTITY_SECRET || '').trim() || await ask('Entity Secret (hidden): ')
 const arg = (n) => process.argv.find(a => a.startsWith(`--${n}=`))?.split('=')[1]
 const mainnet = process.argv.includes('--mainnet')
 
