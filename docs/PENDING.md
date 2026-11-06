@@ -39,11 +39,10 @@ transactions (Circle `signTransaction`) and receives every MeshPort fee.
 fee address at deploy - deploying now means redeploying later):
 
 - [x] **MeshPortRouter** `0x4B53c10390A7A3C0AA16899a94c547974210b377` (fee to the Circle
-      wallet) deployed 6 Nov on Arc + 18 Bring chains; Vercel `VITE_BRIDGE_ROUTERS` /
+      wallet) deployed 6 Nov on Arc + 19 Bring chains; Vercel `VITE_BRIDGE_ROUTERS` /
       `BRIDGE_ROUTERS` / `VITE_ARC_ROUTER` / `ARC_ROUTER` / `VITE_FEE_WALLET` set.
-- [ ] **HyperEVM** router failed ("internal error" from rpcs.chain.link): retry with
-      `BRIDGE_RPC_HYPEREVM_TESTNET=https://rpc.hyperliquid-testnet.xyz/evm`; until then it
-      stays on the old router `0x10d0…b8Cb` (fees to the old relayer). Codex / Edge: no gas.
+- [x] HyperEVM router deployed too (with `BRIDGE_RPC_HYPEREVM_TESTNET`) - all 19 Bring
+      chains on `0x4B53…b377`. Codex / Edge: no router (deploy wallet had no gas).
 - [ ] Deploy **MeshPortCheckout** (`node contracts/deploy-checkout.cjs`) with
       `FEE_RECIPIENT` = the Circle wallet → set `VITE_MESHPORT_CHECKOUT` (Vercel)
       and `MESHPORT_CHECKOUT` (Supabase secrets); then I redeploy `merchant-pay`.
