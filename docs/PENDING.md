@@ -65,9 +65,12 @@ fee address at deploy - deploying now means redeploying later):
       before anything moved → the normal way (Circle wallet).
 - [x] Express Transfer (Arc → other chains): pull + approve + burn by the session key.
 - [x] Express Swap: session key runs Circle's swap kit (approve strategy), output to the owner.
-- [ ] Express Bring: router function that takes the session key's signature,
-      bring only to the owner's own Arc wallet; per-chain one-time grant;
-      redeploy MeshPortRouter on the Bring chains.
+- [x] Express Bring built (router expressBring + setBringKey, frame Bring key,
+      relayer express_setup / express_bring, app setup-once-per-chain).
+- [ ] **You:** redeploy MeshPortRouter (new address 0x60EDB201D34C504ee2B2795B31112CB55E7d1B0C):
+      `node contracts/deploy-router-all.cjs` (+ `--chains=HyperEVM_Testnet` with
+      `BRIDGE_RPC_HYPEREVM_TESTNET`), then I switch VITE_BRIDGE_ROUTERS / BRIDGE_ROUTERS /
+      VITE_ARC_ROUTER / ARC_ROUTER. Until then Bring uses the old router (normal way).
 - [ ] Test on testnet after "push to main" (wallet frame deploys from main too).
 
 ## 2. Fees (agreed list - `src/lib/feePolicy.ts`)
