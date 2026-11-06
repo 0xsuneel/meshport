@@ -23,6 +23,8 @@ transactions (Circle `signTransaction`) and receives every MeshPort fee.
       (signer, nonce, chain, to, value, data, gas, fee) before broadcast. P2P
       offers made before the switch name the old relayer as operator, so
       registerTrade / cancelTrade fall back to the key wallet when needed.
+- [x] **Live (6 Nov):** Circle relayer on. First Bring (Ethereum Sepolia → Arc, 1 USDC,
+      38.4 s) sent from 0x7218…7c0d through router 0x4B53…b377; fee $0.05 to 0x7218…7c0d.
 - [x] **Me (Vercel, 6 Nov):** `CIRCLE_RELAYER_WALLET_ID`, `CIRCLE_RELAYER_ADDRESS`,
       `RELAYER_MODE=circle` (Production + Preview).
 - [ ] **You (Vercel):** `CIRCLE_ENTITY_SECRET` (Sensitive, Production + Preview) -
