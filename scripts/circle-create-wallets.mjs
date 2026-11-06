@@ -27,13 +27,21 @@ const API = 'https://api.circle.com/v1/w3s'
 // Hidden prompt (nothing echoed, nothing saved in shell history). Text typed
 // or pasted past the first line is kept for the next prompt.
 let pending = ''
+// Windows Terminal wraps a paste in hidden codes (ESC[200~ ... ESC[201~);
+// drop them, any other control characters, spaces and surrounding quotes.
+const clean = (v) => String(v)
+  .replace(/\u001b\[20[01]~/g, '')
+  .replace(/[\u0000-\u001f\u007f]/g, '')
+  .trim()
+  .replace(/^['"]+|['"]+$/g, '')
+  .trim()
 function ask(question) {
   return new Promise((resolve) => {
     const stdin = process.stdin
     process.stdout.write(question)
     const finish = (line) => {
       stdin.setRawMode?.(false); stdin.pause(); stdin.off('data', onData)
-      process.stdout.write('\n'); resolve(line.trim())
+      process.stdout.write('\n'); resolve(clean(line))
     }
     const onData = (chunk) => {
       for (const ch of chunk) {
@@ -56,13 +64,19 @@ function ask(question) {
     stdin.resume()
   })
 }
-const apiKey = (process.env.CIRCLE_API_KEY || '').trim() || await ask('Circle API key (hidden): ')
-const entitySecret = (process.env.CIRCLE_ENTITY_SECRET || '').trim() || await ask('Entity Secret (hidden): ')
+const apiKey = clean(process.env.CIRCLE_API_KEY || '') || await ask('Circle API key (hidden): ')
+const entitySecret = clean(process.env.CIRCLE_ENTITY_SECRET || '') || await ask('Entity Secret (hidden): ')
 const arg = (n) => process.argv.find(a => a.startsWith(`--${n}=`))?.split('=')[1]
 const mainnet = process.argv.includes('--mainnet')
 
 if (!apiKey) throw new Error('Set CIRCLE_API_KEY')
-if (!/^[0-9a-fA-F]{64}$/.test(entitySecret)) throw new Error('Set CIRCLE_ENTITY_SECRET (64 hex characters)')
+if (!/^[0-9a-fA-F]{64}$/.test(entitySecret)) {
+  // Say what is wrong without showing the secret.
+  const bad = [...new Set(entitySecret.replace(/[0-9a-fA-F]/g, ''))].length
+  throw new Error(`The Entity Secret must be 64 hex characters (0-9, a-f). Got ${entitySecret.length} characters` +
+    (bad ? `, with ${bad} kind(s) of non-hex character` : '') +
+    '. Use the Entity Secret itself - not the ciphertext and not the recovery file.')
+}
 if (mainnet !== apiKey.startsWith('LIVE_')) throw new Error(mainnet ? '--mainnet needs a LIVE_ API key' : 'This is a LIVE_ key - add --mainnet, or use your TEST_ key')
 
 async function call(method, path, body) {
