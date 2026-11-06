@@ -222,6 +222,40 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
     expect((await ask('session:sign', { address, transaction: { ...tx('0x9999999999999999999999999999999999999999'), value: 5n } }))!.msg.result.serialized).toMatch(/^0x02/)
   })
 
+  it('Express Bring key: kept per wallet, signs only its own ExpressBring, and only after a passcode approval', async () => {
+    await session()
+    const k1 = (await ask('bring:key', { owner: OWNER, create: true }))!.msg.result.address
+    expect(k1).toMatch(/^0x[0-9a-fA-F]{40}$/)
+    expect((await ask('bring:key', { owner: OWNER }))!.msg.result.address).toBe(k1) // the same key next time
+    const ROUTER = '0x60EDB201D34C504ee2B2795B31112CB55E7d1B0C'
+    const bring = { owner: OWNER, token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', amount: '10000000', fee: '50000', maxFee: '1000',
+      minFinalityThreshold: 1000, hookDataHash: '0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470', salt: '0x' + 'ab'.repeat(32), deadline: '9999999999' }
+    const sign = async (b = bring, owner = OWNER) => (await ask('bring:sign', { owner, chainId: 84532, router: ROUTER, bring: b }))!.msg
+    expect((await sign()).error?.code).toBe('approval-required')
+    await ask('fastpay:approve', { owner: OWNER, passcode: PIN })
+    const ok = await sign()
+    const { recoverTypedDataAddress } = await import('viem')
+    const signer = await recoverTypedDataAddress({
+      domain: { name: 'MeshPortRouter', version: '1', chainId: 84532, verifyingContract: ROUTER },
+      types: { ExpressBring: [
+        { name: 'owner', type: 'address' }, { name: 'token', type: 'address' }, { name: 'amount', type: 'uint256' },
+        { name: 'fee', type: 'uint256' }, { name: 'maxFee', type: 'uint256' }, { name: 'minFinalityThreshold', type: 'uint32' },
+        { name: 'hookDataHash', type: 'bytes32' }, { name: 'salt', type: 'bytes32' }, { name: 'deadline', type: 'uint256' },
+      ] },
+      primaryType: 'ExpressBring',
+      message: { ...bring, owner: OWNER, amount: 10000000n, fee: 50000n, maxFee: 1000n, deadline: 9999999999n } as any,
+      signature: ok.result.signature,
+    })
+    expect(signer.toLowerCase()).toBe(k1.toLowerCase())
+    // One approval, one signature.
+    expect((await sign()).error?.code).toBe('approval-required')
+    // Never for another wallet.
+    await ask('fastpay:approve', { owner: OWNER, passcode: PIN })
+    expect((await sign({ ...bring, owner: '0x2222222222222222222222222222222222222222' })).error?.code).toBe('invalid')
+    await ask('bring:forget', { owner: OWNER })
+    expect((await ask('bring:key', { owner: OWNER }))!.msg.result.address).toBeNull()
+  })
+
   it('refuses anything else: another contract, another function, another chain, an ended session', async () => {
     const address = await session()
     const refused = async (t: unknown) => (await ask('session:sign', { address, transaction: t }))!.msg.error?.code

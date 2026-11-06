@@ -94,6 +94,11 @@ export interface WalletRpc {
   'session:end': [{ address?: string }, { ok: true }]
   /** What session keys may do in this frame (Express): 'pay', 'transfer'. Older frames don't answer. */
   'session:capabilities': [Record<string, never>, { capabilities: string[] }]
+  /** Express Bring: this wallet's Bring key on this device (create: make one if none). */
+  'bring:key': [{ owner: string; create?: boolean }, { address: Hex | null }]
+  /** Express Bring: the Bring key signs one ExpressBring (needs a passcode approval). */
+  'bring:sign': [{ owner: string; chainId: number; router: string; bring: Record<string, string | number> }, { signature: Hex }]
+  'bring:forget': [{ owner: string }, { ok: true }]
   /**
    * The passcode of Google / email (Circle) wallets, checked only in the
    * frame (wallet-frame/src/fastPayGate.ts) - one per device, like the app's
