@@ -58,6 +58,18 @@ fee address at deploy - deploying now means redeploying later):
       a swap, a merchant order (paid in full; 0.6% to 0x7218…7c0d).
 - [ ] Mainnet only: `BRIDGE_NETWORK=mainnet` (live gas-coin prices for fees).
 
+## 1b. Express (was Fast Pay) - Pay, Swap, Transfer, Bring with the passcode only
+
+- [x] Renamed Express; ONE shared limit ($100 or $300, user's choice) for every
+      action and token; over what's left / not ready / older frame / failure
+      before anything moved → the normal way (Circle wallet).
+- [x] Express Transfer (Arc → other chains): pull + approve + burn by the session key.
+- [x] Express Swap: session key runs Circle's swap kit (approve strategy), output to the owner.
+- [ ] Express Bring: router function that takes the session key's signature,
+      bring only to the owner's own Arc wallet; per-chain one-time grant;
+      redeploy MeshPortRouter on the Bring chains.
+- [ ] Test on testnet after "push to main" (wallet frame deploys from main too).
+
 ## 2. Fees (agreed list - `src/lib/feePolicy.ts`)
 
 Done: never-a-loss rule, cross-chain 0.2% (Bring + Arc router Transfer),
