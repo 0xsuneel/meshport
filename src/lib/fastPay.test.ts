@@ -92,7 +92,7 @@ vi.stubGlobal('fetch', vi.fn(async (_u: string, init: RequestInit) => {
 // signing for the app, a payment only with a passcode approval it checked),
 // or it's an older frame that answers 'unsupported'.
 let frameSupports = true
-let frameCaps = ['pay', 'transfer']
+let frameCaps = ['pay', 'transfer', 'swap']
 const PIN = '123456'
 let framePin: string | null = PIN // the frame's Fast Pay passcode check (set when turned on)
 let frameApproved = false
@@ -406,7 +406,39 @@ describe('Fast Pay session', () => {
       vi.resetModules()
       const fresh = await import('./fastPay')
       expect(await fresh.frameCan('transfer')).toBe(false)
-      frameCaps = ['pay', 'transfer']
+      frameCaps = ['pay', 'transfer', 'swap']
+    })
+  })
+
+  describe('Express Swap (no Circle signature)', () => {
+    it('pulls tokenIn and its gas to the session key; if the swap does not happen, tokenIn goes back to the wallet', async () => {
+      usdcAllowanceToPermit2 = maxUint256
+      tokenAllowance[EURC] = maxUint256
+      tokenBalance[EURC] = 50_000_000n
+      fp.setFastPayEnabled(true)
+      expect(await fp.maybeStartFastPay()).toBe(true)
+      sent.length = 0
+      await enterPin()
+      const ex = await fp.expressSwapBegin({ owner: OWNER, token: 'EURC', amount: 10 })
+      const pull = decodeFunctionData({ abi: permit2Abi, data: sent[0].data! }) as any
+      const [tokenIn, gas] = pull.args[0]
+      expect(lc(tokenIn.token)).toBe(EURC); expect(tokenIn.amount).toBe(10_000_000n); expect(lc(tokenIn.to)).toBe(lc(ex.account.address))
+      expect(lc(gas.token)).toBe(lc(ARC_USDC)); expect(gas.amount > 0n).toBe(true)
+      const before = fp.useFastPay.getState().remainingUsd
+      expect(await ex.finish(true)).toBe(true) // the swap didn't happen: EURC back
+      const back = sent[sent.length - 1]
+      expect(lc(back.to)).toBe(EURC)
+      const t = decodeFunctionData({ abi: [{ type: 'function', name: 'transfer', stateMutability: 'nonpayable', inputs: [{ name: 'to', type: 'address' }, { name: 'a', type: 'uint256' }], outputs: [{ type: 'bool' }] }] as const, data: back.data! }) as any
+      expect(lc(t.args[0])).toBe(lc(OWNER)); expect(t.args[1]).toBe(10_000_000n)
+      expect(fp.useFastPay.getState().remainingUsd).toBeGreaterThan(before) // the returned amount is free again
+    })
+    it('more than is left of the limit: the normal way', async () => {
+      usdcAllowanceToPermit2 = maxUint256
+      fp.setFastPayEnabled(true)
+      await fp.maybeStartFastPay()
+      await enterPin()
+      expect(fp.expressCoversSwap(OWNER, 120, 'USDC')).toBe(false)
+      await expect(fp.expressSwapBegin({ owner: OWNER, token: 'USDC', amount: 120 })).rejects.toBeInstanceOf(fp.FastPayNotSent)
     })
   })
 

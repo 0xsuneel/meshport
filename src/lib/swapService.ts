@@ -626,6 +626,49 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
     })
   }
 
+  // Express (lib/fastPay): within the shared limit, the session key swaps -
+  // no Circle signature. Anything it can't do goes the normal way below.
+  const express = await (async (): Promise<SwapOutcome | null> => {
+    let ex: import('./fastPay').ExpressSwap
+    try {
+      const fp = await import('./fastPay')
+      if (!fp.fastPayEnabled() || !fp.expressCoversSwap(params.walletAddress, parsedAmt, params.tokenIn)) return null
+      ex = await fp.expressSwapBegin({ owner: params.walletAddress, token: params.tokenIn as import('./fastPay').FastToken, amount: parsedAmt })
+    } catch { return null } // nothing moved
+    const t0 = performance.now()
+    let result: any
+    try {
+      const keyAdapter = await getAdapter(ex.account)
+      result = await kit.swap({
+        ...baseParams,
+        from: { adapter: keyAdapter, chain: ARC_CHAIN_KEY as any },
+        to: params.walletAddress, // the output straight to the wallet
+        config: { ...baseParams.config, allowanceStrategy: 'approve' },
+      } as any)
+    } catch (e) {
+      const settled = await settleSwapTx()
+      if (settled.kind === 'confirmed') {
+        await ex.finish(false)
+        const amountOut = amountOutFromReceipt(settled.receipt, params.tokenOut, params.walletAddress)
+        finish(settled.hash, parseFloat(amountOut || '0') || 0)
+        return { txHash: settled.hash, amountOut, explorerUrl: `${ARC_EXPLORER}/tx/${settled.hash}`, blockNumber: await swapBlockNumber(settled.hash, settled.receipt) }
+      }
+      // Not swapped: tokenIn back to the wallet, then the normal way.
+      if (await ex.finish(true)) {
+        void import('./errorReport').then(m => m.reportPerf(`[perf express swap] normal way: ${String((e as any)?.message ?? e).slice(0, 140)}`)).catch(() => {})
+        return null
+      }
+      throw Object.assign(new Error("The swap couldn't finish and your tokens are held for you - check Activity or contact support before trying again."), { isUncertain: true, isLiquidity: false })
+    }
+    await ex.finish(false)
+    const amountOut = amountOutFromReceipt(_swapReceipt, params.tokenOut, params.walletAddress) || result?.amountOut || ''
+    if (result?.txHash) finish(result.txHash, parseFloat(amountOut || '0') || 0)
+    void import('./errorReport').then(m => m.reportPerf(`[perf express swap] ${((performance.now() - t0) / 1000).toFixed(2)}s ${params.tokenIn}>${params.tokenOut}`)).catch(() => {})
+    const blockNumber = result?.txHash ? await swapBlockNumber(result.txHash, _swapReceipt) : undefined
+    return { txHash: result?.txHash || '', amountOut, explorerUrl: result?.explorerUrl || '', blockNumber }
+  })()
+  if (express) return express
+
   try {
     const result: any = await kit.swap(baseParams)
     // amountOut from the confirmed swap's own Transfer log to this wallet (the

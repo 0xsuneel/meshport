@@ -89,25 +89,31 @@ const ARC_EURC = '0x89b50855aa3be2f677cd6303cec089b5f319d72a'
 const ARC_CIRBTC = '0xf0c4a4ce82a5746abaad9425360ab04fbba432bf'
 const EIP2612_PERMIT = new Set(['0xd505accf']) // permit(owner, spender, value, deadline, v, r, s)
 const ERC20_APPROVE = '0x095ea7b3' // approve(spender, amount)
+const ERC20_TRANSFER = '0xa9059cbb' // transfer(to, amount) - only back to the session's owner
 // Express Transfer: Circle's CCTP TokenMessengerV2 on Arc.
 const TOKEN_MESSENGER_V2 = '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa'
+// Express Swap: Circle's swap adapter on Arc (execute - its calls carry the
+// stablecoin service's own signature over the route).
+const SWAP_ADAPTER = '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b'
 const SESSION_CALLS: Record<string, ReadonlySet<string>> = {
   // permit(owner, PermitSingle, sig), permit(owner, PermitBatch, sig), transferFrom(AllowanceTransferDetails[])
   [PERMIT2]: new Set(['0x2b67b570', '0x2a2d80d1', '0x0d58b1db']),
   // The tokens Express pays in: their one-time permit for Permit2; USDC also
   // approve - only to TokenMessengerV2 (see APPROVE_SPENDERS), for a Transfer.
-  [ARC_USDC_ERC20]: new Set([...EIP2612_PERMIT, ERC20_APPROVE]),
-  [ARC_EURC]: EIP2612_PERMIT,
-  [ARC_CIRBTC]: EIP2612_PERMIT,
+  [ARC_USDC_ERC20]: new Set([...EIP2612_PERMIT, ERC20_APPROVE, ERC20_TRANSFER]),
+  [ARC_EURC]: new Set([...EIP2612_PERMIT, ERC20_APPROVE, ERC20_TRANSFER]),
+  [ARC_CIRBTC]: new Set([...EIP2612_PERMIT, ERC20_APPROVE, ERC20_TRANSFER]),
   // depositForBurn, depositForBurnWithHook - an Express Transfer's burn.
   [TOKEN_MESSENGER_V2]: new Set(['0x8e0250ee', '0x779b432d']),
+  // execute - an Express Swap.
+  [SWAP_ADAPTER]: new Set(['0xaa3e079c']),
 }
 // Who a session key may approve. Approvals, the burn and plain transfers only
 // ever spend what the key itself holds - its gas float, and what a
 // passcode-approved Permit2 pull just moved to it for this one move.
-const APPROVE_SPENDERS = new Set([TOKEN_MESSENGER_V2])
+const APPROVE_SPENDERS = new Set([TOKEN_MESSENGER_V2, SWAP_ADAPTER])
 /** What this frame lets a session key do (the app checks before relying on it). */
-export const SESSION_CAPABILITIES = ['pay', 'transfer'] as const
+export const SESSION_CAPABILITIES = ['pay', 'transfer', 'swap'] as const
 const sessionKeys = new Map<string, ReturnType<typeof privateKeyToAccount>>()
 const sessionOwner = new Map<string, string>() // session key → the wallet it spends for
 const SESSION_STORE = 'mp.fastpay.session.' // + address → { owner, sealed key }
@@ -125,7 +131,7 @@ function gateError(e: unknown): RpcError {
   return new RpcError('failed', e instanceof Error ? e.message : 'Fast Pay passcode check failed')
 }
 /** Why a session key must not sign this (null: allowed). Exported for tests. */
-export function sessionTxRefusal(tx: Record<string, unknown>): string | null {
+export function sessionTxRefusal(tx: Record<string, unknown>, owner?: string): string | null {
   if (Number(tx.chainId) !== ARC_CHAIN_ID) return 'Fast Pay signs on Arc only'
   const to = typeof tx.to === 'string' ? tx.to.toLowerCase() : ''
   const data = typeof tx.data === 'string' ? tx.data.toLowerCase() : '0x'
@@ -134,6 +140,8 @@ export function sessionTxRefusal(tx: Record<string, unknown>): string | null {
   const selector = data.slice(0, 10)
   if (!allowed || !allowed.has(selector)) return 'Not a Fast Pay call'
   if (selector === ERC20_APPROVE && !APPROVE_SPENDERS.has('0x' + data.slice(34, 74))) return 'Not a Fast Pay call'
+  // A token transfer only back to the wallet the session spends for (returning an unfinished move).
+  if (selector === ERC20_TRANSFER && (!owner || '0x' + data.slice(34, 74) !== owner.toLowerCase())) return 'Not a Fast Pay call'
   return null
 }
 
@@ -332,7 +340,7 @@ const handlers: Handlers = {
     const a = String(address).toLowerCase()
     const k = sessionKeys.get(a)
     if (!k) throw new RpcError('locked', 'This Fast Pay session has ended')
-    const why = sessionTxRefusal(transaction)
+    const why = sessionTxRefusal(transaction, sessionOwner.get(a))
     if (why) throw new RpcError('invalid', why)
     // A payment (Permit2 batch transferFrom) needs the passcode, checked here.
     if (isSessionPayment(transaction) && !gate.takeApproval(sessionOwner.get(a) ?? '')) {
