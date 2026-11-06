@@ -236,6 +236,116 @@ contract MeshPortRouter {
         emit Bridged(a.from, nonce, b.destinationDomain, b.mintRecipient, amount, b.fee, b.maxFee);
     }
 
+    // ── Express Bring (USDC, to the owner's OWN Arc wallet) ────────────────
+    // Set up once per chain with two of the owner's signatures: USDC's own
+    // EIP-2612 permit (the router may pull up to the Express limit) and
+    // setBringKey (a key held in MeshPort's wallet frame may ask for Brings
+    // until `expiry`). After that each Bring is signed by that key alone -
+    // after the owner's passcode, checked in the frame - and the relayer
+    // submits it. What the key can do is fixed HERE, whatever it signs:
+    //   - only to Arc (domain 26), only to the owner's own address there;
+    //   - MeshPort's fee at most 5% + 0.1 USDC of the amount;
+    //   - each signed Bring works once, until its deadline.
+    // So a leaked key could at most move the owner's USDC to the owner's own
+    // Arc wallet. The owner ends it any time with a new setBringKey (key 0),
+    // or by lowering USDC's allowance to the router.
+    uint32 public constant ARC_DOMAIN = 26;
+    bytes32 public constant SET_BRING_KEY_TYPEHASH = keccak256(
+        "SetBringKey(address owner,address key,uint64 expiry,uint256 nonce)"
+    );
+    bytes32 public constant EXPRESS_BRING_TYPEHASH = keccak256(
+        "ExpressBring(address owner,address token,uint256 amount,uint256 fee,uint256 maxFee,uint32 minFinalityThreshold,bytes32 hookDataHash,bytes32 salt,uint256 deadline)"
+    );
+
+    struct BringKey { address key; uint64 expiry; }
+    /// The owner's current Express Bring key on this chain, and the nonce its next setBringKey signs.
+    mapping(address => BringKey) public bringKeys;
+    mapping(address => uint256) public bringKeyNonces;
+
+    struct ExpressBringArgs {
+        address owner;                // whose USDC, and who receives it on Arc
+        address token;                // USDC on this chain
+        uint256 amount;               // burned to the owner on Arc
+        uint256 fee;                  // MeshPort fee (relayer gas etc.), on top of amount
+        uint256 maxFee;               // CCTP V2 maxFee, taken from the burn on mint
+        uint32 minFinalityThreshold;  // 1000 = fast, 2000 = standard
+        bytes hookData;               // empty (relayer mints) or Circle's forwarding hook
+        bytes32 salt;                 // makes every Bring unique
+        uint256 deadline;             // the key's signature is valid until then
+    }
+
+    event BringKeySet(address indexed owner, address indexed key, uint64 expiry);
+    event ExpressBridged(address indexed owner, bytes32 indexed digest, uint256 amount, uint256 fee, uint256 maxFee);
+
+    function _typed(bytes32 structHash) private view returns (bytes32) {
+        return keccak256(abi.encodePacked("\x19\x01", domainSeparator(), structHash));
+    }
+
+    /// An EOA's signature (65 bytes, low s), or an ERC-1271 wallet's.
+    function _isValidSig(address signer, bytes32 digest, bytes calldata sig) private view returns (bool) {
+        if (signer.code.length > 0) {
+            (bool ok, bytes memory ret) = signer.staticcall(abi.encodeWithSelector(0x1626ba7e, digest, sig));
+            return ok && ret.length >= 32 && abi.decode(ret, (bytes4)) == 0x1626ba7e;
+        }
+        if (sig.length != 65) return false;
+        bytes32 r = bytes32(sig[0:32]);
+        bytes32 sv = bytes32(sig[32:64]);
+        uint8 v = uint8(sig[64]);
+        if (v < 27) v += 27;
+        if (uint256(sv) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) return false;
+        address got = ecrecover(digest, v, r, sv);
+        return got != address(0) && got == signer;
+    }
+
+    /// The digest the owner signs to set (or, key 0, end) their Bring key.
+    function setBringKeyDigest(address owner, address key, uint64 expiry) public view returns (bytes32) {
+        return _typed(keccak256(abi.encode(SET_BRING_KEY_TYPEHASH, owner, key, expiry, bringKeyNonces[owner])));
+    }
+
+    /// Set (or end, with key 0) the owner's Bring key. Anyone may submit the owner's signature.
+    function setBringKey(address owner, address key, uint64 expiry, bytes calldata sig) external {
+        if (owner == address(0)) revert ZeroAddress();
+        if (!_isValidSig(owner, setBringKeyDigest(owner, key, expiry), sig)) revert BadSignature();
+        bringKeyNonces[owner]++;
+        bringKeys[owner] = BringKey(key, expiry);
+        emit BringKeySet(owner, key, expiry);
+    }
+
+    /// The digest the Bring key signs for these parameters.
+    function expressBringDigest(ExpressBringArgs calldata b) public view returns (bytes32) {
+        return _typed(keccak256(abi.encode(
+            EXPRESS_BRING_TYPEHASH, b.owner, b.token, b.amount, b.fee, b.maxFee,
+            b.minFinalityThreshold, keccak256(b.hookData), b.salt, b.deadline
+        )));
+    }
+
+    /// A Bring signed by the owner's Bring key: pull (EIP-2612 allowance), fee, burn to the owner on Arc.
+    function expressBring(ExpressBringArgs calldata b, bytes calldata keySig) external returns (bytes32 digest) {
+        if (b.token == address(0)) revert ZeroToken();
+        BringKey memory k = bringKeys[b.owner];
+        if (k.key == address(0) || block.timestamp > k.expiry || block.timestamp > b.deadline) revert Expired();
+        if (b.fee > b.amount / 20 + 100_000) revert FeeTooHigh();
+        if (b.maxFee >= b.amount) revert MaxFeeTooHigh();
+        digest = expressBringDigest(b);
+        if (usedNonce[b.owner][digest]) revert NonceUsed();
+        usedNonce[b.owner][digest] = true;
+        if (!_isValidSig(k.key, digest, keySig)) revert BadSignature();
+
+        IERC20Like usdc = IERC20Like(b.token);
+        if (!usdc.transferFrom(b.owner, address(this), b.amount + b.fee)) revert TransferFailed();
+        if (b.fee > 0 && !usdc.transfer(feeRecipient, b.fee)) revert TransferFailed();
+        bytes32 mintRecipient = bytes32(uint256(uint160(b.owner)));
+        if (!usdc.approve(address(tokenMessenger), 0)) revert ApproveFailed();
+        if (!usdc.approve(address(tokenMessenger), b.amount)) revert ApproveFailed();
+        if (b.hookData.length > 0) {
+            tokenMessenger.depositForBurnWithHook(b.amount, ARC_DOMAIN, mintRecipient, b.token, bytes32(0), b.maxFee, b.minFinalityThreshold, b.hookData);
+        } else {
+            tokenMessenger.depositForBurn(b.amount, ARC_DOMAIN, mintRecipient, b.token, bytes32(0), b.maxFee, b.minFinalityThreshold);
+        }
+        if (!usdc.approve(address(tokenMessenger), 0)) revert ApproveFailed();
+        emit ExpressBridged(b.owner, digest, b.amount, b.fee, b.maxFee);
+    }
+
     // ── EURC / cirBTC (CCTPx) ───────────────────────────────────────────────
 
     /// The nonce for these token parameters (EIP-3009 nonce, or what the bridge signature covers).
