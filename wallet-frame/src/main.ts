@@ -88,14 +88,26 @@ const ARC_USDC_ERC20 = '0x3600000000000000000000000000000000000000'
 const ARC_EURC = '0x89b50855aa3be2f677cd6303cec089b5f319d72a'
 const ARC_CIRBTC = '0xf0c4a4ce82a5746abaad9425360ab04fbba432bf'
 const EIP2612_PERMIT = new Set(['0xd505accf']) // permit(owner, spender, value, deadline, v, r, s)
+const ERC20_APPROVE = '0x095ea7b3' // approve(spender, amount)
+// Express Transfer: Circle's CCTP TokenMessengerV2 on Arc.
+const TOKEN_MESSENGER_V2 = '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa'
 const SESSION_CALLS: Record<string, ReadonlySet<string>> = {
   // permit(owner, PermitSingle, sig), permit(owner, PermitBatch, sig), transferFrom(AllowanceTransferDetails[])
   [PERMIT2]: new Set(['0x2b67b570', '0x2a2d80d1', '0x0d58b1db']),
-  // The tokens Fast Pay pays in: only their one-time permit for Permit2.
-  [ARC_USDC_ERC20]: EIP2612_PERMIT,
+  // The tokens Express pays in: their one-time permit for Permit2; USDC also
+  // approve - only to TokenMessengerV2 (see APPROVE_SPENDERS), for a Transfer.
+  [ARC_USDC_ERC20]: new Set([...EIP2612_PERMIT, ERC20_APPROVE]),
   [ARC_EURC]: EIP2612_PERMIT,
   [ARC_CIRBTC]: EIP2612_PERMIT,
+  // depositForBurn, depositForBurnWithHook - an Express Transfer's burn.
+  [TOKEN_MESSENGER_V2]: new Set(['0x8e0250ee', '0x779b432d']),
 }
+// Who a session key may approve. Approvals, the burn and plain transfers only
+// ever spend what the key itself holds - its gas float, and what a
+// passcode-approved Permit2 pull just moved to it for this one move.
+const APPROVE_SPENDERS = new Set([TOKEN_MESSENGER_V2])
+/** What this frame lets a session key do (the app checks before relying on it). */
+export const SESSION_CAPABILITIES = ['pay', 'transfer'] as const
 const sessionKeys = new Map<string, ReturnType<typeof privateKeyToAccount>>()
 const sessionOwner = new Map<string, string>() // session key → the wallet it spends for
 const SESSION_STORE = 'mp.fastpay.session.' // + address → { owner, sealed key }
@@ -119,7 +131,9 @@ export function sessionTxRefusal(tx: Record<string, unknown>): string | null {
   const data = typeof tx.data === 'string' ? tx.data.toLowerCase() : '0x'
   if (data === '0x' || data === '') return to ? null : 'No recipient' // a plain value transfer (the leftover gas back)
   const allowed = SESSION_CALLS[to]
-  if (!allowed || !allowed.has(data.slice(0, 10))) return 'Not a Fast Pay call'
+  const selector = data.slice(0, 10)
+  if (!allowed || !allowed.has(selector)) return 'Not a Fast Pay call'
+  if (selector === ERC20_APPROVE && !APPROVE_SPENDERS.has('0x' + data.slice(34, 74))) return 'Not a Fast Pay call'
   return null
 }
 
@@ -325,6 +339,10 @@ const handlers: Handlers = {
       throw new RpcError('approval-required', 'Enter your passcode to approve this')
     }
     return { serialized: await k.signTransaction(transaction as any) }
+  },
+
+  async 'session:capabilities'() {
+    return { capabilities: [...SESSION_CAPABILITIES] }
   },
 
   async 'session:end'({ address }) {
