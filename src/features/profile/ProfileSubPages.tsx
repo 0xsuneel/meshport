@@ -31,7 +31,7 @@ import { Card } from '@/components/ui/Card'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { useAuthStore, useNotificationStore, useUIStore, type AppNotification } from '@/store'
 import { useFeatureEnabled } from '@/store/settingsStore'
-import { fastPayEnabled, enableFastPay, stopFastPay, useFastPay, FAST_PAY_LIMIT_USDC } from '@/lib/fastPay'
+import { fastPayEnabled, enableFastPay, stopFastPay, useFastPay, expressLimitUsd, setExpressLimitUsd, EXPRESS_LIMITS, type ExpressLimit } from '@/lib/fastPay'
 import { useThemeStore, resolveTheme, type ThemeMode } from '@/store/themeStore'
 import { switchTheme } from '@/lib/themeTransition'
 import { Avatar } from '@/components/ui/Avatar'
@@ -82,12 +82,13 @@ export function SecurityPage() {
   const [fastPayError, setFastPayError] = useState('')
   const [fastPayBusy, setFastPayBusy] = useState(false)
   const [fastPayStopping, setFastPayStopping] = useState(false)
+  const [expressLimit, setExpressLimit] = useState<ExpressLimit>(expressLimitUsd)
   // The logo spins from the passcode until the session is ready (or fails).
   const fastPaySettingUp = fastPayBusy || fastPayStopping || (fastPayOn && fastPay.phase === 'starting')
-  const fastPayStatus = fastPayStopping ? 'Turning off Fast Pay… cancelling its limit on-chain'
-    : !fastPayOn ? `Pay up to $${FAST_PAY_LIMIT_USDC} in USDC, EURC or cirBTC in about a second for 2 hours after unlocking. Bigger payments use your wallet as now.`
-    : fastPayBusy || fastPay.phase === 'starting' ? 'Turning on Fast Pay… confirm in your wallet if asked'
-    : fastPay.phase === 'ready' ? `${fastPayLeft(fastPay.remainingBy)} left until ${new Date(fastPay.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - passcode still asked every payment`
+  const fastPayStatus = fastPayStopping ? 'Turning off Express… cancelling its limit on-chain'
+    : !fastPayOn ? `Pay, swap, transfer and bring up to $${expressLimit} in total with just your passcode, for 2 hours after unlocking. Anything more uses your wallet as now.`
+    : fastPayBusy || fastPay.phase === 'starting' ? 'Turning on Express… confirm in your wallet if asked'
+    : fastPay.phase === 'ready' ? `$${fastPay.remainingUsd.toFixed(2)} of $${fastPay.limitUsd} left until ${new Date(fastPay.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - passcode still asked every time`
     : fastPay.phase === 'error' ? `Couldn't start: ${fastPay.error ?? 'try again'}`
     : 'On - starts after you unlock'
   // Turning it on asks for the passcode: the wallet frame keeps its own check
@@ -101,11 +102,11 @@ export function SecurityPage() {
       try {
         const r = await stopFastPay()
         setFastPayOn(false)
-        if (!('reason' in r)) showToastMessage('Fast Pay off - its limit is cancelled on-chain', 'success')
+        if (!('reason' in r)) showToastMessage('Express off - its limit is cancelled on-chain', 'success')
         else if (r.reason === 'failed') {
           const until = r.expiresAt ? ` - it ends by itself at ${new Date(r.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''
-          showToastMessage(`Fast Pay off, but its limit couldn't be cancelled on-chain${until}`, 'warning')
-        } else showToastMessage('Fast Pay off')
+          showToastMessage(`Express off, but its limit couldn't be cancelled on-chain${until}`, 'warning')
+        } else showToastMessage('Express off')
       } finally {
         setFastPayStopping(false)
       }
@@ -123,10 +124,10 @@ export function SecurityPage() {
       if (!correct) { setFastPayError('Incorrect passcode. Try again.'); setFastPayPass(''); return }
       setFastPaySheet(false)
       setFastPayOn(true)
-      if (await enableFastPay(code)) showToastMessage('Fast Pay is ready', 'success')
+      if (await enableFastPay(code)) showToastMessage('Express is ready', 'success')
     } catch (e) {
       setFastPayOn(false)
-      showToastMessage(e instanceof Error && e.message ? e.message : "Couldn't turn on Fast Pay", 'error')
+      showToastMessage(e instanceof Error && e.message ? e.message : "Couldn't turn on Express", 'error')
     } finally {
       setFastPayBusy(false)
     }
@@ -213,8 +214,25 @@ export function SecurityPage() {
               disabled={!biometricAdminEnabled}
               onToggle={handleToggle} />
             {walletSource === 'circle' && (
-              <ToggleItem icon={fastPaySettingUp ? <span className="text-accent-text"><MeshLoader size={22} color="currentColor" label="Turning on Fast Pay" /></span> : <KeyRound className="w-5 h-5 text-accent-text" />}
-                label="Fast Pay (beta)" description={fastPayStatus} enabled={fastPayOn} busy={fastPaySettingUp} onToggle={toggleFastPay} />
+              <ToggleItem icon={fastPaySettingUp ? <span className="text-accent-text"><MeshLoader size={22} color="currentColor" label="Turning on Express" /></span> : <KeyRound className="w-5 h-5 text-accent-text" />}
+                label="Express (beta)" description={fastPayStatus} enabled={fastPayOn} busy={fastPaySettingUp} onToggle={toggleFastPay} />
+            )}
+            {walletSource === 'circle' && (
+              <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-text-primary">Express limit</p>
+                  <p className="text-xs text-text-secondary">Shared by Pay, Swap, Transfer and Bring - any token{fastPayOn ? ' · applies from the next session' : ''}</p>
+                </div>
+                <div className="flex shrink-0 rounded-xl bg-surface border border-border p-1" role="radiogroup" aria-label="Express limit">
+                  {EXPRESS_LIMITS.map(v => (
+                    <button key={v} type="button" role="radio" aria-checked={expressLimit === v} disabled={fastPaySettingUp}
+                      onClick={() => { setExpressLimitUsd(v); setExpressLimit(v) }}
+                      className={`px-3 h-8 rounded-lg text-sm font-semibold transition-colors ${expressLimit === v ? 'bg-brand text-white' : 'text-text-secondary'}`}>
+                      ${v}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
             <ToggleItem icon={<Lock className="w-5 h-5 text-accent-text" />} label="Passcode Lock"
               description="Locks when reopened, or after 5 min in the background" enabled={passcodeLockEnabled}
@@ -242,22 +260,13 @@ export function SecurityPage() {
         footer={registering ? <p className="text-xs text-text-secondary text-center mt-3">Verifying…</p> : undefined} />
 
       <PinSheet open={fastPaySheet} onClose={() => !fastPayBusy && setFastPaySheet(false)} id="fastpay-confirm"
-        title="Confirm Passcode" subtitle="Enter your passcode to turn on Fast Pay"
+        title="Confirm Passcode" subtitle="Enter your passcode to turn on Express"
         value={fastPayPass} onChange={v => { setFastPayPass(v); setFastPayError('') }}
         onComplete={pin => confirmFastPay(pin)} error={fastPayError || undefined}
         biometricAvailable={false} autoBiometric={false} locked={fastPayBusy}
         footer={fastPayBusy ? <p className="text-xs text-text-secondary text-center mt-3">Verifying…</p> : undefined} />
     </div>
   )
-}
-
-/** "$96.50 · €40.00 · 0.000510 cirBTC" - what is left of each Fast Pay token. */
-function fastPayLeft(by: Partial<Record<'USDC' | 'EURC' | 'cirBTC', number>>): string {
-  const parts: string[] = []
-  if (by.USDC != null) parts.push(`$${by.USDC.toFixed(2)}`)
-  if (by.EURC != null) parts.push(`€${by.EURC.toFixed(2)}`)
-  if (by.cirBTC != null) parts.push(`${by.cirBTC.toFixed(6)} cirBTC`)
-  return parts.join(' · ') || '$0.00'
 }
 
 // ─── Appearance - System / Light / Dark theme picker ───────────────────────────
