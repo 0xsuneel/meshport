@@ -46,10 +46,9 @@ fee address at deploy - deploying now means redeploying later):
 - [x] **MeshPortCheckout** `0xda51a32edfc723e3de9aaf0a452fd2f71e6019f1` deployed 6 Nov
       (checked on Arc: fee recipient 0x7218…7c0d, 60 bps, cap $3); Vercel
       `VITE_MESHPORT_CHECKOUT` set.
-- [ ] **You:** Supabase secret `MESHPORT_CHECKOUT` + deploy `merchant-pay`
-      (`npx supabase secrets set …` / `npx supabase functions deploy merchant-pay
-      --no-verify-jwt`) - BEFORE the next Vercel redeploy, or order payments made
-      through the checkout aren't credited the full price.
+- [x] Supabase secret `MESHPORT_CHECKOUT` set and `merchant-pay` deployed (v71, 6 Nov).
+- [ ] **You:** redeploy Vercel, then test: Transfer from Arc (one signature), a Bring,
+      a swap, a merchant order (paid in full; 0.6% to 0x7218…7c0d).
 - [ ] Mainnet only: `BRIDGE_NETWORK=mainnet` (live gas-coin prices for fees).
 
 ## 2. Fees (agreed list - `src/lib/feePolicy.ts`)
