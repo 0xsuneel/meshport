@@ -54,6 +54,8 @@ import {
   decodeFunctionResult, encodeFunctionData, maxUint256, parseSignature, type Hex,
 } from 'viem'
 import { arcRpcJson } from './arc'
+import { lastKnownEurcPrice } from './eurcPrice'
+import { lastKnownBtcPrice } from './btcPrice'
 import { onPasscodeVerified } from './security'
 
 // ── The session key: in the wallet frame when it can, else in memory here ────
@@ -96,6 +98,9 @@ interface SavedSession {
   /** Each token's cap (atomic). Saved before EURC / cirBTC: `limit` = the USDC cap. */
   limits?: Partial<Record<FastToken, string>>
   limit?: string
+  /** The shared Express limit and what is spent of it (USD). Absent: saved before the shared limit. */
+  limitUsd?: number
+  spentUsd?: number
 }
 const sessionStoreKey = (owner: string) => `meshport:fastpay-session:${owner.toLowerCase()}`
 function loadSaved(owner: string): SavedSession | null {
@@ -108,6 +113,7 @@ function saveSession(s: Session | null, owner: string): void {
       owner: s.owner, key: s.key.address, expiresAt: s.expiresAt,
       limits: Object.fromEntries(Object.entries(s.grants).map(([t, g]) => [t, g!.limit.toString()])),
       payGas: s.payGas.toString(), payGasEstimate: s.payGasEstimate.toString(), owedGasWei: s.owedGasWei.toString(), relayer: s.relayer,
+      limitUsd: s.limitUsd, spentUsd: s.spentUsd,
     }
     localStorage.setItem(sessionStoreKey(owner), JSON.stringify(saved))
   } catch { /* private mode */ }
@@ -138,9 +144,36 @@ export function isFastToken(t: string): t is FastToken { return t === 'USDC' || 
 const atomic = (token: FastToken, amount: number) => BigInt(Math.round(amount * 10 ** FAST_TOKENS[token].decimals))
 const fromAtomic = (token: FastToken, units: bigint) => Number(units) / 10 ** FAST_TOKENS[token].decimals
 
-export const FAST_PAY_LIMIT_USD = 100
-/** @deprecated the USDC cap; see FAST_PAY_LIMIT_USD. */
+// ── Express (formerly "Fast Pay"): one shared limit ─────────────────────────
+// One dollar limit for everything Express does - Pay, Swap, Transfer, Bring,
+// in any token - chosen by the user: $100 or $300 per session. Not a limit per
+// token: a $60 EURC payment and a $40 swap use up a $100 limit together.
+// On-chain, each granted token's Permit2 cap is worth the whole limit (so any
+// mix fits); the shared total is counted here, in USD at the last known price.
+// Anything Express can't cover - over what's left, a token without a price,
+// the session not ready, or an Express send that fails before anything went
+// out - goes the normal way (the Circle wallet), never refused.
+export const EXPRESS_LIMITS = [100, 300] as const
+export type ExpressLimit = typeof EXPRESS_LIMITS[number]
+export const FAST_PAY_LIMIT_USD: ExpressLimit = 100
+/** @deprecated see expressLimitUsd(). */
 export const FAST_PAY_LIMIT_USDC = FAST_PAY_LIMIT_USD
+const LIMIT_KEY = 'meshport:express-limit'
+/** The user's chosen Express limit (USD, shared by everything). */
+export function expressLimitUsd(): ExpressLimit {
+  try { const v = Number(localStorage.getItem(LIMIT_KEY)); return (EXPRESS_LIMITS as readonly number[]).includes(v) ? v as ExpressLimit : FAST_PAY_LIMIT_USD } catch { return FAST_PAY_LIMIT_USD }
+}
+/** Sets the limit for the next session (the screen restarts a running one). */
+export function setExpressLimitUsd(v: ExpressLimit): void {
+  try { localStorage.setItem(LIMIT_KEY, String(v)) } catch { /* private mode */ }
+}
+/** A token's USD price right now, synchronously (0 = unknown: Express doesn't cover it). */
+export function expressUsdPrice(token: FastToken): number {
+  if (token === 'USDC') return 1
+  try { return token === 'EURC' ? lastKnownEurcPrice() || 0 : lastKnownBtcPrice() || 0 } catch { return 0 }
+}
+/** Room kept for the gas refunds (USD), so the last payment's refund always fits. */
+const REFUND_RESERVE_USD = 0.05
 export const FAST_PAY_SESSION_MS = 2 * 60 * 60_000
 /** A payment isn't started on a session about to expire. */
 const EXPIRY_MARGIN_MS = 60_000
@@ -282,6 +315,9 @@ interface Session {
   payGasEstimate: bigint // its estimate (what the refund is based on)
   owedGasWei: bigint     // the setup's gas, repaid by the first payment
   relayer: Hex | null    // where the key's leftover gas goes at the end
+  /** The shared Express limit (USD) and what is spent of it: payments, swaps, transfers, brings and gas refunds. */
+  limitUsd: number
+  spentUsd: number
 }
 let session: Session | null = null
 let starting: Promise<boolean> | null = null
@@ -294,9 +330,16 @@ export const useFastPay = create<{
   remaining: number
   /** What is left of each granted token. */
   remainingBy: Partial<Record<FastToken, number>>
+  /** The shared limit (USD) and what is left of it. */
+  limitUsd: number
+  remainingUsd: number
   expiresAt: number
   error: string | null
-}>(() => ({ phase: 'off', remaining: 0, remainingBy: {}, expiresAt: 0, error: null }))
+}>(() => ({ phase: 'off', remaining: 0, remainingBy: {}, limitUsd: 0, remainingUsd: 0, expiresAt: 0, error: null }))
+/** USD still free under the shared limit (the refund room kept back). */
+function leftUsd(s: Session): number {
+  return Math.max(0, s.limitUsd - s.spentUsd - REFUND_RESERVE_USD)
+}
 /** What a payment in `token` can still use (USDC keeps the refund reserve back). */
 function leftFor(s: Session, token: FastToken): bigint {
   const g = s.grants[token]
@@ -312,6 +355,8 @@ function publish(phase?: FastPayPhase, error: string | null = null) {
     phase: phase ?? (s ? 'ready' : 'off'),
     remaining: remainingBy.USDC ?? 0,
     remainingBy,
+    limitUsd: s?.limitUsd ?? 0,
+    remainingUsd: s ? Math.floor(leftUsd(s) * 100) / 100 : 0,
     expiresAt: s?.expiresAt ?? 0,
     error,
   })
@@ -359,6 +404,9 @@ export function fastPayCovers(owner: string, amount: number, token: string = 'US
   if (Date.now() > s.expiresAt - EXPIRY_MARGIN_MS) return false
   const units = atomic(token, amount)
   if (!(units > 0n) || units > leftFor(s, token)) return false
+  // The shared limit: this amount, in USD, must fit what is left of it.
+  const price = expressUsdPrice(token)
+  if (!(price > 0) || amount * price > leftUsd(s) + 1e-9) return false
   // The refund is USDC: a non-USDC payment needs the reserve still there.
   if (token !== 'USDC') { const u = s.grants.USDC; if (!u || u.limit - u.spent < REFUND_RESERVE) return false }
   return true
@@ -387,13 +435,14 @@ function batchData(owner: Hex, to: Hex, amount: bigint, key: Hex, refund: bigint
  * Each token's cap for a new session: worth about FAST_PAY_LIMIT_USD now.
  * USDC exactly; EURC and cirBTC at today's price (no price: not granted).
  */
-async function tokenCaps(): Promise<Partial<Record<FastToken, bigint>>> {
+async function tokenCaps(limitUsd: number = FAST_PAY_LIMIT_USD): Promise<Partial<Record<FastToken, bigint>>> {
   const [eur, btc] = await Promise.all([
     import('./eurcPrice').then(m => m.fetchEurcPriceUsd()).catch(() => 0),
     import('./btcPrice').then(m => m.fetchBtcPriceUsd()).catch(() => 0),
   ])
-  const cap = (t: FastToken, usdPerToken: number) => usdPerToken > 0 ? atomic(t, Math.floor(FAST_PAY_LIMIT_USD / usdPerToken * 10 ** FAST_TOKENS[t].decimals) / 10 ** FAST_TOKENS[t].decimals) : 0n
-  return { USDC: atomic('USDC', FAST_PAY_LIMIT_USD), EURC: cap('EURC', eur), cirBTC: cap('cirBTC', btc) }
+  // Each worth the whole shared limit: any mix of tokens fits (the shared total is counted in the app).
+  const cap = (t: FastToken, usdPerToken: number) => usdPerToken > 0 ? atomic(t, Math.floor(limitUsd / usdPerToken * 10 ** FAST_TOKENS[t].decimals) / 10 ** FAST_TOKENS[t].decimals) : 0n
+  return { USDC: atomic('USDC', limitUsd), EURC: cap('EURC', eur), cirBTC: cap('cirBTC', btc) }
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
@@ -463,6 +512,9 @@ async function resume(owner: Hex, gen: number): Promise<boolean> {
     nonce: Number(BigInt(nonceHex?.result ?? '0x0')),
     payGas: BigInt(saved.payGas), payGasEstimate: BigInt(saved.payGasEstimate), owedGasWei: BigInt(saved.owedGasWei),
     relayer: saved.relayer as Hex | null,
+    // Saved before the shared limit: its USDC cap was the limit, and what is spent is read back from the chain.
+    limitUsd: saved.limitUsd ?? fromAtomic('USDC', limits.USDC),
+    spentUsd: Math.max(saved.spentUsd ?? 0, tokens.reduce((sum, t) => sum + fromAtomic(t, grants[t]!.spent) * expressUsdPrice(t), 0)),
   }
   publish('ready')
   const secs = ((performance.now() - t0) / 1000).toFixed(2)
@@ -518,7 +570,8 @@ async function start(gen: number): Promise<boolean> {
     ])
     return { t, allowance, permitNonce, balance, p2nonce: Number(p2[2]) }
   }))
-  const caps = await tokenCaps()
+  const limitUsd = expressLimitUsd()
+  const caps = await tokenCaps(limitUsd)
   // USDC always (it pays the gas refunds); EURC / cirBTC when the wallet holds some.
   const granted = reads.filter(r => r.t === 'USDC' || (r.balance > 0n && (caps[r.t] ?? 0n) > 0n))
   mark('reads')
@@ -588,7 +641,7 @@ async function start(gen: number): Promise<boolean> {
   session = {
     owner, key, home, kept: keyKept, endKey, grants, expiresAt, nonce,
     payGas: BigInt(Math.ceil(Number(payGasEstimate) * PAY_GAS_HEADROOM)), payGasEstimate,
-    owedGasWei: setupGas * gasPrice, relayer,
+    owedGasWei: setupGas * gasPrice, relayer, limitUsd, spentUsd: 0,
   }
   if (keyKept) saveSession(session, owner)
   kept = true
@@ -756,7 +809,8 @@ export async function sendFastPay(p: { owner: string; to: Hex; amount: number; i
   const grant = s.grants[token]!
   if (token !== 'USDC' && refund > usdc.limit - usdc.spent) throw new FastPayNotSent('No USDC left for the gas refund')
   // Counted up front: a pending payment may still land. Undone below if nothing was sent.
-  const count = (sign: 1n | -1n) => { grant.spent += sign * amount; usdc.spent += sign * refund }
+  const usd = p.amount * expressUsdPrice(token) + fromAtomic('USDC', refund)
+  const count = (sign: 1n | -1n) => { grant.spent += sign * amount; usdc.spent += sign * refund; s.spentUsd += Number(sign) * usd }
   const nonce = s.nonce
   s.nonce++
   count(1n)

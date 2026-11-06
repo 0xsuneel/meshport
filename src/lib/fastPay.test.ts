@@ -57,8 +57,8 @@ vi.mock('./supabase', () => ({ authApiHeaders: async () => ({ 'Content-Type': 'a
 const perf: string[] = []
 vi.mock('./errorReport', () => ({ reportPerf: (l: string) => perf.push(l) }))
 // Prices for the EURC / cirBTC caps (worth about $100 each).
-vi.mock('./eurcPrice', () => ({ fetchEurcPriceUsd: async () => 1.08 }))
-vi.mock('./btcPrice', () => ({ fetchBtcPriceUsd: async () => 100_000 }))
+vi.mock('./eurcPrice', () => ({ fetchEurcPriceUsd: async () => 1.08, lastKnownEurcPrice: () => 1.08 }))
+vi.mock('./btcPrice', () => ({ fetchBtcPriceUsd: async () => 100_000, lastKnownBtcPrice: () => 100_000 }))
 
 // The relay: what the session key sends.
 const sent: Array<{ from: string; to: string; data?: Hex; value?: bigint; nonce: number; gas: bigint }> = []
@@ -362,6 +362,38 @@ describe('Fast Pay session', () => {
       expect((await fp.stopFastPay()).cancelled).toBe(true)
       const { args } = decodeFunctionData({ abi: permit2Abi, data: sent.find(t => lc(t.from) === lc(OWNER))!.data! })
       expect((args as any)[0].map((a: any) => lc(a.spender))).toEqual([keyAddr])
+    })
+  })
+
+  describe('Express: one shared limit for every token', () => {
+    it('the limit is shared: an EURC payment uses up room a USDC payment then can\'t have', async () => {
+      usdcAllowanceToPermit2 = maxUint256
+      tokenAllowance[EURC] = maxUint256
+      tokenBalance[EURC] = 50_000_000n
+      fp.setFastPayEnabled(true)
+      expect(await fp.maybeStartFastPay()).toBe(true)
+      expect(fp.useFastPay.getState().limitUsd).toBe(100)
+      expect(fp.fastPayCovers(OWNER, 90, 'USDC')).toBe(true)
+      await pay({ owner: OWNER, to: RECIPIENT, amount: 50, token: 'EURC' }) // $54 at 1.08
+      const left = fp.useFastPay.getState().remainingUsd
+      expect(left).toBeGreaterThan(45); expect(left).toBeLessThan(46)
+      // Plenty of USDC cap left on-chain, but not of the shared limit: the normal way.
+      expect(fp.fastPayCovers(OWNER, 50, 'USDC')).toBe(false)
+      expect(fp.fastPayCovers(OWNER, 45, 'USDC')).toBe(true)
+    })
+
+    it('$300 when chosen: every token\'s cap is worth the whole limit', async () => {
+      usdcAllowanceToPermit2 = maxUint256
+      tokenBalance[EURC] = 50_000_000n
+      fp.setExpressLimitUsd(300)
+      fp.setFastPayEnabled(true)
+      expect(await fp.maybeStartFastPay()).toBe(true)
+      const details = typedSigned[typedSigned.length - 1].message.details
+      expect(details.map((d: any) => d.amount)).toEqual([300_000_000n, 277_777_777n])
+      expect(fp.useFastPay.getState().limitUsd).toBe(300)
+      expect(fp.fastPayCovers(OWNER, 250, 'USDC')).toBe(true)
+      expect(fp.fastPayCovers(OWNER, 301, 'USDC')).toBe(false) // more than the limit: the normal way
+      fp.setExpressLimitUsd(100)
     })
   })
 
