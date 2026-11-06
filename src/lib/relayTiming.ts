@@ -24,17 +24,18 @@ export interface RelayServerTiming {
 const s = (ms?: number) => (ms == null || !Number.isFinite(ms) ? '-' : (ms / 1000).toFixed(2))
 
 /** The report line (pure - unit tested). */
-export function relayTimingLine(what: string, chain: string, t: { waitMs?: number; requestMs: number; server?: RelayServerTiming | null; ok: boolean }): string {
+export function relayTimingLine(what: string, chain: string, t: { waitMs?: number; requestMs: number; headersMs?: number; server?: RelayServerTiming | null; ok: boolean }): string {
   const sv = t.server ?? null
   const net = sv?.totalMs != null ? t.requestMs - sv.totalMs : undefined
   const server = sv
     ? `server ${sv.fn ?? '?'} ${sv.outcome ?? '?'}: checks ${s(sv.checksMs)}, simulate ${s(sv.simulateMs)}, send ${s(sv.sendMs)}, receipt ${s(sv.receiptMs)}, blocks ${sv.blocks ?? '-'}, tip ${sv.tipGwei ?? '-'} gwei, cold ${sv.cold ?? '-'}`
     : 'server -'
-  return `[perf relay] ${what} ${chain}: wait ${s(t.waitMs)}, request ${s(t.requestMs)}, net ${s(net)} | ${server} (${t.ok ? 'ok' : 'failed'})`
+  const headers = t.headersMs != null ? `, auth header ${s(t.headersMs)}` : ''
+  return `[perf relay] ${what} ${chain}: wait ${s(t.waitMs)}, request ${s(t.requestMs)}${headers}, net ${s(net)} | ${server} (${t.ok ? 'ok' : 'failed'})`
 }
 
 /** Store the line (fire-and-forget; reporting never affects the transfer). */
-export function reportRelayTiming(what: string, chain: string, t: { waitMs?: number; requestMs: number; server?: RelayServerTiming | null; ok: boolean }): void {
+export function reportRelayTiming(what: string, chain: string, t: { waitMs?: number; requestMs: number; headersMs?: number; server?: RelayServerTiming | null; ok: boolean }): void {
   try {
     const line = relayTimingLine(what, chain, t)
     void import('./errorReport').then(m => m.reportPerf(line)).catch(() => {})

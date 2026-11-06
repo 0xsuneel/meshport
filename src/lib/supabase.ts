@@ -168,9 +168,38 @@ export function syncAuthUidToProfile(userId: string, signer?: import('@/wallet')
  * no chat-specific auth_uid sync needed, unlike
  * chatApiHeaders() below.
  */
+// The session's access token, kept from Supabase's auth events: getSession()
+// waits for Supabase's auth lock, so while a token refresh (or another auth
+// call) runs on a slow connection every server request waited behind it -
+// a Transfer's mint request reached the relayer ~24 s after it was sent
+// (6 Nov). A token valid for another minute is used as is; otherwise (or
+// none yet) getSession(), capped at 4 s before falling back to the kept one.
+let _token: { value: string; expiresAt: number } | null = null
+function keepToken(session: { access_token?: string; expires_at?: number } | null | undefined): void {
+  _token = session?.access_token ? { value: session.access_token, expiresAt: (session.expires_at ?? 0) * 1000 } : null
+}
+try {
+  supabase.auth.onAuthStateChange?.((_event, session) => { keepToken(session as any) })
+} catch { /* tests / no auth */ }
+
+/** How long the last authApiHeaders() took (ms) - for the relay timing reports. */
+export let lastAuthHeadersMs = 0
+
 export async function authApiHeaders(): Promise<Record<string, string>> {
+  const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now()
   let token = ''
-  try { token = (await supabase.auth.getSession()).data.session?.access_token || '' } catch { /* none */ }
+  if (_token && _token.expiresAt - Date.now() > 60_000) token = _token.value
+  else {
+    try {
+      const got = await Promise.race([
+        supabase.auth.getSession().then(r => r.data.session),
+        new Promise<null>(res => setTimeout(() => res(null), 4_000)),
+      ])
+      if (got) { keepToken(got as any); token = got.access_token || '' }
+      else token = _token?.value || ''
+    } catch { token = _token?.value || '' }
+  }
+  lastAuthHeadersMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0
   return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
 }
 
