@@ -529,12 +529,10 @@ export async function getAvatarByWallet(walletAddress: string): Promise<string |
 // Security-audit note: every users-table select below is an explicit column
 // list (USER_COLS) - id, username, display_name, wallet_address, avatar_url,
 // created_at - matching DbUser (email is private and never selected), rather than select('*'). This is
-// deliberate, not stylistic: the users table also holds encrypted_wallet_key
-// and wallet_auth_share (legacy server-side wallet columns, no longer
-// used), which the app never needs client-side and which have a
-// column-level REVOKE from anon/authenticated. A select('*') here would need those
-// two columns too and fail outright post-REVOKE - keep every users query
-// on an explicit allowlist, not '*', so this stays true.
+// deliberate, not stylistic: the users table also holds private columns
+// (email, backup_email) with a column-level REVOKE from anon/authenticated,
+// so a select('*') would fail - keep every users query on an explicit
+// allowlist, not '*'.
 export async function fetchUserProfile(userId: string): Promise<DbUser | null> {
   const { data, error } = await supabase
     .from('users')
