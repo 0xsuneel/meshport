@@ -1201,6 +1201,18 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   const chain = { ...baseChain, ub: effectiveUb }
 
+  // The relayer's server, woken while the person reviews and confirms: the
+  // mint request at the end then lands on a warm instance with the
+  // destination chain already set up (once a minute per chain at most).
+  const warmedAt = useRef<Record<string, number>>({})
+  useEffect(() => {
+    if (step !== 'review' && step !== 'confirm') return
+    const key = chain.sdk
+    if (Date.now() - (warmedAt.current[key] ?? 0) < 60_000) return
+    warmedAt.current[key] = Date.now()
+    void fetch(`/api/bridge-relay?action=warm&chain=${encodeURIComponent(key)}`).catch(() => {})
+  }, [step, chain.sdk])
+
   // Safe to leave once the burn is on Arc and Circle's forwarder mints: from
   // there Circle and transfer-worker finish it without this screen. A Unified
   // Balance transfer, or one MeshPort's relayer mints, is driven from here to
