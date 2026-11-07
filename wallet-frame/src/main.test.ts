@@ -334,6 +334,12 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
     // A raw passcode (handed in by the app) approves, but covers no Express pull.
     expect((await ask('fastpay:approve', { owner: OWNER, passcode: PIN }))!.msg.result.approved).toBe(true)
     expect((await sign()).error?.code).toBe('invalid')
+    // The app's passcode pad, sent with the sheet's intent: covers exactly that payment.
+    expect((await ask('fastpay:approve', { owner: OWNER, passcode: PIN, intent: PAY_INTENT }))!.msg.result.approved).toBe(true)
+    expect((await sign()).result.serialized).toMatch(/^0x02/)
+    // ...and not another one (here: a different recipient).
+    await ask('fastpay:approve', { owner: OWNER, passcode: PIN, intent: { ...PAY_INTENT, to: '0x5555555555555555555555555555555555555555' } })
+    expect((await sign()).error?.code).toBe('invalid')
     // The keypad page's approval for this payment: one signature.
     expect((await approveVia()).ok).toBe(true)
     expect((await sign()).result.serialized).toMatch(/^0x02/)

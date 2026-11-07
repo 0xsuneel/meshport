@@ -761,7 +761,9 @@ export async function stopFastPay(): Promise<StopResult> {
 // payment hands it to the frame, which checks it again and allows ONE
 // signature - so a passcode typed to unlock never approves a payment.
 const PIN_TTL_MS = 60_000
-let pendingPin: { pin: string; at: number } | null = null
+let pendingPin: { pin: string; at: number; intent?: import('@/wallet/protocol').ApprovalIntent } | null = null
+// What the last taken PIN approved (its sheet's intent): sent with it to the frame.
+let takenIntent: import('@/wallet/protocol').ApprovalIntent | undefined
 onPasscodeVerified(async pin => {
   if (!fastPayEnabled()) return
   const { useAuthStore } = await import('@/store')
@@ -769,7 +771,10 @@ onPasscodeVerified(async pin => {
   if (walletSource !== 'circle' || !walletAddress) return
   // Only a PIN entered on a payment screen can approve a payment - not one
   // typed to unlock, in Security or to reveal a phrase.
-  if (onPaymentScreen()) pendingPin = { pin, at: Date.now() }
+  if (onPaymentScreen()) {
+    const { takeApprovalIntent } = await import('./approvalIntents')
+    pendingPin = { pin, at: Date.now(), intent: takeApprovalIntent() }
+  }
 })
 /** The screens whose PIN sheet pays with sendUSDC (Pay, chat Pay). */
 const PAYMENT_PATHS = ['/pay', '/chat', '/multichain', '/swap']
@@ -779,7 +784,9 @@ function onPaymentScreen(): boolean {
 function takePin(): string | null {
   const p = pendingPin
   pendingPin = null
-  return p && Date.now() - p.at < PIN_TTL_MS ? p.pin : null
+  const fresh = p && Date.now() - p.at < PIN_TTL_MS
+  takenIntent = fresh ? p!.intent : undefined
+  return fresh ? p!.pin : null
 }
 
 /** Turning Fast Pay on, with the passcode the person just confirmed: the frame must hold its check. Resolves when the session is ready (true) or couldn't start. */
@@ -860,7 +867,7 @@ export async function sendFastPay(p: { owner: string; to: Hex; amount: number; i
   let fullCheck = false
   try {
     const { callWallet } = await import('@/wallet/frameClient')
-    fullCheck = (await callWallet('fastpay:approve', { owner: s.owner, passcode: pin })).full === true
+    fullCheck = (await callWallet('fastpay:approve', { owner: s.owner, passcode: pin, intent: takenIntent })).full === true
     lap.approve = performance.now() - t0
   } catch (e) {
     const code = (e as { code?: string })?.code
@@ -957,7 +964,7 @@ export async function expressTransfer(p: { owner: string; amount: bigint; fee: b
   let fullCheck = false
   try {
     const { callWallet } = await import('@/wallet/frameClient')
-    fullCheck = (await callWallet('fastpay:approve', { owner: s.owner, passcode: pin })).full === true
+    fullCheck = (await callWallet('fastpay:approve', { owner: s.owner, passcode: pin, intent: takenIntent })).full === true
     lap.approve = performance.now() - t0
   } catch (e) {
     throw new FastPayNotSent(`Frame refused the passcode (${(e as { code?: string })?.code ?? 'error'})`)
@@ -1089,7 +1096,7 @@ export async function expressSwapBegin(p: { owner: string; token: FastToken; amo
   if (!pin) throw new FastPayNotSent('No passcode for this swap')
   try {
     const { callWallet } = await import('@/wallet/frameClient')
-    await callWallet('fastpay:approve', { owner: s.owner, passcode: pin })
+    await callWallet('fastpay:approve', { owner: s.owner, passcode: pin, intent: takenIntent })
   } catch (e) {
     throw new FastPayNotSent(`Frame refused the passcode (${(e as { code?: string })?.code ?? 'error'})`)
   }
@@ -1172,7 +1179,7 @@ export async function expressApprove(owner: string): Promise<boolean> {
   if (!pin) return false
   try {
     const { callWallet } = await import('@/wallet/frameClient')
-    await callWallet('fastpay:approve', { owner, passcode: pin })
+    await callWallet('fastpay:approve', { owner, passcode: pin, intent: takenIntent })
     return true
   } catch { return false }
 }

@@ -7,7 +7,15 @@ approval let the page sign anything. The fix is to make the wallet frame's
 origin (wallet.meshport.xyz) the only place the passcode is typed and the
 only place that decides what an approval covers.
 
-## Phase 1 — passcode entry and approvals bound to what is shown (this change)
+## Phase 1 — approvals bound to what is shown
+
+Update 7 Nov: the passcode is entered on the app's own shared passcode pad
+(the same one as the lock screen) on every screen. The sheet's intent goes
+to the wallet frame with the passcode (`fastpay:approve`), which checks the
+passcode and binds the approval to that intent. The frame-hosted keypad
+page (`confirm.html`, below) is kept in the frame but not used by the app.
+
+Original phase 1 design:
 
 - `wallet-frame/confirm.html`: a keypad page on the wallet origin, shown in
   the app as a visible iframe (the same pattern as `reveal.html`). It shows

@@ -6,7 +6,7 @@
 // The error shows in one place on both: under the title, in red, and the
 // dots shake. With no passcode set, a plain confirm button stands in for the
 // keypad, so it's still an explicit "are you sure" step.
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { ActionSheet } from './ActionSheet'
 import { DesktopTransactionAuthDialog } from './DesktopTransactionAuthDialog'
@@ -15,7 +15,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY } from '@/lib/motion'
 import type { BiometricVerb } from '@/lib/biometricWording'
 import type { ApprovalIntent } from '@/wallet/protocol'
-import { SecurePinPad, secureWallet, frameHasSecureKeypad } from './SecurePinPad'
+import { noteApprovalIntent } from '@/lib/approvalIntents'
 
 export interface PinSheetProps {
   open: boolean
@@ -65,41 +65,25 @@ export interface PinSheetProps {
    *  or fade on top of it. */
   leaveUnder?: boolean
   /** What this approval is for, in exact terms (docs/SECURE-APPROVALS.md):
-   *  the wallet frame shows it and binds the approval to it. Without one,
-   *  the approval covers no Express move (it goes the normal way). */
+   *  handed to the wallet frame with the passcode, which then lets Express
+   *  sign only that (recipient, token, amount, chain). Without one, the
+   *  approval covers no Express move (it goes the normal way). */
   intent?: ApprovalIntent
-}
-
-/** The wallet frame's own keypad when this account's passcode lives there (and the frame has it). */
-function useSecureKeypad(open: boolean, fallback: boolean): [boolean, () => void] {
-  const [on, setOn] = useState(false)
-  useEffect(() => {
-    if (!open || fallback || !secureWallet()) { setOn(false); return }
-    let cancelled = false
-    void frameHasSecureKeypad().then(ok => { if (!cancelled) setOn(ok) })
-    return () => { cancelled = true }
-  }, [open, fallback])
-  return [on, () => setOn(false)]
 }
 
 export function PinSheet(p: PinSheetProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const close = p.locked ? () => {} : p.onClose
-  const [secure, notSecure] = useSecureKeypad(p.open, !!p.fallbackConfirm)
-  const said0 = typeof p.subtitle === 'string' ? p.subtitle : ''
-  const pad = secure && !p.fallbackConfirm ? (
-    <SecurePinPad key={p.id ?? 'secure'} intent={p.intent} title={p.title}
-      name={p.card?.name} label={p.card ? `${p.card.label} ${p.card.amount}${p.card.unit ? ' ' + p.card.unit : ''}` : said0}
-      onChange={p.onChange} onComplete={p.onComplete} onCancel={close} onUnavailable={notSecure}
-      biometricAvailable={p.biometricAvailable} autoBiometric={p.autoBiometric} />
-  ) : p.fallbackConfirm ? (
+  // The passcode now entered approves exactly this (read by lib/fastPay).
+  const onComplete = (pin: string, viaBiometric?: boolean) => { noteApprovalIntent(p.intent); p.onComplete(pin, viaBiometric) }
+  const pad = p.fallbackConfirm ? (
     <button type="button" onClick={p.fallbackConfirm.onConfirm}
       className="w-full rounded-2xl py-4 text-[15px] font-bold text-white bg-brand active:scale-[0.98] transition-transform">
       {p.fallbackConfirm.label}
     </button>
   ) : (
     <PinKeypad value={p.value} onChange={p.onChange} length={6} error={!!p.error} shake={!!p.error}
-      onComplete={p.onComplete} biometricAvailable={p.biometricAvailable} autoBiometric={p.autoBiometric} bioVerb={p.bioVerb} />
+      onComplete={onComplete} biometricAvailable={p.biometricAvailable} autoBiometric={p.autoBiometric} bioVerb={p.bioVerb} />
   )
   const said = p.error
     ? <span role="alert" className="text-danger">{p.error}</span>
