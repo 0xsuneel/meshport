@@ -986,7 +986,16 @@ async function pendingNonce(addr: Hex): Promise<number> {
 async function sessionWalletAccount(s: Session): Promise<any> {
   const { toAccount } = await import('viem/accounts')
   const refuse = async () => { throw new Error('An Express key signs transactions only') }
-  return Object.assign(toAccount({ address: s.key.address, signTransaction: (tx: any) => s.key.signTransaction(tx), signMessage: refuse as any, signTypedData: refuse as any }), { meshportWallet: true as const })
+  // Typed data: only a token permit to Circle's swap adapter, which the frame checks itself.
+  const signTypedData = async (td: any) => {
+    if (td?.primaryType !== 'Permit' || !(await frameCan('swap-permit'))) return refuse()
+    const { callWallet } = await import('@/wallet/frameClient')
+    const str = (v: unknown) => typeof v === 'bigint' ? v.toString() : String(v)
+    const message = Object.fromEntries(Object.entries(td.message ?? {}).map(([k, v]) => [k, str(v)]))
+    const domain = { ...td.domain, ...(td.domain?.chainId != null ? { chainId: Number(td.domain.chainId) } : {}) }
+    return (await callWallet('session:permit', { address: s.key.address, typedData: { domain, types: td.types, primaryType: td.primaryType, message } })).signature
+  }
+  return Object.assign(toAccount({ address: s.key.address, signTransaction: (tx: any) => s.key.signTransaction(tx), signMessage: refuse as any, signTypedData: signTypedData as any }), { meshportWallet: true as const })
 }
 
 export type ExpressSwap = {

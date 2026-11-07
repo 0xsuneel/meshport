@@ -116,7 +116,29 @@ const SESSION_CALLS: Record<string, ReadonlySet<string>> = {
 // passcode-approved Permit2 pull just moved to it for this one move.
 const APPROVE_SPENDERS = new Set([TOKEN_MESSENGER_V2, SWAP_ADAPTER])
 /** What this frame lets a session key do (the app checks before relying on it). */
-export const SESSION_CAPABILITIES = ['pay', 'transfer', 'swap', 'bring'] as const
+export const SESSION_CAPABILITIES = ['pay', 'transfer', 'swap', 'bring', 'swap-permit'] as const
+
+/** A session key signs one kind of typed data: an EIP-2612 Permit of its own
+ *  USDC / EURC / cirBTC on Arc, to Circle's swap adapter only - in place of
+ *  the approve transaction the swap kit would otherwise send (the same
+ *  spender rule as approve, see APPROVE_SPENDERS). Null = allowed. */
+export const PERMIT_TOKENS = new Set([ARC_USDC_ERC20, ARC_EURC, ARC_CIRBTC])
+export function sessionPermitRefusal(td: Record<string, any>, key: string): string | null {
+  const d = td?.domain ?? {}, m = td?.message ?? {}
+  if (td?.primaryType !== 'Permit') return 'Only a token permit'
+  if (Number(d.chainId) !== ARC_CHAIN_ID) return 'Arc only'
+  if (!PERMIT_TOKENS.has(String(d.verifyingContract ?? '').toLowerCase())) return 'Not an Express token'
+  if (String(m.owner ?? '').toLowerCase() !== key.toLowerCase()) return 'Not this key'
+  if (String(m.spender ?? '').toLowerCase() !== SWAP_ADAPTER) return 'Only for the swap adapter'
+  const fields = (td?.types?.Permit ?? []).map((f: any) => `${f?.name}:${f?.type}`).join(',')
+  if (fields !== 'owner:address,spender:address,value:uint256,nonce:uint256,deadline:uint256') return 'Not a standard permit'
+  try {
+    const deadline = BigInt(m.deadline), now = BigInt(Math.floor(Date.now() / 1000))
+    if (deadline > now + 3600n) return 'Deadline too far'
+    BigInt(m.value); BigInt(m.nonce)
+  } catch { return 'Bad permit' }
+  return null
+}
 
 // ── Express Bring keys ───────────────────────────────────────────────────────
 // One per wallet, kept (sealed to this device) for weeks: MeshPortRouter on
@@ -422,6 +444,22 @@ const handlers: Handlers = {
     bringKeys.delete(o)
     try { localStorage.removeItem(BRING_STORE + o) } catch { /* storage blocked */ }
     return { ok: true as const }
+  },
+
+  async 'session:permit'({ address, typedData }) {
+    const a = String(address).toLowerCase()
+    const k = sessionKeys.get(a)
+    if (!k) throw new RpcError('locked', 'This Fast Pay session has ended')
+    const td = (typedData ?? {}) as Record<string, any>
+    const why = sessionPermitRefusal(td, a)
+    if (why) throw new RpcError('invalid', `Not an Express permit (${why})`)
+    const m = td.message
+    const signature = await k.signTypedData({
+      domain: { name: String(td.domain.name), version: String(td.domain.version), chainId: ARC_CHAIN_ID, verifyingContract: String(td.domain.verifyingContract) as Hex },
+      types: { Permit: td.types.Permit }, primaryType: 'Permit',
+      message: { owner: a as Hex, spender: SWAP_ADAPTER as Hex, value: BigInt(m.value), nonce: BigInt(m.nonce), deadline: BigInt(m.deadline) },
+    })
+    return { signature }
   },
 
   async 'session:capabilities'() {

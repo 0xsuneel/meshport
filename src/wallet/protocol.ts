@@ -90,6 +90,8 @@ export interface WalletRpc {
    * value transfer (the leftover gas going back). Anything else is refused.
    */
   'session:sign': [{ address: string; transaction: FrameTransaction }, { serialized: Hex }]
+  /** A session key's EIP-2612 permit to Circle's swap adapter (Express Swap, no approve tx). Values as decimal strings. */
+  'session:permit': [{ address: string; typedData: { domain: Record<string, unknown>; types: Record<string, unknown>; primaryType: string; message: Record<string, string> } }, { signature: Hex }]
   /** Drop a session key (or all of them). */
   'session:end': [{ address?: string }, { ok: true }]
   /** What session keys may do in this frame (Express): 'pay', 'transfer'. Older frames don't answer. */
