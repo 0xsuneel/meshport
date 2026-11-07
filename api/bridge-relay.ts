@@ -1858,6 +1858,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // ── GET actions ──────────────────────────────────────────────────────
     if (req.method === 'GET') {
+      // ── warm: a move is about to need this function (Transfer's Review /
+      // passcode step): start the instance and set up the destination chain's
+      // clients and the relayer signer now, so the mint request that follows
+      // doesn't pay a cold start (7 Nov: 24 s of a Unified Balance transfer's
+      // 33 s Gateway mint request was spent before the handler ran).
+      if (req.query.action === 'warm') {
+        const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown'
+        if (!allowQuote(ip)) return res.status(429).end()
+        const chainKey = CHAIN_ALIASES[String(req.query.chain || '')] ?? String(req.query.chain || '')
+        if (CHAINS[chainKey] || EXTRA_RPCS[chainKey]) await callClients(chainKey).then(cl => cl?.pub.getBlockNumber()).catch(() => {})
+        res.setHeader('Cache-Control', 'no-store')
+        return res.status(204).end()
+      }
       // ── p2p_operator: the relayer's PUBLIC address, which sellers name as
       // their sell ad's auto-accept operator (escrow V3). Address only.
       if (req.query.p2p_operator) {
