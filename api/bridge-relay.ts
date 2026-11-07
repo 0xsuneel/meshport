@@ -570,10 +570,9 @@ async function arcTransfer(req: VercelRequest, res: VercelResponse) {
   const used = await pub.readContract({ address: ARC_USDC_ERC20, abi: USDC_ABI, functionName: 'authorizationState', args: [a.from, nonce] })
   // Already used → the transaction that used it (safe retries).
   if (used) {
-    const logs = await pub.getContractEvents({ address: router, abi: ROUTER_ABI, eventName: 'Bridged', args: { from: a.from, nonce }, fromBlock: 'earliest' }).catch(() => [])
-    const hit = (logs as any[])[0]
-    return hit ? res.status(200).json({ txHash: hit.transactionHash, alreadySubmitted: true })
-      : res.status(409).json({ error: 'This authorization was already used' })
+    const hit = await findBridged(pub, router, a.from, nonce)
+    return hit ? res.status(200).json({ txHash: hit, alreadySubmitted: true })
+      : res.status(409).json({ error: 'This transfer was already sent', alreadySubmitted: true })
   }
 
   const { parseSignature } = await import('viem')
@@ -606,6 +605,22 @@ async function arcTransfer(req: VercelRequest, res: VercelResponse) {
   } catch {
     return res.status(200).json({ txHash, pending: true })
   }
+}
+
+/**
+ * The router transaction that used an authorization (a retry after a lost
+ * answer). Public nodes often refuse a log search from block 0, and the
+ * authorization can only have been used inside its window, so the recent
+ * blocks are searched when the full search is refused (audit 7 Nov H7).
+ */
+async function findBridged(pub: any, router: `0x${string}`, from: `0x${string}`, nonce: `0x${string}`): Promise<string | null> {
+  const find = (fromBlock: bigint | 'earliest') => pub.getContractEvents({ address: router, abi: ROUTER_ABI, eventName: 'Bridged', args: { from, nonce }, fromBlock }) as Promise<any[]>
+  let logs: any[] = await find('earliest').catch(() => [])
+  if (!logs.length) {
+    const head = await pub.getBlockNumber().catch(() => null) as bigint | null
+    if (head !== null) logs = await find(head > 9_000n ? head - 9_000n : 0n).catch(() => [])
+  }
+  return logs[0]?.transactionHash ?? null
 }
 
 async function callClients(chainKey: string) {
@@ -1906,10 +1921,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const used = await pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'authorizationState', args: [a.from, nonce] })
     // Already used → return the transaction that used it (safe retries).
     if (used) {
-      const logs = await pub.getContractEvents({ address: router, abi: ROUTER_ABI, eventName: 'Bridged', args: { from: a.from, nonce }, fromBlock: 'earliest' }).catch(() => [])
-      const hit = (logs as any[])[0]
-      return hit ? res.status(200).json({ txHash: hit.transactionHash, alreadySubmitted: true })
-        : res.status(409).json({ error: 'This authorization was already used' })
+      const hit = await findBridged(pub, router, a.from, nonce)
+      return hit ? res.status(200).json({ txHash: hit, alreadySubmitted: true })
+        : res.status(409).json({ error: 'This transfer was already sent', alreadySubmitted: true })
     }
 
     const [now_q, bal] = await Promise.all([quoteP, balP])

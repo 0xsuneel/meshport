@@ -64,6 +64,7 @@ vi.mock('./btcPrice', () => ({ fetchBtcPriceUsd: async () => 100_000, lastKnownB
 const sent: Array<{ from: string; to: string; data?: Hex; value?: bigint; nonce: number; gas: bigint }> = []
 let relayFails = false
 let failNextSetupSend = false
+let failBurn = false // the next CCTP burn reverts
 vi.mock('./arcService', () => ({
   sendFeeCap: async () => 41_000_000_000n,
   currentGasPrice: async () => GAS_PRICE,
@@ -76,6 +77,7 @@ vi.mock('./arcService', () => ({
   },
   relaySend: async (account: any, tx: any, onSent: (h: string) => void) => {
     if (relayFails) throw new Error('Transaction rejected')
+    if (failBurn && String(tx.to).toLowerCase() === '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa') { failBurn = false; return { txHash: '0x' + 'bb'.repeat(32), state: 'failed' } }
     await account.signTransaction({ type: 'eip1559', chainId: 5042002, maxPriorityFeePerGas: 1n, value: 0n, ...tx })
     sent.push({ from: account.address, ...tx })
     const h = ('0x' + String(sent.length).padStart(64, '0')) as Hex
@@ -377,22 +379,35 @@ describe('Fast Pay session', () => {
       expect(await fp.maybeStartFastPay()).toBe(true)
       sent.length = 0
     }
-    it('pull (amount + gas to the key, fee to the fee wallet), approve exactly the amount, burn - all signed by the session key', async () => {
+    it('pull (amount + gas + fee to the key), approve exactly the amount, burn, then the fee on to the fee wallet - all signed by the session key', async () => {
       await ready()
       await enterPin()
       const { burnHash } = await fp.expressTransfer({ owner: OWNER, amount: 10_000_000n, fee: 50_000n, feeWallet: FEE_WALLET, burnData: BURN })
       expect(burnHash).toMatch(/^0x/)
-      expect(sent.map(t => lc(t.to))).toEqual([lc(PERMIT2), lc(ARC_USDC), TM])
+      // The fee waits in the key and goes on only after the burn (never charged when the transfer goes the normal way).
+      await vi.waitFor(() => expect(sent.length).toBe(4))
+      expect(sent.map(t => lc(t.to))).toEqual([lc(PERMIT2), lc(ARC_USDC), TM, lc(FEE_WALLET)])
       const pull = decodeFunctionData({ abi: permit2Abi, data: sent[0].data! }) as any
-      const [toKey, toFee] = pull.args[0]
-      expect(lc(toKey.from)).toBe(lc(OWNER)); expect(lc(toKey.to)).toBe(lc(sent[0].from)); expect(toKey.amount).toBeGreaterThan(10_000_000n) // + gas refund
-      expect(lc(toFee.to)).toBe(lc(FEE_WALLET)); expect(toFee.amount).toBe(50_000n)
+      expect(pull.args[0]).toHaveLength(1)
+      const [toKey] = pull.args[0]
+      expect(lc(toKey.from)).toBe(lc(OWNER)); expect(lc(toKey.to)).toBe(lc(sent[0].from)); expect(toKey.amount).toBeGreaterThan(10_050_000n) // + fee + gas refund
+      expect(sent[3].value).toBe(50_000n * 1_000_000_000_000n); expect(sent[3].nonce).toBe(sent[0].nonce + 3)
       const approve = decodeFunctionData({ abi: [{ type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ name: 's', type: 'address' }, { name: 'a', type: 'uint256' }], outputs: [{ type: 'bool' }] }] as const, data: sent[1].data! }) as any
       expect(approve.functionName).toBe('approve'); expect(lc(approve.args[0])).toBe(TM); expect(approve.args[1]).toBe(10_000_000n)
       expect(sent[2].data).toBe(BURN)
-      expect(sent.map(t => t.nonce)).toEqual([sent[0].nonce, sent[0].nonce + 1, sent[0].nonce + 2])
+      expect(sent.map(t => t.nonce)).toEqual([sent[0].nonce, sent[0].nonce + 1, sent[0].nonce + 2, sent[0].nonce + 3])
       // The shared limit counts the whole move.
       expect(fp.useFastPay.getState().remainingUsd).toBeLessThan(100 - 10.05)
+    })
+    it('a burn that fails: the amount and the fee go back to the owner, the fee is never paid, then the normal way', async () => {
+      await ready()
+      await enterPin()
+      failBurn = true
+      await expect(fp.expressTransfer({ owner: OWNER, amount: 10_000_000n, fee: 50_000n, feeWallet: FEE_WALLET, burnData: BURN })).rejects.toBeInstanceOf(fp.FastPayNotSent)
+      const back = sent[sent.length - 1]
+      expect(lc(back.to)).toBe(lc(OWNER))
+      expect(back.value).toBe(10_050_000n * 1_000_000_000_000n) // amount + fee
+      expect(sent.some(t => lc(t.to) === lc(FEE_WALLET))).toBe(false)
     })
     it('no passcode, or more than is left: the normal way, nothing sent', async () => {
       await ready()
@@ -430,7 +445,8 @@ describe('Fast Pay session', () => {
       expect(lc(back.to)).toBe(EURC)
       const t = decodeFunctionData({ abi: [{ type: 'function', name: 'transfer', stateMutability: 'nonpayable', inputs: [{ name: 'to', type: 'address' }, { name: 'a', type: 'uint256' }], outputs: [{ type: 'bool' }] }] as const, data: back.data! }) as any
       expect(lc(t.args[0])).toBe(lc(OWNER)); expect(t.args[1]).toBe(10_000_000n)
-      expect(fp.useFastPay.getState().remainingUsd).toBeGreaterThan(before) // the returned amount is free again
+      // The limit isn't given back: the Permit2 allowance was used either way (audit 7 Nov M2).
+      expect(fp.useFastPay.getState().remainingUsd).toBe(before)
     })
     it('more than is left of the limit: the normal way', async () => {
       usdcAllowanceToPermit2 = maxUint256
@@ -627,12 +643,12 @@ describe('Fast Pay session', () => {
       expect(details[1].amount).toBe(fp.refundUnits(70_000n, GAS_PRICE, 140_000n * GAS_PRICE)) // still repays the set-up
     })
 
-    it('session end: the key sends its leftover gas back to the relayer, then nothing is covered', async () => {
+    it('session end: the key sends what it holds back to the owner (not the relayer), then nothing is covered', async () => {
       fp.endFastPaySession()
       expect(fp.fastPayCovers(OWNER, 1)).toBe(false)
       expect(fp.useFastPay.getState().phase).toBe('off')
       await vi.waitFor(() => expect(sent.length).toBe(1))
-      expect(lc(sent[0].to)).toBe(lc(RELAYER))
+      expect(lc(sent[0].to)).toBe(lc(OWNER))
       expect(sent[0].value).toBe(10_000_000_000_000_000n - 21_000n * 41_000_000_000n) // 0.01 minus the transfer's gas
       expect(sent[0].data).toBeUndefined()
     })

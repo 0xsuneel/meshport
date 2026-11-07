@@ -286,6 +286,11 @@ async function routerBurn(p: FastCctpParams, router: Hex, amount: bigint, maxFee
     if (status >= 500) throw Object.assign(new FastCctpError('The transfer failed on Arc. Nothing was sent.', 'not_sent'), { txHash: hash })
     return hash as Hex
   }
+  // Already sent (a retry after a lost answer) but its transaction wasn't
+  // found yet: never "nothing was sent" - it may be on its way.
+  if ((out as { alreadySubmitted?: boolean } | null)?.alreadySubmitted) {
+    throw new FastCctpError('This transfer was already sent - check Activity in a minute before trying again.', 'settling')
+  }
   throw new FastCctpError(`${out?.error || 'The transfer was refused'}. Nothing was sent.`, 'not_sent')
 }
 
