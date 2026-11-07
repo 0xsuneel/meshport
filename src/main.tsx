@@ -110,12 +110,18 @@ clearLegacyData()
   if (savedSource && !KNOWN_SOURCES.has(savedSource)) useAuthStore.getState().logout()
   const auth = useAuthStore.getState()
   if ((!hadSession || awayTooLong) && auth.isAuthenticated && auth.passcodeLockEnabled && !auth.isLocked) auth.lock()
+  if (useAuthStore.getState().isLocked) void import('./lib/perfTrace').then(m => m.noteStartedLocked()).catch(() => {})
   // Wallet readiness (lib/walletReadiness): tracking starts before the first
   // render, so the first Arc answer and the first open are both seen.
   startWalletReadiness()
   // A Google / email (Circle) wallet: load Circle's SDK and frame now, before
   // React has mounted, so the wallet is ready by the first payment.
-  if (auth.isAuthenticated && auth.walletSource === 'circle') import('./wallet/circle').then(m => m.warmCircle()).catch(() => {})
+  if (auth.isAuthenticated && auth.walletSource === 'circle') {
+    import('./wallet/circle').then(m => m.warmCircle()).catch(() => {})
+    // Its passcode check and Express keys live in the wallet frame too: load
+    // it now, while the lock screen shows, not on the unlock tap (audit 7 Nov D7).
+    import('./wallet/frameClient').then(m => m.walletReady()).catch(() => {})
+  }
   // A created / imported wallet: load its wallet frame now too, so it is
   // ready (or reloading if its first load failed - wallet/frameClient.ts)
   // by the time the lock screen or the first payment needs it.
