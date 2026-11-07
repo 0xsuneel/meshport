@@ -172,10 +172,13 @@ export function sessionTxRefusal(tx: Record<string, unknown>, owner?: string): s
   if (data === '0x' || data === '') return to ? null : 'No recipient' // a plain value transfer (the leftover gas back)
   const allowed = SESSION_CALLS[to]
   const selector = data.slice(0, 10)
-  if (!allowed || !allowed.has(selector)) return 'Not a Fast Pay call'
-  if (selector === ERC20_APPROVE && !APPROVE_SPENDERS.has('0x' + data.slice(34, 74))) return 'Not a Fast Pay call'
+  // What was refused (public: a contract address and a function selector) -
+  // so a refusal in the field says which call to look at.
+  const what = (extra = '') => `Not a Fast Pay call (to ${to || '-'}, fn ${selector}${extra})`
+  if (!allowed || !allowed.has(selector)) return what()
+  if (selector === ERC20_APPROVE && !APPROVE_SPENDERS.has('0x' + data.slice(34, 74))) return what(`, spender 0x${data.slice(34, 74)}`)
   // A token transfer only back to the wallet the session spends for (returning an unfinished move).
-  if (selector === ERC20_TRANSFER && (!owner || '0x' + data.slice(34, 74) !== owner.toLowerCase())) return 'Not a Fast Pay call'
+  if (selector === ERC20_TRANSFER && (!owner || '0x' + data.slice(34, 74) !== owner.toLowerCase())) return what(', not to the owner')
   return null
 }
 
