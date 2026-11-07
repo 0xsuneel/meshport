@@ -630,11 +630,17 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
   // no Circle signature. Anything it can't do goes the normal way below.
   const express = await (async (): Promise<SwapOutcome | null> => {
     let ex: import('./fastPay').ExpressSwap
+    // Why Express didn't take this swap - reported, so a silent "normal way" can be explained.
+    const skip = (why: string) => { void import('./errorReport').then(m => m.reportPerf(`[perf express swap] not used: ${why}`)).catch(() => {}); return null }
     try {
       const fp = await import('./fastPay')
-      if (!fp.fastPayEnabled() || !fp.expressCoversSwap(params.walletAddress, parsedAmt, params.tokenIn)) return null
+      if (!fp.fastPayEnabled()) return null // Express off: nothing to report
+      const st = fp.useFastPay.getState()
+      if (!fp.expressCoversSwap(params.walletAddress, parsedAmt, params.tokenIn)) {
+        return skip(`not covered (phase ${st.phase}, ${st.remainingUsd} of ${st.limitUsd} USD left, ${parsedAmt} ${params.tokenIn})`)
+      }
       ex = await fp.expressSwapBegin({ owner: params.walletAddress, token: params.tokenIn as import('./fastPay').FastToken, amount: parsedAmt })
-    } catch { return null } // nothing moved
+    } catch (e) { return skip(String((e as any)?.message ?? e).slice(0, 200)) } // nothing moved
     const t0 = performance.now()
     let result: any
     try {
