@@ -2161,10 +2161,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 5, maxWidth: '100%' }}>
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                            <SpeedTag fast={id === 'cctp'} on={on} />
+                            <SpeedTag fast={id === 'cctp' || ubCovers} on={on} />
                           </span>
                           <span style={{ fontSize: 11, fontWeight: 500, color: on ? 'rgba(255,255,255,0.85)' : COLORS.muted }}>
-                            {id === 'ub' ? ubBringTime(selectedSdkId) : CCTP_BRING_TIME}
+                            {id === 'ub' ? (ubCovers ? 'Seconds · from your balance' : ubBringTime(selectedSdkId)) : CCTP_BRING_TIME}
                           </span>
                           {feeLine && (
                             <span style={{ fontSize: 11, fontWeight: 500, color: tooHigh ? COLORS.error : (id === 'ub' && ubFeeHigh) ? 'var(--warning-text)' : on ? 'rgba(255,255,255,0.85)' : COLORS.muted }}>{feeLine}</span>
