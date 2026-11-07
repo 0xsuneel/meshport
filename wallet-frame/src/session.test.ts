@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto'
 import { describe, it, expect, vi } from 'vitest'
+import { encodeFunctionData, parseAbi } from 'viem'
 import { WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION } from '@/wallet/protocol'
 
 // Fast Pay session keys kept across app restarts: sealed to this device with
@@ -32,7 +33,10 @@ async function frame() {
     return parent.postMessage.mock.calls.find(c => c[0]?.id === id)![0]
   }
 }
-const permit2Tx = { type: 'eip1559', chainId: 5042002, nonce: 0, to: '0x000000000022D473030F116dDEE9F6B43aC78BA3', value: 0n, data: '0x0d58b1db' + '00'.repeat(32), gas: 100000n, maxFeePerGas: 2n, maxPriorityFeePerGas: 1n }
+const permit2Tx = { type: 'eip1559', chainId: 5042002, nonce: 0, to: '0x000000000022D473030F116dDEE9F6B43aC78BA3', value: 0n,
+  data: encodeFunctionData({ abi: parseAbi(['function transferFrom((address from, address to, uint160 amount, address token)[] details)']), functionName: 'transferFrom',
+    args: [[{ from: '0x1111111111111111111111111111111111111111', to: '0x9999999999999999999999999999999999999999', amount: 1n, token: '0x3600000000000000000000000000000000000000' }]] }),
+  gas: 100000n, maxFeePerGas: 2n, maxPriorityFeePerGas: 1n }
 
 const OWNER = '0x1111111111111111111111111111111111111111'
 const PIN = '123456'

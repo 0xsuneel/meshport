@@ -12,7 +12,7 @@
 // 'none' (wallet-frame/vercel.json): the frame makes no network requests.
 
 import { generateMnemonic, english, privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
-import { bytesToHex } from 'viem'
+import { bytesToHex, decodeFunctionData } from 'viem'
 import {
   WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION, REVEAL_CHANNEL, PASSKEY_CHANNEL,
   isWalletMessage, parseOrigins,
@@ -115,6 +115,42 @@ const SESSION_CALLS: Record<string, ReadonlySet<string>> = {
 // ever spend what the key itself holds - its gas float, and what a
 // passcode-approved Permit2 pull just moved to it for this one move.
 const APPROVE_SPENDERS = new Set([TOKEN_MESSENGER_V2, SWAP_ADAPTER])
+// A plain value send (native USDC on Arc - the same balance as the USDC
+// token) only to the session's owner, or MeshPort's relayer (an older app
+// returns the gas float there). Audit 7 Nov: an unrestricted value send got
+// around the "tokens only back to the owner" rule.
+const RELAYERS = new Set(['0x7218ec7dd868444a7655599551520ac5bcca7c0d', '0xd9db937066e4e11d233993e44e838923ecdce950'])
+// Most one session transaction may reserve for gas (gas × fee cap): 0.25 USDC.
+// A real Express swap reserves ~0.043 (961k gas at 45 gwei, 7 Nov).
+const MAX_SESSION_FEE_WEI = 250_000_000_000_000_000n
+const EXPRESS_TOKENS = new Set([ARC_USDC_ERC20, ARC_EURC, ARC_CIRBTC])
+const PERMIT2_TRANSFER_ABI = [{ type: 'function', name: 'transferFrom', stateMutability: 'nonpayable', outputs: [], inputs: [
+  { name: 'transferDetails', type: 'tuple[]', components: [
+    { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'amount', type: 'uint160' }, { name: 'token', type: 'address' }] }] }] as const
+const EIP2612_PERMIT_ABI = [{ type: 'function', name: 'permit', stateMutability: 'nonpayable', outputs: [], inputs: [
+  { name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'deadline', type: 'uint256' },
+  { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] }] as const
+const BURN_ABI = [
+  { type: 'function', name: 'depositForBurn', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'amount', type: 'uint256' }, { name: 'destinationDomain', type: 'uint32' }, { name: 'mintRecipient', type: 'bytes32' }, { name: 'burnToken', type: 'address' },
+    { name: 'destinationCaller', type: 'bytes32' }, { name: 'maxFee', type: 'uint256' }, { name: 'minFinalityThreshold', type: 'uint32' }] },
+  { type: 'function', name: 'depositForBurnWithHook', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'amount', type: 'uint256' }, { name: 'destinationDomain', type: 'uint32' }, { name: 'mintRecipient', type: 'bytes32' }, { name: 'burnToken', type: 'address' },
+    { name: 'destinationCaller', type: 'bytes32' }, { name: 'maxFee', type: 'uint256' }, { name: 'minFinalityThreshold', type: 'uint32' }, { name: 'hookData', type: 'bytes' }] },
+] as const
+// Circle's swap adapter execute(params, tokenInputs, signature): Circle signs
+// the route, but not who sends it - so the frame checks where the tokens go.
+const ADAPTER_EXECUTE_ABI = [{ type: 'function', name: 'execute', stateMutability: 'payable', outputs: [], inputs: [
+  { name: 'params', type: 'tuple', components: [
+    { name: 'instructions', type: 'tuple[]', components: [{ name: 'target', type: 'address' }, { name: 'data', type: 'bytes' }, { name: 'value', type: 'uint256' }, { name: 'tokenIn', type: 'address' }, { name: 'amountToApprove', type: 'uint256' }, { name: 'tokenOut', type: 'address' }, { name: 'minTokenOut', type: 'uint256' }] },
+    { name: 'tokens', type: 'tuple[]', components: [{ name: 'token', type: 'address' }, { name: 'beneficiary', type: 'address' }] },
+    { name: 'execId', type: 'uint256' }, { name: 'deadline', type: 'uint256' }, { name: 'metadata', type: 'bytes' }] },
+  { name: 'tokenInputs', type: 'tuple[]', components: [{ name: 'permitType', type: 'uint8' }, { name: 'token', type: 'address' }, { name: 'amount', type: 'uint256' }, { name: 'permitCalldata', type: 'bytes' }] },
+  { name: 'signature', type: 'bytes' }] }] as const
+const big = (v: unknown): bigint | null => {
+  if (v == null || v === '') return 0n
+  try { return BigInt(v as string | number | bigint) } catch { return null }
+}
 /** What this frame lets a session key do (the app checks before relying on it). */
 export const SESSION_CAPABILITIES = ['pay', 'transfer', 'swap', 'bring', 'swap-permit'] as const
 
@@ -168,6 +204,22 @@ async function bringKeyFor(owner: string, create: boolean): Promise<ReturnType<t
   bringKeys.set(o, k)
   return k
 }
+// Express Bring: only MeshPort's Express router, a short deadline and fees
+// within the app's own limits (lib/gaslessBridge MAX_FEE_*, MAX_CCTP_*).
+const BRING_ROUTERS = new Set(['0x3010518f036ee1bf95da787eee3aaffad95a1794'])
+/** Why a Bring key must not sign this Bring (null: allowed). Exported for tests. */
+export function bringRefusal(router: string, b: Record<string, string | number>): string | null {
+  if (!BRING_ROUTERS.has(router.toLowerCase())) return 'unknown router'
+  let amount: bigint, fee: bigint, maxFee: bigint, deadline: bigint
+  try { amount = BigInt(b.amount); fee = BigInt(b.fee); maxFee = BigInt(b.maxFee); deadline = BigInt(b.deadline) } catch { return 'bad numbers' }
+  if (amount <= 0n || fee < 0n || maxFee < 0n) return 'bad amounts'
+  const total = amount + fee
+  if (fee > 2_000_000n || (fee > total / 20n && fee > 100_000n)) return 'fee too high'
+  if (maxFee > total / 50n && maxFee > 250_000n) return 'bridge fee too high'
+  const now = BigInt(Math.floor(Date.now() / 1000))
+  if (deadline <= now || deadline > now + 900n) return 'deadline'
+  return null
+}
 const EXPRESS_BRING_TYPES = { ExpressBring: [
   { name: 'owner', type: 'address' }, { name: 'token', type: 'address' }, { name: 'amount', type: 'uint256' },
   { name: 'fee', type: 'uint256' }, { name: 'maxFee', type: 'uint256' }, { name: 'minFinalityThreshold', type: 'uint32' },
@@ -189,21 +241,68 @@ function gateError(e: unknown): RpcError {
   if (e instanceof gate.GateError) return new RpcError(e.code, e.message, e.lockedForMs)
   return new RpcError('failed', e instanceof Error ? e.message : 'Fast Pay passcode check failed')
 }
-/** Why a session key must not sign this (null: allowed). Exported for tests. */
-export function sessionTxRefusal(tx: Record<string, unknown>, owner?: string): string | null {
+/** Why a session key must not sign this (null: allowed). `key`: the session key's own address. Exported for tests. */
+export function sessionTxRefusal(tx: Record<string, unknown>, owner?: string, key?: string): string | null {
   if (Number(tx.chainId) !== ARC_CHAIN_ID) return 'Fast Pay signs on Arc only'
+  // Plain EIP-1559 / legacy transactions only (no EIP-7702 delegation, no blobs).
+  if (tx.type != null && !['eip1559', 'legacy', 'eip2930'].includes(String(tx.type))) return `Fast Pay does not sign ${String(tx.type)} transactions`
+  if (tx.authorizationList != null || tx.blobs != null) return 'Fast Pay does not sign delegations'
+  // Gas: bounded, so a page can't spend the key's balance as fees.
+  const gas = big(tx.gas), fee = big(tx.maxFeePerGas ?? tx.gasPrice), value = big(tx.value)
+  if (gas == null || fee == null || value == null || value < 0n) return 'Bad transaction fields'
+  if (gas > 0n && fee > 0n && gas * fee > MAX_SESSION_FEE_WEI) return 'Gas above the Fast Pay cap'
+  const o = (owner ?? '').toLowerCase(), k = (key ?? '').toLowerCase()
   const to = typeof tx.to === 'string' ? tx.to.toLowerCase() : ''
   const data = typeof tx.data === 'string' ? tx.data.toLowerCase() : '0x'
-  if (data === '0x' || data === '') return to ? null : 'No recipient' // a plain value transfer (the leftover gas back)
+  if (data === '0x' || data === '') {
+    // A plain value send - native USDC: only back to the owner (an unfinished
+    // move) or the relayer (the gas float).
+    if (!to) return 'No recipient'
+    if ((o && to === o) || RELAYERS.has(to)) return null
+    return `Not a Fast Pay call (value to ${to})`
+  }
   const allowed = SESSION_CALLS[to]
   const selector = data.slice(0, 10)
   // What was refused (public: a contract address and a function selector) -
   // so a refusal in the field says which call to look at.
   const what = (extra = '') => `Not a Fast Pay call (to ${to || '-'}, fn ${selector}${extra})`
   if (!allowed || !allowed.has(selector)) return what()
+  if (value !== 0n) return what(', with value')
   if ((selector === ERC20_APPROVE || selector === ERC20_INCREASE_ALLOWANCE) && !APPROVE_SPENDERS.has('0x' + data.slice(34, 74))) return what(`, spender 0x${data.slice(34, 74)}`)
   // A token transfer only back to the wallet the session spends for (returning an unfinished move).
-  if (selector === ERC20_TRANSFER && (!owner || '0x' + data.slice(34, 74) !== owner.toLowerCase())) return what(', not to the owner')
+  if (selector === ERC20_TRANSFER && (!o || '0x' + data.slice(34, 74) !== o)) return what(', not to the owner')
+  try {
+    // The owner's own token permit: only for Permit2.
+    if (EIP2612_PERMIT.has(selector)) {
+      const { args } = decodeFunctionData({ abi: EIP2612_PERMIT_ABI, data: data as Hex })
+      if (args[1].toLowerCase() !== PERMIT2) return what(', permit not for Permit2')
+    }
+    // Permit2 pull: every leg from the owner, in an Express token.
+    if (to === PERMIT2 && selector === '0x0d58b1db') {
+      const { args } = decodeFunctionData({ abi: PERMIT2_TRANSFER_ABI, data: data as Hex })
+      if (!o) return what(', no owner')
+      for (const d of args[0]) {
+        if (d.from.toLowerCase() !== o) return what(', pull not from the owner')
+        if (!EXPRESS_TOKENS.has(d.token.toLowerCase())) return what(', not an Express token')
+      }
+    }
+    // A burn: USDC only.
+    if (to === TOKEN_MESSENGER_V2) {
+      const { args } = decodeFunctionData({ abi: BURN_ABI, data: data as Hex })
+      if (String(args[3]).toLowerCase() !== ARC_USDC_ERC20) return what(', not USDC')
+    }
+    // A swap: every token it pays out goes to the owner or back to this key.
+    if (to === SWAP_ADAPTER) {
+      const { args } = decodeFunctionData({ abi: ADAPTER_EXECUTE_ABI, data: data as Hex })
+      for (const t of args[0].tokens) {
+        const b = t.beneficiary.toLowerCase()
+        if (b !== o && b !== k) return what(`, swap pays out to ${b}`)
+      }
+      if (!o) return what(', no owner')
+    }
+  } catch {
+    return what(', unreadable call')
+  }
   return null
 }
 
@@ -402,7 +501,7 @@ const handlers: Handlers = {
     const a = String(address).toLowerCase()
     const k = sessionKeys.get(a)
     if (!k) throw new RpcError('locked', 'This Fast Pay session has ended')
-    const why = sessionTxRefusal(transaction, sessionOwner.get(a))
+    const why = sessionTxRefusal(transaction, sessionOwner.get(a), a)
     if (why) throw new RpcError('invalid', why)
     // A payment (Permit2 batch transferFrom) needs the passcode, checked here.
     if (isSessionPayment(transaction) && !gate.takeApproval(sessionOwner.get(a) ?? '')) {
@@ -423,6 +522,8 @@ const handlers: Handlers = {
     const b = (bring ?? {}) as Record<string, string | number>
     if (!/^0x[0-9a-f]{40}$/.test(o) || String(b.owner ?? '').toLowerCase() !== o) throw new RpcError('invalid', 'A Bring key signs only for its own wallet')
     if (!/^0x[0-9a-fA-F]{40}$/.test(String(router)) || !(Number(chainId) > 0)) throw new RpcError('invalid', 'Unknown router')
+    const why = bringRefusal(String(router), b)
+    if (why) throw new RpcError('invalid', `Not an Express Bring (${why})`)
     const k = await bringKeyFor(o, false)
     if (!k) throw new RpcError('not-found', 'No Express Bring key on this device')
     // Every Bring needs the passcode, checked here.

@@ -27,6 +27,8 @@ vi.mock('@/wallet/frameClient', () => ({
 }))
 vi.mock('./supabase', () => ({ authApiHeaders: async () => ({ 'Content-Type': 'application/json' }) }))
 vi.mock('./errorReport', () => ({ reportPerf: () => {} }))
+// The app's own router for the chain (VITE_BRIDGE_ROUTERS): the server's answer must match it.
+vi.mock('./gaslessBridge', () => ({ gaslessRouter: () => ROUTER }))
 
 let chainState: any
 let bringResponse: { status: number; body: any } = { status: 200, body: { txHash: '0x' + 'cd'.repeat(32), mint: 'relayer' } }
@@ -79,6 +81,9 @@ describe('Express Bring', () => {
     covers = true
     chainState = { router: ROUTER, unsupported: true }
     expect(await run()).toBeNull()
+    // A router the app doesn't know: refused before anything is signed.
+    chainState = { router: '0x9999999999999999999999999999999999999999', key: KEY, expiry: Math.floor(Date.now() / 1000) + 10 * 86400, allowance: '100000000' }
+    expect(await run()).toBeNull(); expect(frame).not.toContain('bring:sign'); expect(posts).toEqual([])
     chainState = { router: ROUTER, key: KEY, expiry: Math.floor(Date.now() / 1000) + 10 * 86400, allowance: '100000000' }
     approved = false
     expect(await run()).toBeNull(); expect(frame).not.toContain('bring:sign')

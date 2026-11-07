@@ -261,11 +261,18 @@ async function relayStablecoinService(req, res, svcPath) {
     // and the output goes to the wallet), when the output goes to the
     // caller's wallet AND Arc shows the wallet granted that key a live
     // Permit2 allowance.
-    const from = String(body.fromAddress || '').toLowerCase()
-    if (from && from !== wallet) {
-      const to = String(body.toAddress || '').toLowerCase()
-      if (to !== wallet || !(await isExpressKeyOf(wallet, from))) return res.status(403).json({ message: 'Wallet mismatch' })
+    // Addresses as plain strings only (no arrays / objects / other spellings).
+    for (const k of ['fromAddress', 'toAddress']) {
+      if (body[k] != null && typeof body[k] !== 'string') return res.status(400).json({ message: 'Bad address' })
     }
+    const from = String(body.fromAddress || '').toLowerCase()
+    const to = String(body.toAddress || '').toLowerCase()
+    if (!from) return res.status(400).json({ message: 'Missing sender' })
+    // The output always goes to the caller's own wallet (audit 7 Nov: a quote
+    // from the wallet to another address was let through - Circle signs the
+    // payout address, not who sends the swap).
+    if (to && to !== wallet) return res.status(403).json({ message: 'Wallet mismatch' })
+    if (from !== wallet && (to !== wallet || !(await isExpressKeyOf(wallet, from)))) return res.status(403).json({ message: 'Wallet mismatch' })
     body = JSON.stringify(body)
   }
   const r = await fetch(target.href, {
