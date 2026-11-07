@@ -585,7 +585,11 @@ async function arcTransfer(req: VercelRequest, res: VercelResponse) {
     pub.estimateContractGas({ account: wallet.account, address: router, abi: ROUTER_ABI, functionName: 'bridgeWithAuthorization', args: [bridgeArgs, authArgs] }) as Promise<bigint>,
     pub.getGasPrice() as Promise<bigint>,
   ])
-  const gasUnits = arcWeiToUsdcUnits(gas * gasPrice)
+  // No hook = MeshPort's relayer mints on the destination: its gas there is
+  // part of the fee too (transfer_mint quotes the same number to the app).
+  const destKey = hook === '0x' ? chainKeyForDomain(Number(b.destinationDomain)) : null
+  const destGas = destKey ? await destMintGasCost(destKey).catch(() => 0n) : 0n
+  const gasUnits = arcWeiToUsdcUnits(gas * gasPrice) + destGas
   const required = meshportFee(value - fee, gasUnits, usdRule(CROSS_CHAIN_FEE, 6))
   if (!feeAcceptable(fee, required, gasUnits)) return res.status(400).json({ error: 'Fee too low - please try again' })
 
@@ -1480,6 +1484,49 @@ async function tokenRelay(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+// ── Transfer: who mints on the destination ──────────────────────────────────
+// Circle's forwarder (the user pays Circle's forwarding fee out of the amount)
+// or MeshPort's relayer (it pays the destination gas, charged in MeshPort's
+// fee). The relayer mints when that gas costs less than Circle's forwarding
+// fee - and always where Circle's forwarder keeps failing.
+const DEST_MINT_GAS = 300_000n // receiveMessage, seen ~290k on Ethereum Sepolia
+const FORWARDER_FAILING = new Set((process.env.FORWARDER_FAILING_CHAINS || 'Ethereum_Sepolia').split(',').map(s => s.trim()).filter(Boolean))
+function chainKeyForDomain(domain: number): string | null {
+  for (const [k, c] of Object.entries(CHAINS)) if (c.domain === domain && k !== 'Arc_Testnet') return k
+  return null
+}
+/** MeshPort's relayer's gas for a mint on `chainKey`, in USDC units (live gas price; testnet capped). */
+async function destMintGasCost(chainKey: string): Promise<bigint> {
+  const { pub } = await clients(chainKey)
+  const [gasPrice, usd] = await Promise.all([chainGasPrice(pub, chainKey), nativeUsd(chainKey)])
+  return testnetGasCap(weiToUsdUnits(DEST_MINT_GAS * gasPrice, usd))
+}
+/** Circle's forwarding fee (base units) for Arc → `chainKey`, or null. */
+const forwardFeeCache = new Map<string, { at: number; fee: Promise<bigint | null> }>()
+function arcForwardFee(chainKey: string): Promise<bigint | null> {
+  return cached(forwardFeeCache, chainKey, 'fee', FEE_ROWS_TTL_MS, async () => {
+    const r = await fetch(`${IRIS}/v2/burn/USDC/fees/${ARC_DOMAIN}/${CHAINS[chainKey].domain}?forward=true`, { signal: AbortSignal.timeout(8_000) })
+    if (!r.ok) return null
+    const rows = await r.json() as IrisFeeRow[]
+    const fast = rows.find(x => x.finalityThreshold === 1000) ?? rows[0]
+    const ff = fast?.forwardFee
+    if (ff == null) return null
+    return BigInt(Math.ceil(typeof ff === 'number' ? ff : (ff?.high ?? ff?.med ?? ff?.low ?? 0)))
+  })
+}
+/** GET ?action=transfer_mint&chain= → { relayer, destGas, forwardFee } (units). */
+async function transferMint(req: VercelRequest, res: VercelResponse) {
+  const chainKey = String(req.query.chain || '')
+  if (!CHAINS[chainKey] || chainKey === 'Arc_Testnet') return res.status(200).json({ relayer: false })
+  const [destGas, forwardFee, cl] = await Promise.all([
+    destMintGasCost(chainKey).catch(() => null), arcForwardFee(chainKey).catch(() => null), clients(chainKey).catch(() => null),
+  ])
+  const canMint = !!cl?.wallet && destGas != null
+  const relayer = canMint && (FORWARDER_FAILING.has(chainKey) || (forwardFee != null && destGas! * 115n / 100n <= forwardFee))
+  res.setHeader('Cache-Control', 'private, max-age=30')
+  return res.status(200).json({ relayer, destGas: (destGas ?? 0n).toString(), forwardFee: forwardFee?.toString() ?? null })
+}
+
 // ── Express Bring (MeshPortRouter.expressBring) ──────────────────────────────
 // Set up once per chain (two of the owner's signatures, submitted here): USDC's
 // EIP-2612 permit for the router, and setBringKey. Then a Bring is the Bring
@@ -1667,6 +1714,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!allowQuote(quoteIp)) return res.status(429).json({ error: 'Too many requests - try again shortly' })
       if (req.query.action === 'token_quote') return await tokenQuote(req, res)
       if (req.query.action === 'express_state') return await expressState(req, res)
+      if (req.query.action === 'transfer_mint') return await transferMint(req, res)
       const chainKey = String(req.query.chain || '')
       const total = String(req.query.amount || '')
       if (!CHAINS[chainKey] || !routers()[chainKey]) return res.status(400).json({ error: 'Gasless bridging is not available for this chain' })

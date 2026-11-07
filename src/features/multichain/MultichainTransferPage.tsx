@@ -1355,8 +1355,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     // those can't be read.
     if (!isTokenRoute && !chain.ub && (import.meta.env.VITE_FAST_CCTP as string | undefined) !== 'off') {
       if (!silent) setFeeEstimate(f => ({ ...f, loading: true, error: '' }))
-      const { fastCctpFees } = await import('@/lib/fastCctp')
-      const f = await fastCctpFees({ destination: chain.sdk, amount: numAmount, fast: selectedSpeed === 'fast', forward: circleForwarderMintsTo(chain.sdk), owner: senderAddress })
+      const { fastCctpFees, transferMintPlan } = await import('@/lib/fastCctp')
+      const plan = await transferMintPlan(chain.sdk)
+      const f = await fastCctpFees({ destination: chain.sdk, amount: numAmount, fast: selectedSpeed === 'fast', forward: plan.forward, owner: senderAddress, destMintGas: plan.destMintGas })
       if (f) {
         const { bridgeFee, forwarderFee, networkFee } = f
         const totalFee = bridgeFee + forwarderFee + networkFee
@@ -2809,7 +2810,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // MeshPort's relayer (relayedProviderFor), so the wallet needs no gas.
       // Not for chains where Circle's forwarder mint keeps failing
       // (FORWARDER_MINT_FAILING_SDK_CHAINS) - MeshPort's relayer mints there.
-      const useForwarder = circleForwarderMintsTo(chain.sdk)
+      // Direct path (lib/fastCctp): who mints comes from the relayer's plan
+      // (MeshPort's relayer when cheaper than Circle's forwarder).
+      const { canFastCctp: canFast0, transferMintPlan } = await import('@/lib/fastCctp')
+      const mintPlan = (import.meta.env.VITE_FAST_CCTP as string | undefined) !== 'off' && canFast0(chain.sdk)
+        ? await transferMintPlan(chain.sdk) : null
+      const useForwarder = mintPlan ? mintPlan.forward : circleForwarderMintsTo(chain.sdk)
 
       const destTarget = useForwarder
         ? { chain: chain.sdk as any, recipientAddress: address, useForwarder: true }
@@ -2927,6 +2933,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               maxFee,
               speed: transferSpeed,
               useForwarder,
+              destMintGas: mintPlan?.destMintGas,
               onStep: (step, payload) => handleEvent(step)(payload),
               onBurnSent: h => { burnTxHashRef.current = h },
             })) as Promise<any>
