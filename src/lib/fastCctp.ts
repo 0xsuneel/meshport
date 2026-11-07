@@ -145,7 +145,7 @@ const BURN_GAS = 200_000n
  * table and two Arc reads, all in parallel - instead of the SDK's estimate.
  * Null when anything can't be read (the caller uses the SDK then).
  */
-export async function fastCctpFees(p: { destination: string; amount: number; fast: boolean; forward: boolean; owner: string }): Promise<{ bridgeFee: number; forwarderFee: number; networkFee: number } | null> {
+export async function fastCctpFees(p: { destination: string; amount: number; fast: boolean; forward: boolean; owner: string; destMintGas?: bigint }): Promise<{ bridgeFee: number; forwarderFee: number; networkFee: number } | null> {
   if (!canFastCctp(p.destination)) return null
   try {
     const [rows, gasPriceHex, allowanceHex] = await Promise.all([
@@ -156,7 +156,7 @@ export async function fastCctpFees(p: { destination: string; amount: number; fas
     const fees = rows ? expectedFeesFromIris(rows, p.amount, p) : null
     if (!fees) return null
     // Through the Arc router: its fee (the relayer's gas), whatever the allowance.
-    if (arcRouterAddress()) return { ...fees, networkFee: Number(routerFee(BigInt(gasPriceHex), parseUnits(p.amount.toFixed(6), 6))) / 1e6 }
+    if (arcRouterAddress()) return { ...fees, networkFee: Number(routerFee(BigInt(gasPriceHex), parseUnits(p.amount.toFixed(6), 6), p.forward ? 0n : (p.destMintGas ?? 0n))) / 1e6 }
     const allowance = decodeFunctionResult({ abi: ERC20, functionName: 'allowance', data: allowanceHex as Hex }) as bigint
     const gas = BURN_GAS + (allowance !== parseUnits(p.amount.toFixed(6), 6) ? APPROVE_GAS : 0n)
     // Arc gas is USDC with 18 decimals.
@@ -207,14 +207,41 @@ export function arcRouterAddress(): Hex | null {
  * cap $5 - never below the router call's gas at today's price × 1.15
  * (lib/feePolicy - the relayer checks the same number).
  */
-export function routerFee(gasPrice: bigint, amount: bigint): bigint {
-  return meshportFee(amount, arcWeiToUsdcUnits(ROUTER_TRANSFER_GAS * gasPrice), usdRule(CROSS_CHAIN_FEE, 6))
+export function routerFee(gasPrice: bigint, amount: bigint, destMintGas: bigint = 0n): bigint {
+  return meshportFee(amount, arcWeiToUsdcUnits(ROUTER_TRANSFER_GAS * gasPrice) + destMintGas, usdRule(CROSS_CHAIN_FEE, 6))
+}
+
+// ── Who mints on the destination (api/bridge-relay transfer_mint) ──────────
+// Circle's forwarder (the user pays Circle's forwarding fee out of the amount)
+// or MeshPort's relayer (its destination gas is part of MeshPort's fee). The
+// relayer when that's cheaper, and where Circle's forwarder keeps failing.
+export type MintPlan = { forward: boolean; destMintGas: bigint }
+const planCache = new Map<string, { at: number; plan: Promise<MintPlan> }>()
+export function transferMintPlan(destination: string): Promise<MintPlan> {
+  const hit = planCache.get(destination)
+  if (hit && Date.now() - hit.at < 30_000) return hit.plan
+  const plan = (async (): Promise<MintPlan> => {
+    const { circleForwarderMintsTo } = await import('@/blockchain/chains')
+    const fallback = circleForwarderMintsTo(destination)
+    try {
+      const r = await fetch(`/api/bridge-relay?action=transfer_mint&chain=${encodeURIComponent(destination)}`, { signal: AbortSignal.timeout(6_000) })
+      const j = await r.json().catch(() => null) as { relayer?: boolean; destGas?: string } | null
+      if (!r.ok || !j) throw new Error('no plan')
+      const forward = j.relayer ? false : fallback
+      return { forward, destMintGas: forward ? 0n : BigInt(j.destGas ?? '0') }
+    } catch {
+      planCache.delete(destination)
+      return { forward: fallback, destMintGas: 0n }
+    }
+  })()
+  planCache.set(destination, { at: Date.now(), plan })
+  return plan
 }
 
 async function routerBurn(p: FastCctpParams, router: Hex, amount: bigint, maxFee: bigint, dst: number): Promise<Hex> {
   const { currentGasPrice } = await import('./arcService')
   const gasPrice = await beforeSending(currentGasPrice())
-  const fee = routerFee(gasPrice, amount)
+  const fee = routerFee(gasPrice, amount, p.useForwarder ? 0n : (p.destMintGas ?? 0n))
   const params: BridgeParams = {
     token: ARC_USDC, destinationDomain: dst, mintRecipient: pad(p.recipient as Hex, { size: 32 }),
     fee, maxFee, minFinalityThreshold: p.speed === 'FAST' ? FAST_FINALITY : SLOW_FINALITY,
@@ -282,6 +309,8 @@ export type FastCctpStep = 'approve' | 'burn' | 'attestation' | 'mint'
 type StepPayload = { values: { state: 'success' | 'pending' | 'error'; txHash?: string } }
 
 export interface FastCctpParams {
+  /** MeshPort's relayer's gas for the destination mint (USDC units), when it mints - part of MeshPort's fee. */
+  destMintGas?: bigint
   account: WalletAccount
   /** Destination chain (kit id, e.g. Ethereum_Sepolia). */
   destination: string
@@ -440,7 +469,7 @@ async function expressBurn(p: FastCctpParams, amount: bigint, burnData: Hex): Pr
     const owner = p.account.address
     if (!fp.fastPayEnabled()) return null
     const { currentGasPrice } = await import('./arcService')
-    const fee = routerFee(await currentGasPrice(), amount)
+    const fee = routerFee(await currentGasPrice(), amount, p.useForwarder ? 0n : (p.destMintGas ?? 0n))
     if (!fp.expressCoversTransfer(owner, Number(amount + fee) / 1e6)) return null
     const fw = String((import.meta.env.VITE_FEE_WALLET as string | undefined) ?? '').trim()
     args = { owner, amount, fee, feeWallet: /^0x[0-9a-fA-F]{40}$/.test(fw) ? fw as Hex : null, burnData }
