@@ -114,6 +114,7 @@ export async function bringExpress(p: {
   // The passcode for THIS Bring, checked in the frame.
   if (!(await fp.expressApprove(owner))) return null
   const fee = p.quote.fee, maxFee = p.quote.maxFee
+  if (fee >= total) return null // nothing left to bring (audit 7 Nov L7)
   const bring = {
     owner, token: p.usdc, amount: (total - fee).toString(), fee: fee.toString(), maxFee: maxFee.toString(),
     minFinalityThreshold: 1000, hookData: p.quote.hookData, salt: toHex(crypto.getRandomValues(new Uint8Array(32))),

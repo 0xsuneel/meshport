@@ -486,6 +486,7 @@ async function expressBurn(p: FastCctpParams, amount: bigint, burnData: Hex): Pr
     // burn still confirming, funds held - is the user's to see, not retried.
     if (e instanceof fp.FastPayNotSent) {
       void import('./errorReport').then(m => m.reportPerf(`[perf express transfer] normal way: ${(e.message || '').slice(0, 140)}`)).catch(() => {})
+      fp.noteExpressFallback('transfer', e.message || '')
       return null
     }
     throw e

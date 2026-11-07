@@ -593,6 +593,10 @@ const handlers: Handlers = {
     // Every Fast Pay session key goes with it (memory and storage).
     for (const a of [...sessionKeys.keys()]) dropSessionKey(a)
     try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k?.startsWith(SESSION_STORE)) localStorage.removeItem(k) } } catch { /* storage blocked */ }
+    // And every Express Bring key: nothing approved under the old passcode
+    // stays usable after a reset (audit 7 Nov H10).
+    bringKeys.clear()
+    try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k?.startsWith(BRING_STORE)) localStorage.removeItem(k) } } catch { /* storage blocked */ }
     return { ok: true as const }
   },
 
