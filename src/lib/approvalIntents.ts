@@ -16,6 +16,18 @@ const isAddr = (a: unknown): a is Hex => typeof a === 'string' && /^0x[0-9a-fA-F
 const units = (amount: number, decimals: number) => String(BigInt(Math.round(amount * 10 ** decimals)))
 const ok = (amount: number) => Number.isFinite(amount) && amount > 0
 
+// The intent of the passcode sheet just completed: lib/fastPay hands it to the
+// wallet frame with that passcode. One use, and only for a minute.
+let noted: { intent: ApprovalIntent; at: number } | null = null
+export function noteApprovalIntent(intent: ApprovalIntent | undefined): void {
+  noted = intent ? { intent, at: Date.now() } : null
+}
+export function takeApprovalIntent(): ApprovalIntent | undefined {
+  const n = noted
+  noted = null
+  return n && Date.now() - n.at < 60_000 ? n.intent : undefined
+}
+
 /** A payment on Arc of `amount` `token` to `to`. */
 export function payIntent(token: string, to: string | null | undefined, amount: number): ApprovalIntent | undefined {
   const t = ARC_TOKENS[token]

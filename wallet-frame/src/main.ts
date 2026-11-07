@@ -769,7 +769,7 @@ const handlers: Handlers = {
     return { ok: true as const }
   },
 
-  async 'fastpay:approve'({ owner, passcode }) {
+  async 'fastpay:approve'({ owner, passcode, intent }) {
     // From the keypad page: already checked there, for this intent.
     if (isTicket(passcode)) {
       const t = approvedTicket(passcode, String(owner), 'fastpay')
@@ -777,7 +777,13 @@ const handlers: Handlers = {
       gate.grant(owner, t.intent)
       return { approved: true as const, validForMs: gate.APPROVAL_MS, full: false }
     }
-    try { return { approved: true as const, ...(await gate.approve(owner, passcode)) } } catch (e) { throw gateError(e) }
+    // The app's passcode pad, with what its sheet showed: checked here, and
+    // bound to that intent - Express may then sign only that move.
+    try {
+      const out = await gate.approve(owner, passcode)
+      if (intent && validIntent(intent) && intent.kind !== 'other') gate.grant(owner, intent)
+      return { approved: true as const, ...out }
+    } catch (e) { throw gateError(e) }
   },
 
   async 'confirm:open'({ owner, wallet, intent, title, name, label }) {

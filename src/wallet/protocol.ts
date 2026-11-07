@@ -112,7 +112,8 @@ export interface WalletRpc {
   'circle-passcode:check': [{ passcode: string }, { ok: true }]
   'circle-passcode:forget': [Record<string, never>, { ok: true }]
   /** `full`: the frame ran its full (slow) check - the first since it loaded. */
-  'fastpay:approve': [{ owner: string; passcode: string }, { approved: true; validForMs: number; full?: boolean }]
+  /** `intent`: what the passcode sheet showed - the approval then covers only that Express move. */
+  'fastpay:approve': [{ owner: string; passcode: string; intent?: ApprovalIntent }, { approved: true; validForMs: number; full?: boolean }]
   /**
    * Secure approvals (docs/SECURE-APPROVALS.md): a one-time ticket for
    * confirm.html, the keypad page on the wallet origin. The frame shows the

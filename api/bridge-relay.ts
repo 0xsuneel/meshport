@@ -742,6 +742,22 @@ async function callClients(chainKey: string) {
 // LRU: only the oldest wallet entry is evicted so all other limits stay intact.
 const _relayHits = new Map<string, number[]>()
 const RELAY_HITS_MAX = 5000
+const RECEIVE_MESSAGE_SELECTOR = '0x57ecfd28' // receiveMessage(bytes,bytes)
+// Separate budgets per kind of request (7 Nov: the background claim scans
+// and the mints shared the 20 sends' budget, so after a burst of moves a
+// transfer's mint was refused and the transfer sat waiting). allowRelay:
+// requests that make the relayer SEND something it pays for.
+const _bucketHits = new Map<string, number[]>()
+function allowAction(bucket: 'mint' | 'scan', wallet: string): boolean {
+  const max = bucket === 'mint' ? 60 : 30
+  const key = `${bucket}:${wallet}`, now = Date.now(), win = 10 * 60_000
+  const hits = (_bucketHits.get(key) || []).filter(t => now - t < win)
+  if (hits.length >= max) return false
+  hits.push(now)
+  _bucketHits.set(key, hits)
+  if (_bucketHits.size > RELAY_HITS_MAX) { const k = _bucketHits.keys().next().value; if (k !== undefined) _bucketHits.delete(k) }
+  return true
+}
 function allowRelay(wallet: string): boolean {
   const now = Date.now(), win = 10 * 60_000
   const hits = (_relayHits.get(wallet) || []).filter(t => now - t < win)
@@ -886,7 +902,10 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
   const session = await sessionInfo(req)
   const caller = session?.wallet ?? null
   if (!caller) return res.status(403).json({ error: 'Not signed in' })
-  if (!allowRelay(caller)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
+  // Finishing a transfer's mint has its own (larger) budget: it must never be
+  // crowded out by other requests - the user's money is waiting on it.
+  const isMint = String(data).slice(0, 10).toLowerCase() === RECEIVE_MESSAGE_SELECTOR
+  if (!(isMint ? allowAction('mint', caller) : allowRelay(caller))) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
   const reason = await checkRelayable(to, data, caller)
   if (reason) return res.status(400).json({ error: reason })
   // Calls that move the caller's money or start a P2P order need an account
@@ -1240,7 +1259,7 @@ async function transferMintStart(req: VercelRequest, res: VercelResponse) {
   const session = await sessionInfo(req)
   const caller = session?.wallet ?? null
   if (!caller) return res.status(403).json({ error: 'Not signed in' })
-  if (!allowRelay(caller)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
+  if (!allowAction('mint', caller)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
   const chainKey = String((req.body as any)?.chain || '')
   const burnTx = String((req.body as any)?.burnTx || '')
   const dest = CHAINS[chainKey]
@@ -1932,7 +1951,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if ((req.body as any)?.action === 'claim_recovery_scan') {
       const wallet = await sessionWallet(req)
       if (!wallet) return res.status(401).json({ error: 'Not authenticated' })
-      if (!allowRelay(wallet)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
+      if (!allowAction('scan', wallet)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
       const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
       const svcKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
       if (!supabaseUrl || !svcKey) return res.status(500).json({ error: 'server misconfigured' })
@@ -1956,7 +1975,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // claim id could run the worker with the service key), within the relay limit.
       const caller = await sessionWallet(req)
       if (!caller) return res.status(403).json({ error: 'Not signed in' })
-      if (!allowRelay(caller)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
+      if (!allowAction('scan', caller)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
       const own = await fetch(`${supabaseUrl}/rest/v1/claims?id=eq.${claimId}&select=wallet_address`, {
         headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` }, signal: AbortSignal.timeout(6_000),
       }).then(r => r.ok ? r.json() : []).catch(() => []) as Array<{ wallet_address?: string }>
