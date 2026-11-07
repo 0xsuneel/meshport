@@ -60,4 +60,8 @@ describe('wrong account type notice', () => {
     expect(accountRuleCopy({ kind: 'mismatch', existing: 'personal' }, 'wallet').action).toBeNull()
     expect(accountRuleCopy({ kind: 'already_exists', existing: 'personal' }, 'wallet').action).toBe('Log in as Personal')
   })
+  it('a wallet with no account is offered an account with that same wallet', async () => {
+    const { accountRuleCopy } = await import('@/features/auth/AccountRuleNotice')
+    expect(accountRuleCopy({ kind: 'no_account' }, 'wallet').action).toBe('Create account with this wallet')
+  })
 })

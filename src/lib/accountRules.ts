@@ -7,7 +7,8 @@
 // (users.account_type, guarded server-side), so:
 //   - A wallet of the other type (Log in or Create) → mismatch: refused, the
 //     person goes back and picks the account's own type
-//   - Log in with no MeshPort account yet       → no_account (offer Create account)
+//   - Log in with no MeshPort account yet       → no_account (offer to create
+//     one with this same wallet, of the type picked)
 //   - Create account with a login/wallet that
 //     already has a MeshPort account            → already_exists (offer Log in)
 // Only the Create account path may create a new account.

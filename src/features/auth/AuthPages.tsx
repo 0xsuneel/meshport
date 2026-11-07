@@ -635,9 +635,10 @@ export function ImportWalletPage() {
         busy={loading}
         onContinue={() => {
           if (decision.kind === 'no_account') {
-            // Back to the first screen, on Create account.
-            setAuthIntent('create', null)
-            navigate('/auth', { replace: true })
+            // No account yet (a MetaMask / other wallet, say): create one
+            // with this same wallet, of the type picked on the first screen.
+            setAuthIntent('create', getChosenKind() ?? 'personal')
+            void finishImport(blocked.result, blocked.walletSource)
             return
           }
           // The wallet's real account type, on the Log in path.
@@ -809,9 +810,11 @@ export function ClaimUsernamePage() {
 
   if (noAccount) {
     const startOver = (mode: AuthMode) => { logout(); setAuthIntent(mode, null); navigate('/auth', { replace: true }) }
+    // Create the account with the wallet already open here.
+    const createWithThisWallet = () => { setAuthIntent('create', getChosenKind() ?? 'personal'); setNoAccount(false) }
     return (
       <AccountRuleNotice decision={{ kind: 'no_account' }} via="wallet"
-        onContinue={() => startOver('create')} onBack={() => startOver('login')} />
+        onContinue={createWithThisWallet} onBack={() => startOver('login')} />
     )
   }
 

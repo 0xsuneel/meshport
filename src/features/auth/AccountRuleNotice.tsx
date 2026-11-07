@@ -28,9 +28,11 @@ export function accountRuleCopy(d: Blocked, via: 'wallet' | 'login'): { title: s
       }
     case 'no_account':
       return {
-        title: 'No MeshPort account found',
-        text: `No MeshPort account found for this ${via}. Create an account first, then you can log in with it.`,
-        action: 'Create an account',
+        title: 'No MeshPort account yet',
+        text: via === 'wallet'
+          ? 'This wallet doesn’t have a MeshPort account yet. Create one with it - same wallet, same secret words or private key, nothing new to back up.'
+          : `No MeshPort account found for this ${via}. Create an account first, then you can log in with it.`,
+        action: via === 'wallet' ? 'Create account with this wallet' : 'Create an account',
       }
   }
 }
