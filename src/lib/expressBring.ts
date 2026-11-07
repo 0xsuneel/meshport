@@ -86,6 +86,14 @@ export async function bringExpress(p: {
   let st: State
   try { st = await state(p.chainId, owner) } catch { return null }
   if (st.unsupported || !st.router) return null
+  // Only the router this app build is configured with - never an address the
+  // server hands back (audit 7 Nov H3: a wrong one would get the USDC permit).
+  const { gaslessRouter } = await import('./gaslessBridge')
+  const pinned = gaslessRouter(p.chainId)
+  if (!pinned || pinned.toLowerCase() !== st.router.toLowerCase()) {
+    void import('./errorReport').then(m => m.reportPerf(`[perf express bring] router mismatch on ${p.chainId} (normal way)`)).catch(() => {})
+    return null
+  }
   let key: Hex | null = null
   try { key = (await callWallet('bring:key', { owner, create: true })).address } catch { return null }
   if (!key) return null

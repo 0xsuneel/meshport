@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
-import { verifyMessage } from 'viem'
+import { verifyMessage, encodeFunctionData, parseAbi } from 'viem'
 import { WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION } from '@/wallet/protocol'
 
 // The frame's message boundary: who it answers, what it answers with.
@@ -198,7 +198,10 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
   const tx = (to: string, data?: string, chainId = 5042002) => ({ type: 'eip1559', chainId, nonce: 0, to, value: 0n, data, gas: 100000n, maxFeePerGas: 2n, maxPriorityFeePerGas: 1n })
   const OWNER = '0x1111111111111111111111111111111111111111'
   const PIN = '123456'
-  const PAY = '0x0d58b1db' + '00'.repeat(32)
+  const PAY = encodeFunctionData({ abi: parseAbi(['function transferFrom((address from, address to, uint160 amount, address token)[] details)']), functionName: 'transferFrom',
+    args: [[{ from: OWNER, to: '0x9999999999999999999999999999999999999999', amount: 1n, token: USDC }]] })
+  const tokenPermit = (spender: string) => encodeFunctionData({ abi: parseAbi(['function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)']), functionName: 'permit',
+    args: [OWNER, spender as `0x${string}`, 1n, 1n, 27, `0x${'11'.repeat(32)}`, `0x${'22'.repeat(32)}`] })
   let pinSet = false
   async function session(): Promise<string> {
     if (!pinSet) { expect((await ask('circle-passcode:set', { passcode: PIN }))!.msg.result).toEqual({ ok: true }); pinSet = true }
@@ -212,14 +215,24 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
     expect(Object.keys(created!.msg.result).sort()).toEqual(['address', 'kept']) // never the key
     expect(address).toMatch(/^0x[0-9a-fA-F]{40}$/)
     const EURC = '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a', CIRBTC = '0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF'
-    for (const [to, sel] of [[PERMIT2, '0x2b67b570'], [PERMIT2, '0x2a2d80d1'], [USDC, '0xd505accf'], [EURC, '0xd505accf'], [CIRBTC, '0xd505accf']]) {
-      const r = await ask('session:sign', { address, transaction: tx(to, sel + '00'.repeat(32)) })
+    for (const [to, data] of [[PERMIT2, '0x2b67b570' + '00'.repeat(32)], [PERMIT2, '0x2a2d80d1' + '00'.repeat(32)], [USDC, tokenPermit(PERMIT2)], [EURC, tokenPermit(PERMIT2)], [CIRBTC, tokenPermit(PERMIT2)]]) {
+      const r = await ask('session:sign', { address, transaction: tx(to, data) })
       expect(r!.msg.result.serialized).toMatch(/^0x02/)
     }
+    // A token permit for anything but Permit2 is refused.
+    expect((await ask('session:sign', { address, transaction: tx(USDC, tokenPermit('0x9999999999999999999999999999999999999999')) }))!.msg.error?.code).toBe('invalid')
     await ask('fastpay:approve', { owner: OWNER, passcode: PIN })
     expect((await ask('session:sign', { address, transaction: tx(PERMIT2, PAY) }))!.msg.result.serialized).toMatch(/^0x02/)
-    // A plain value transfer (the leftover gas going back).
-    expect((await ask('session:sign', { address, transaction: { ...tx('0x9999999999999999999999999999999999999999'), value: 5n } }))!.msg.result.serialized).toMatch(/^0x02/)
+    // A plain value send (native USDC): only back to the owner or the relayer, never elsewhere.
+    expect((await ask('session:sign', { address, transaction: { ...tx(OWNER), data: undefined, value: 5n } }))!.msg.result.serialized).toMatch(/^0x02/)
+    expect((await ask('session:sign', { address, transaction: { ...tx('0x7218ec7dd868444a7655599551520ac5bcca7c0d'), data: undefined, value: 5n } }))!.msg.result.serialized).toMatch(/^0x02/)
+    expect((await ask('session:sign', { address, transaction: { ...tx('0x9999999999999999999999999999999999999999'), data: undefined, value: 5n } }))!.msg.error?.code).toBe('invalid')
+    // A pull from anyone but the owner is refused, even with an approval.
+    await ask('fastpay:approve', { owner: OWNER, passcode: PIN })
+    const notOwner = encodeFunctionData({ abi: parseAbi(['function transferFrom((address from, address to, uint160 amount, address token)[] details)']), functionName: 'transferFrom',
+      args: [[{ from: '0x2222222222222222222222222222222222222222', to: OWNER, amount: 1n, token: USDC }]] })
+    expect((await ask('session:sign', { address, transaction: tx(PERMIT2, notOwner) }))!.msg.error?.code).toBe('invalid')
+    expect((await ask('session:sign', { address, transaction: tx(PERMIT2, PAY) }))!.msg.result.serialized).toMatch(/^0x02/) // the approval is still there, used once
   })
 
   it('Express Bring key: kept per wallet, signs only its own ExpressBring, and only after a passcode approval', async () => {
@@ -227,9 +240,10 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
     const k1 = (await ask('bring:key', { owner: OWNER, create: true }))!.msg.result.address
     expect(k1).toMatch(/^0x[0-9a-fA-F]{40}$/)
     expect((await ask('bring:key', { owner: OWNER }))!.msg.result.address).toBe(k1) // the same key next time
-    const ROUTER = '0x60EDB201D34C504ee2B2795B31112CB55E7d1B0C'
+    const ROUTER = '0x3010518F036eE1BF95Da787eEe3AafFAD95a1794'
+    const DEADLINE = String(Math.floor(Date.now() / 1000) + 600)
     const bring = { owner: OWNER, token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', amount: '10000000', fee: '50000', maxFee: '1000',
-      minFinalityThreshold: 1000, hookDataHash: '0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470', salt: '0x' + 'ab'.repeat(32), deadline: '9999999999' }
+      minFinalityThreshold: 1000, hookDataHash: '0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470', salt: '0x' + 'ab'.repeat(32), deadline: DEADLINE }
     const sign = async (b = bring, owner = OWNER) => (await ask('bring:sign', { owner, chainId: 84532, router: ROUTER, bring: b }))!.msg
     expect((await sign()).error?.code).toBe('approval-required')
     await ask('fastpay:approve', { owner: OWNER, passcode: PIN })
@@ -243,7 +257,7 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
         { name: 'hookDataHash', type: 'bytes32' }, { name: 'salt', type: 'bytes32' }, { name: 'deadline', type: 'uint256' },
       ] },
       primaryType: 'ExpressBring',
-      message: { ...bring, owner: OWNER, amount: 10000000n, fee: 50000n, maxFee: 1000n, deadline: 9999999999n } as any,
+      message: { ...bring, owner: OWNER, amount: 10000000n, fee: 50000n, maxFee: 1000n, deadline: BigInt(DEADLINE) } as any,
       signature: ok.result.signature,
     })
     expect(signer.toLowerCase()).toBe(k1.toLowerCase())
@@ -330,8 +344,15 @@ describe('Express Transfer: what a session key may sign', () => {
     expect(SESSION_CAPABILITIES).toContain('transfer')
     expect(sessionTxRefusal(t(USDC, approve(TM)))).toBeNull()
     expect(sessionTxRefusal(t(USDC, approve('0x9999999999999999999999999999999999999999')))).not.toBeNull()
-    expect(sessionTxRefusal(t(TM, '0x8e0250ee' + '00'.repeat(32)))).toBeNull()
-    expect(sessionTxRefusal(t(TM, '0x779b432d' + '00'.repeat(32)))).toBeNull()
+    const burnAbi = parseAbi([
+      'function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold)',
+      'function depositForBurnWithHook(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold, bytes hookData)',
+    ])
+    const z32 = `0x${'00'.repeat(32)}` as const
+    expect(sessionTxRefusal(t(TM, encodeFunctionData({ abi: burnAbi, functionName: 'depositForBurn', args: [1n, 0, z32, USDC, z32, 0n, 1000] })))).toBeNull()
+    expect(sessionTxRefusal(t(TM, encodeFunctionData({ abi: burnAbi, functionName: 'depositForBurnWithHook', args: [1n, 0, z32, USDC, z32, 0n, 1000, '0x'] })))).toBeNull()
+    // A burn of anything but USDC is refused.
+    expect(sessionTxRefusal(t(TM, encodeFunctionData({ abi: burnAbi, functionName: 'depositForBurn', args: [1n, 0, z32, '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a', z32, 0n, 1000] })))).not.toBeNull()
     expect(sessionTxRefusal(t(TM, '0xdeadbeef'))).not.toBeNull()
     // A token transfer() only back to the session's own owner.
     const OWNER_ = '0x0baf9b2c44f377208b3c5f833afbab8414d69d5d'
@@ -343,7 +364,19 @@ describe('Express Transfer: what a session key may sign', () => {
     const ADAPTER = '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b'
     expect(SESSION_CAPABILITIES).toContain('swap')
     expect(sessionTxRefusal(t('0x89b50855aa3be2f677cd6303cec089b5f319d72a', approve(ADAPTER)))).toBeNull()
-    expect(sessionTxRefusal(t(ADAPTER, '0xaa3e079c' + '00'.repeat(32)))).toBeNull()
+    // execute: every token it pays out goes to the owner or back to the key itself.
+    const OWNER2 = '0x0baf9b2c44f377208b3c5f833afbab8414d69d5d', KEY = '0x2cd38840dddb2dbe208f963794690665bf5f8781'
+    const execAbi = parseAbi([
+      'struct Instruction { address target; bytes data; uint256 value; address tokenIn; uint256 amountToApprove; address tokenOut; uint256 minTokenOut; }',
+      'struct TokenRecipient { address token; address beneficiary; }',
+      'struct ExecutionParams { Instruction[] instructions; TokenRecipient[] tokens; uint256 execId; uint256 deadline; bytes metadata; }',
+      'struct TokenInput { uint8 permitType; address token; uint256 amount; bytes permitCalldata; }',
+      'function execute(ExecutionParams params, TokenInput[] tokenInputs, bytes signature)',
+    ])
+    const exec = (beneficiaries: string[]) => encodeFunctionData({ abi: execAbi, functionName: 'execute', args: [
+      { instructions: [], tokens: beneficiaries.map(b => ({ token: USDC as `0x${string}`, beneficiary: b as `0x${string}` })), execId: 1n, deadline: 1n, metadata: '0x' }, [], '0x'] })
+    expect(sessionTxRefusal(t(ADAPTER, exec([KEY, OWNER2])), OWNER2, KEY)).toBeNull()
+    expect(sessionTxRefusal(t(ADAPTER, exec([KEY, '0x9999999999999999999999999999999999999999'])), OWNER2, KEY)).not.toBeNull()
     expect(sessionTxRefusal(t(ADAPTER, '0x12345678'))).not.toBeNull()
     // increaseAllowance (the swap kit's approval) - same spender rule as approve.
     const inc = (spender: string) => '0x39509351' + spender.slice(2).padStart(64, '0') + '00'.repeat(32)
