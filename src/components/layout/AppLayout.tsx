@@ -12,9 +12,9 @@ const PaymentReceivedWatcher = lazy(() => import('@/features/business/PaymentRec
 import { Toast } from '@/components/ui/Toast'
 import { PushPermissionBanner } from '@/components/ui/PushPermissionBanner'
 import { PageTransition } from '@/components/ui/PageTransition'
-import { onReconnect, useOnReconnect, isSlowNetwork, whenNetworkOk } from '@/lib/connectivity'
+import { useOnReconnect, isSlowNetwork, whenNetworkOk } from '@/lib/connectivity'
 import { ModeToggle } from '@/components/admin/ModeToggle'
-import { useAuthStore, useP2PTradesCountStore, useWalletStore, useUIStore } from '@/store'
+import { useAuthStore, useP2PTradesCountStore, useUIStore } from '@/store'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useVisibleFrame, useFrameScrollGuard, visibleFrame } from '@/hooks/useVisibleViewportHeight'
 import { supabase, syncAuthUidToProfile } from '@/lib/supabase'
@@ -99,8 +99,8 @@ export function AppLayout() {
   // right here, without reloading the app (a reload would lock it again).
   const openFromNotification = useNavigate()
 
-  // Email sign-in is kept for the admin panel only: a signed-in email account
-  // (no Google) that isn't an admin is signed out of the wallet app.
+  // Email sign-in is for the admin panel only: a signed-in email account that
+  // isn't an admin is signed out of the wallet app.
   useEffect(() => {
     if (!userId) return
     let cancelled = false
@@ -108,11 +108,11 @@ export function AppLayout() {
       const u = (await supabase.auth.getSession()).data.session?.user
       if (!u || u.is_anonymous) return
       const m = (u.app_metadata ?? {}) as { provider?: string; providers?: string[] }
-      if (m.provider !== 'email' || m.providers?.includes('google')) return
+      if (m.provider !== 'email') return
       const { isAdminUser } = await import('@/lib/adminSupabase')
       if (cancelled || await isAdminUser(u.id)) return
       useAuthStore.getState().logout()
-      useUIStore.getState().showToastMessage('Email sign-in is for the admin panel only. Continue with Google.', 'error')
+      useUIStore.getState().showToastMessage('Email sign-in is for the admin panel only. Create or import a wallet instead.', 'error')
       openFromNotification('/auth', { replace: true })
     })().catch(() => {})
     return () => { cancelled = true }
@@ -513,59 +513,18 @@ export function AppLayout() {
   }, [walletAddress, signer])
 
 
-  // ── Keep retrying wallet key restoration in the background ─────────────────
-  // restorePrivateKey() (see lib/restoreWallet.ts) already retries a failed
-  // attempt 3 times internally, spanning ~4.5s - but once THAT is exhausted,
-  // nothing tried again until the user noticed the recovery banner and
-  // manually tapped "Try Again". For social-auto (Google/Email) accounts
-  // specifically, restoring the key is a genuine server round-trip (there's
-  // no local mnemonic to fall back to), so a single bad moment on a weak
-  // connection could leave the wallet permanently "not recovered" for the
-  // rest of the session with no further attempt ever made. This keeps
-  // trying every 20s for as long as walletAddress exists but signer
-  // doesn't - stops immediately once it succeeds (the interval callback's
-  // own live check does this, nothing else needed beyond unmount cleanup).
-  //
-  // BUG FIX (2026-09-03) - this loop used to run for EVERY walletSource, not
-  // just social-auto. For a create/import-seed wallet, restorePrivateKey()'s
-  // mnemonic-derive step is local and instant and either succeeds on the
-  // very first internal attempt or won't ever succeed by retrying the exact
-  // same inputs again - so this loop firing every 20s did nothing useful
-  // there. For import-privkey specifically it was actively harmful: that
-  // wallet source has NO mnemonic, so restorePrivateKey() can only succeed
-  // via the LOCAL encrypted key + the user's passcode (see restoreWallet.ts
-  // step 3) - but this loop calls restorePrivateKey() with no passcode
-  // argument, which can never supply one. Every 20s it would therefore fail
-  // exactly the same way, set walletRecoveryNeeded back to true, and
-  // re-trigger WalletRecoveryBanner's "Still restoring your wallet…" state
-  // - forever, on every session where the passcode hasn't been re-entered
-  // yet - even though nothing was actually "still restoring": it needed the
-  // user's passcode, not another silent retry. That is the direct cause of
-  // reports of the recovery banner staying up indefinitely for imported
-  // wallets. Scoped to social-auto only, matching what this effect's own
-  // comment above already says it exists for.
-  const walletSource = useAuthStore(s => s.walletSource)
-  // Restore right away after a reload too - not only on the 20s retry below.
+  // ── Restore the wallet right after a reload ───────────────────────────────
   // The wallet key lives in memory only, so every reload (Android reloads
   // background tabs often) drops it; until it's back, chat can't unlock
-  // encrypted messages and shows them locked. Social accounts restore from
-  // the server; other wallets from this tab's session cache (silent: if that
-  // needs the passcode, the normal unlock flow asks - no banner from here).
+  // encrypted messages and shows them locked. Restored from this tab's
+  // session copy (silent: if that needs the passcode, the normal unlock
+  // flow asks - no banner from here).
   useEffect(() => {
     if (!walletAddress || useAuthStore.getState().signer) return
     import('@/lib/restoreWallet')
-      .then(({ restorePrivateKey }) => restorePrivateKey(undefined, { silent: walletSource !== 'social-auto' }))
+      .then(({ restorePrivateKey }) => restorePrivateKey(undefined, { silent: true }))
       .catch(() => {})
-  }, [walletAddress, walletSource])
-  useEffect(() => {
-    if (!walletAddress || signer || walletSource !== 'social-auto') return
-    const interval = setInterval(() => {
-      const { walletAddress: addr, signer: key, walletSource: src } = useAuthStore.getState()
-      if (!addr || key || src !== 'social-auto') return // already restored (or logged out, or not social-auto) - nothing to do
-      import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey()).catch(() => {})
-    }, 20000)
-    return () => clearInterval(interval)
-  }, [walletAddress, signer, walletSource])
+  }, [walletAddress])
 
   // ── Real-time deposit detection - REMOVED, superseded by Phase 5/6 ─────────
   // This used to open a persistent Alchemy WebSocket to Arc
@@ -604,9 +563,7 @@ export function AppLayout() {
   // trade events that happened while this device was offline, then keeps it
   // live via Realtime. Keyed on the app's own user id (not walletAddress) -
   // notifications.user_id matches p2p_trades.buyer_id/seller_id, which are
-  // app user ids, so this needs to re-subscribe on user change too, not just
-  // wallet change (a social-auth account could switch users without its
-  // wallet address ever changing).
+  // app user ids, so this re-subscribes on user change.
   useEffect(() => {
     if (!userId) return
     return startP2PNotifications(userId)
@@ -828,8 +785,7 @@ function DeviceKeyNotice() {
   const [lost, setLost] = useState(false)
   useEffect(() => {
     setLost(false)
-    // No device copy for social-auto or Circle wallets (no key in the frame).
-    if (!walletAddress || walletSource === 'social-auto' || walletSource === 'circle') return
+    if (!walletAddress) return
     let cancelled = false
     // Old app-side copies (before the wallet frame) still get checked until
     // they're moved; the frame reports its own device-sealed copy.

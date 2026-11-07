@@ -24,11 +24,10 @@ export const SECTIONS: Section[] = [
     features: [
       {
         id: 'sign-in', title: 'Sign in', image: 'auth',
-        summary: 'Open MeshPort with Google or a wallet you already have.',
+        summary: 'Create a new wallet or import one you already have.',
         steps: [
           'Tick the box to accept the Terms and Privacy Policy.',
-          'Choose Continue with Google - no password needed.',
-          'Prefer a classic wallet? Create New Wallet gives you 12 secret words; Import Existing Wallet uses yours.',
+          'Create New Wallet gives you 12 secret words; Import Existing Wallet uses yours.',
           'Pick a .arc username and set a 6-digit passcode. That’s it.',
         ],
       },
@@ -36,10 +35,9 @@ export const SECTIONS: Section[] = [
         id: 'self-custody', title: 'Your wallet is yours', image: 'security', path: '/security',
         summary: 'Every wallet is self-custodial. The key is made on your phone and never sent to MeshPort.',
         steps: [
-          'With Google or email, add a passkey (Face ID, fingerprint or device PIN) when asked.',
-          'Save your Recovery QR and remember its password - it brings your wallet back on a new phone.',
-          'On a new device, sign in, then unlock with your passkey or scan the Recovery QR.',
-          'MeshPort never stores your private key, recovery password or secret words.',
+          'Write down your 12 secret words (or private key) and keep them offline - they bring your wallet back on a new phone.',
+          'On a new device, choose Import Existing Wallet and enter them.',
+          'MeshPort never stores your private key or secret words.',
         ],
       },
     ],
@@ -236,10 +234,8 @@ export const SECTIONS: Section[] = [
       },
       {
         id: 'security', title: 'Security', image: 'security', path: '/security',
-        summary: 'Passkeys, Recovery QR, passcode and fingerprint unlock.',
+        summary: 'Passcode and fingerprint unlock.',
         steps: [
-          'Wallet shows your address - tap the copy icon to copy it.',
-          'Recovery shows your passkeys (with the device each was added on) and when your Recovery QR was saved. Manage adds a passkey or makes a new QR.',
           'App lock turns fingerprint login and Passcode Lock on or off, and changes your 6-digit passcode.',
           'Lock Now locks the app straight away.',
         ],

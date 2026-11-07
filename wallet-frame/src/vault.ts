@@ -24,7 +24,7 @@ import type { Hex, WalletKind, WalletStatus } from '@/wallet/protocol'
 
 const P = 'mpw_'
 const SESSION = P + 'ss_'   // sessionStorage
-const DEVICE = P + 'dv_'
+const DEVICE = P + 'dv_' // device copies of the old Google / email wallets: only removed (forget)
 const PASSCODE = P + 'pc_'
 const PHRASE = P + 'pm_'
 const WORDS = P + 'wc_'
@@ -95,10 +95,7 @@ export async function store(address: string, privateKey: string, opts: StoreOpti
   const a = norm(address)
   storedAt.set(a, Date.now())
   put(ls(), KIND + a, opts.kind)
-  if (opts.kind === 'social-auto') {
-    const sealed = await sealForDevice(privateKey)
-    if (sealed) put(ls(), DEVICE + a, sealed)
-  } else if (opts.passcode) {
+  if (opts.passcode) {
     put(ls(), PASSCODE + a, await sealed(privateKey, opts.passcode))
     if (opts.mnemonic) put(ls(), PHRASE + a, await sealed(opts.mnemonic, opts.passcode))
   }
@@ -122,7 +119,6 @@ export async function status(address: string): Promise<WalletStatus> {
   const pc = get(ls(), PASSCODE + a)
   return {
     unlocked: open.has(a),
-    device: !!get(ls(), DEVICE + a),
     passcode: !!pc,
     mnemonic: !!get(ls(), PHRASE + a) || openPhrase.has(a),
     wordCount: words,
@@ -199,15 +195,15 @@ export async function checkPasscode(address: string, passcode: string): Promise<
 }
 
 /**
- * Open the key: already open → session copy → device copy → passcode copy.
+ * Open the key: already open → session copy → passcode copy.
  * Returns false when nothing here opens it without more input.
  */
 export async function unlock(address: string, passcode?: string): Promise<boolean> {
   const a = norm(address)
   if (open.has(a)) return true
-  for (const sealed of [get(ss(), SESSION + a), get(ls(), DEVICE + a)]) {
-    if (!sealed) continue
-    const k = await openFromDevice(sealed)
+  const session = get(ss(), SESSION + a)
+  if (session) {
+    const k = await openFromDevice(session)
     if (k && norm(addressOf(k)) === a) { await keepOpen(address, k); return true }
   }
   if (!passcode) return false
@@ -224,19 +220,6 @@ export async function unlock(address: string, passcode?: string): Promise<boolea
   verified.set(a, await passcodeTag(passcode))
   await keepOpen(address, k)
   return true
-}
-
-/** Open a key that came from a passkey / Recovery QR; also keeps a device copy for Google / email wallets. */
-export async function openRecovered(address: string, privateKey: string): Promise<void> {
-  assertKeyFor(privateKey, address)
-  const a = norm(address)
-  const kind = (get(ls(), KIND + a) as WalletKind | null) ?? 'social-auto'
-  put(ls(), KIND + a, kind)
-  if (kind === 'social-auto') {
-    const sealed = await sealForDevice(privateKey)
-    if (sealed) put(ls(), DEVICE + a, sealed)
-  }
-  await keepOpen(address, privateKey)
 }
 
 export async function setPasscode(address: string, passcode: string, oldPasscode?: string): Promise<void> {

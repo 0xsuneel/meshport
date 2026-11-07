@@ -12,14 +12,9 @@ export { walletAccount, quoteAccount, isWalletAccount, toEthersSigner, createWal
 export { WalletFrameError, walletOrigin, walletReady } from './frameClient'
 export type { PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
 
-/**
- * Wallets whose key is in the wallet frame (created / imported, and the old
- * social-auto ones). Circle wallets (Google / email) keep it with Circle:
- * frame-key features (passcode re-encryption, device copy, recovery phrase)
- * don't apply to them.
- */
+/** Wallets whose key is in the wallet frame: every created / imported wallet. */
 export function keyInWalletFrame(walletSource: string | null | undefined): boolean {
-  return walletSource !== 'circle'
+  return !!walletSource
 }
 
 export function walletStatus(address: string): Promise<WalletStatus> {
@@ -27,7 +22,7 @@ export function walletStatus(address: string): Promise<WalletStatus> {
 }
 
 /** A brand-new wallet, made in the frame. */
-export async function createWallet(kind: 'create' | 'social-auto', passcode?: string): Promise<WalletAccount> {
+export async function createWallet(kind: 'create', passcode?: string): Promise<WalletAccount> {
   const { address } = await callWallet('create', { kind, passcode })
   return walletAccount(address)
 }
@@ -61,12 +56,6 @@ export function lockWallet(address?: string) { return callWallet('lock', { addre
 export function forgetWallet(address?: string, everything = false) { return callWallet('forget', { address, everything }).catch(() => undefined) }
 
 export async function chatSeed(address: string): Promise<Uint8Array> {
-  // Google / email (Circle): no key in the frame, and Circle's signatures
-  // differ every time (field 1 Nov), so a signature can't make a stable chat
-  // key either. Refused at once - no Circle signature spent; the device
-  // makes its own chat key instead (lib/chatCrypto.ts getMySeed).
-  const { useAuthStore } = await import('@/store')
-  if (useAuthStore.getState().walletSource === 'circle') throw new Error('No wallet-derived chat key for a Circle wallet')
   const { seed } = await callWallet('chat:seed', { address })
   const h = seed.slice(2)
   const out = new Uint8Array(h.length / 2)
@@ -110,24 +99,18 @@ export async function awaitPasskey(ticket: string, opts: { signal?: AbortSignal;
 }
 
 // ── Moving keys the app used to hold ────────────────────────────────────────
-// Before the frame, the app kept (on its own origin) a session copy, a
-// device-sealed copy for Google / email wallets and a passcode-encrypted copy
-// for create / import wallets. On first open they're handed to the frame once
+// Before the frame, the app kept (on its own origin) a session copy and a
+// passcode-encrypted copy. On first open they're handed to the frame once
 // and deleted here. A passcode copy is only deleted once the frame holds one
 // too - otherwise the next session couldn't open the wallet.
-const LEGACY_SOCIAL_COPY = 'meshport_social_dv_'
-
 export async function migrateLegacyKey(address: string, kind: WalletKind | null, passcodes: string[]): Promise<WalletAccount | null> {
   const a = address.toLowerCase()
   const sec = await import('@/lib/security')
   const encKey = sec.getEncryptedKey(a)
   const hasSession = await sec.getSessionPrivateKey(a).then(Boolean).catch(() => false)
-  let socialSealed: string | null = null
-  try { socialSealed = localStorage.getItem(LEGACY_SOCIAL_COPY + a) } catch { /* */ }
-  if (!encKey && !hasSession && !socialSealed) return null
+  if (!encKey && !hasSession) return null
 
   let key: string | null = (await sec.getSessionPrivateKey(a).catch(() => null))
-  if (!key && socialSealed) key = await sec.openFromDevice(socialSealed)
   let passcode: string | undefined
   if (encKey) {
     for (const pc of passcodes) {
@@ -141,7 +124,7 @@ export async function migrateLegacyKey(address: string, kind: WalletKind | null,
   const encPhrase = sec.getEncryptedMnemonic(a)
   if (encPhrase && passcode) mnemonic = (await sec.decryptMnemonic(encPhrase, passcode)) ?? undefined
 
-  const effectiveKind: WalletKind = kind ?? (socialSealed ? 'social-auto' : mnemonic ? 'create' : 'import-privkey')
+  const effectiveKind: WalletKind = kind ?? (mnemonic ? 'create' : 'import-privkey')
   try {
     await callWallet('adopt', { address, privateKey: key, mnemonic, kind: effectiveKind, passcode })
   } finally {
@@ -149,7 +132,6 @@ export async function migrateLegacyKey(address: string, kind: WalletKind | null,
   }
 
   sec.clearSessionPrivateKey(a)
-  try { localStorage.removeItem(LEGACY_SOCIAL_COPY + a) } catch { /* */ }
   if (passcode) {
     try {
       localStorage.removeItem('meshport_encrypted_' + a)

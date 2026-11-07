@@ -13,7 +13,7 @@ import {
 
 /**
  * Shown right after a passcode is confirmed - for new signups (create/
- * import/social), for a returning login on a browser with no local
+ * import), for a returning login on a browser with no local
  * biometric registered yet (see PasscodeSetup.tsx's returning=1 flow and
  * PasscodeLockPage's unlock handler), and reused again from Settings'
  * "Confirm Passcode" sheet when the user turns the toggle on manually.

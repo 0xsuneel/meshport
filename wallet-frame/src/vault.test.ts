@@ -59,7 +59,6 @@ describe('wallet frame vault', () => {
   it('refuses a key that does not belong to the address', async () => {
     const other = privateKeyToAccount(generatePrivateKey()).address
     await expect(vault.store(other, pk, { kind: 'import-privkey' })).rejects.toMatchObject({ code: 'mismatch' })
-    await expect(vault.openRecovered(other, pk)).rejects.toMatchObject({ code: 'mismatch' })
   })
 
   it('keeps a new phrase open until a passcode saves it, then only behind the passcode', async () => {
@@ -75,7 +74,7 @@ describe('wallet frame vault', () => {
     expect((await vault.status(a)).wordCount).toBe(12)
   })
 
-  it('logout forgets open keys and device copies but keeps passcode copies', async () => {
+  it('logout forgets open keys but keeps passcode copies', async () => {
     await vault.store(address, pk, { kind: 'import-privkey', passcode: '123456' })
     vault.forget(address)
     expect(() => vault.keyFor(address)).toThrow()

@@ -11,24 +11,15 @@
  * phrase on its servers, in any form. The frame keeps a passcode-encrypted
  * copy on this device; otherwise the user re-enters the phrase / key.
  *
- * circle (Google / email accounts) - Circle keeps the key; this browser keeps
- * the Circle session (wallet/circle.ts). Without it the person signs in to
- * Circle again.
- *
- * social-auto (older Google / email accounts) - the frame keeps a copy
- * sealed to this browser, opened without a prompt; there is no other copy
- * (passkey and Recovery QR backups were removed), so another device can't
- * open it. The app passcode is an APP LOCK ONLY for these.
- *
  * Priority order:
  * 1. Already open → done
- * 2. Frame without a prompt: this tab's session copy, or (social-auto) the
- *    device copy - a plain refresh skips the passcode.
- * 3. Keys the app held before the frame existed (session copy, social
- *    device copy, passcode copy) are handed to the frame once and deleted
- *    from the app's origin (wallet/index.ts migrateLegacyKey).
- * 4. create / import-*: the frame's passcode copy, with the passcode the
- *    caller has (just typed / stashed). Never for social-auto.
+ * 2. Frame without a prompt: this tab's session copy - a plain refresh
+ *    skips the passcode.
+ * 3. Keys the app held before the frame existed (session copy, passcode
+ *    copy) are handed to the frame once and deleted from the app's origin
+ *    (wallet/index.ts migrateLegacyKey).
+ * 4. The frame's passcode copy, with the passcode the caller has (just
+ *    typed / stashed).
  *
  * If none of these work, `walletRecoveryNeeded` is set on the UI store,
  * which drives a persistent, app-wide banner (see
@@ -61,16 +52,9 @@ let inFlightRestore: { promise: Promise<boolean>; passcode: string | null; gener
 // mistyped 6-digit PIN the user is about to retry. A genuine failure from
 // a normal (non-silent) call elsewhere still sets the banner exactly as
 // before.
-/**
- * What to tell someone whose wallet didn't open. Google / email (Circle)
- * accounts have no recovery phrase to re-import: their wallet comes back
- * with the sign-in.
- */
+/** What to tell someone whose wallet didn't open. */
 export function walletUnavailableMessage(): string {
-  const src = useAuthStore.getState().walletSource
-  return src === 'circle' || src === 'social-auto'
-    ? "Your wallet didn't open - nothing was sent. Check your connection and try again; if it keeps happening, sign out and sign in again with Google / email."
-    : "Couldn't access your wallet on this device. Sign out and re-import your wallet with your recovery phrase or private key to continue."
+  return "Couldn't access your wallet on this device. Sign out and re-import your wallet with your recovery phrase or private key to continue."
 }
 
 export async function restorePrivateKey(rawPasscode?: string, opts?: { silent?: boolean }): Promise<boolean> {
@@ -89,8 +73,7 @@ export async function restorePrivateKey(rawPasscode?: string, opts?: { silent?: 
     // failure says nothing about this passcode: a create / import wallet
     // after the lock screen stayed locked for the whole session, and the
     // next payment failed with "Couldn't access your wallet".
-    // Google / email wallets open without a passcode: the result stands.
-    const samePasscode = running.passcode === rawPasscode || !passcodeOpens(useAuthStore.getState().walletSource)
+    const samePasscode = running.passcode === rawPasscode
     if (ok || !rawPasscode || samePasscode) {
       // A silent attempt sets no banner. This caller isn't silent: show it,
       // unless that attempt had a passcode this caller doesn't - it may have
@@ -171,10 +154,6 @@ export function stashRawPasscode(pc: string): void { pendingRawPasscode = pc }
 export function getPendingRawPasscode(): string | null { return pendingRawPasscode }
 export function clearRawPasscode(): void { pendingRawPasscode = null }
 
-/** Whether a passcode can open this kind of wallet (the frame's passcode copy: created / imported). */
-function passcodeOpens(walletSource: string | null | undefined): boolean {
-  return walletSource !== 'social-auto' && walletSource !== 'circle'
-}
 
 /** ok, or why not: null = it needs the passcode / an unlock (not an error). */
 type Outcome = { ok: true } | { ok: false; error: string | null }
@@ -184,7 +163,7 @@ const fail = (error: string | null): Outcome => ({ ok: false, error })
 /**
  * Put the opened wallet in the store - only if it still belongs to the
  * account this attempt started for. A restore can wait tens of seconds
- * (Circle signing in, the wallet frame on a weak connection); setWallet with
+ * (the wallet frame on a weak connection); setWallet with
  * the address captured at the start used to bring a logged-out wallet back.
  */
 function commit(generation: number, address: string, account: WalletAccount, source?: Parameters<ReturnType<typeof useAuthStore.getState>['setWallet']>[2]): boolean {
@@ -199,27 +178,11 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 async function attemptRestore(generation: number, rawPasscode?: string): Promise<Outcome> {
   const { walletAddress, signer, walletSource } = useAuthStore.getState()
 
-  if (signer) {
-    // A Circle signer can exist before its warm-up has finished (walletReadiness
-    // 'wallet_discovered'): start it so the first payment doesn't pay for it.
-    if (walletSource === 'circle' && walletAddress) {
-      void import('@/wallet/circle').then(m => { if (!m.circleSignerReady(walletAddress)) void m.warmCircleSigner(walletAddress) }).catch(() => {})
-    }
-    return OK
-  }
+  if (signer) return OK
   if (!walletAddress) return fail(null)
 
-  // ── 1. a Circle wallet (Google / email): Circle keeps the key; this browser
-  // keeps the Circle session. Without it the person signs in to Circle again.
-  if (walletSource === 'circle') {
-    const { restoreCircleAccount } = await import('@/wallet/circle')
-    const account = await restoreCircleAccount(walletAddress).catch(() => null)
-    if (account) return commit(generation, walletAddress, account, 'circle') ? OK : fail('account changed')
-    return fail('circle session not found')
-  }
-
   const wallet = await import('@/wallet')
-  const passcodes = (walletSource === 'social-auto' ? [] : [rawPasscode, pendingRawPasscode]).filter(Boolean) as string[]
+  const passcodes = [rawPasscode, pendingRawPasscode].filter(Boolean) as string[]
 
   // ── 2. the frame's session / device copy - no prompt ──────────────────────
   // A frame that timed out or didn't load (weak connection, a slow phone)
@@ -266,7 +229,7 @@ async function attemptRestore(generation: number, rawPasscode?: string): Promise
   }
 
   // No passcode given: it simply needs one (the lock screen / payment asks) - not an error.
-  if (!passcodes.length && passcodeOpens(walletSource)) return fail(null)
+  if (!passcodes.length) return fail(null)
   console.warn('[Restore] No recovery path available - walletSource:', walletSource, '- user needs to re-enter their recovery phrase or private key.')
   return fail(passcodes.length ? 'passcode did not open the wallet' : 'no copy of the wallet on this device')
 }

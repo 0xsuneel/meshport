@@ -5,8 +5,7 @@
 // IDENTITY - one per person, on every device.
 //   Each user's chat identity is an X25519 key pair DERIVED from their wallet
 //   private key (deriveMyChatIdentity). Logging in on any device restores the
-//   wallet (Google/email accounts with their passkey or Recovery QR, others
-//   from the recovery phrase / private key), and with it the exact same chat
+//   wallet (from the recovery phrase / private key), and with it the exact same chat
 //   identity, so every
 //   device the user signs in on reads their whole chat history, old and new.
 //   Only the PUBLIC key is uploaded (users.chat_public_key), together with
@@ -67,13 +66,6 @@
 //   on this device, sealed with the browser's non-extractable device key
 //   (see sealForDevice in security.ts). It stays after logout: chats are
 //   kept on the device (lib/localChat.ts), sealed, and need it to open.
-//
-// GOOGLE / EMAIL (CIRCLE) WALLETS - a key per device.
-//   Circle's signatures differ each time, so no seed can be derived from
-//   them. The device makes a random key instead and publishes it with one
-//   wallet signature (getMySeed). Like WhatsApp, chats then belong to that
-//   device - which matches device-only chat (the server keeps a message only
-//   until the recipient's phone has saved it, lib/chatMailbox.ts).
 
 import { x25519 } from '@noble/curves/ed25519'
 import { sha256 } from '@noble/hashes/sha256'
@@ -185,13 +177,8 @@ export function clearChatSessionSeeds() {
 }
 
 /**
- * This wallet's chat seed on this device. Created / imported wallets derive
- * it from the wallet key (the same on every device). A Google / email
- * (Circle) wallet can't - its signatures differ each time - so this device
- * makes its own random key, keeps it (sealed to this browser) and publishes
- * it with one wallet signature. Chats are device-only, like WhatsApp: a
- * message is sealed for the key published when it was sent and kept on the
- * phone that received it.
+ * This wallet's chat seed on this device: derived from the wallet key (the
+ * same on every device), kept sealed to this browser.
  */
 const _seedInFlight = new Map<string, Promise<Uint8Array | null>>()
 function getMySeed(walletAddress: string): Promise<Uint8Array | null> {
@@ -203,13 +190,7 @@ function getMySeed(walletAddress: string): Promise<Uint8Array | null> {
       if (saved) return saved
       const seed = await seedFromWallet(walletAddress)
       if (seed) { await saveSeed(walletAddress, seed); return seed }
-      // No derivable seed. With the wallet open (a Circle wallet), make this
-      // device's key; with it locked, wait for the unlock.
-      const signer = (await import('@/store')).useAuthStore.getState().signer
-      if (!signer || signer.address.toLowerCase() !== addr) return null
-      const fresh = crypto.getRandomValues(new Uint8Array(32))
-      await saveSeed(walletAddress, fresh)
-      return fresh
+      return null // the wallet is locked: wait for the unlock
     })()
     _seedInFlight.set(addr, p)
     p.finally(() => _seedInFlight.delete(addr)).catch(() => {})
@@ -300,9 +281,7 @@ export async function ensureChatKeysReady(walletAddress: string, myUserId: strin
     const { data: current } = await supabase.from('users').select('chat_public_key, chat_key_sig').eq('id', myUserId).maybeSingle()
     // Already published, from this device's copy of the seed and with a
     // valid wallet signature: nothing to sign. This runs on every start and
-    // every unlock - for a Google / email wallet it would ask the wallet for
-    // 3 signatures each time (2 for the seed, 1 for the key), right when the
-    // first payment wants it too.
+    // every unlock.
     const seed = await getMySeed(walletAddress)
     if (!seed) return
     if (current?.chat_public_key === toBase64(x25519.getPublicKey(seed))

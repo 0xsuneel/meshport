@@ -186,8 +186,7 @@ export function transferRoutes(settings: SettingsMap, chainId: string, kind: Acc
   if (!(opts.ub ?? TRANSFER_UB_ENABLED)) return on(settings, k.cctp, true) ? ['cctp'] : []
   const routes: Route[] = []
   if (on(settings, k.ub)) routes.push('ub')
-  // Both routes by default now that Unified Balance is back (7 Nov): CCTP
-  // carries Express (no Circle signature); an admin can still turn either off.
+  // Both routes by default now that Unified Balance is back (7 Nov): an admin can still turn either off.
   if (on(settings, k.cctp, true)) routes.push('cctp')
   return routes
 }

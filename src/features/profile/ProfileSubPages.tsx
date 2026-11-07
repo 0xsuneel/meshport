@@ -16,7 +16,7 @@ function buildProfileUpdateMessage(
   ].join('\n')
 }
 import { handBiometricPasscode, handBiometricPending } from '@/lib/biometricHandoff'
-import { useNavigate, useLocation, Navigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import {
   ArrowLeft, Shield, Fingerprint, Lock, KeyRound, ChevronRight,
@@ -28,10 +28,8 @@ import {
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
-import { MeshLoader } from '@/components/ui/MeshLoader'
 import { useAuthStore, useNotificationStore, useUIStore, type AppNotification } from '@/store'
 import { useFeatureEnabled } from '@/store/settingsStore'
-import { fastPayEnabled, enableFastPay, stopFastPay, useFastPay, expressLimitUsd, setExpressLimitUsd, EXPRESS_LIMITS, type ExpressLimit } from '@/lib/fastPay'
 import { useThemeStore, resolveTheme, type ThemeMode } from '@/store/themeStore'
 import { switchTheme } from '@/lib/themeTransition'
 import { Avatar } from '@/components/ui/Avatar'
@@ -73,65 +71,6 @@ export function SecurityPage() {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const storedPasscode = useAuthStore(s => s.passcode)
   const lock = useAuthStore(s => s.lock)
-  // Fast Pay (beta, Google / email Circle wallets - lib/fastPay.ts).
-  const walletSource = useAuthStore(s => s.walletSource)
-  const [fastPayOn, setFastPayOn] = useState(fastPayEnabled)
-  const fastPay = useFastPay()
-  const [fastPaySheet, setFastPaySheet] = useState(false)
-  const [fastPayPass, setFastPayPass] = useState('')
-  const [fastPayError, setFastPayError] = useState('')
-  const [fastPayBusy, setFastPayBusy] = useState(false)
-  const [fastPayStopping, setFastPayStopping] = useState(false)
-  const [expressLimit, setExpressLimit] = useState<ExpressLimit>(expressLimitUsd)
-  // The logo spins from the passcode until the session is ready (or fails).
-  const fastPaySettingUp = fastPayBusy || fastPayStopping || (fastPayOn && fastPay.phase === 'starting')
-  const fastPayStatus = fastPayStopping ? 'Turning off Express… cancelling its limit on-chain'
-    : !fastPayOn ? `Pay, swap, transfer and bring up to $${expressLimit} in total with just your passcode, for 2 hours after unlocking. Anything more uses your wallet as now.`
-    : fastPayBusy || fastPay.phase === 'starting' ? 'Turning on Express… confirm in your wallet if asked'
-    : fastPay.phase === 'ready' ? `$${fastPay.remainingUsd.toFixed(2)} of $${fastPay.limitUsd} left until ${new Date(fastPay.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - passcode still asked every time`
-    : fastPay.phase === 'error' ? `Couldn't start: ${fastPay.error ?? 'try again'}`
-    : 'On - starts after you unlock'
-  // Turning it on asks for the passcode: the wallet frame keeps its own check
-  // of it and signs a Fast Pay payment only after that check passes.
-  const toggleFastPay = async () => {
-    if (fastPaySettingUp) return
-    if (fastPayOn) {
-      // Off = the key dropped AND its limit cancelled on-chain (one wallet
-      // confirmation), so even a leaked key can't spend what was left.
-      setFastPayStopping(true)
-      try {
-        const r = await stopFastPay()
-        setFastPayOn(false)
-        if (!('reason' in r)) showToastMessage('Express off - its limit is cancelled on-chain', 'success')
-        else if (r.reason === 'failed') {
-          const until = r.expiresAt ? ` - it ends by itself at ${new Date(r.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''
-          showToastMessage(`Express off, but its limit couldn't be cancelled on-chain${until}`, 'warning')
-        } else showToastMessage('Express off')
-      } finally {
-        setFastPayStopping(false)
-      }
-      return
-    }
-    setFastPayPass(''); setFastPayError(''); setFastPaySheet(true)
-  }
-  const confirmFastPay = async (code: string) => {
-    if (code.length < 6 || !walletAddress || !storedPasscode || fastPayBusy) return
-    setFastPayBusy(true); setFastPayError('')
-    try {
-      const { verifyPasscode } = await import('@/lib/security')
-      let correct = false
-      try { correct = await verifyPasscode(code, storedPasscode) } catch {}
-      if (!correct) { setFastPayError('Incorrect passcode. Try again.'); setFastPayPass(''); return }
-      setFastPaySheet(false)
-      setFastPayOn(true)
-      if (await enableFastPay(code)) showToastMessage('Express is ready', 'success')
-    } catch (e) {
-      setFastPayOn(false)
-      showToastMessage(e instanceof Error && e.message ? e.message : "Couldn't turn on Express", 'error')
-    } finally {
-      setFastPayBusy(false)
-    }
-  }
   // Admin Panel → Features → Security. When an admin turns this off, App.tsx
   // (global effect) forces biometricEnabled to false for every session
   // immediately - this local gate additionally locks the toggle itself so
@@ -213,27 +152,6 @@ export function SecurityPage() {
               enabled={biometricAdminEnabled && biometricEnabled}
               disabled={!biometricAdminEnabled}
               onToggle={handleToggle} />
-            {walletSource === 'circle' && (
-              <ToggleItem icon={fastPaySettingUp ? <span className="text-accent-text"><MeshLoader size={22} color="currentColor" label="Turning on Express" /></span> : <KeyRound className="w-5 h-5 text-accent-text" />}
-                label="Express (beta)" description={fastPayStatus} enabled={fastPayOn} busy={fastPaySettingUp} onToggle={toggleFastPay} />
-            )}
-            {walletSource === 'circle' && (
-              <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-text-primary">Express limit</p>
-                  <p className="text-xs text-text-secondary">Shared by Pay, Swap, Transfer and Bring - any token{fastPayOn ? ' · applies from the next session' : ''}</p>
-                </div>
-                <div className="flex shrink-0 rounded-xl bg-surface border border-border p-1" role="radiogroup" aria-label="Express limit">
-                  {EXPRESS_LIMITS.map(v => (
-                    <button key={v} type="button" role="radio" aria-checked={expressLimit === v} disabled={fastPaySettingUp}
-                      onClick={() => { setExpressLimitUsd(v); setExpressLimit(v) }}
-                      className={`px-3 h-8 rounded-lg text-sm font-semibold transition-colors ${expressLimit === v ? 'bg-brand text-white' : 'text-text-secondary'}`}>
-                      ${v}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             <ToggleItem icon={<Lock className="w-5 h-5 text-accent-text" />} label="Passcode Lock"
               description="Locks when reopened, or after 5 min in the background" enabled={passcodeLockEnabled}
               onToggle={() => { setPasscodeLockEnabled(!passcodeLockEnabled); showToastMessage(`Auto-lock ${!passcodeLockEnabled ? 'enabled' : 'disabled'}`) }} />
@@ -259,12 +177,6 @@ export function SecurityPage() {
         biometricAvailable={false} autoBiometric={false} locked={registering}
         footer={registering ? <p className="text-xs text-text-secondary text-center mt-3">Verifying…</p> : undefined} />
 
-      <PinSheet open={fastPaySheet} onClose={() => !fastPayBusy && setFastPaySheet(false)} id="fastpay-confirm"
-        title="Confirm Passcode" subtitle="Enter your passcode to turn on Express"
-        value={fastPayPass} onChange={v => { setFastPayPass(v); setFastPayError('') }}
-        onComplete={pin => confirmFastPay(pin)} error={fastPayError || undefined}
-        biometricAvailable={false} autoBiometric={false} locked={fastPayBusy}
-        footer={fastPayBusy ? <p className="text-xs text-text-secondary text-center mt-3">Verifying…</p> : undefined} />
     </div>
   )
 }
@@ -476,19 +388,9 @@ export function ChangePasscodePage() {
       const { walletAddress, signer, walletSource, biometricEnabled } = useAuthStore.getState()
       const { setWalletPasscode, keyInWalletFrame } = await import('@/wallet')
       let inFrame = false
-      if (walletAddress && walletSource === 'circle') {
-        // Google / email wallets: the frame holds the only check of the
-        // passcode (lib/circlePasscode) - it changes only with the current
-        // one. Before anything else, so a refusal changes nothing.
-        const { changeCirclePasscode } = await import('@/lib/circlePasscode')
-        inFrame = await changeCirclePasscode(storedPasscode ? oldPass : null, newPass)
-      }
-      if (walletAddress && signer && walletSource !== 'social-auto' && keyInWalletFrame(walletSource)) {
-        // create / import-seed / import-privkey wallets only - social-auto
-        // wallets are never encrypted with the passcode, and Circle
-        // wallets have no key in the frame (it failed for them). The wallet
-        // frame re-encrypts the key AND the recovery phrase (opened with the
-        // just-verified old passcode) under the new one.
+      if (walletAddress && signer && keyInWalletFrame(walletSource)) {
+        // The wallet frame re-encrypts the key AND the recovery phrase
+        // (opened with the just-verified old passcode) under the new one.
         await setWalletPasscode(walletAddress, newPass, storedPasscode ? oldPass : newPass)
         inFrame = true
       }
@@ -523,7 +425,7 @@ export function ChangePasscodePage() {
       // The passcode (even hashed) never leaves this device: a 6-digit PIN's
       // hash can be reversed in seconds by anyone who could read it.
     } catch (e) {
-      // The wallet frame's own reasons (lib/circlePasscode) are worth showing.
+      // The wallet frame's own reasons are worth showing.
       const msg = e instanceof Error ? e.message : ''
       setError(/^(Current passcode is incorrect|Couldn't reach your wallet|Enter your current passcode)/.test(msg) ? msg : 'Failed to update passcode')
     } finally {
@@ -544,7 +446,7 @@ export function ChangePasscodePage() {
       <div className="px-4 space-y-3">
         <div className="p-4 bg-brand/10 border border-brand/30 rounded-2xl">
           <p className="text-sm text-text-secondary">
-            Works across all wallet types - generated, imported seed phrase, imported private key, and social login.
+            Works across all wallet types - generated, imported seed phrase and imported private key.
           </p>
         </div>
 
@@ -603,14 +505,11 @@ export function ChangePasscodePage() {
 
 // ─── Backup - routes based on loginType and walletSource ───────────────────────
 // Route map:
-//   social login             → nothing to back up: the wallet comes back with the sign-in
 //   create (generated seed)  → BackupRecoveryPhrasePage  (Seed + Private Key tabs)
 //   import-seed              → BackupRecoveryPhrasePage  (Seed + Private Key tabs)
 //   import-privkey           → BackupPrivateKeyOnlyPage  (Private Key only - no seed)
 export function BackupPage() {
-  const loginType = useAuthStore(s => s.loginType)
   const walletSource = useAuthStore(s => s.walletSource)
-  if (loginType === 'social') return <Navigate to="/security" replace />
   if (walletSource === 'import-privkey') return <BackupPrivateKeyOnlyPage />
   // 'create' and 'import-seed' both use BackupRecoveryPhrasePage with both tabs visible
   return <BackupRecoveryPhrasePage />

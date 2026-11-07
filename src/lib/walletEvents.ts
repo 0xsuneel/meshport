@@ -2,11 +2,9 @@
 //
 // What the wallet itself did on this device, saved to Supabase (wallet_events)
 // the same way move_timings saves a Transfer / Bring / Swap: one row per
-// event, queryable by wallet, kind and time. It covers both kinds of wallet:
+// event, queryable by wallet, kind and time.
 //
-//   wallet_kind  circle  Google / email (Circle user-controlled wallet)
-//                frame   created / imported private key (signs on the device)
-//                ...     whatever walletSource says (social-auto)
+//   wallet_kind  frame   created / imported private key (signs on the device)
 //
 //   event        startup        page load → wallet can sign (steps: shell, auth, provider, discovered, signer, rpc, actionReady)
 //                open           opening the wallet (unlock / restore): ms, ok, error
@@ -53,7 +51,7 @@ export function walletEventRow(p: WalletEventInput & {
 }
 
 const kindOf = (source: string | null | undefined) =>
-  source === 'circle' ? 'circle' : source === 'social-auto' ? 'social-auto' : source ? 'frame' : 'unknown'
+  source ? 'frame' : 'unknown'
 
 export function logWalletEvent(e: WalletEventInput): void {
   void (async () => {

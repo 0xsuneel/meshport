@@ -22,7 +22,7 @@ const PILLARS = [
   },
   {
     icon: KeyRound, title: 'Yours alone',
-    body: 'Every wallet is self-custodial - even when you sign in with Google or email. The key is made on your phone and protected by your passkey and Recovery QR. MeshPort never holds it.',
+    body: 'Every wallet is self-custodial. Create one or import yours - the key stays on your device, locked by your passcode. MeshPort never holds it.',
   },
 ]
 

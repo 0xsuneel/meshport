@@ -1,5 +1,4 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
-import { swapIntent } from '@/lib/approvalIntents'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import { quoteAccount } from '@/wallet/account'
 import { timeQuote } from '@/lib/quoteTiming'
@@ -1018,7 +1017,7 @@ export function SwapPage() {
     // away from succeeding (a mnemonic-based wallet, or a passcode already
     // stashed this session - see restoreWallet.ts). One on-demand attempt
     // here covers both: it's fast and local for create/import-seed wallets
-    // (no network at all - instant), and for social-auto/import-privkey it
+    // (no network at all - instant), and for import-privkey it
     // reuses whatever the app has already been trying in the background.
     // Only genuinely falls through to the error message below if this
     // attempt ALSO fails - at which point "still loading" is honest rather
@@ -2073,7 +2072,6 @@ export function SwapPage() {
           amount: trimTrailingZeros(parseFloat(amountIn || '0').toFixed(swapTokenDecimals(tokenIn.id))), unit: tokenIn.id,
         }}
         bioVerb="Swap"
-        intent={swapIntent(tokenIn.id, parseFloat(amountIn || '0'))}
         anchor={desktopColumnRef.current}
         value={passEntry}
         onChange={v => { setPassEntry(v); setPassError('') }}

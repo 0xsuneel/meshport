@@ -21,13 +21,11 @@ export const WALLET_MESSAGE_TAG = 'meshport-wallet'
 export const WALLET_PROTOCOL_VERSION = 1
 
 export type Hex = `0x${string}`
-export type WalletKind = 'create' | 'import-seed' | 'import-privkey' | 'social-auto'
+export type WalletKind = 'create' | 'import-seed' | 'import-privkey'
 
 export interface WalletStatus {
   /** The key is open in the frame right now. */
   unlocked: boolean
-  /** A copy sealed to this browser exists (opens without a prompt). */
-  device: boolean
   /** A passcode-encrypted copy exists on this device. */
   passcode: boolean
   /** A recovery phrase is kept for this wallet (create / import-seed). */
@@ -51,7 +49,7 @@ export interface WalletRpc {
   ping: [Record<string, never>, { version: number }]
   status: [{ address: string }, WalletStatus]
   /** New wallet made in the frame. `create` also keeps a recovery phrase. */
-  create: [{ kind: 'create' | 'social-auto'; passcode?: string }, { address: Hex }]
+  create: [{ kind: 'create'; passcode?: string }, { address: Hex }]
   /** A phrase / key the user typed. Validated, stored, never echoed back. */
   import: [{ kind: 'import-seed' | 'import-privkey'; secret: string; passcode?: string }, { address: Hex }]
   /** One-time move of a key the app held before the frame existed. */
@@ -76,54 +74,6 @@ export interface WalletRpc {
   'sign:message': [{ address: string; message: string | { raw: Hex } }, { signature: Hex }]
   'sign:typed-data': [{ address: string; typedData: Record<string, unknown> }, { signature: Hex }]
   'sign:transaction': [{ address: string; transaction: FrameTransaction }, { serialized: Hex }]
-  /**
-   * Fast Pay (src/lib/fastPay.ts): a fresh session key, made and kept in this
-   * frame's memory only. It never leaves the frame; its power is the Permit2
-   * allowance the user's Circle wallet grants it (amount + expiry on-chain).
-   */
-  'session:create': [{ keep?: boolean; owner: string }, { address: Hex; kept: boolean }]
-  /** After an app restart: reopen a kept session key (sealed to this device). */
-  'session:restore': [{ address: string }, { restored: boolean }]
-  /**
-   * Sign with a session key - only what Fast Pay needs on Arc: the USDC
-   * permit for Permit2, Permit2 permit / batch transferFrom, and a plain
-   * value transfer (the leftover gas going back). Anything else is refused.
-   */
-  'session:sign': [{ address: string; transaction: FrameTransaction }, { serialized: Hex }]
-  /** A session key's EIP-2612 permit to Circle's swap adapter (Express Swap, no approve tx). Values as decimal strings. */
-  'session:permit': [{ address: string; typedData: { domain: Record<string, unknown>; types: Record<string, unknown>; primaryType: string; message: Record<string, string> } }, { signature: Hex }]
-  /** Drop a session key (or all of them). */
-  'session:end': [{ address?: string }, { ok: true }]
-  /** What session keys may do in this frame (Express): 'pay', 'transfer'. Older frames don't answer. */
-  'session:capabilities': [Record<string, never>, { capabilities: string[] }]
-  /** Express Bring: this wallet's Bring key on this device (create: make one if none). */
-  'bring:key': [{ owner: string; create?: boolean }, { address: Hex | null }]
-  /** Express Bring: the Bring key signs one ExpressBring (needs a passcode approval). */
-  'bring:sign': [{ owner: string; chainId: number; router: string; bring: Record<string, string | number> }, { signature: Hex }]
-  'bring:forget': [{ owner: string }, { ok: true }]
-  /**
-   * The passcode of Google / email (Circle) wallets, checked only in the
-   * frame (wallet-frame/src/fastPayGate.ts) - one per device, like the app's
-   * passcode. set: first time, or a change (needs the current one). check:
-   * unlocking. forget: removes it and every Fast Pay session key. approve:
-   * checks it and allows ONE Fast Pay payment signature for that wallet, 60 s.
-   */
-  'circle-passcode:set': [{ passcode: string; oldPasscode?: string }, { ok: true }]
-  'circle-passcode:check': [{ passcode: string }, { ok: true }]
-  'circle-passcode:forget': [Record<string, never>, { ok: true }]
-  /** `full`: the frame ran its full (slow) check - the first since it loaded. */
-  /** `intent`: what the passcode sheet showed - the approval then covers only that Express move. */
-  'fastpay:approve': [{ owner: string; passcode: string; intent?: ApprovalIntent }, { approved: true; validForMs: number; full?: boolean }]
-  /**
-   * Secure approvals (docs/SECURE-APPROVALS.md): a one-time ticket for
-   * confirm.html, the keypad page on the wallet origin. The frame shows the
-   * intent itself and checks the passcode typed there; the app never sees it.
-   * `wallet`: whose passcode - a Google / email wallet's (circle) or a
-   * frame-kept wallet's (frame, `owner` is its address).
-   */
-  'confirm:open': [{ owner: string; wallet: 'circle' | 'frame'; intent: ApprovalIntent; title?: string; name?: string; label?: string }, { ticket: Hex }]
-  /** Whether the keypad page approved this ticket (the app's hint only - signing checks it itself). */
-  'confirm:status': [{ ticket: string }, { approved: boolean }]
   /** This wallet's chat identity seed (derived, domain-separated - not the wallet key). */
   'chat:seed': [{ address: string }, { seed: Hex }]
   /** This wallet's Solana public key (32 bytes; derived, domain-separated - lib/solanaKey.ts). */
@@ -191,17 +141,6 @@ export interface WalletResponse {
 
 /** Reveal page ↔ frame, over a same-origin BroadcastChannel (never the app). */
 export const REVEAL_CHANNEL = 'meshport-wallet-reveal'
-/** Keypad page (confirm.html) ↔ frame, same origin only. */
-export const CONFIRM_CHANNEL = 'meshport-wallet-confirm'
-/** What a passcode approval is for. Amounts in the token's base units (strings). */
-export type ApprovalIntent =
-  | { kind: 'pay'; token: Hex; to: Hex; amount: string }
-  | { kind: 'transfer'; amount: string; destinationDomain: number; recipient: Hex }
-  | { kind: 'swap'; tokenIn: Hex; amount: string }
-  | { kind: 'bring'; chainId: number; amount: string }
-  | { kind: 'other' }
-/** The app's stand-in for a passcode typed on the frame's keypad page: the approved ticket. */
-export const FRAME_TICKET_PREFIX = 'frame-ticket:'
 
 export function isWalletMessage(data: unknown): data is { tag: string; v: number; id: string } {
   return !!data && typeof data === 'object'

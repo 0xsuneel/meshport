@@ -25,7 +25,6 @@ export default defineConfig({
         index: path.resolve(__dirname, 'wallet-frame/index.html'),
         reveal: path.resolve(__dirname, 'wallet-frame/reveal.html'),
         passkey: path.resolve(__dirname, 'wallet-frame/passkey.html'),
-        confirm: path.resolve(__dirname, 'wallet-frame/confirm.html'),
       },
     },
   },

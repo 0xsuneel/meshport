@@ -14,8 +14,6 @@ import { PinKeypad } from './PinKeypad'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY } from '@/lib/motion'
 import type { BiometricVerb } from '@/lib/biometricWording'
-import type { ApprovalIntent } from '@/wallet/protocol'
-import { noteApprovalIntent } from '@/lib/approvalIntents'
 
 export interface PinSheetProps {
   open: boolean
@@ -64,18 +62,11 @@ export interface PinSheetProps {
    *  is right → processing): it leaves underneath that page - no slide down
    *  or fade on top of it. */
   leaveUnder?: boolean
-  /** What this approval is for, in exact terms (docs/SECURE-APPROVALS.md):
-   *  handed to the wallet frame with the passcode, which then lets Express
-   *  sign only that (recipient, token, amount, chain). Without one, the
-   *  approval covers no Express move (it goes the normal way). */
-  intent?: ApprovalIntent
 }
 
 export function PinSheet(p: PinSheetProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const close = p.locked ? () => {} : p.onClose
-  // The passcode now entered approves exactly this (read by lib/fastPay).
-  const onComplete = (pin: string, viaBiometric?: boolean) => { noteApprovalIntent(p.intent); p.onComplete(pin, viaBiometric) }
   const pad = p.fallbackConfirm ? (
     <button type="button" onClick={p.fallbackConfirm.onConfirm}
       className="w-full rounded-2xl py-4 text-[15px] font-bold text-white bg-brand active:scale-[0.98] transition-transform">
@@ -83,7 +74,7 @@ export function PinSheet(p: PinSheetProps) {
     </button>
   ) : (
     <PinKeypad value={p.value} onChange={p.onChange} length={6} error={!!p.error} shake={!!p.error}
-      onComplete={onComplete} biometricAvailable={p.biometricAvailable} autoBiometric={p.autoBiometric} bioVerb={p.bioVerb} />
+      onComplete={p.onComplete} biometricAvailable={p.biometricAvailable} autoBiometric={p.autoBiometric} bioVerb={p.bioVerb} />
   )
   const said = p.error
     ? <span role="alert" className="text-danger">{p.error}</span>

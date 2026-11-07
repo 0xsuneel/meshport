@@ -3,8 +3,7 @@
 // This account's Solana wallet (docs/SOLANA.md): for created / imported
 // wallets, the Solana key derived from the wallet key inside the wallet frame
 // (lib/solanaKey.ts, 'solana:key' / 'solana:sign') - the app gets an address
-// and signatures, never a key. Google / email accounts (Circle wallets) have
-// no Solana wallet: Solana features stay hidden for them.
+// and signatures, never a key.
 
 import { getBase58Decoder, getTransactionDecoder, getTransactionEncoder, type Address, type SignatureBytes, type Transaction } from '@solana/kit'
 import { useAuthStore } from '@/store'
@@ -22,7 +21,7 @@ function unhex(h: string): Uint8Array {
 type Kind = 'frame' | null
 function kind(): { kind: Kind; evm: string | null } {
   const s = useAuthStore.getState()
-  if (s.walletSource === 'circle' || !s.walletAddress) return { kind: null, evm: s.walletAddress }
+  if (!s.walletAddress) return { kind: null, evm: s.walletAddress }
   return { kind: 'frame', evm: s.walletAddress }
 }
 

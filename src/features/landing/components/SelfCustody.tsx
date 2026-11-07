@@ -3,9 +3,9 @@ import { Reveal } from './Reveal'
 // How a MeshPort wallet stays yours - every sign-in method ends in the same
 // place: a key made on your device that MeshPort never receives.
 const POINTS = [
-  { title: 'Made on your device', desc: 'Your wallet key is generated in your browser. Create, import or sign in with Google or email - the key is never sent to MeshPort.' },
-  { title: 'Unlock with a passkey', desc: 'Google and email accounts unlock with Face ID, fingerprint or your device PIN, on any device your passkey syncs to.' },
-  { title: 'Recovery QR you keep', desc: 'A backup sealed with a password only you know. Scan it on a new phone to get your wallet back - useless to anyone without the password.' },
+  { title: 'Made on your device', desc: 'Your wallet key is generated in your browser. Create a wallet or import yours - the key is never sent to MeshPort.' },
+  { title: 'Locked by your passcode', desc: 'Every payment asks for your passcode (or Face ID / fingerprint once you turn it on).' },
+  { title: 'A backup you keep', desc: 'Your 12 secret words or private key bring the wallet back on a new phone. Keep them offline.' },
   { title: 'Nothing to hand over', desc: 'MeshPort stores no private keys, no recovery passwords and no seed phrases. It can’t move your funds, and neither can anyone who breaks into it.' },
 ]
 
@@ -23,10 +23,10 @@ export function SelfCustody() {
             Your keys. Your money. Your messages.
           </h2>
           <p className="mt-5 text-[18px] leading-relaxed text-text-primary">
-            Every MeshPort wallet is self-custodial, including the ones you open with Google. The key is made on your device, protected by your passkey and a Recovery QR only you can open, and never stored by MeshPort.
+            Every MeshPort wallet is self-custodial. The key is made on your device, locked by your passcode, and never stored by MeshPort.
           </p>
           <p className="mt-6 text-[16px] leading-relaxed text-text-secondary">
-            Sign in with Google or your own wallet; the key is created on this device; add a passkey and save your Recovery QR; then unlock on any device with either one.
+            Create a wallet or import your own; write down your secret words; then restore it on any device with them.
           </p>
         </Reveal>
 

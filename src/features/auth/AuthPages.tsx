@@ -6,22 +6,20 @@ import { ScreenPush } from '@/components/ui/ScreenPush'
 import { useNavigate, Navigate } from 'react-router-dom'
 import {
   ArrowLeft, Eye, EyeOff, CheckCircle,
-  AlertCircle, AlertTriangle, RefreshCw, XCircle, AtSign, Loader2,
+  AlertCircle, AlertTriangle, XCircle, AtSign, Loader2,
   Sparkles, Download, Wallet, Lock, Link2, Zap, FileText, KeyRound, Store, User as UserIcon, ChevronRight,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
-import { clearSocialDeviceState } from '@/lib/socialWallet'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { validateMnemonic } from '@/lib/arc'
 import { createWallet, importWallet, walletStatus, checkRecoveryWords, setWalletPasscode, lockWallet, WalletFrameError, type WalletAccount } from '@/wallet'
 import { WalletSecretFrame } from '@/components/wallet/WalletSecretFrame'
 import {
   supabase, upsertUserProfile,
-  isUsernameTakenDb, getUserByWalletAddress, ensureAnonSession, resolveAccountForSession, lookupAccountByWallet,
-  type DbUser,
+  isUsernameTakenDb, getUserByWalletAddress, ensureAnonSession, lookupAccountByWallet,
 } from '@/lib/supabase'
 import { markWalletBackedUp } from '@/lib/security'
 import { LoadingDots } from '@/components/ui/LoadingDots'
@@ -78,20 +76,12 @@ function makeUser(id: string, email: string, extra?: Partial<User>): User {
  *
  * BUG FIX (2026-09-03): this used to only carry over id/username/
  * walletAddress from `existing`, silently dropping display_name and
- * avatar_url even though both are already present in the same query result
- * - GoogleAuthPage's equivalent restore (this same file, social-auto path)
- * does carry both over; this path just never matched it. A wallet
+ * avatar_url even though both are already present in the same query result.
+ * A wallet
  * re-imported on a fresh device or after a reinstall would keep its correct
  * username but revert its profile picture and display name to blank/
  * default, even though the real values were one field away the whole time.
  */
-
-// A fresh Google/email sign-in may set a new passcode on /auth/passcode?returning=1.
-// The flag proves the page was reached from that sign-in (not typed by
-// someone holding a locked device) - see RequireNoPasscode in App.tsx.
-function markReturningSignIn() {
-  try { sessionStorage.setItem('mp_returning_signin', String(Date.now())) } catch { /* private mode */ }
-}
 
 export function mergeExistingWalletProfile(
   user: User | null,
@@ -171,9 +161,6 @@ function AccountKindPicker({ mode, onChoose, onSwitchMode }: {
 export function LoginPage() {
   const navigate = useNavigate()
   const [agreed, setAgreed] = useState(false)
-  // Circle's SDK and this browser's device id load while the user reads the
-  // screen, so "Continue with Google" leaves for Google without waiting.
-  useEffect(() => { void import('@/wallet/circle').then(c => { if (c.circleSignInForNewAccounts()) c.warmCircle() }).catch(() => {}) }, [])
   // First screen: Create account or Log in, and Personal or Business.
   const [mode, setMode] = useState<AuthMode>(() => getAuthMode())
   const [kind, setKind] = useState<AccountKind | null>(() => getChosenKind())
@@ -185,40 +172,6 @@ export function LoginPage() {
   const login = mode === 'login'
   const isBiz = kind === 'business'
 
-  const handleGoogleLogin = async () => {
-    if (!agreed) return
-    // One Google screen signs in to MeshPort and the Circle wallet together
-    // (src/wallet/circle.ts); Google sends the user to /wallet/circle-login,
-    // which then continues at /auth/google below. Without Circle's Google
-    // client configured, the plain Supabase Google sign-in (the wallet set-up
-    // screen then asks Circle itself).
-    const circle = await import('@/wallet/circle')
-    if (circle.circleSignInForNewAccounts()) {
-      try { await circle.startGoogleSignIn({ meshport: true }); return }
-      catch (e) { console.error('[Auth] Google + Circle sign-in could not start; plain Google sign-in instead:', e) }
-    }
-    // signInWithOAuth redirects the whole page to Google, then back to
-    // /auth/callback once the OAuth flow completes - the actual account
-    // lookup/creation logic lives there (AuthCallbackPage below), not
-    // here, since this function's own execution ends the moment the
-    // redirect happens.
-    //
-    // queryParams.prompt: 'select_account' forces Google's account chooser
-    // to show every time, even when the browser already has an active
-    // Google session it could silently reuse - without this, Google skips
-    // the picker and auto-signs into whichever account was last used,
-    // which is exactly the behavior that was confusing on re-login (no
-    // visible account choice, just an instant redirect into whatever
-    // account happened to be active).
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/google`,
-        queryParams: { prompt: 'select_account' },
-      },
-    })
-    if (error) console.error('[Auth] Google sign-in failed:', error.message)
-  }
 
   return (
     <div className="flex flex-col h-full bg-bg px-6 pt-16 pb-8">
@@ -230,7 +183,7 @@ export function LoginPage() {
           </h1>
           <p className="text-text-secondary mt-2">
             {login ? `Log in to your ${isBiz ? 'business' : 'personal'} account`
-              : isBiz ? 'Sign in, then claim your store username' : 'Sign in, then claim your username'}
+              : isBiz ? 'Create or import a wallet, then claim your store username' : 'Create or import a wallet, then claim your username'}
           </p>
           <button type="button" onClick={() => { setAuthIntent(mode, null); setKind(null); setChoosing(true) }}
             className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-text px-3 py-1.5 rounded-full bg-brand/10">
@@ -275,34 +228,21 @@ export function LoginPage() {
         </motion.button>
 
         <div className="w-full space-y-3">
-          <button onClick={handleGoogleLogin} disabled={!agreed}
-            className="w-full flex items-center justify-center gap-3 bg-text-primary/5 text-text-primary font-semibold py-4 rounded-2xl active:scale-95 transition-transform border border-border disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
-            <GoogleIcon size={20} /> Continue with Google
-          </button>
-          {/* Business accounts sign in with Google only; creating or
-              importing a wallet is for personal accounts. */}
-          {!isBiz && (
-            <>
-              <div className="flex items-center gap-3 my-1">
-                <div className="flex-1 h-px bg-text-primary/10" />
-                <span className="text-xs text-text-secondary">OR</span>
-                <div className="flex-1 h-px bg-text-primary/10" />
-              </div>
-              {/* A brand-new wallet never has an account - Create account only. */}
-              {!login && (
-                <button onClick={() => agreed && navigate('/auth/passcode?next=create')}
-                  disabled={!agreed}
-                  className="w-full flex items-center justify-center gap-3 bg-surface border border-border text-text-primary font-semibold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
-                  <Sparkles className="w-5 h-5" /> Create New Wallet
-                </button>
-              )}
-              <button onClick={() => agreed && navigate('/auth/passcode?next=import')}
-                disabled={!agreed}
-                className="w-full flex items-center justify-center gap-3 bg-surface border border-border text-text-primary font-semibold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
-                <Download className="w-5 h-5" /> {login ? 'Log in with Wallet' : 'Import Existing Wallet'}
-              </button>
-            </>
+          {/* Personal and business alike: a new wallet, or one you already
+              have (its recovery phrase or private key). A brand-new wallet
+              never has an account - Create account only. */}
+          {!login && (
+            <button onClick={() => agreed && navigate('/auth/passcode?next=create')}
+              disabled={!agreed}
+              className="w-full flex items-center justify-center gap-3 bg-brand text-white font-semibold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
+              <Sparkles className="w-5 h-5" /> Create New Wallet
+            </button>
           )}
+          <button onClick={() => agreed && navigate('/auth/passcode?next=import')}
+            disabled={!agreed}
+            className="w-full flex items-center justify-center gap-3 bg-surface border border-border text-text-primary font-semibold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
+            <Download className="w-5 h-5" /> {login ? 'Log in with Wallet' : 'Import Existing Wallet'}
+          </button>
           <div className="flex items-center justify-center gap-2 pt-2">
             <motion.span
               animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
@@ -313,158 +253,6 @@ export function LoginPage() {
           </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-// ─── Google OAuth Callback ───────────────────────────────────────────────────
-// Reached after Google redirects back post-authentication (reuses the
-// existing /auth/google route - this used to just show a "coming soon"
-// toast and bounce back to /auth). Handles the existing/new-user
-// logic. Google is the only email-based sign-in (email codes were removed).
-// Another MeshPort account already uses this email, but this sign-in isn't
-// linked to it - never merged silently (see resolveAccountForSession).
-const ACCOUNT_CONFLICT_MESSAGE =
-  'This email already belongs to a MeshPort account that this sign-in isn\'t linked to. Sign in with the method you used to create that account.'
-
-/**
- * Applies the account-type rules to a Google / email-code sign-in once its
- * account is known. 'allow' → go on; otherwise the caller shows the notice
- * (the session is kept until the person picks an option, so "Continue as
- * Business" / "Log in as Personal" needs no second sign-in).
- */
-function decideForSession(existing: DbUser | null): AccessDecision {
-  return decideAccountAccess(getChosenKind(), foundAccountOf(existing), getAuthMode())
-}
-
-type BlockedDecision = Exclude<AccessDecision, { kind: 'allow' }>
-
-/** Shared by Google and email-code sign-in: the notice and what its buttons do. */
-function useSessionRuleNotice(enterExisting: () => void) {
-  const navigate = useNavigate()
-  const [blocked, setBlocked] = useState<BlockedDecision | null>(null)
-  const leave = async (to: { mode: AuthMode; kind: AccountKind | null }) => {
-    await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
-    setAuthIntent(to.mode, to.kind)
-    navigate('/auth', { replace: true })
-  }
-  const notice = blocked && (
-    <AccountRuleNotice
-      decision={blocked}
-      via="login"
-      onContinue={() => {
-        if (blocked.kind === 'no_account') { void leave({ mode: 'create', kind: null }); return }
-        // The account's real type, on the Log in path.
-        setAuthIntent('login', blocked.existing)
-        setBlocked(null)
-        enterExisting()
-      }}
-      onBack={() => { void leave({ mode: getAuthMode(), kind: getChosenKind() }) }}
-    />
-  )
-  return { notice, setBlocked }
-}
-
-export function GoogleAuthPage() {
-  const navigate = useNavigate()
-  const setUser = useAuthStore(s => s.setUser)
-  const setUsername = useAuthStore(s => s.setUsername)
-  const setLoginType = useAuthStore(s => s.setLoginType)
-  const [error, setError] = useState('')
-  const pending = useRef<(() => void) | null>(null)
-  const { notice, setBlocked } = useSessionRuleNotice(() => pending.current?.())
-
-  useEffect(() => {
-    (async () => {
-      const { data, error: sessionErr } = await supabase.auth.getSession()
-      const supaUser = data?.session?.user
-      if (sessionErr || !supaUser) {
-        setError('Google sign-in failed. Please try again.')
-        setTimeout(() => navigate('/auth', { replace: true }), 1500)
-        return
-      }
-
-      // The account this Google login belongs to - through the session's
-      // own binding only, never by matching emails (see
-      // resolveAccountForSession). Same lookup as the email-code login.
-      const resolved = await resolveAccountForSession(supaUser.id, supaUser.email)
-      if (resolved.kind === 'error') {
-        setError("Couldn't reach MeshPort. Please try again.")
-        setTimeout(() => navigate('/auth', { replace: true }), 2000)
-        return
-      }
-      if (resolved.kind === 'conflict') {
-        await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
-        setError(ACCOUNT_CONFLICT_MESSAGE)
-        setTimeout(() => navigate('/auth', { replace: true }), 5000)
-        return
-      }
-      const existing = resolved.kind === 'existing' ? resolved.user : null
-      // An account whose wallet is its Circle wallet opens with the Circle
-      // signer (Circle signed in with the same Google screen). Without a
-      // Circle session here, the account's own link says whether its wallet is
-      // a Circle wallet (the older device-kept ones aren't).
-      const circleMod = await import('@/wallet/circle')
-      const circleSigner = existing?.wallet_address
-        ? await circleMod.circleSignerFor(supaUser.id, existing.wallet_address).catch(() => null)
-        : null
-      const isCircle = !!circleSigner || (!!existing?.wallet_address && await circleMod.circleStatus()
-        .then(s => !!s.address && s.address.toLowerCase() === existing.wallet_address!.toLowerCase()).catch(() => false))
-
-      const enterExisting = () => {
-        if (!existing) return
-        setLoginType('social')
-        useWalletStore.getState().setBalance(0)
-        setUser(makeUser(existing.id, supaUser.email || '', {
-          username:      existing.username ? existing.username + '.arc' : '',
-          displayName:   existing.display_name,
-          walletAddress: existing.wallet_address,
-          avatar:        existing.avatar_url || null,
-        }))
-        if (existing.username) setUsername((existing.username || '').replace(/\.arc$/, ''))
-        // walletSource: 'social-auto' is set here (not just walletAddress) so
-        // restoreWallet.ts knows this account is eligible for the server-side
-        // key backup fallback if this device has no local key material.
-        if (existing.wallet_address) useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: isCircle ? 'circle' : 'social-auto' })
-        if (circleSigner && existing.wallet_address) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
-        // A new sign-in always unlocks the wallet with the passkey or
-        // Recovery QR - never a copy left on this device from before.
-        clearSocialDeviceState()
-        clearAuthIntent()
-        markReturningSignIn()
-        navigate('/auth/passcode?returning=1', { replace: true })
-      }
-      pending.current = enterExisting
-
-      // Account-type rules: Log in needs an account of the chosen type;
-      // only Create account makes a new one.
-      const decision = decideForSession(existing)
-      if (decision.kind !== 'allow') { setBlocked(decision); return }
-
-      if (existing) { enterExisting(); return }
-
-      // New user (Create account). No 'next' param here on purpose: PasscodeSetup routes
-      // loginType === 'social' straight to AutoWalletPage automatically, same
-      // as before - adding next=create here would incorrectly
-      // route through the manual create-wallet flow instead.
-      setLoginType('social')
-      setUser(makeUser(supaUser.id, supaUser.email || ''))
-      navigate('/auth/passcode', { replace: true })
-    })()
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
-  }, [])
-
-  if (notice) return notice
-  return (
-    <div className="flex flex-col items-center justify-center h-full bg-bg px-6 text-center">
-      {error ? (
-        <p role="alert" className="text-danger">{error}</p>
-      ) : (
-        <>
-          <Loader2 className="w-8 h-8 text-brand-text animate-spin mb-4" />
-          <p className="text-text-secondary">Signing you in…</p>
-        </>
-      )}
     </div>
   )
 }
@@ -703,9 +491,6 @@ export function ImportWalletPage() {
   const user = useAuthStore(s => s.user)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const existingWalletAddress = useAuthStore(s => s.walletAddress)
-  // Google / email sign-ins hold one MeshPort account per login, so switching
-  // that account to a different wallet (= a different account) can't work.
-  const isSocialLogin = useAuthStore(s => s.loginType) === 'social'
   const { setBalance } = useWalletStore()
   const { showToastMessage } = useUIStore()
   const [method, setMethod] = useState<'mnemonic' | 'privatekey'>('mnemonic')
@@ -730,7 +515,7 @@ export function ImportWalletPage() {
   // Set when the wallet's account doesn't fit the chosen path (see
   // src/lib/accountRules.ts). Nothing is saved until the person picks an option.
   const [blocked, setBlocked] = useState<{
-    decision: BlockedDecision
+    decision: Exclude<AccessDecision, { kind: 'allow' }>
     result: { address: string; signer: WalletAccount }
     walletSource: 'import-seed' | 'import-privkey'
   } | null>(null)
@@ -884,17 +669,10 @@ export function ImportWalletPage() {
             <p className="text-xs text-text-secondary font-mono break-all">Current: {existingWalletAddress}</p>
             <p className="text-xs text-text-secondary font-mono break-all">Importing: {mismatch.result.address}</p>
           </div>
-          {isSocialLogin ? (
-            <p className="text-sm text-text-secondary" role="note">
-              This login already has a MeshPort account, so it can't be switched to a different wallet.
-              Log in with this login to use your existing account, or use a different login for this wallet.
-            </p>
-          ) : (
-            <p className="text-sm text-text-secondary">
-              Switching will move you to this different wallet inside MeshPort. Your existing wallet isn't deleted -
-              it's just no longer the one this account uses.
-            </p>
-          )}
+          <p className="text-sm text-text-secondary">
+            Switching will move you to this different wallet inside MeshPort. Your existing wallet isn't deleted -
+            it's just no longer the one this account uses.
+          </p>
           <div className="flex flex-col gap-2">
             <button
               onClick={() => { discardImport(mismatch.result); setMismatch(null) }}
@@ -902,14 +680,12 @@ export function ImportWalletPage() {
             >
               Cancel - check my input again
             </button>
-            {!isSocialLogin && (
-              <button
-                onClick={() => finishImport(mismatch.result, mismatch.walletSource)}
-                className="w-full py-3 bg-surface border border-border rounded-2xl text-sm font-medium text-text-secondary"
-              >
-                Yes, switch to this wallet anyway
-              </button>
-            )}
+            <button
+              onClick={() => finishImport(mismatch.result, mismatch.walletSource)}
+              className="w-full py-3 bg-surface border border-border rounded-2xl text-sm font-medium text-text-secondary"
+            >
+              Yes, switch to this wallet anyway
+            </button>
           </div>
         </div>
       </div>
@@ -964,7 +740,6 @@ export function ClaimUsernamePage() {
   const setUser = useAuthStore(s => s.setUser)
   const user = useAuthStore(s => s.user)
   const walletAddress = useAuthStore(s => s.walletAddress)
-  const loginType = useAuthStore(s => s.loginType)
   const username = useAuthStore(s => s.username)
   const { showToastMessage } = useUIStore()
   const [handle, setHandle] = useState('')
@@ -1004,9 +779,7 @@ export function ClaimUsernamePage() {
         // BUG FIX (2026-09-03): this used to stop at id/username/
         // walletAddress and never carried over display_name/avatar_url,
         // even though `existing` already has both from the exact same
-        // query - GoogleAuthPage's equivalent restore (a few hundred lines
-        // up in this same file) does carry these over for social-auto
-        // accounts; this path just never matched it. A re-imported wallet
+        // query. A re-imported wallet
         // with a previously-set profile picture and display name was
         // silently reverting to blank/default on every fresh device or
         // reinstall, even though the real values were one field away.
@@ -1037,7 +810,7 @@ export function ClaimUsernamePage() {
   if (noAccount) {
     const startOver = (mode: AuthMode) => { logout(); setAuthIntent(mode, null); navigate('/auth', { replace: true }) }
     return (
-      <AccountRuleNotice decision={{ kind: 'no_account' }} via={loginType === 'social' ? 'login' : 'wallet'}
+      <AccountRuleNotice decision={{ kind: 'no_account' }} via="wallet"
         onContinue={() => startOver('create')} onBack={() => startOver('login')} />
     )
   }
@@ -1080,7 +853,7 @@ export function ClaimUsernamePage() {
       username: handle,
       displayName: user?.displayName || handle,
       walletAddress,
-      loginType: loginType === 'social' ? 'social' : 'wallet',
+      loginType: 'wallet',
     })
 
     if (error) {
@@ -1191,13 +964,3 @@ export function ClaimUsernamePage() {
   )
 }
 
-function GoogleIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24">
-      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-    </svg>
-  )
-}

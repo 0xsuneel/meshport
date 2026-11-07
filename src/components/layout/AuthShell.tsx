@@ -65,8 +65,8 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         // `overflow: hidden` (needed to keep the phone-width frame from
         // spilling on desktop) simply clipped the excess instead of a
         // scrollbar ever appearing. Reached via /terms, /privacy, /legal
-        // (this AuthShell path, for the public/pre-login/Google-OAuth-
-        // consent-screen links) but NOT via Profile → Support's nested
+        // (this AuthShell path, for the public/pre-login
+        // links) but NOT via Profile → Support's nested
         // in-app route (a different parent, AppLayout's own outlet, which
         // already provides this correctly) - exactly the "behaves
         // differently" symptom. display:flex + column here is what makes

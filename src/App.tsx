@@ -56,8 +56,6 @@ const NewsPage              = lazyRetry(() => import('./features/news/NewsPage')
 const NewsArticlePage       = lazyRetry(() => import('./features/news/NewsArticlePage').then(m => ({ default: m.NewsArticlePage })), 'NewsArticlePage')
 const BulkPayoutPage        = lazyRetry(() => import('./features/bulkpayout/BulkPayoutPage').then(m => ({ default: m.BulkPayoutPage })), 'BulkPayoutPage')
 const ProfilePage           = lazyRetry(() => import('./features/profile/ProfilePage').then(m => ({ default: m.ProfilePage })), 'ProfilePage')
-const CircleWalletPage      = lazyRetry(() => import('./features/profile/CircleWalletPage').then(m => ({ default: m.CircleWalletPage })), 'CircleWalletPage')
-const CircleLoginReturnPage = lazyRetry(() => import('./features/profile/CircleWalletPage').then(m => ({ default: m.CircleLoginReturnPage })), 'CircleLoginReturnPage')
 const SecurityPage          = lazyRetry(() => import('./features/profile/ProfileSubPages').then(m => ({ default: m.SecurityPage })), 'SecurityPage')
 const AppearancePage        = lazyRetry(() => import('./features/profile/ProfileSubPages').then(m => ({ default: m.AppearancePage })), 'AppearancePage')
 const BackupPage            = lazyRetry(() => import('./features/profile/ProfileSubPages').then(m => ({ default: m.BackupPage })), 'BackupPage')
@@ -70,7 +68,6 @@ const TermsPrivacyPage      = lazyRetry(() => import('./features/profile/TermsPr
 const HelpSupportPage       = lazyRetry(() => import('./features/profile/HelpSupportPage').then(m => ({ default: m.HelpSupportPage })), 'HelpSupportPage')
 const SwapPage              = lazyRetry(() => import('./features/swap/SwapPage').then(m => ({ default: m.SwapPage })), 'SwapPage')
 const LoginPage             = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.LoginPage })), 'LoginPage')
-const GoogleAuthPage        = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.GoogleAuthPage })), 'GoogleAuthPage')
 const CreateWalletPage      = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.CreateWalletPage })), 'CreateWalletPage')
 const ImportWalletPage      = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.ImportWalletPage })), 'ImportWalletPage')
 const WalletSetupPage       = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.WalletSetupPage })), 'WalletSetupPage')
@@ -78,7 +75,6 @@ const ClaimUsernamePage     = lazyRetry(() => import('./features/auth/AuthPages'
 const PasscodeSetupPage     = lazyRetry(() => import('./features/auth/PasscodeSetup').then(m => ({ default: m.PasscodeSetupPage })), 'PasscodeSetupPage')
 const PasscodeLockPage      = lazyRetry(() => import('./features/auth/PasscodeSetup').then(m => ({ default: m.PasscodeLockPage })), 'PasscodeLockPage')
 const EnableBiometricPage   = lazyRetry(() => import('./features/auth/EnableBiometricPage').then(m => ({ default: m.EnableBiometricPage })), 'EnableBiometricPage')
-const AutoWalletPage        = lazyRetry(() => import('./features/auth/AutoWalletPage').then(m => ({ default: m.AutoWalletPage })), 'AutoWalletPage')
 const LandingPage           = lazyRetry(() => import('./features/landing/LandingPage').then(m => ({ default: m.LandingPage })), 'LandingPage')
 // PayPage is the one route that most benefits from being kept as light as
 // possible - it's the page a brand-new visitor (no session, nothing cached)
@@ -262,7 +258,7 @@ function RootGate() {
  *
  * Guard matrix (what each route checks):
  *
- *  /auth, /auth/google  →  RequireNoAuth
+ *  /auth  →  RequireNoAuth
  *    - fully onboarded → /
  *    - partially through → next incomplete step
  *
@@ -271,7 +267,7 @@ function RootGate() {
  *    - passcode set → next step
  *    - not authenticated → /auth
  *
- *  /auth/wallet-setup, /auth/auto-wallet  →  RequireNoWallet
+ *  /auth/wallet-setup  →  RequireNoWallet
  *    - fully onboarded → /
  *    - wallet set → /auth/claim-username
  *    - no passcode → /auth/passcode
@@ -370,13 +366,9 @@ const router = createBrowserRouter([
   // Wrapped in AuthShell so the whole login/register flow stays phone-width
   // and centered on desktop instead of stretching full browser width.
   { path: '/auth',                element: <AuthShell><RequireNoAuth><LoginPage /></RequireNoAuth></AuthShell> },
-  { path: '/auth/google',         element: <AuthShell><RequireNoAuth><GoogleAuthPage /></RequireNoAuth></AuthShell> },
-  // Email-code sign-in was removed (Google only): old links land on sign-in.
-  { path: '/auth/email',          element: <Navigate to="/auth" replace /> },
   { path: '/auth/passcode',       element: <AuthShell><RequireNoPasscode><PasscodeSetupPage /></RequireNoPasscode></AuthShell> },
   { path: '/auth/enable-biometric', element: <AuthShell><RequireUnlocked><EnableBiometricPage /></RequireUnlocked></AuthShell> },
   { path: '/auth/lock',           element: <AuthShell><PasscodeLockPage /></AuthShell> },
-  { path: '/auth/auto-wallet',    element: <AuthShell><RequireNoWallet><AutoWalletPage /></RequireNoWallet></AuthShell> },
   { path: '/auth/wallet-setup',   element: <AuthShell><RequireNoWallet><WalletSetupPage /></RequireNoWallet></AuthShell> },
   { path: '/auth/create-wallet',  element: <AuthShell><CreateWalletPage /></AuthShell> },
   { path: '/auth/import-wallet',  element: <AuthShell><ImportWalletPage /></AuthShell> },
@@ -397,16 +389,12 @@ const router = createBrowserRouter([
   // ── Public legal page - no auth required, so it can be linked from the
   //    registration screen before someone has an account ────────────────────
   { path: '/legal',   element: <AuthShell><TermsPrivacyPage /></AuthShell> },
-  // Same page, direct links - Google's OAuth consent screen verification
-  // wants a distinct URL for each document, not one combined page with
-  // tabs. TermsPrivacyPage reads the path itself to land on the right tab.
+  // Same page, direct links - one URL per document. TermsPrivacyPage reads
+  // the path itself to land on the right tab.
   { path: '/terms',   element: <AuthShell><TermsPrivacyPage /></AuthShell> },
   { path: '/privacy', element: <AuthShell><TermsPrivacyPage /></AuthShell> },
   // Public Feature Guide - linked from the landing page, no account needed.
   { path: '/guide',   element: <div className="fixed inset-0 flex flex-col bg-bg"><FeatureGuidePage isPublic /></div> },
-  // Google sends Circle sign-ins back here (src/wallet/circle.ts): outside
-  // the app's gates, which could redirect away and lose the result in the URL.
-  { path: '/wallet/circle-login', element: <CircleLoginReturnPage /> },
 
   // ── Admin Control Panel ──────────────────────────────────────────────────────
   { path: ADMIN_PATH, element: <Navigate to={`${ADMIN_PATH}/login`} replace /> },
@@ -512,7 +500,6 @@ const router = createBrowserRouter([
       { path: 'p2p/my-offers',              element: <Unlocked title="P2P"><P2PMyOffersPage /></Unlocked> },
       { path: 'p2p/my-trades',              element: <Unlocked title="P2P"><P2PMyTradesPage /></Unlocked> },
       { path: 'p2p/history',                element: <Unlocked title="P2P"><P2PHistoryPage /></Unlocked> },
-      { path: 'circle-wallet',              element: <Unlocked title="Circle wallet"><CircleWalletPage /></Unlocked> },
       { path: 'swap',                        element: <Unlocked title="Swap"><FeatureGate feature="swap_enabled"><SwapPage /></FeatureGate></Unlocked> },
       { path: 'activity/:id',               element: <TransactionDetailPage /> },
     ],

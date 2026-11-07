@@ -1,6 +1,4 @@
 import { backLayerPop } from '@/lib/backLayers'
-import { expressCoversTransfer, fastPayEnabled } from '@/lib/fastPay'
-import { transferIntent } from '@/lib/approvalIntents'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
@@ -1165,12 +1163,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // both routes are available, otherwise whichever single route the admin
   // left enabled. Defaults to UB (today's existing default) until the user
   // opens the picker and chooses CCTP v2 instead.
-  // Default when both are on: Express (over CCTP - no Circle signature) when
-  // it covers this amount, else Unified Balance. The person can still pick.
-  const expressFirst = !isTokenRoute && numAmount > 0 && !!senderAddress && fastPayEnabled() && expressCoversTransfer(senderAddress, numAmount * 1.01 + 0.1)
   const effectiveUb = isTokenRoute ? false // EURC / cirBTC: CCTPx only
     : availableMechanisms.length > 1
-    ? (selectedRoute ?? (expressFirst ? 'cctp' : 'ub')) === 'ub'
+    ? (selectedRoute ?? 'ub') === 'ub'
     : availableMechanisms[0] === 'ub'
   // The destination chips: every enabled chain for USDC; for EURC / cirBTC
   // only the enabled chains Circle supports that token on (with Arc).
@@ -2262,9 +2257,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // Where MeshPort's relayer delivers (gatewaySelfMintsTo), Circle's kit
         // still signs a gatewayMint transaction through the destination adapter
         // - a signature the relayed provider throws away (it sends only the
-        // call's target and data, from the relayer: lib/relayedProvider). With
-        // a Circle wallet that cost a full Circle signature (~3.5 s, field
-        // 1 Nov). The burn intent's destinationCaller is zero (anyone may
+        // call's target and data, from the relayer: lib/relayedProvider). The burn intent's destinationCaller is zero (anyone may
         // mint - provider-gateway-v1 createBurnIntentFromAlloc) and Circle's
         // attestation fixes recipient and amount, so the destination adapter
         // is a throwaway key made in memory for this transfer: no funds, never
@@ -4271,7 +4264,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         subtitle={desktopInput ? `To ${chain.name}` : `Authorise ${tokenChar}${fmtTok(numAmount)} ${tokenSym} to ${chain.name}`}
         amountLabel={`${tokenChar}${fmtTok(numAmount)} ${tokenSym}`} placement="panel"
         card={{ label: 'Sending to', name: chain.name, amount: `${tokenChar}${fmtTok(numAmount)}`, unit: tokenSym }} bioVerb="Transfer"
-        intent={tokenSym === 'USDC' ? transferIntent(chain.sdk, address, numAmount) : undefined}
         value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }} error={passError || undefined}
         onComplete={(_, viaBiometric) => { if (!loading) { setPaidViaBiometric(!!viaBiometric); handleConfirm() } }}
         // Right passcode → the processing page comes in over the sheet.

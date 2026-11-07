@@ -147,27 +147,6 @@ const ROUTER_ABI = [
   },
 ] as const
 
-// MeshPortRouter's Express Bring (contracts/MeshPortRouter.sol).
-const EXPRESS_ARGS = { type: 'tuple', components: [
-  { name: 'owner', type: 'address' }, { name: 'token', type: 'address' }, { name: 'amount', type: 'uint256' },
-  { name: 'fee', type: 'uint256' }, { name: 'maxFee', type: 'uint256' }, { name: 'minFinalityThreshold', type: 'uint32' },
-  { name: 'hookData', type: 'bytes' }, { name: 'salt', type: 'bytes32' }, { name: 'deadline', type: 'uint256' },
-] } as const
-const EXPRESS_ROUTER_ABI = [
-  { type: 'function', name: 'bringKeys', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ name: 'key', type: 'address' }, { name: 'expiry', type: 'uint64' }] },
-  { type: 'function', name: 'bringKeyNonces', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'setBringKey', stateMutability: 'nonpayable', outputs: [],
-    inputs: [{ name: 'owner', type: 'address' }, { name: 'key', type: 'address' }, { name: 'expiry', type: 'uint64' }, { name: 'sig', type: 'bytes' }] },
-  { type: 'function', name: 'expressBring', stateMutability: 'nonpayable', outputs: [{ type: 'bytes32' }],
-    inputs: [{ name: 'b', ...EXPRESS_ARGS }, { name: 'keySig', type: 'bytes' }] },
-] as const
-const USDC_PERMIT_ABI = [
-  { type: 'function', name: 'nonces', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'allowance', stateMutability: 'view', inputs: [{ type: 'address' }, { type: 'address' }], outputs: [{ type: 'uint256' }] },
-  { type: 'function', name: 'permit', stateMutability: 'nonpayable', outputs: [],
-    inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }, { name: 'value', type: 'uint256' },
-      { name: 'deadline', type: 'uint256' }, { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] },
-] as const
 
 const USDC_ABI = [
   { type: 'function', name: 'name', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
@@ -269,11 +248,6 @@ function spendBlock(canSpend: boolean | null | undefined): { status: number; err
   if (canSpend === true) return null
   if (canSpend === false) return { status: 403, error: ACCOUNT_LOCKED_ERROR }
   return { status: 503, error: 'Could not check your account - please try again' }
-}
-
-/** The caller's Supabase session must own `address`. */
-async function sessionOwns(req: VercelRequest, address: string): Promise<boolean> {
-  return (await sessionWallet(req)) === address.toLowerCase()
 }
 
 /** Receipt polling interval: Arc finalizes in under a second. */
@@ -573,37 +547,11 @@ export function cctpMessageParts(message: string): { destinationDomain: number; 
     messageSender: '0x' + word(248).slice(24),
   }
 }
-const PERMIT2_ADDR = '0x000000000022d473030f116ddee9f6b43ac78ba3'
-const expressKeyCache = new Map<string, { ok: boolean; exp: number }>()
-/** Whether `key` is (or ever was) an Express key of `owner`: the owner signed it a Permit2 grant on Arc. */
-async function isExpressKeyOf(owner: string, key: string): Promise<boolean> {
-  const ck = `${owner}:${key}`
-  const hit = expressKeyCache.get(ck)
-  if (hit && hit.exp > Date.now()) return hit.ok
-  let ok = false
-  const cl = await callClients('Arc_Testnet').catch(() => null)
-  if (cl) {
-    const pad = (a: string) => a.slice(2).toLowerCase().padStart(64, '0')
-    for (const token of [ARC_USDC_ERC20, '0x89b50855aa3be2f677cd6303cec089b5f319d72a', '0xf0c4a4ce82a5746abaad9425360ab04fbba432bf']) {
-      try {
-        const out = String(await cl.pub.request({ method: 'eth_call', params: [{ to: PERMIT2_ADDR, data: '0x927da105' + pad(owner) + pad(token) + pad(key) }, 'latest'] }))
-        // (amount, expiration, nonce). The nonce counts the owner's signed
-        // grants to this key and never goes back: above 0, the owner made it
-        // their Express key at some point - true for good, so a transfer it
-        // burned can still be finished (Recover) long after the session ended.
-        // (7 Nov: an expiry-based check refused Recover once the session was over.)
-        if (out.length >= 2 + 192 && BigInt('0x' + out.slice(130, 194)) > 0n) { ok = true; break }
-      } catch { /* next token */ }
-    }
-  }
-  expressKeyCache.set(ck, { ok, exp: Date.now() + (ok ? 60_000 : 10_000) })
-  return ok
-}
 /**
  * Null when the relayer may pay the gas to mint `message` for `caller`, else
  * why not. On Arc any attested message (a Bring; Arc gas is ~$0.005). Elsewhere
  * only burns MeshPort is paid for or that are the caller's own: from a
- * MeshPort router, the caller's wallet, or the caller's Express key - not any
+ * MeshPort router or the caller's wallet - not any
  * attested message (the relayer's destination gas, ~$0.0006+ on Ethereum).
  */
 export async function mintRefusal(chainKey: string, message: string, caller: string): Promise<string | null> {
@@ -613,7 +561,6 @@ export async function mintRefusal(chainKey: string, message: string, caller: str
   const sender = m.messageSender.toLowerCase()
   const known = new Set([...Object.values(routers()), arcRouter() ?? ''].map(a => a.toLowerCase()).filter(Boolean))
   if (known.has(sender) || sender === caller.toLowerCase()) return null
-  if (await isExpressKeyOf(caller.toLowerCase(), sender)) return null
   return 'This transfer was not sent through MeshPort'
 }
 
@@ -992,58 +939,6 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
     const t = timing('pending', { ...base, receiptMs: Date.now() - sentAt })
     return res.status(200).json({ txHash, pending: true, timing: t })
   }
-}
-
-// ── Fast Pay gas float (src/lib/fastPay.ts) ─────────────────────────────────
-// A Fast Pay session key is a fresh, empty address; Arc gas is USDC, so it
-// needs a little to send the session's permits and payments (~0.0016 USDC
-// each at 20 gwei). The relayer gives it FASTPAY_GAS_WEI once. Guards: a
-// signed-in account only, the shared relay rate limit, a per-account daily
-// cap, and only an address with no code and less than the float already.
-// The float can only pay gas - the session key's spending power over the
-// user's USDC comes from their own Permit2 grant, not from this. It is a
-// loan: each payment refunds its own gas (and the first one the set-up's)
-// from the user's allowance, and the key sends what's left back to this
-// relayer when the session ends (src/lib/fastPay.ts). 0.015 covers the
-// set-up (~0.003) and a payment's upfront gas reservation (~0.0066 at the
-// fee cap) before the first refund arrives.
-const FASTPAY_GAS_WEI = 15_000_000_000_000_000n // 0.015 USDC (18-decimal native)
-const FASTPAY_GAS_PER_DAY = 12
-const _fastPayGasHits = new Map<string, number[]>()
-function allowFastPayGas(wallet: string): boolean {
-  const now = Date.now(), day = 24 * 60 * 60_000
-  const hits = (_fastPayGasHits.get(wallet) || []).filter(t => now - t < day)
-  if (hits.length >= FASTPAY_GAS_PER_DAY) return false
-  hits.push(now)
-  _fastPayGasHits.set(wallet, hits)
-  return true
-}
-
-async function fastPayGas(req: VercelRequest, res: VercelResponse) {
-  const address = String((req.body as any)?.address || '')
-  if (!isHex(address, 20)) return res.status(400).json({ error: 'Malformed address' })
-  const session = await sessionInfo(req)
-  const caller = session?.wallet ?? null
-  if (!caller) return res.status(403).json({ error: 'Not signed in' })
-  if (!allowRelay(caller)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
-  const cl = await callClients('Arc_Testnet')
-  if (!cl) return res.status(400).json({ error: 'Arc is not configured' })
-  if (!cl.wallet) return res.status(503).json({ error: 'Relayer is not configured' })
-  const [code, balance] = await Promise.all([
-    cl.pub.getCode({ address }).catch(() => undefined),
-    cl.pub.getBalance({ address }) as Promise<bigint>,
-  ])
-  if (code && code !== '0x') return res.status(400).json({ error: 'Not a session key' })
-  const from = cl.wallet.account.address as string // where the leftover goes back
-  if (balance >= FASTPAY_GAS_WEI) return res.status(200).json({ funded: false, from })
-  if (!allowFastPayGas(caller)) return res.status(429).json({ error: 'Fast Pay gas limit reached for today' })
-  const txHash = await cl.wallet.sendTransaction({ to: address, value: FASTPAY_GAS_WEI - balance, ...(await relayFees(cl.pub, cl.pub.chain.id)) })
-  try {
-    const receipt = await cl.pub.waitForTransactionReceipt({ hash: txHash, timeout: 20_000 })
-    if (receipt.status !== 'success') return res.status(502).json({ error: 'Gas transfer reverted', txHash })
-  } catch { return res.status(200).json({ funded: true, txHash, pending: true, from }) }
-  console.log(`[fastpay gas] funded ${address.slice(0, 10)}… for ${caller.slice(0, 10)}…`)
-  return res.status(200).json({ funded: true, txHash, from })
 }
 
 type IrisFeeRow = { finalityThreshold: number; minimumFee: number; forwardFee?: number | { low?: number; med?: number; high?: number } }
@@ -1738,120 +1633,6 @@ async function transferMint(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({ relayer, destGas: (destGas ?? 0n).toString(), forwardFee: forwardFee?.toString() ?? null })
 }
 
-// ── Express Bring (MeshPortRouter.expressBring) ──────────────────────────────
-// Set up once per chain (two of the owner's signatures, submitted here): USDC's
-// EIP-2612 permit for the router, and setBringKey. Then a Bring is the Bring
-// key's signature alone (after the passcode, in the wallet frame); the router
-// sends it only to the owner's own Arc wallet with a capped fee.
-
-/** GET ?action=express_state&chain=&owner= → is Express Bring set up there (public chain data). */
-async function expressState(req: VercelRequest, res: VercelResponse) {
-  const chainKey = String(req.query.chain || '')
-  const owner = String(req.query.owner || '')
-  const router = routers()[chainKey]
-  if (!CHAINS[chainKey] || !router || !isHex(owner, 20)) return res.status(400).json({ error: 'Unknown chain or wallet' })
-  const { pub } = await clients(chainKey)
-  try {
-    const [[key, expiry], nonce, allowance, permitNonce] = await Promise.all([
-      pub.readContract({ address: router, abi: EXPRESS_ROUTER_ABI, functionName: 'bringKeys', args: [owner] }) as Promise<readonly [string, bigint]>,
-      pub.readContract({ address: router, abi: EXPRESS_ROUTER_ABI, functionName: 'bringKeyNonces', args: [owner] }) as Promise<bigint>,
-      pub.readContract({ address: CHAINS[chainKey].usdc, abi: USDC_PERMIT_ABI, functionName: 'allowance', args: [owner, router] }) as Promise<bigint>,
-      pub.readContract({ address: CHAINS[chainKey].usdc, abi: USDC_PERMIT_ABI, functionName: 'nonces', args: [owner] }) as Promise<bigint>,
-    ])
-    return res.status(200).json({ router, key, expiry: Number(expiry), keyNonce: nonce.toString(), allowance: allowance.toString(), permitNonce: permitNonce.toString(), chainId: CHAINS[chainKey].id })
-  } catch (e: any) {
-    // A router from before Express Bring has no bringKeys: not available on this chain yet.
-    return res.status(200).json({ router, unsupported: true })
-  }
-}
-
-/** POST { action:'express_setup', chain, permit?, bringKey } - the owner's two signatures, submitted (relayer gas). */
-async function expressSetup(req: VercelRequest, res: VercelResponse) {
-  const { chain: chainKey, permit: pm, bringKey: bk } = (req.body ?? {}) as any
-  const router = routers()[chainKey]
-  if (!CHAINS[chainKey] || !router) return res.status(400).json({ error: 'Express Bring is not available for this chain' })
-  const session = await sessionInfo(req)
-  if (!session) return res.status(403).json({ error: 'Not signed in' })
-  // Each set-up costs the relayer two transactions (audit 7 Nov M8).
-  if (!allowRelay(session.wallet)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
-  const owner = session.wallet as `0x${string}`
-  if (!bk || !isHex(bk.key, 20) || !isUint(bk.expiry) || !isHex(bk.sig)) return res.status(400).json({ error: 'Malformed bring key' })
-  const expiry = Number(bk.expiry)
-  if (expiry > Math.floor(Date.now() / 1000) + 31 * 86400) return res.status(400).json({ error: 'A Bring key lasts at most 31 days' })
-  const { pub, wallet } = await clients(chainKey)
-  if (!wallet) return res.status(503).json({ error: 'Relayer is not configured' })
-  const fees = await relayFees(pub, pub.chain.id)
-  const sent: string[] = []
-  // 1. USDC's own permit for the router (when given) - the most the router may pull.
-  if (pm) {
-    if (!isUint(pm.value) || !isUint(pm.deadline) || !isHex(pm.signature, 65)) return res.status(400).json({ error: 'Malformed permit' })
-    if (BigInt(pm.value) > 1_000_000_000n) return res.status(400).json({ error: 'Express allowance is at most 1000 USDC' })
-    const { parseSignature } = await import('viem')
-    const sig = parseSignature(pm.signature)
-    const v = sig.v !== undefined ? Number(sig.v) : 27 + (sig.yParity ?? 0)
-    const { request } = await pub.simulateContract({ account: wallet.account, address: CHAINS[chainKey].usdc, abi: USDC_PERMIT_ABI, functionName: 'permit',
-      args: [owner, router, BigInt(pm.value), BigInt(pm.deadline), v, sig.r, sig.s] })
-      .catch((e: any) => { throw Object.assign(new Error(e?.shortMessage || 'USDC permit would fail'), { status: 400 }) })
-    const h = await wallet.writeContract({ ...request, ...fees })
-    sent.push(h)
-    const rc = await pub.waitForTransactionReceipt({ hash: h, timeout: 40_000 })
-    if (rc.status !== 'success') return res.status(502).json({ error: 'USDC permit reverted', txHash: h })
-  }
-  // 2. The Bring key.
-  const { request } = await pub.simulateContract({ account: wallet.account, address: router, abi: EXPRESS_ROUTER_ABI, functionName: 'setBringKey',
-    args: [owner, bk.key, BigInt(expiry), bk.sig] })
-    .catch((e: any) => { throw Object.assign(new Error(e?.shortMessage || 'Bring key would be refused'), { status: 400 }) })
-  const h = await wallet.writeContract({ ...request, ...fees })
-  sent.push(h)
-  const rc = await pub.waitForTransactionReceipt({ hash: h, timeout: 40_000 })
-  if (rc.status !== 'success') return res.status(502).json({ error: 'Bring key reverted', txHash: h })
-  return res.status(200).json({ ok: true, txHashes: sent })
-}
-
-/** POST { action:'express_bring', chain, bring, keySig } - an Express Bring, checked and sent; the relayer mints on Arc for a hookless one. */
-async function expressBringRelay(req: VercelRequest, res: VercelResponse) {
-  const startedAt = Date.now()
-  const { chain: chainKey, bring: b, keySig } = (req.body ?? {}) as any
-  const router = routers()[chainKey]
-  if (!CHAINS[chainKey] || !router) return res.status(400).json({ error: 'Express Bring is not available for this chain' })
-  if (!b || !isHex(b.owner, 20) || !isHex(b.token, 20) || !isUint(b.amount) || !isUint(b.fee) || !isUint(b.maxFee) || !isHex(b.salt, 32) || !isHex(b.hookData) || !isUint(b.deadline) || !isHex(keySig))
-    return res.status(400).json({ error: 'Malformed bring' })
-  if (String(b.token).toLowerCase() !== CHAINS[chainKey].usdc.toLowerCase()) return res.status(400).json({ error: 'Only USDC can be brought' })
-  if (![1000, 2000].includes(Number(b.minFinalityThreshold))) return res.status(400).json({ error: 'Unsupported finality' })
-  const hook = String(b.hookData).toLowerCase()
-  if (hook !== '0x' && hook !== FORWARD_HOOK) return res.status(400).json({ error: 'Unsupported hook' })
-  const relayerMints = hook === '0x'
-  const session = await sessionInfo(req)
-  if (!session || session.wallet !== String(b.owner).toLowerCase()) return res.status(403).json({ error: 'Not signed in to this wallet' })
-  if (!allowRelay(session.wallet)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
-  const block = spendBlock(session.canSpend)
-  if (block) return res.status(block.status).json({ error: block.error })
-  const amount = BigInt(b.amount), fee = BigInt(b.fee), maxFee = BigInt(b.maxFee)
-  const q = await quote(chainKey, amount + fee)
-  if (relayerMints && !q.direct) return res.status(409).json({ error: 'Please try again', retryQuote: true })
-  const want = relayerMints && q.direct ? q.direct : q
-  if (!feeAcceptable(fee, want.fee, want.gasCost)) return res.status(400).json({ error: 'Fee too low - please try again' })
-  if (maxFee * 100n < want.maxFee * 80n) return res.status(400).json({ error: 'Bridge fee too low - please try again' })
-  const { pub, wallet } = await clients(chainKey)
-  if (!wallet) return res.status(503).json({ error: 'Relayer is not configured' })
-  const args = { owner: b.owner, token: b.token, amount, fee, maxFee, minFinalityThreshold: Number(b.minFinalityThreshold), hookData: (relayerMints ? '0x' : FORWARD_HOOK) as `0x${string}`, salt: b.salt, deadline: BigInt(b.deadline) }
-  // Simulated first: a bad key signature, a used one or too little allowance costs nothing.
-  const { request } = await pub.simulateContract({ account: wallet.account, address: router, abi: EXPRESS_ROUTER_ABI, functionName: 'expressBring', args: [args, keySig] })
-    .catch((e: any) => { throw Object.assign(new Error(e?.shortMessage || 'Bring would fail'), { status: 400 }) })
-  const txHash = await wallet.writeContract({ ...request, ...(await relayFees(pub, pub.chain.id)) })
-  const startMint = () => { if (relayerMints) waitUntil(mintOnArcAfterBurn(chainKey, txHash, startedAt + 55_000).catch(e => console.error('[bridge-relay] arc mint failed', e?.shortMessage || e?.message || e))) }
-  try {
-    const rc = await pub.waitForTransactionReceipt({ hash: txHash, timeout: 40_000 })
-    if (rc.status !== 'success') return res.status(502).json({ error: 'Transaction reverted', txHash })
-    startMint()
-    console.log('[bridge-relay] express bring', JSON.stringify({ chain: chainKey, ms: Date.now() - startedAt, mint: relayerMints ? 'relayer' : 'circle' }))
-    return res.status(200).json({ txHash, mint: relayerMints ? 'relayer' : 'circle' })
-  } catch {
-    startMint()
-    return res.status(200).json({ txHash, pending: true, mint: relayerMints ? 'relayer' : 'circle' })
-  }
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Content-Type', 'application/json')
   res.setHeader('Cache-Control', 'no-store')
@@ -1940,7 +1721,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const quoteIp = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown'
       if (!allowQuote(quoteIp)) return res.status(429).json({ error: 'Too many requests - try again shortly' })
       if (req.query.action === 'token_quote') return await tokenQuote(req, res)
-      if (req.query.action === 'express_state') return await expressState(req, res)
       if (req.query.action === 'transfer_mint') return await transferMint(req, res)
       const chainKey = String(req.query.chain || '')
       const total = String(req.query.amount || '')
@@ -2007,12 +1787,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if ((req.body as any)?.action === 'call') return await relayCall(req, res)
-    if ((req.body as any)?.action === 'fastpay_gas') return await fastPayGas(req, res)
     if ((req.body as any)?.action === 'token_relay') return await tokenRelay(req, res)
     if ((req.body as any)?.action === 'arc_transfer') return await arcTransfer(req, res)
     if ((req.body as any)?.action === 'transfer_mint_start') return await transferMintStart(req, res)
-    if ((req.body as any)?.action === 'express_setup') return await expressSetup(req, res)
-    if ((req.body as any)?.action === 'express_bring') return await expressBringRelay(req, res)
 
     // ── Relay ────────────────────────────────────────────────────────────
     const RELAY_STARTED_AT = Date.now()
