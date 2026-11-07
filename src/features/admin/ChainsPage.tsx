@@ -20,6 +20,7 @@ import {
   CHAIN_TRANSFER_FEATURE_MAP, CHAIN_CLAIM_FEATURE_MAP, transferKeys, bringKeys, settleKey,
   type AccountKind,
 } from '@/lib/featureFilters'
+import { UB_CLAIM_CHAINS } from '@/lib/ubChains'
 import { canBringOverCctp } from '@/lib/gaslessBridge'
 
 type Flow = 'transfer' | 'bring' | 'settle'
@@ -46,12 +47,12 @@ function entries(settings: Record<string, AppSetting>, kind: AccountKind, flow: 
   if (flow === 'bring') {
     return BRING_IDS.map(id => {
       const k = bringKeys(kind, id)
-      const cctp = canBringOverCctp(id)
-      // Bring is CCTP only (Unified Balance is for Transfer).
+      const ub = UB_CLAIM_CHAINS.has(id), cctp = canBringOverCctp(id)
       return {
         id, name: nameOf(settings[CHAIN_CLAIM_FEATURE_MAP[id]], id), chainKey: k.chain, reason: true,
         routes: [
-          { label: 'CCTP', key: k.cctp, supported: cctp, note: cctp ? 'Only route' : 'No gasless router on this chain' },
+          { label: 'Unified Balance', key: k.ub, supported: ub, note: ub ? (kind === 'business' ? 'Not for approved merchants' : undefined) : 'Not supported on this chain' },
+          { label: 'CCTP', key: k.cctp, supported: cctp, note: cctp ? undefined : 'No gasless router on this chain' },
         ],
       }
     })

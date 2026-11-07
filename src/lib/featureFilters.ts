@@ -177,7 +177,7 @@ export function settleKey(sdkChainId: string): string | null {
  * as they were. While off, a chain that offered UB sends over CCTP instead,
  * unless an admin turned that chain's CCTP off.
  */
-export const TRANSFER_UB_ENABLED = false
+export const TRANSFER_UB_ENABLED = true
 
 export function transferRoutes(settings: SettingsMap, chainId: string, kind: AccountKind = 'personal', opts: { ub?: boolean } = {}): Route[] {
   const k = transferKeys(kind, chainId)
@@ -186,7 +186,9 @@ export function transferRoutes(settings: SettingsMap, chainId: string, kind: Acc
   if (!(opts.ub ?? TRANSFER_UB_ENABLED)) return on(settings, k.cctp, true) ? ['cctp'] : []
   const routes: Route[] = []
   if (on(settings, k.ub)) routes.push('ub')
-  if (on(settings, k.cctp, CCTP_DEFAULT_ON.has(chainId))) routes.push('cctp')
+  // Both routes by default now that Unified Balance is back (7 Nov): CCTP
+  // carries Express (no Circle signature); an admin can still turn either off.
+  if (on(settings, k.cctp, true)) routes.push('cctp')
   return routes
 }
 
@@ -208,7 +210,7 @@ export function isChainEnabledForTransfer(settings: SettingsMap, chainId: string
  * admin switches. Money already in a Unified Balance is still recovered
  * (Recover / spendUnifiedToArc), and merchants' Claim All is CCTP anyway.
  */
-export const BRING_UB_ENABLED = false
+export const BRING_UB_ENABLED = true
 
 export function bringRoutes(settings: SettingsMap, sdkChainId: string, kind: AccountKind = 'personal',
   can: { ub: boolean; cctp: boolean } = { ub: true, cctp: true }, opts: { ub?: boolean } = {}): Route[] {
