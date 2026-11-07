@@ -655,7 +655,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
       }
       // Not swapped: tokenIn back to the wallet, then the normal way.
       if (await ex.finish(true)) {
-        void import('./errorReport').then(m => m.reportPerf(`[perf express swap] normal way: ${String((e as any)?.message ?? e).slice(0, 140)}`)).catch(() => {})
+        void import('./errorReport').then(m => m.reportPerf(`[perf express swap] normal way: ${String((e as any)?.message ?? e).slice(0, 260)}`)).catch(() => {})
         return null
       }
       throw Object.assign(new Error("The swap couldn't finish and your tokens are held for you - check Activity or contact support before trying again."), { isUncertain: true, isLiquidity: false })
