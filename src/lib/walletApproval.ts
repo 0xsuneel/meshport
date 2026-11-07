@@ -18,7 +18,8 @@ import { FRAME_PASSCODE, WALLET_UNAVAILABLE, onPasscodeVerified, setFramePasscod
 const FRAME_SOURCES = new Set(['create', 'import-seed', 'import-privkey'])
 // A little under the frame's own 2 minutes, so a job that starts never runs out.
 const FRESH_MS = 100_000
-let approvedAt = 0
+// Per wallet: an approval for one wallet says nothing about another.
+const approvedAt = new Map<string, number>()
 
 function frameWallet(): string | null {
   const { walletAddress, walletSource } = useAuthStore.getState()
@@ -27,7 +28,7 @@ function frameWallet(): string | null {
 
 /**
  * Hand the passcode to the frame. `required`: the frame really checked it
- * (this wallet has a passcode there). `error` is the frame's code when it
+ * (the frame always does now). `error` is the frame's code when it
  * refused it.
  */
 export async function approveWallet(passcode: string): Promise<{ ok: boolean; required?: boolean; error?: string; lockedForMs?: number }> {
@@ -36,7 +37,7 @@ export async function approveWallet(passcode: string): Promise<{ ok: boolean; re
   try {
     const { approveFrameWallet } = await import('@/wallet')
     const { required } = await approveFrameWallet(address, passcode)
-    approvedAt = Date.now()
+    approvedAt.set(address.toLowerCase(), Date.now())
     return { ok: true, required }
   } catch (e) {
     const { code, lockedForMs } = e as { code?: string; lockedForMs?: number }
@@ -72,7 +73,8 @@ onPasscodeVerified(async passcode => {
 
 /** An approval from the last ~2 minutes is in place (background work may sign). */
 export function approvalFresh(): boolean {
-  return !frameWallet() || Date.now() - approvedAt < FRESH_MS
+  const address = frameWallet()
+  return !address || Date.now() - (approvedAt.get(address.toLowerCase()) ?? 0) < FRESH_MS
 }
 
 // ── The shared passcode sheet ────────────────────────────────────────────────

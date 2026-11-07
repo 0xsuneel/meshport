@@ -19,7 +19,7 @@ const LEGACY_SHOW_MS = 900
 export function WalletSecretFrame({ address, what, passcode, height, onError }: {
   address: string
   what: 'mnemonic' | 'privateKey'
-  /** Needed for the recovery phrase (it's kept passcode-encrypted in the frame). */
+  /** The passcode just entered: the frame checks it before showing either secret. */
   passcode?: string
   height?: number
   onError?: (e: WalletFrameError | Error) => void

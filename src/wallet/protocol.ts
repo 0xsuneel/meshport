@@ -58,17 +58,20 @@ export interface WalletRpc {
   unlock: [{ address: string; passcode?: string }, { unlocked: boolean; lockedForMs: number }]
   /** Re-encrypt this device's copy under a new passcode (key must be open). */
   'set-passcode': [{ address: string; passcode: string; oldPasscode?: string }, { ok: true }]
-  /** Confirm-word check after backup: { wordIndex: word }. */
+  /**
+   * Confirm-word check after backup: { wordIndex: word }, 3+ positions.
+   * Pass / fail for the whole set only (`wrong` is always empty).
+   */
   'mnemonic:check': [{ address: string; answers: Record<number, string> }, { ok: boolean; wrong: number[] }]
   /**
    * One-time ticket for reveal.html to show a secret inside the frame.
-   * The recovery phrase needs the passcode (it's kept passcode-encrypted).
+   * Both need the passcode (or, for the key, an approval from the last 2 minutes).
    */
   'reveal:grant': [{ address: string; what: 'mnemonic' | 'privateKey'; passcode?: string }, { ticket: string }]
   /**
    * The person just entered the passcode (or a fingerprint released it): the
    * frame checks it itself and then signs value-moving requests for
-   * APPROVAL_MS. `required: false` - this wallet has no passcode here.
+   * APPROVAL_MS. A wallet with no passcode on this device takes this one.
    */
   approve: [{ address: string; passcode: string }, { approved: true; required: boolean; validForMs: number }]
   'sign:message': [{ address: string; message: string | { raw: Hex } }, { signature: Hex }]
@@ -82,8 +85,8 @@ export interface WalletRpc {
   'solana:sign': [{ address: string; message: Hex }, { signature: Hex }]
   /** Close the open key(s) in memory and this tab's session copy. */
   lock: [{ address?: string }, { ok: true }]
-  /** Logout: also delete this browser's sealed device copy. Passcode copies stay. */
-  forget: [{ address?: string; everything?: boolean }, { ok: true }]
+  /** Logout: close the key here and in other tabs. `everything` also wipes this wallet's passcode copy and phrase (needs its passcode). */
+  forget: [{ address?: string; everything?: boolean; passcode?: string }, { ok: true }]
   /**
    * Start a passkey ceremony. The app then shows passkey.html#t=<ticket> in a
    * visible iframe; the person taps there (browsers only allow WebAuthn in a
@@ -96,7 +99,7 @@ export interface WalletRpc {
 
 export type PasskeyRequest =
   | { mode: 'create'; userId: string; userName: string }
-  | { mode: 'sign'; credentialId: string; challenge: Hex; label?: string }
+  | { mode: 'sign'; address: string; credentialId: string; challenge: Hex; label?: string }
 
 export type PasskeyOutcome =
   | { status: 'pending' }
@@ -126,7 +129,6 @@ export type WalletErrorCode =
   | 'rate-limited'  // too many wrong passcodes; wait lockedForMs
   | 'mismatch'      // a secret opened, but it's a different wallet
   | 'invalid'       // malformed phrase / key / request
-  | 'decrypt'       // wrong recovery password or tampered QR
   | 'unsupported'
   | 'failed'
   | 'approval-required' // a value-moving signature without a recent passcode

@@ -9,7 +9,11 @@
 // URL: reveal.html#t=<ticket>&theme=dark|light
 // The ticket rides in the fragment, which is never sent to a server.
 
-import { REVEAL_CHANNEL } from '@/wallet/protocol'
+import { REVEAL_CHANNEL, parseOrigins } from '@/wallet/protocol'
+
+// The app origins allowed to embed this page (same list as main.ts).
+const PARENTS = parseOrigins(import.meta.env.VITE_WALLET_PARENT_ORIGINS as string | undefined
+  ?? (import.meta.env.DEV ? 'http://localhost:5173,http://127.0.0.1:5173' : ''))
 
 const params = new URLSearchParams(location.hash.slice(1))
 const ticket = params.get('t') ?? ''
@@ -27,10 +31,13 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 
 // Tells the app embedding this page that it has drawn (the secret or an
 // error), so it can fade the frame in instead of showing it half-drawn. No
-// secret in it - only that something is on screen. frame-ancestors limits who
-// can embed this page.
+// secret in it - only that something is on screen. Sent only to the app
+// origins (frame-ancestors also limits who can embed this page).
 function drawn() {
-  requestAnimationFrame(() => { try { parent.postMessage({ type: 'mp-reveal' }, '*') } catch { /* not embedded */ } })
+  requestAnimationFrame(() => {
+    if (parent === window) return
+    for (const origin of PARENTS) { try { parent.postMessage({ type: 'mp-reveal' }, origin) } catch { /* */ } }
+  })
 }
 
 function showError(message: string) {

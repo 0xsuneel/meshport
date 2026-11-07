@@ -523,6 +523,8 @@ function BackupPrivateKeyOnlyPage() {
   const storedPasscode = useAuthStore(s => s.passcode)
   const [revealed, setRevealed] = useState(false)
   const [passcode, setPasscode] = useState('')
+  // The passcode that opened it, for the frame's own check (cleared from the pad).
+  const [revealedWith, setRevealedWith] = useState('')
   const [passcodeError, setPasscodeError] = useState('')
   const [verifying, setVerifying] = useState(false)
 
@@ -533,7 +535,7 @@ function BackupPrivateKeyOnlyPage() {
       const { verifyPasscode } = await import('@/lib/security')
       const correct = !!storedPasscode && await verifyPasscode(passcode, storedPasscode)
       if (!correct) setPasscodeError('Incorrect passcode. Try again.')
-      else if (await openForReveal(passcode)) setRevealed(true)
+      else if (await openForReveal(passcode)) { setRevealedWith(passcode); setRevealed(true) }
       else setPasscodeError('Could not open your wallet. Go to Home to unlock it first, then try again.')
     } catch (e) {
       console.error('[Backup] Reveal failed:', e)
@@ -575,7 +577,7 @@ function BackupPrivateKeyOnlyPage() {
               {verifying && <p className="text-xs text-text-secondary text-center">Opening…</p>}
             </div>
           ) : (
-            <WalletSecretFrame address={walletAddress} what="privateKey" />
+            <WalletSecretFrame address={walletAddress} what="privateKey" passcode={revealedWith} />
           )}
         </Card>
 
@@ -720,7 +722,7 @@ function BackupRecoveryPhrasePage() {
                     <EyeOff className="w-3.5 h-3.5" /> Hide
                   </button>
                 </div>
-                {walletAddress && <WalletSecretFrame address={walletAddress} what="privateKey" />}
+                {walletAddress && <WalletSecretFrame address={walletAddress} what="privateKey" passcode={revealPasscode} />}
               </Card>
             )}
 

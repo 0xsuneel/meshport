@@ -25,7 +25,7 @@ const pk = generatePrivateKey()
 const address = privateKeyToAccount(pk).address
 
 describe('wallet frame vault', () => {
-  beforeEach(() => { vault.forget(undefined, true); local.clear(); session.clear() })
+  beforeEach(() => { vault.resetForTests(); local.clear(); session.clear() })
 
   it('stores a create/import wallet under the passcode and reopens it only with that passcode', async () => {
     await vault.store(address, pk, { kind: 'import-privkey', passcode: '123456' })
@@ -49,11 +49,35 @@ describe('wallet frame vault', () => {
   it('slows down passcode guessing: 5 free tries, then a wait that the frame enforces', async () => {
     await vault.store(address, pk, { kind: 'import-privkey', passcode: '123456' })
     vault.lock(address)
-    for (let i = 0; i < 4; i++) await expect(vault.unlock(address, '000000')).rejects.toMatchObject({ code: 'bad-passcode' })
+    for (let i = 0; i < 5; i++) await expect(vault.unlock(address, '000000')).rejects.toMatchObject({ code: 'bad-passcode' })
     await expect(vault.unlock(address, '000000')).rejects.toMatchObject({ code: 'rate-limited' })
     // Even the right passcode waits now.
     await expect(vault.unlock(address, '123456')).rejects.toMatchObject({ code: 'rate-limited' })
     expect((await vault.status(address)).lockedForMs).toBeGreaterThan(0)
+  })
+
+  it('counts parallel guesses: a burst cannot slip past the lockout', async () => {
+    await vault.store(address, pk, { kind: 'import-privkey', passcode: '123456' })
+    vault.lock(address)
+    const burst = await Promise.allSettled(Array.from({ length: 8 }, () => vault.unlock(address, '000000')))
+    const codes = burst.map(r => r.status === 'rejected' ? (r.reason as { code: string }).code : 'ok')
+    expect(codes.filter(c => c === 'bad-passcode')).toHaveLength(5)
+    expect(codes.filter(c => c === 'rate-limited')).toHaveLength(3)
+  })
+
+  it('a lock that lands during a slow passcode check wins: the key stays closed', async () => {
+    await vault.store(address, pk, { kind: 'import-privkey', passcode: '123456' })
+    vault.lock(address)
+    const opening = vault.unlock(address, '123456')
+    vault.lock(address)
+    await expect(opening).rejects.toMatchObject({ code: 'locked' })
+    expect(() => vault.keyFor(address)).toThrow(/locked/)
+  })
+
+  it('re-importing a wallet replaces its old passcode copy', async () => {
+    await vault.store(address, pk, { kind: 'import-privkey', passcode: '123456' })
+    await vault.store(address, pk, { kind: 'import-privkey' })
+    expect(vault.hasPasscode(address)).toBe(false)
   })
 
   it('refuses a key that does not belong to the address', async () => {
@@ -81,5 +105,6 @@ describe('wallet frame vault', () => {
     expect((await vault.status(address)).passcode).toBe(true)
     vault.forget(address, true)
     expect((await vault.status(address)).passcode).toBe(false)
+    await expect(vault.store(address, pk, { kind: 'import-privkey', passcode: '12' })).rejects.toMatchObject({ code: 'invalid' })
   })
 })

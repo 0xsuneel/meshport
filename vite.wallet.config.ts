@@ -16,7 +16,8 @@ export default defineConfig({
     target: 'esnext',
     outDir: path.resolve(__dirname, 'wallet-frame/dist'),
     emptyOutDir: true,
-    sourcemap: true,
+    // No source maps in the published frame (they'd only help someone study it).
+    sourcemap: false,
     // The preload polyfill fetch()es the frame's own chunks; the frame's CSP is
     // connect-src 'none' (it makes no requests at all), so leave it out.
     modulePreload: { polyfill: false },

@@ -84,7 +84,8 @@ export async function revealUrl(address: string, what: 'mnemonic' | 'privateKey'
  * (components/wallet/WalletPasskeyFrame.tsx) and the ticket to wait on.
  */
 export async function beginPasskey(request: PasskeyRequest, theme: 'dark' | 'light' = 'dark'): Promise<{ ticket: string; url: string }> {
-  const { ticket } = await callWallet('passkey:begin', request)
+  const { withApproval } = await import('./account')
+  const { ticket } = await withApproval(() => callWallet('passkey:begin', request))
   return { ticket, url: `${walletOrigin()}/passkey.html#t=${ticket}&theme=${theme}` }
 }
 

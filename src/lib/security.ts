@@ -435,11 +435,20 @@ async function getDeviceKey(create: boolean): Promise<CryptoKey | null> {
     })
     if (existing || !create) return existing
     const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(DEVICE_STORE, 'readwrite'); tx.objectStore(DEVICE_STORE).put(key, DEVICE_KEY_ID)
-      tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error)
+    // `add`, not `put`: when two first-time callers race (two tabs, two
+    // stores at once), the second write fails instead of replacing the key
+    // the first one already sealed with - and that caller uses the stored one.
+    const added = await new Promise<boolean>((resolve) => {
+      const tx = db.transaction(DEVICE_STORE, 'readwrite')
+      const r = tx.objectStore(DEVICE_STORE).add(key, DEVICE_KEY_ID)
+      r.onerror = (ev) => { ev.preventDefault(); resolve(false) }
+      tx.oncomplete = () => resolve(true); tx.onabort = () => resolve(false)
     })
-    return key
+    if (added) return key
+    return await new Promise<CryptoKey | null>((resolve, reject) => {
+      const r = db.transaction(DEVICE_STORE, 'readonly').objectStore(DEVICE_STORE).get(DEVICE_KEY_ID)
+      r.onsuccess = () => resolve((r.result as CryptoKey) ?? null); r.onerror = () => reject(r.error)
+    })
   } finally { db.close() }
 }
 async function wrapForDevice(inner: string): Promise<string> {

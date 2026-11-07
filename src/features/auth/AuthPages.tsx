@@ -351,8 +351,7 @@ export function CreateWalletPage() {
     try { check = await checkRecoveryWords(walletData.address, answers) }
     catch (e) { setConfirmError(e instanceof Error ? e.message : "Couldn't check the words"); return }
     if (!check.ok) {
-      const wrong = check.wrong.length ? check.wrong : verifyIdx
-      setConfirmError(`${wrong.map(wi => `Word #${wi + 1}`).join(', ')} ${wrong.length > 1 ? 'are' : 'is'} incorrect. Check your backup.`); return
+      setConfirmError(`One or more of words ${verifyIdx.map(wi => `#${wi + 1}`).join(', ')} is incorrect. Check your backup.`); return
     }
     setConfirmError('')
     setWallet(walletData.address, walletData.signer, 'create')
