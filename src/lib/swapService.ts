@@ -663,7 +663,14 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
         finish(settled.hash, parseFloat(amountOut || '0') || 0)
         return { txHash: settled.hash, amountOut, explorerUrl: `${ARC_EXPLORER}/tx/${settled.hash}`, blockNumber: await swapBlockNumber(settled.hash, settled.receipt) }
       }
-      // Not swapped: tokenIn back to the wallet, then the normal way.
+      // Not sure the swap didn't go out (no receipt yet): never swap again the
+      // normal way - it could land twice (audit 7 Nov H6). The tokens stay in
+      // the Express key until it lands or not; nothing is returned meanwhile.
+      if (settled.kind === 'unknown') {
+        await ex.finish(false)
+        throw Object.assign(new Error("The swap is still confirming - check Activity before trying again."), { isUncertain: true, isLiquidity: false })
+      }
+      // Not swapped (not sent, or reverted): tokenIn back to the wallet, then the normal way.
       if (await ex.finish(true)) {
         void import('./errorReport').then(m => m.reportPerf(`[perf express swap] normal way: ${String((e as any)?.message ?? e).slice(0, 260)}`)).catch(() => {})
         return null
@@ -678,6 +685,9 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
     return { txHash: result?.txHash || '', amountOut, explorerUrl: result?.explorerUrl || '', blockNumber }
   })()
   if (express) return express
+  // The Express attempt's broadcast state must not leak into the normal swap's.
+  _swapBroadcast = false; _swapSendAttempted = false
+  _swapHash = null; _swapConfirmed = false; _swapReceipt = null
 
   try {
     const result: any = await kit.swap(baseParams)

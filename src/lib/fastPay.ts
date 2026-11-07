@@ -337,6 +337,22 @@ interface Session {
   spentUsd: number
 }
 let session: Session | null = null
+// Express moves between their pull and their last transaction (audit 7 Nov
+// H5): a session isn't swept or dropped while one is in flight.
+let inFlight = 0
+let idleWaiters: Array<() => void> = []
+function opStarted(): void { inFlight++ }
+function opEnded(): void {
+  inFlight = Math.max(0, inFlight - 1)
+  if (inFlight === 0) { const w = idleWaiters; idleWaiters = []; w.forEach(f => f()) }
+}
+function whenIdle(maxMs: number): Promise<void> {
+  if (inFlight === 0) return Promise.resolve()
+  return new Promise(r => { idleWaiters.push(r); setTimeout(r, maxMs) })
+}
+// MeshPort's fee wallet / relayer: the frame lets a key send native USDC
+// there (wallet-frame RELAYERS), so a fee can wait in the key until the burn.
+const FEE_FORWARD_TO = new Set(['0x7218ec7dd868444a7655599551520ac5bcca7c0d'])
 let starting: Promise<boolean> | null = null
 let generation = 0
 
@@ -392,20 +408,32 @@ export function endFastPaySession(): void {
   publish('off')
   if (!s) return
   saveSession(null, s.owner)
-  // The leftover gas back to the relayer first (the key signs it), then the key is dropped.
-  void (s.relayer ? returnLeftover(s) : Promise.resolve()).catch(() => {}).finally(() => s.endKey())
+  // Once no Express move is in flight (up to 2 min): everything left in the
+  // key back to the owner (audit 7 Nov H5 - it went to the relayer, money in
+  // flight included, and EURC / cirBTC were never swept), then the key is dropped.
+  void whenIdle(120_000).then(() => returnLeftover(s)).catch(() => {}).finally(() => s.endKey())
 }
 
+const balanceOfAbi = [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const
 async function returnLeftover(s: Session): Promise<void> {
-  const [{ relayArcSend, sendFeeCap }, bal] = await Promise.all([
-    import('./arcService'),
-    arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [s.key.address, 'latest'] }),
-  ])
-  const balance = BigInt(bal?.result ?? '0x0')
+  const { relayArcSend, sendFeeCap } = await import('./arcService')
   const feeCap = await sendFeeCap()
+  let nonce = await pendingNonce(s.key.address)
+  // EURC / cirBTC first (they need the key's gas), then all the native USDC.
+  for (const t of ['EURC', 'cirBTC'] as const) {
+    try {
+      const r = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: FAST_TOKENS[t].address, data: encodeFunctionData({ abi: balanceOfAbi, functionName: 'balanceOf', args: [s.key.address] }) }, 'latest'] })
+      const bal = BigInt(r?.result && r.result !== '0x' ? r.result : '0x0')
+      if (bal === 0n) continue
+      await relayArcSend(s.key as any, { to: FAST_TOKENS[t].address, data: encodeFunctionData({ abi: transferAbi, functionName: 'transfer', args: [s.owner, bal] }), gas: APPROVE_GAS, nonce, maxFeePerGas: feeCap })
+      nonce++
+    } catch { /* stays in the key: swept on the next session end */ }
+  }
+  const bal = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [s.key.address, 'latest'] })
+  const balance = BigInt(bal?.result ?? '0x0')
   const value = balance - NATIVE_TRANSFER_GAS * feeCap
   if (value <= NATIVE_TRANSFER_GAS * feeCap) return // not worth a transaction
-  await relayArcSend(s.key as any, { to: s.relayer!, value, gas: NATIVE_TRANSFER_GAS, nonce: s.nonce, maxFeePerGas: feeCap })
+  await relayArcSend(s.key as any, { to: s.owner, value, gas: NATIVE_TRANSFER_GAS, nonce, maxFeePerGas: feeCap })
 }
 
 
@@ -920,27 +948,36 @@ export async function expressTransfer(p: { owner: string; amount: bigint; fee: b
   if (total + refund > leftFor(s, 'USDC') + REFUND_RESERVE) throw new FastPayNotSent('Not enough left of the Express limit')
   const usd = fromAtomic('USDC', total + refund)
   const count = (sign: 1n | -1n) => { usdc.spent += sign * (total + refund); s.spentUsd += Number(sign) * usd }
+  // MeshPort's fee waits in the key and goes on only after the burn (audit
+  // 7 Nov M6: it was paid even when the transfer then went the normal way and
+  // was charged again there). Only to a fee wallet the frame lets the key pay.
+  const feeHeld = !!p.feeWallet && p.fee > 0n && FEE_FORWARD_TO.has(p.feeWallet.toLowerCase())
   const nonce0 = s.nonce
   count(1n)
   s.owedGasWei = 0n
-  s.nonce += 3
+  s.nonce += feeHeld ? 4 : 3
   if (s.kept) saveSession(s, s.owner)
   publish()
-  const details: Array<{ from: Hex; to: Hex; amount: bigint; token: Hex }> = [{ from: s.owner, to: s.key.address, amount: p.amount + refund, token: ARC_USDC_ERC20 }]
-  if (p.feeWallet && p.fee > 0n) details.push({ from: s.owner, to: p.feeWallet, amount: p.fee, token: ARC_USDC_ERC20 })
+  const details: Array<{ from: Hex; to: Hex; amount: bigint; token: Hex }> = [{ from: s.owner, to: s.key.address, amount: p.amount + refund + (feeHeld ? p.fee : 0n), token: ARC_USDC_ERC20 }]
+  if (p.feeWallet && p.fee > 0n && !feeHeld) details.push({ from: s.owner, to: p.feeWallet, amount: p.fee, token: ARC_USDC_ERC20 })
   const pullData = encodeFunctionData({ abi: permit2Abi, functionName: 'transferFrom', args: [details] })
   const approveData = encodeFunctionData({ abi: approveAbi, functionName: 'approve', args: [TOKEN_MESSENGER_V2_ARC, p.amount] })
   const undo = () => { count(-1n); s.owedGasWei += owed; s.nonce = Math.min(s.nonce, nonce0); if (s.kept) saveSession(s, s.owner); publish() }
   // 1. The pull (the passcode-approved signature).
   let pulled
+  opStarted()
   try {
-    pulled = await relaySend(s.key as any, { to: PERMIT2, data: pullData, gas: s.payGas + (p.feeWallet ? s.payGas / 3n : 0n), nonce: nonce0, maxFeePerGas: feeCap }, () => {})
+    pulled = await relaySend(s.key as any, { to: PERMIT2, data: pullData, gas: s.payGas + (p.feeWallet && !feeHeld ? s.payGas / 3n : 0n), nonce: nonce0, maxFeePerGas: feeCap }, () => {})
   } catch (e) {
-    undo()
+    undo(); opEnded()
     throw new FastPayNotSent(e instanceof Error ? e.message : 'Express pull refused')
   }
   if (pulled.state !== 'success') {
-    if (pulled.state === 'failed') { undo(); throw new FastPayNotSent('Express pull failed on-chain') }
+    if (pulled.state === 'failed') { undo(); opEnded(); throw new FastPayNotSent('Express pull failed on-chain') }
+    // Only the pull's nonce is used; the rest weren't sent.
+    s.nonce = nonce0 + 1
+    if (s.kept) saveSession(s, s.owner)
+    opEnded()
     throw new Error('The transfer is still confirming - check Activity before trying again')
   }
   lap.pull = performance.now() - t0
@@ -952,18 +989,28 @@ export async function expressTransfer(p: { owner: string; amount: bigint; fee: b
     if (b.state === 'failed') throw new Error('burn failed')
     lap.burn = performance.now() - t0
     void import('./errorReport').then(m => m.reportPerf(`[perf express transfer] approve ${(lap.approve / 1000).toFixed(2)} (${fullCheck ? 'full' : 'fast'} check), pull ${(lap.pull / 1000).toFixed(2)}, burn ${(lap.burn / 1000).toFixed(2)} (${b.state})`)).catch(() => {})
+    // The burn went out: now MeshPort's fee (if it waited in the key). If this
+    // doesn't go through, it stays in the key and goes back to the owner at
+    // session end - never charged twice.
+    if (feeHeld) void relaySend(s.key as any, { to: p.feeWallet!, value: p.fee * WEI_PER_UNIT, gas: NATIVE_TRANSFER_GAS, nonce: nonce0 + 3, maxFeePerGas: feeCap }, () => {}).catch(() => {}).finally(opEnded)
+    else opEnded()
     return { burnHash: b.txHash }
   } catch (e) {
-    // The amount came to the key but wasn't burned: straight back to the owner
-    // (the fee and the gas refund stay - those transactions ran).
+    // The amount came to the key but wasn't burned: back to the owner, at the
+    // key's real next nonce (audit 7 Nov H4: a fixed nonce could sit behind a
+    // gap and never mine). Only a confirmed return counts as returned; the
+    // limit isn't given back (the Permit2 allowance was used either way, M2).
     try {
-      const back = await relaySend(s.key as any, { to: s.owner, value: p.amount * WEI_PER_UNIT, gas: NATIVE_TRANSFER_GAS, nonce: nonce0 + 3, maxFeePerGas: feeCap }, () => {})
-      s.nonce = nonce0 + 4
-      usdc.spent -= p.amount; s.spentUsd -= fromAtomic('USDC', p.amount)
+      const n = await pendingNonce(s.key.address)
+      const value = (p.amount + (feeHeld ? p.fee : 0n)) * WEI_PER_UNIT
+      const back = await relaySend(s.key as any, { to: s.owner, value, gas: NATIVE_TRANSFER_GAS, nonce: n, maxFeePerGas: feeCap }, () => {})
+      s.nonce = n + 1
       if (s.kept) saveSession(s, s.owner)
       publish()
-      if (back.state !== 'failed') throw new FastPayNotSent(`Express transfer stopped (${e instanceof Error ? e.message : 'error'}) - the amount was returned`)
-    } catch (r) { if (r instanceof FastPayNotSent) throw r }
+      if (back.state === 'success') throw new FastPayNotSent(`Express transfer stopped (${e instanceof Error ? e.message : 'error'}) - the amount was returned`)
+      if (back.state !== 'failed') throw new Error('The transfer stopped and the amount is on its way back to your wallet - check Activity before trying again')
+    } catch (r) { if (r instanceof FastPayNotSent || (r instanceof Error && r.message.startsWith('The transfer stopped'))) throw r }
+    finally { opEnded() }
     throw new Error("The transfer couldn't finish and the amount is held for you - open Recover or contact support")
   }
 }
@@ -1040,33 +1087,42 @@ export async function expressSwapBegin(p: { owner: string; token: FastToken; amo
   const details: Array<{ from: Hex; to: Hex; amount: bigint; token: Hex }> = p.token === 'USDC'
     ? [{ from: s.owner, to: s.key.address, amount: amount + refund, token: ARC_USDC_ERC20 }]
     : [{ from: s.owner, to: s.key.address, amount, token: FAST_TOKENS[p.token].address }, { from: s.owner, to: s.key.address, amount: refund, token: ARC_USDC_ERC20 }]
+  // The nonce is taken now, before any await (audit 7 Nov M5: a payment
+  // started meanwhile could take the same one).
   const nonce = s.nonce
+  s.nonce = nonce + 1
+  opStarted()
   let pulled
   try {
     pulled = await relaySend(s.key as any, { to: PERMIT2, data: encodeFunctionData({ abi: permit2Abi, functionName: 'transferFrom', args: [details] }), gas: s.payGas * 2n, nonce, maxFeePerGas: feeCap }, () => {})
   } catch (e) {
-    undo()
+    undo(); s.nonce = Math.min(s.nonce, nonce); opEnded()
     throw new FastPayNotSent(e instanceof Error ? e.message : 'Express pull refused')
   }
-  if (pulled.state === 'failed') { undo(); throw new FastPayNotSent('Express pull failed on-chain') }
-  s.nonce = nonce + 1
+  if (pulled.state === 'failed') { undo(); s.nonce = Math.min(s.nonce, nonce); opEnded(); throw new FastPayNotSent('Express pull failed on-chain') }
   const account = await sessionWalletAccount(s)
+  let finished = false
   const finish = async (returnFunds: boolean): Promise<boolean> => {
+    if (finished) return false
+    finished = true
     let returned = false
-    if (returnFunds) {
-      try {
-        const n = await pendingNonce(s.key.address)
-        const back = p.token === 'USDC'
-          ? await relaySend(s.key as any, { to: s.owner, value: amount * WEI_PER_UNIT, gas: NATIVE_TRANSFER_GAS, nonce: n, maxFeePerGas: feeCap }, () => {})
-          : await relaySend(s.key as any, { to: FAST_TOKENS[p.token].address, data: encodeFunctionData({ abi: transferAbi, functionName: 'transfer', args: [s.owner, amount] }), gas: APPROVE_GAS, nonce: n, maxFeePerGas: feeCap }, () => {})
-        returned = back.state !== 'failed'
-        if (returned) { grant.spent -= amount; s.spentUsd -= usdIn }
-      } catch { returned = false }
-    }
-    try { s.nonce = await pendingNonce(s.key.address) } catch { /* next send reads it */ }
-    if (s.kept) saveSession(s, s.owner)
-    publish()
-    return returned
+    try {
+      if (returnFunds) {
+        try {
+          const n = await pendingNonce(s.key.address)
+          const back = p.token === 'USDC'
+            ? await relaySend(s.key as any, { to: s.owner, value: amount * WEI_PER_UNIT, gas: NATIVE_TRANSFER_GAS, nonce: n, maxFeePerGas: feeCap }, () => {})
+            : await relaySend(s.key as any, { to: FAST_TOKENS[p.token].address, data: encodeFunctionData({ abi: transferAbi, functionName: 'transfer', args: [s.owner, amount] }), gas: APPROVE_GAS, nonce: n, maxFeePerGas: feeCap }, () => {})
+          // Only a confirmed return counts (audit 7 Nov H6); the limit isn't
+          // given back - the Permit2 allowance was used either way (M2).
+          returned = back.state === 'success'
+        } catch { returned = false }
+      }
+      try { s.nonce = await pendingNonce(s.key.address) } catch { /* next send reads it */ }
+      if (s.kept) saveSession(s, s.owner)
+      publish()
+      return returned
+    } finally { opEnded() }
   }
   return { account, finish }
 }
