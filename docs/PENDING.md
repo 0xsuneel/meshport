@@ -23,6 +23,7 @@ transactions (Circle `signTransaction`) and receives every MeshPort fee.
       (signer, nonce, chain, to, value, data, gas, fee) before broadcast. P2P
       offers made before the switch name the old relayer as operator, so
       registerTrade / cancelTrade fall back to the key wallet when needed.
+- [x] **Decision 7 Nov: keep the relayer mint** (`BRING_ARC_MINT=relayer`; tested: Circle's forwarder is ~4.5 s faster from Ethereum but costs the user ~$0.019 more).
 - [x] **Bring: relayer mints on Arc** (6 Nov) instead of Circle's forwarder - saves the
       ~$0.0236 forwarding fee per Bring (Arc mint gas ~$0.0045, in MeshPort's fee).
       Server mints after the burn (waitUntil); the app re-checks after 60 s; quotes fall
