@@ -487,7 +487,29 @@ async function expressBurn(p: FastCctpParams, amount: bigint, burnData: Hex): Pr
   }
 }
 
+/**
+ * MeshPort's relayer mints from the server: it waits for Circle's attestation
+ * itself and submits the mint the moment it's there (api/bridge-relay
+ * transfer_mint_start). Resolves to the mint tx, or null (not done - the app
+ * finishes it the usual way).
+ */
+export async function serverTransferMint(destination: string, burnTx: string): Promise<string | null> {
+  try {
+    const sb = await import('./supabase')
+    const r = await fetch('/api/bridge-relay', {
+      method: 'POST', headers: await sb.authApiHeaders(),
+      body: JSON.stringify({ action: 'transfer_mint_start', chain: destination, burnTx }),
+      signal: AbortSignal.timeout(58_000),
+    })
+    const j = await r.json().catch(() => null) as { txHash?: string } | null
+    return r.ok && j?.txHash && /^0x[0-9a-fA-F]{64}$/.test(j.txHash) ? j.txHash : null
+  } catch { return null }
+}
+
 async function settle(p: FastCctpParams, burnHash: string, approveHash: string | undefined, pollMs: number): Promise<FastCctpResult> {
+  // MeshPort's relayer mints: the server starts now and mints as soon as Circle attests.
+  const serverMint = p.useForwarder ? null : serverTransferMint(p.destination, burnHash)
+
   // 3. Circle's attestation.
   const attestDeadline = Date.now() + (p.attestationTimeoutMs ?? 10 * 60_000)
   let msg: IrisMessage | null = null
@@ -503,6 +525,7 @@ async function settle(p: FastCctpParams, burnHash: string, approveHash: string |
 
   // 4. Mint: Circle's forwarder, or MeshPort's relayer.
   let mintHash: string | null = forwarded(msg) ? msg!.forwardTxHash! : null
+  if (!mintHash && serverMint) mintHash = await serverMint
   if (!mintHash && p.useForwarder) {
     const fwdDeadline = Date.now() + 90_000
     while (!mintHash && Date.now() < fwdDeadline && !forwardFailed(msg)) {

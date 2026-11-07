@@ -296,12 +296,15 @@ const MIN_PRIORITY_FEE: Record<number, bigint> = {
  *  RPC's suggested tip raised to the floor, and room for the base fee to
  *  double. Passed explicitly - viem otherwise lets the node fill in the fees
  *  (eth_fillTransaction), which ignores the floor. {} elsewhere. */
-async function relayFees(pub: any, chainId: number): Promise<{ maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint }> {
+async function relayFees(pub: any, chainId: number, boost = false): Promise<{ maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint }> {
   const floor = MIN_PRIORITY_FEE[chainId]
   if (!floor) return {}
   let suggested = 0n
   try { suggested = BigInt(await pub.request({ method: 'eth_maxPriorityFeePerGas' })) } catch { /* use the floor */ }
-  const tip = suggested > floor ? suggested : floor
+  let tip = suggested > floor ? suggested : floor
+  // boost: a transfer's mint, where a missed block is 12 s the user waits -
+  // 1.5x the tip so it's near the front of the next block.
+  if (boost) tip = tip * 3n / 2n
   const block = await pub.getBlock()
   const base = BigInt(block.baseFeePerGas ?? 0n)
   return { maxPriorityFeePerGas: tip, maxFeePerGas: base * 2n + tip }
@@ -1120,6 +1123,68 @@ export async function mintOnArcAfterBurn(chainKey: string, burnTx: string, deadl
   return txHash
 }
 
+// ── Transfer: the relayer mints on the destination as soon as Circle attests ─
+// POST { action:'transfer_mint_start', chain, burnTx }, sent by the app right
+// after a hookless Arc burn (lib/fastCctp settle). The server waits for the
+// attestation itself (Iris every 0.5 s), submits receiveMessage with a raised
+// tip, and answers once it's mined - no round trip from the phone between
+// "attested" and "mint sent". Same exposure as action:'call' with
+// receiveMessage: an attested message fixes recipient and amount, and mints once.
+const TRANSFER_MINT_POLL_MS = 500
+async function transferMintStart(req: VercelRequest, res: VercelResponse) {
+  const startedAt = Date.now()
+  const session = await sessionInfo(req)
+  const caller = session?.wallet ?? null
+  if (!caller) return res.status(403).json({ error: 'Not signed in' })
+  if (!allowRelay(caller)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
+  const chainKey = String((req.body as any)?.chain || '')
+  const burnTx = String((req.body as any)?.burnTx || '')
+  const dest = CHAINS[chainKey]
+  if (!dest || chainKey === 'Arc_Testnet' || !isHex(burnTx, 32)) return res.status(400).json({ error: 'Bad request' })
+
+  const deadline = startedAt + 40_000
+  let msg: any = null
+  const done = (m: any) => m?.status === 'complete' && m.message && m.attestation && m.attestation !== 'PENDING'
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch(`${IRIS}/v2/messages/${ARC_DOMAIN}?transactionHash=${burnTx}`, { signal: AbortSignal.timeout(4_000) })
+      msg = r.ok ? (await r.json())?.messages?.[0] : null
+    } catch { msg = null }
+    if (done(msg)) break
+    await new Promise(r => setTimeout(r, TRANSFER_MINT_POLL_MS))
+  }
+  if (!done(msg)) return res.status(200).json({ pending: true })
+  const attestedAt = Date.now()
+  const d = msg.decodedMessage
+  if (d?.destinationDomain != null && Number(d.destinationDomain) !== dest.domain) return res.status(400).json({ error: 'Not a transfer to this chain' })
+  const hook = d?.decodedMessageBody?.hookData
+  if (hook && hook !== '0x') return res.status(200).json({ pending: true, forwarder: true }) // Circle's forwarder mints it
+
+  const cl = await callClients(chainKey)
+  if (!cl?.wallet) return res.status(400).json({ error: 'Relayer not available on this chain' })
+  const { encodeFunctionData } = await import('viem')
+  const data = encodeFunctionData({ abi: RECEIVE_MESSAGE_ABI, functionName: 'receiveMessage', args: [msg.message, msg.attestation] })
+  try {
+    await cl.pub.call({ account: cl.wallet.account, to: MESSAGE_TRANSMITTER_V2 as `0x${string}`, data })
+  } catch (e: any) {
+    return res.status(200).json({ alreadyMinted: true, error: e?.shortMessage || 'Call would fail' })
+  }
+  const txHash = await cl.wallet.sendTransaction({ to: MESSAGE_TRANSMITTER_V2 as `0x${string}`, data, ...(await relayFees(cl.pub, cl.pub.chain.id, true)) })
+  const sentAt = Date.now()
+  const log = (outcome: string) => console.log('[bridge-relay] transfer mint', JSON.stringify({
+    chain: chainKey, burnTx, mintTx: txHash, outcome, attestMs: attestedAt - startedAt, sendMs: sentAt - attestedAt, receiptMs: Date.now() - sentAt,
+  }))
+  try {
+    const receipt = await cl.pub.waitForTransactionReceipt({ hash: txHash, timeout: Math.max(5_000, startedAt + 55_000 - Date.now()) })
+    log(receipt.status)
+    if (receipt.status !== 'success') return res.status(502).json({ error: 'Transaction reverted', txHash })
+    return res.status(200).json({ txHash })
+  } catch {
+    log('pending')
+    return res.status(200).json({ txHash, pending: true })
+  }
+}
+
 // ── EURC / cirBTC (Circle CCTPx) through MeshPortRouter ────────────────────
 // The same relayer, the CCTPx counterpart of the USDC flow above:
 //
@@ -1773,6 +1838,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if ((req.body as any)?.action === 'fastpay_gas') return await fastPayGas(req, res)
     if ((req.body as any)?.action === 'token_relay') return await tokenRelay(req, res)
     if ((req.body as any)?.action === 'arc_transfer') return await arcTransfer(req, res)
+    if ((req.body as any)?.action === 'transfer_mint_start') return await transferMintStart(req, res)
     if ((req.body as any)?.action === 'express_setup') return await expressSetup(req, res)
     if ((req.body as any)?.action === 'express_bring') return await expressBringRelay(req, res)
 
