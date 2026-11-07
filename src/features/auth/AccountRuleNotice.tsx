@@ -12,13 +12,13 @@ const typeName = (k: AccountKind) => (k === 'business' ? 'business' : 'personal'
 const TypeName = (k: AccountKind) => (k === 'business' ? 'Business' : 'Personal')
 
 /** Copy for each blocked case - exported for tests and screenshots. */
-export function accountRuleCopy(d: Blocked, via: 'wallet' | 'login') {
+export function accountRuleCopy(d: Blocked, via: 'wallet' | 'login'): { title: string; text: string; action: string | null } {
   switch (d.kind) {
     case 'mismatch':
       return {
-        title: `This is a ${typeName(d.existing)} account`,
-        text: `You already have a ${typeName(d.existing)} account with this ${via}. An account’s type can’t be changed, so it opens as ${TypeName(d.existing)}.`,
-        action: `Continue as ${TypeName(d.existing)}`,
+        title: `Wrong account type`,
+        text: `This ${via} belongs to a ${typeName(d.existing)} account, so it can’t log in as ${d.existing === 'business' ? 'Personal' : 'Business'}. Go back and choose ${TypeName(d.existing)} account to log in with it.`,
+        action: null,
       }
     case 'already_exists':
       return {
@@ -58,12 +58,15 @@ export function AccountRuleNotice({ decision, via, busy, onContinue, onBack, bac
           <p className="text-text-secondary text-[14px] leading-[1.5] mt-2">{copy.text}</p>
         </div>
         <div className="space-y-2 pt-2">
-          <button type="button" onClick={onContinue} disabled={busy}
-            className="w-full py-3.5 rounded-2xl bg-brand text-white font-bold shadow-elevation-2 active:scale-[0.98] transition-transform border border-black/10 flex items-center justify-center gap-2 disabled:opacity-60">
-            {busy && <Loader2 className="w-4 h-4 animate-spin" />}{copy.action}
-          </button>
+          {copy.action && (
+            <button type="button" onClick={onContinue} disabled={busy}
+              className="w-full py-3.5 rounded-2xl bg-brand text-white font-bold shadow-elevation-2 active:scale-[0.98] transition-transform border border-black/10 flex items-center justify-center gap-2 disabled:opacity-60">
+              {busy && <Loader2 className="w-4 h-4 animate-spin" />}{copy.action}
+            </button>
+          )}
           <button type="button" onClick={onBack} disabled={busy}
-            className="w-full py-3 text-sm font-semibold text-text-secondary">
+            className={copy.action ? 'w-full py-3 text-sm font-semibold text-text-secondary'
+              : 'w-full py-3.5 rounded-2xl bg-brand text-white font-bold shadow-elevation-2 active:scale-[0.98] transition-transform border border-black/10'}>
             {backLabel ?? (via === 'wallet' ? 'Use a different wallet' : 'Use a different login')}
           </button>
         </div>

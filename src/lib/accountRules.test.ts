@@ -27,11 +27,14 @@ describe('decideAccountAccess', () => {
       expect(decideAccountAccess('personal', 'none', 'create')).toEqual({ kind: 'allow' })
       expect(decideAccountAccess('business', 'none', 'create')).toEqual({ kind: 'allow' })
     })
-    it('sends an existing account to log in, with its own type', () => {
+    it('sends an existing account of the same type to log in', () => {
       expect(decideAccountAccess('personal', 'personal', 'create')).toEqual({ kind: 'already_exists', existing: 'personal' })
-      expect(decideAccountAccess('business', 'personal', 'create')).toEqual({ kind: 'already_exists', existing: 'personal' })
-      expect(decideAccountAccess('personal', 'business', 'create')).toEqual({ kind: 'already_exists', existing: 'business' })
+      expect(decideAccountAccess('business', 'business', 'create')).toEqual({ kind: 'already_exists', existing: 'business' })
       expect(decideAccountAccess(null, 'business', 'create')).toEqual({ kind: 'already_exists', existing: 'business' })
+    })
+    it('refuses a wallet of the other type', () => {
+      expect(decideAccountAccess('business', 'personal', 'create')).toEqual({ kind: 'mismatch', existing: 'personal' })
+      expect(decideAccountAccess('personal', 'business', 'create')).toEqual({ kind: 'mismatch', existing: 'business' })
     })
   })
 })
@@ -47,5 +50,14 @@ describe('foundAccountOf', () => {
     expect(foundAccountOf({ username: 'abhishek', account_type: 'business' })).toBe('business')
     expect(foundAccountOf({ username: 'sam', account_type: 'personal' })).toBe('personal')
     expect(foundAccountOf({ username: 'old' })).toBe('personal')
+  })
+})
+
+describe('wrong account type notice', () => {
+  it('has no way to continue into the other type', async () => {
+    const { accountRuleCopy } = await import('@/features/auth/AccountRuleNotice')
+    expect(accountRuleCopy({ kind: 'mismatch', existing: 'business' }, 'wallet').action).toBeNull()
+    expect(accountRuleCopy({ kind: 'mismatch', existing: 'personal' }, 'wallet').action).toBeNull()
+    expect(accountRuleCopy({ kind: 'already_exists', existing: 'personal' }, 'wallet').action).toBe('Log in as Personal')
   })
 })
