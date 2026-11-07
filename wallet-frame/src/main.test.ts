@@ -352,3 +352,28 @@ describe('Express Transfer: what a session key may sign', () => {
     expect(sessionTxRefusal(t(USDC, inc('0x9999999999999999999999999999999999999999')))).not.toBeNull()
   })
 })
+
+describe('session key permits (Express Swap)', () => {
+  it("signs only a standard Permit of an Express token, from the key, to Circle's swap adapter, on Arc", async () => {
+    const { sessionPermitRefusal } = await import('./main')
+    const key = '0x1111111111111111111111111111111111111111'
+    const ok = () => ({
+      primaryType: 'Permit',
+      domain: { name: 'USDC', version: '2', chainId: 5042002, verifyingContract: '0x3600000000000000000000000000000000000000' },
+      types: { Permit: [
+        { name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }, { name: 'value', type: 'uint256' },
+        { name: 'nonce', type: 'uint256' }, { name: 'deadline', type: 'uint256' },
+      ] },
+      message: { owner: key, spender: '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b', value: '1000000', nonce: '0', deadline: String(Math.floor(Date.now() / 1000) + 600) },
+    })
+    expect(sessionPermitRefusal(ok(), key)).toBeNull()
+    const bad = (f: (t: any) => void) => { const t = ok(); f(t); return sessionPermitRefusal(t, key) }
+    expect(bad(t => { t.message.spender = '0x9999999999999999999999999999999999999999' })).not.toBeNull()
+    expect(bad(t => { t.message.owner = '0x2222222222222222222222222222222222222222' })).not.toBeNull()
+    expect(bad(t => { t.domain.chainId = 1 })).not.toBeNull()
+    expect(bad(t => { t.domain.verifyingContract = '0x9999999999999999999999999999999999999999' })).not.toBeNull()
+    expect(bad(t => { t.primaryType = 'PermitBatch' })).not.toBeNull()
+    expect(bad(t => { t.message.deadline = String(Math.floor(Date.now() / 1000) + 86_400) })).not.toBeNull()
+    expect(bad(t => { t.types.Permit = t.types.Permit.slice(0, 4) })).not.toBeNull()
+  })
+})

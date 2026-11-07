@@ -643,13 +643,17 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
     } catch (e) { return skip(String((e as any)?.message ?? e).slice(0, 200)) } // nothing moved
     const t0 = performance.now()
     let result: any
+    // A permit signed in the wallet frame instead of an approve transaction
+    // (one Arc transaction fewer); older frames: approve.
+    const fpm = await import('./fastPay')
+    const allowanceStrategy = (await fpm.frameCan('swap-permit')) ? 'permit' : 'approve'
     try {
       const keyAdapter = await getAdapter(ex.account)
       result = await kit.swap({
         ...baseParams,
         from: { adapter: keyAdapter, chain: ARC_CHAIN_KEY as any },
         to: { recipientAddress: params.walletAddress }, // the output straight to the wallet (same chain)
-        config: { ...baseParams.config, allowanceStrategy: 'approve' },
+        config: { ...baseParams.config, allowanceStrategy },
       } as any)
     } catch (e) {
       const settled = await settleSwapTx()
@@ -669,7 +673,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
     await ex.finish(false)
     const amountOut = amountOutFromReceipt(_swapReceipt, params.tokenOut, params.walletAddress) || result?.amountOut || ''
     if (result?.txHash) finish(result.txHash, parseFloat(amountOut || '0') || 0)
-    void import('./errorReport').then(m => m.reportPerf(`[perf express swap] ${((performance.now() - t0) / 1000).toFixed(2)}s ${params.tokenIn}>${params.tokenOut}`)).catch(() => {})
+    void import('./errorReport').then(m => m.reportPerf(`[perf express swap] ${((performance.now() - t0) / 1000).toFixed(2)}s ${params.tokenIn}>${params.tokenOut} (${allowanceStrategy})`)).catch(() => {})
     const blockNumber = result?.txHash ? await swapBlockNumber(result.txHash, _swapReceipt) : undefined
     return { txHash: result?.txHash || '', amountOut, explorerUrl: result?.explorerUrl || '', blockNumber }
   })()

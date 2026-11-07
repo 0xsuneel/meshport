@@ -57,6 +57,7 @@ import { EXTERNAL_CHAINS } from '../src/blockchain/chains'
 import { relayerAccount, relayerAddress, keyRelayerAccount, relayerMode } from './_lib/relayerSigner'
 import { CROSS_CHAIN_FEE, usdRule, meshportFee, feeAcceptable, arcWeiToUsdcUnits } from '../src/lib/feePolicy'
 import { waitUntil } from '@vercel/functions'
+import { hedgedTransport } from './_lib/hedgedTransport'
 
 const ARC_DOMAIN = 26
 const FORWARD_HOOK = '0x636374702d666f72776172640000000000000000000000000000000000000000'
@@ -351,7 +352,8 @@ async function rpcTransport(chainKey: string, primary: string) {
   const { http, fallback } = await import('viem')
   const list = rpcListFor(chainKey, primary)
   if (list.length < 2) return withoutNodeFill(http(list[0] ?? primary, { timeout: 15_000 }))
-  return withoutNodeFill(fallback(list.map(u => http(u, { timeout: 8_000, retryCount: 0 })), { retryCount: 1 }))
+  // Reads race the next RPC after 1.2 s without an answer; sends go in order.
+  return withoutNodeFill(hedgedTransport(http, fallback, list))
 }
 
 async function clients(chainKey: string) {
@@ -1142,6 +1144,10 @@ async function transferMintStart(req: VercelRequest, res: VercelResponse) {
   const dest = CHAINS[chainKey]
   if (!dest || chainKey === 'Arc_Testnet' || !isHex(burnTx, 32)) return res.status(400).json({ error: 'Bad request' })
 
+  // Warmed while Circle attests: the chain's clients and fees, so the send
+  // right after the attestation is only estimate + nonce + sign.
+  const clP = callClients(chainKey).catch(() => null)
+  const feesP = clP.then(cl => cl ? relayFees(cl.pub, cl.pub.chain.id, true) : {}).catch(() => ({}))
   const deadline = startedAt + 40_000
   let msg: any = null
   const done = (m: any) => m?.status === 'complete' && m.message && m.attestation && m.attestation !== 'PENDING'
@@ -1160,16 +1166,23 @@ async function transferMintStart(req: VercelRequest, res: VercelResponse) {
   const hook = d?.decodedMessageBody?.hookData
   if (hook && hook !== '0x') return res.status(200).json({ pending: true, forwarder: true }) // Circle's forwarder mints it
 
-  const cl = await callClients(chainKey)
+  const cl = await clP
   if (!cl?.wallet) return res.status(400).json({ error: 'Relayer not available on this chain' })
   const { encodeFunctionData } = await import('viem')
   const data = encodeFunctionData({ abi: RECEIVE_MESSAGE_ABI, functionName: 'receiveMessage', args: [msg.message, msg.attestation] })
+  const to = MESSAGE_TRANSMITTER_V2 as `0x${string}`
+  const from = cl.wallet.account.address
+  // The gas estimate doubles as the simulation: already minted = it fails, nothing is sent.
+  let gas: bigint, nonce: number
   try {
-    await cl.pub.call({ account: cl.wallet.account, to: MESSAGE_TRANSMITTER_V2 as `0x${string}`, data })
+    [gas, nonce] = await Promise.all([
+      cl.pub.estimateGas({ account: from, to, data }) as Promise<bigint>,
+      cl.pub.getTransactionCount({ address: from, blockTag: 'pending' }) as Promise<number>,
+    ])
   } catch (e: any) {
     return res.status(200).json({ alreadyMinted: true, error: e?.shortMessage || 'Call would fail' })
   }
-  const txHash = await cl.wallet.sendTransaction({ to: MESSAGE_TRANSMITTER_V2 as `0x${string}`, data, ...(await relayFees(cl.pub, cl.pub.chain.id, true)) })
+  const txHash = await cl.wallet.sendTransaction({ to, data, gas: gas * 6n / 5n, nonce, ...(await feesP) })
   const sentAt = Date.now()
   const log = (outcome: string) => console.log('[bridge-relay] transfer mint', JSON.stringify({
     chain: chainKey, burnTx, mintTx: txHash, outcome, attestMs: attestedAt - startedAt, sendMs: sentAt - attestedAt, receiptMs: Date.now() - sentAt,
