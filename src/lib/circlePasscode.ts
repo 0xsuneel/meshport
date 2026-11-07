@@ -93,7 +93,7 @@ export async function changeCirclePasscode(oldPasscode: string | null, passcode:
 
 // A Google / email wallet's passcode verified against the app's hash: move it to the frame.
 onPasscodeVerified(async passcode => {
-  if (!isCircleWallet()) return
+  if (!isCircleWallet() || passcode.startsWith('frame-ticket:')) return
   const stored = useAuthStore.getState().passcode
   if (!stored || stored === FRAME_PASSCODE) return
   if (await adoptCirclePasscode(passcode)) {

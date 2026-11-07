@@ -14,8 +14,8 @@
 import { generateMnemonic, english, privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bytesToHex, decodeFunctionData } from 'viem'
 import {
-  WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION, REVEAL_CHANNEL, PASSKEY_CHANNEL,
-  isWalletMessage, parseOrigins,
+  WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION, REVEAL_CHANNEL, PASSKEY_CHANNEL, CONFIRM_CHANNEL, FRAME_TICKET_PREFIX,
+  isWalletMessage, parseOrigins, type ApprovalIntent,
   type Hex, type WalletMethod, type WalletParams, type WalletResult, type WalletResponse, type WalletErrorCode,
   type PasskeyRequest, type PasskeyOutcome,
 } from '@/wallet/protocol'
@@ -152,7 +152,7 @@ const big = (v: unknown): bigint | null => {
   try { return BigInt(v as string | number | bigint) } catch { return null }
 }
 /** What this frame lets a session key do (the app checks before relying on it). */
-export const SESSION_CAPABILITIES = ['pay', 'transfer', 'swap', 'bring', 'swap-permit'] as const
+export const SESSION_CAPABILITIES = ['pay', 'transfer', 'swap', 'bring', 'swap-permit', 'confirm'] as const
 
 /** A session key signs one kind of typed data: an EIP-2612 Permit of its own
  *  USDC / EURC / cirBTC on Arc, to Circle's swap adapter only - in place of
@@ -362,6 +362,148 @@ try {
 // ── Handlers ────────────────────────────────────────────────────────────────
 type Handlers = { [M in WalletMethod]: (p: WalletParams<M>) => Promise<WalletResult<M>> }
 
+// ── Secure approvals: the keypad page (confirm.html) ────────────────────────
+// docs/SECURE-APPROVALS.md. The app asks for a ticket with what is being
+// approved; confirm.html (same origin, shown in the app) draws it from HERE
+// and takes the passcode; this frame checks it. The app only ever learns
+// "approved" and gets the ticket back, which it hands in where it used to
+// hand in the passcode (approve, fastpay:approve, circle-passcode:check).
+const CONFIRM_TTL_MS = 2 * 60_000
+type ConfirmTicket = {
+  owner: string; wallet: 'circle' | 'frame'; intent: ApprovalIntent
+  title: string; name: string; label: string
+  expires: number; approvedAt: number | null; used: Set<string>
+}
+const confirmTickets = new Map<string, ConfirmTicket>()
+const KNOWN_TOKENS: Record<string, { symbol: string; decimals: number }> = {
+  [ARC_USDC_ERC20]: { symbol: 'USDC', decimals: 6 }, [ARC_EURC]: { symbol: 'EURC', decimals: 6 }, [ARC_CIRBTC]: { symbol: 'cirBTC', decimals: 8 },
+}
+const CCTP_DOMAINS: Record<number, string> = {
+  0: 'Ethereum', 1: 'Avalanche', 2: 'OP Mainnet', 3: 'Arbitrum', 5: 'Solana', 6: 'Base', 7: 'Polygon', 10: 'Unichain', 11: 'Linea',
+  12: 'Codex', 13: 'Sonic', 14: 'World Chain', 15: 'Monad', 16: 'Sei', 17: 'BNB Chain', 18: 'XDC', 19: 'HyperEVM', 21: 'Ink', 22: 'Plume', 26: 'Arc',
+}
+const isAddr = (v: unknown): v is string => typeof v === 'string' && /^0x[0-9a-fA-F]{40}$/.test(v)
+const isUnits = (v: unknown): v is string => typeof v === 'string' && /^\d{1,40}$/.test(v)
+export function units(amount: string, decimals: number): string {
+  const v = BigInt(amount), d = 10n ** BigInt(decimals)
+  const frac = (v % d).toString().padStart(decimals, '0').replace(/0+$/, '')
+  return `${v / d}${frac ? '.' + frac : ''}`
+}
+const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
+/** A well-formed intent (anything else is refused before a ticket exists). */
+export function validIntent(i: unknown): i is ApprovalIntent {
+  const x = (i ?? {}) as Record<string, unknown>
+  switch (x.kind) {
+    case 'pay': return isAddr(x.token) && isAddr(x.to) && isUnits(x.amount)
+    case 'transfer': return isUnits(x.amount) && Number.isInteger(x.destinationDomain) && typeof x.recipient === 'string' && /^0x[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$/.test(x.recipient)
+    case 'swap': return isAddr(x.tokenIn) && isUnits(x.amount)
+    case 'bring': return Number.isInteger(x.chainId) && isUnits(x.amount)
+    case 'other': return true
+    default: return false
+  }
+}
+/** What the keypad page shows: drawn from the intent itself, not the app's words (the app's name for a recipient is shown as such). */
+export function confirmDisplay(t: Pick<ConfirmTicket, 'intent' | 'title' | 'name' | 'label'>): { title: string; lines: string[] } {
+  const i = t.intent
+  const tok = (a: string) => KNOWN_TOKENS[a.toLowerCase()] ?? { symbol: 'tokens', decimals: 6 }
+  const named = t.name ? ` (${t.name.slice(0, 40)})` : ''
+  switch (i.kind) {
+    case 'pay': { const k = tok(i.token); return { title: 'Approve payment', lines: [`Pay ${units(i.amount, k.decimals)} ${k.symbol}`, `To ${short(i.to)}${named}`] } }
+    case 'transfer': {
+      const to = i.recipient.length === 66 ? '0x' + i.recipient.slice(26) : i.recipient
+      return { title: 'Approve transfer', lines: [`Send up to ${units(i.amount, 6)} USDC`, `To ${short(to)}${named}`, `On ${CCTP_DOMAINS[i.destinationDomain] ?? `chain #${i.destinationDomain}`}`] }
+    }
+    case 'swap': { const k = tok(i.tokenIn); return { title: 'Approve swap', lines: [`Swap up to ${units(i.amount, k.decimals)} ${k.symbol}`, 'Into your own wallet'] } }
+    case 'bring': return { title: 'Approve Bring', lines: [`Bring up to ${units(i.amount, 6)} USDC`, 'To your own wallet on Arc'] }
+    default: return { title: (t.title || 'Enter your passcode').slice(0, 60), lines: [t.label, t.name].filter(Boolean).map(x => x.slice(0, 80)) }
+  }
+}
+/** A ticket the keypad page approved, for `owner`, not used yet for `use`; null otherwise. Marks it used. */
+function approvedTicket(passcode: unknown, owner: string, use: string): ConfirmTicket | null {
+  if (typeof passcode !== 'string' || !passcode.startsWith(FRAME_TICKET_PREFIX)) return null
+  const t = confirmTickets.get(passcode.slice(FRAME_TICKET_PREFIX.length))
+  if (!t || t.approvedAt == null || Date.now() - t.approvedAt > CONFIRM_TTL_MS) return null
+  if (t.owner !== owner.toLowerCase() || t.used.has(use)) return null
+  t.used.add(use)
+  return t
+}
+const isTicket = (p: unknown) => typeof p === 'string' && p.startsWith(FRAME_TICKET_PREFIX)
+async function checkConfirmPin(t: ConfirmTicket, pin: string): Promise<void> {
+  if (t.wallet === 'circle') await gate.checkPasscode(pin)
+  else await vault.checkPasscode(t.owner, pin)
+}
+try {
+  const confirmChannel = new BroadcastChannel(CONFIRM_CHANNEL)
+  confirmChannel.onmessage = async (e) => {
+    const d = (e.data ?? {}) as { type?: string; ticket?: string; pin?: string }
+    if (typeof d.ticket !== 'string') return
+    const t = confirmTickets.get(d.ticket)
+    if (!t) return // another tab's frame holds it
+    if (t.expires < Date.now()) { confirmTickets.delete(d.ticket); confirmChannel.postMessage({ type: 'confirm:show', ticket: d.ticket, error: 'expired' }); return }
+    if (d.type === 'confirm:hello') { confirmChannel.postMessage({ type: 'confirm:show', ticket: d.ticket, display: confirmDisplay(t) }); return }
+    if (d.type !== 'confirm:pin' || t.approvedAt != null) return
+    if (typeof d.pin !== 'string' || !/^\d{6}$/.test(d.pin)) { confirmChannel.postMessage({ type: 'confirm:result', ticket: d.ticket, ok: false, error: 'bad-passcode' }); return }
+    try {
+      await checkConfirmPin(t, d.pin)
+      t.approvedAt = Date.now()
+      confirmChannel.postMessage({ type: 'confirm:result', ticket: d.ticket, ok: true })
+    } catch (err) {
+      const x = err as { code?: string; lockedForMs?: number }
+      confirmChannel.postMessage({ type: 'confirm:result', ticket: d.ticket, ok: false, error: x.code ?? 'failed', lockedForMs: x.lockedForMs ?? 0 })
+    }
+  }
+} catch { /* no BroadcastChannel: the app keeps its own keypad */ }
+
+// ── What a bound approval lets a session key sign ────────────────────────────
+const MAX_REFUND = 250_000n   // the key's gas refund in a pull: 0.25 USDC
+const MAX_FEE_LEG = 5_000_000n // MeshPort's fee in a pull: at most 5 USDC
+const activeBurns = new Map<string, { intent: Extract<ApprovalIntent, { kind: 'transfer' }>; until: number }>() // key → its transfer's approved burn
+/** Why this Permit2 pull doesn't fit what was approved (null: it does). Exported for tests. */
+export function pullRefusal(data: string, intent: ApprovalIntent | null, owner: string, key: string): string | null {
+  if (!intent || intent.kind === 'other' || intent.kind === 'bring') return 'approved without the details of this payment - confirm it again'
+  let legs: readonly { from: string; to: string; amount: bigint; token: string }[]
+  try { legs = decodeFunctionData({ abi: PERMIT2_TRANSFER_ABI, data: data as Hex }).args[0] } catch { return 'unreadable pull' }
+  const o = owner.toLowerCase(), k = key.toLowerCase()
+  const toKey = (t: string) => legs.filter(l => l.to.toLowerCase() === k && l.token.toLowerCase() === t).reduce((a, l) => a + l.amount, 0n)
+  for (const l of legs) if (l.from.toLowerCase() !== o) return 'pull not from the owner'
+  const fees = legs.filter(l => RELAYERS.has(l.to.toLowerCase()))
+  if (fees.some(l => l.token.toLowerCase() !== ARC_USDC_ERC20 || l.amount > MAX_FEE_LEG)) return 'fee above the cap'
+  if (intent.kind === 'pay') {
+    const main = legs.filter(l => l.to.toLowerCase() === intent.to.toLowerCase())
+    if (main.length !== 1 || main[0].token.toLowerCase() !== intent.token.toLowerCase() || main[0].amount > BigInt(intent.amount)) return 'not the approved recipient or amount'
+    for (const l of legs) {
+      if (l === main[0] || RELAYERS.has(l.to.toLowerCase())) continue
+      if (l.to.toLowerCase() !== k || l.token.toLowerCase() !== ARC_USDC_ERC20) return 'a leg the payment did not approve'
+    }
+    if (toKey(ARC_USDC_ERC20) > MAX_REFUND) return 'gas refund above the cap'
+    return null
+  }
+  for (const l of legs) if (l.to.toLowerCase() !== k && !RELAYERS.has(l.to.toLowerCase())) return 'a leg the move did not approve'
+  if (intent.kind === 'transfer') {
+    if (legs.some(l => l.token.toLowerCase() !== ARC_USDC_ERC20)) return 'not USDC'
+    if (toKey(ARC_USDC_ERC20) > BigInt(intent.amount) + MAX_REFUND + MAX_FEE_LEG) return 'more than the approved amount'
+    return null
+  }
+  // swap
+  const tin = intent.tokenIn.toLowerCase()
+  const extra = tin === ARC_USDC_ERC20 ? MAX_REFUND : 0n
+  if (toKey(tin) > BigInt(intent.amount) + extra) return 'more than the approved amount'
+  for (const l of legs) if (l.token.toLowerCase() !== tin && !(l.token.toLowerCase() === ARC_USDC_ERC20 && l.amount <= MAX_REFUND)) return 'not the approved token'
+  return null
+}
+/** Why this burn doesn't fit the transfer that was approved (null: it does). Exported for tests. */
+export function burnRefusal(data: string, intent: Extract<ApprovalIntent, { kind: 'transfer' }> | undefined): string | null {
+  if (!intent) return 'no approved transfer for this burn'
+  let args: readonly unknown[]
+  try { args = decodeFunctionData({ abi: BURN_ABI, data: data as Hex }).args } catch { return 'unreadable burn' }
+  const [amount, domain, recipient] = args as [bigint, number, string]
+  const want = intent.recipient.length === 66 ? intent.recipient.toLowerCase() : '0x' + intent.recipient.slice(2).toLowerCase().padStart(64, '0')
+  if (amount > BigInt(intent.amount)) return 'more than the approved amount'
+  if (Number(domain) !== intent.destinationDomain) return 'not the approved destination'
+  if (String(recipient).toLowerCase() !== want) return 'not the approved recipient'
+  return null
+}
+
 const handlers: Handlers = {
   async ping() { return { version: WALLET_PROTOCOL_VERSION } },
 
@@ -437,7 +579,10 @@ const handlers: Handlers = {
   async approve({ address, passcode }) {
     vault.noteApprovalsUsed()
     if (!vault.hasPasscode(address)) return { approved: true as const, required: false, validForMs: 0 }
-    await vault.checkPasscode(address, passcode)
+    if (isTicket(passcode)) {
+      const t = approvedTicket(passcode, String(address), 'approve')
+      if (!t || t.wallet !== 'frame') throw new RpcError('bad-passcode', 'This approval has expired - confirm again')
+    } else await vault.checkPasscode(address, passcode)
     approvedUntil.set(address.toLowerCase(), Date.now() + APPROVAL_MS)
     return { approved: true as const, required: true, validForMs: APPROVAL_MS }
   },
@@ -503,9 +648,23 @@ const handlers: Handlers = {
     if (!k) throw new RpcError('locked', 'This Fast Pay session has ended')
     const why = sessionTxRefusal(transaction, sessionOwner.get(a), a)
     if (why) throw new RpcError('invalid', why)
-    // A payment (Permit2 batch transferFrom) needs the passcode, checked here.
-    if (isSessionPayment(transaction) && !gate.takeApproval(sessionOwner.get(a) ?? '')) {
-      throw new RpcError('approval-required', 'Enter your passcode to approve this')
+    const owner = sessionOwner.get(a) ?? ''
+    const data = typeof transaction.data === 'string' ? transaction.data : ''
+    // A payment (Permit2 batch transferFrom) needs the passcode, checked here,
+    // and must be what was approved (docs/SECURE-APPROVALS.md).
+    if (isSessionPayment(transaction)) {
+      const ap = gate.takeApproval(owner)
+      if (!ap) throw new RpcError('approval-required', 'Enter your passcode to approve this')
+      const bad = pullRefusal(data, ap.intent, owner, a)
+      if (bad) throw new RpcError('invalid', `Not what was approved (${bad})`)
+      if (ap.intent?.kind === 'transfer') activeBurns.set(a, { intent: ap.intent, until: Date.now() + 5 * 60_000 })
+    }
+    // A burn: only the transfer this key's last approved pull was for.
+    if (String(transaction.to ?? '').toLowerCase() === TOKEN_MESSENGER_V2) {
+      const b = activeBurns.get(a)
+      activeBurns.delete(a)
+      const bad = burnRefusal(data, b && b.until > Date.now() ? b.intent : undefined)
+      if (bad) throw new RpcError('invalid', `Not what was approved (${bad})`)
     }
     return { serialized: await k.signTransaction(transaction as any) }
   },
@@ -526,8 +685,13 @@ const handlers: Handlers = {
     if (why) throw new RpcError('invalid', `Not an Express Bring (${why})`)
     const k = await bringKeyFor(o, false)
     if (!k) throw new RpcError('not-found', 'No Express Bring key on this device')
-    // Every Bring needs the passcode, checked here.
-    if (!gate.takeApproval(o)) throw new RpcError('approval-required', 'Enter your passcode to approve this')
+    // Every Bring needs the passcode, checked here - for this chain and amount.
+    const ap = gate.takeApproval(o)
+    if (!ap) throw new RpcError('approval-required', 'Enter your passcode to approve this')
+    const bi = ap.intent
+    if (!bi || bi.kind !== 'bring' || bi.chainId !== Number(chainId) || BigInt(b.amount) + BigInt(b.fee) > BigInt(bi.amount)) {
+      throw new RpcError('invalid', 'Not what was approved (this Bring)')
+    }
     const signature = await k.signTypedData({
       domain: { name: 'MeshPortRouter', version: '1', chainId: Number(chainId), verifyingContract: String(router) as Hex },
       types: EXPRESS_BRING_TYPES, primaryType: 'ExpressBring',
@@ -584,6 +748,11 @@ const handlers: Handlers = {
   },
 
   async 'circle-passcode:check'({ passcode }) {
+    if (isTicket(passcode)) {
+      const t = confirmTickets.get(String(passcode).slice(FRAME_TICKET_PREFIX.length))
+      if (!t || t.wallet !== 'circle' || !approvedTicket(passcode, t.owner, 'check')) throw new RpcError('bad-passcode', 'This approval has expired - confirm again')
+      return { ok: true as const }
+    }
     try { await gate.checkPasscode(passcode) } catch (e) { throw gateError(e) }
     return { ok: true as const }
   },
@@ -601,7 +770,33 @@ const handlers: Handlers = {
   },
 
   async 'fastpay:approve'({ owner, passcode }) {
+    // From the keypad page: already checked there, for this intent.
+    if (isTicket(passcode)) {
+      const t = approvedTicket(passcode, String(owner), 'fastpay')
+      if (!t || t.wallet !== 'circle') throw new RpcError('bad-passcode', 'This approval has expired - confirm again')
+      gate.grant(owner, t.intent)
+      return { approved: true as const, validForMs: gate.APPROVAL_MS, full: false }
+    }
     try { return { approved: true as const, ...(await gate.approve(owner, passcode)) } } catch (e) { throw gateError(e) }
+  },
+
+  async 'confirm:open'({ owner, wallet, intent, title, name, label }) {
+    const o = String(owner ?? '').toLowerCase()
+    if (!/^0x[0-9a-f]{40}$/.test(o) || (wallet !== 'circle' && wallet !== 'frame')) throw new RpcError('invalid', 'Which wallet?')
+    if (!validIntent(intent)) throw new RpcError('invalid', 'Unreadable approval')
+    if (wallet === 'circle' ? !gate.hasPasscode() : !vault.hasPasscode(o)) throw new RpcError('not-found', 'No passcode in the wallet for this')
+    for (const [k, v] of confirmTickets) if (v.expires < Date.now()) confirmTickets.delete(k)
+    const ticket = bytesToHex(crypto.getRandomValues(new Uint8Array(16)))
+    confirmTickets.set(ticket, {
+      owner: o, wallet, intent, title: String(title ?? ''), name: String(name ?? ''), label: String(label ?? ''),
+      expires: Date.now() + CONFIRM_TTL_MS, approvedAt: null, used: new Set(),
+    })
+    return { ticket }
+  },
+
+  async 'confirm:status'({ ticket }) {
+    const t = confirmTickets.get(String(ticket ?? '').replace(FRAME_TICKET_PREFIX, ''))
+    return { approved: !!t && t.approvedAt != null && Date.now() - t.approvedAt <= CONFIRM_TTL_MS }
   },
 
   async 'chat:seed'({ address }) {

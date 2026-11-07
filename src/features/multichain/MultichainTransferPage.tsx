@@ -1,4 +1,5 @@
 import { backLayerPop } from '@/lib/backLayers'
+import { transferIntent } from '@/lib/approvalIntents'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
@@ -4254,6 +4255,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         subtitle={desktopInput ? `To ${chain.name}` : `Authorise ${tokenChar}${fmtTok(numAmount)} ${tokenSym} to ${chain.name}`}
         amountLabel={`${tokenChar}${fmtTok(numAmount)} ${tokenSym}`} placement="panel"
         card={{ label: 'Sending to', name: chain.name, amount: `${tokenChar}${fmtTok(numAmount)}`, unit: tokenSym }} bioVerb="Transfer"
+        intent={tokenSym === 'USDC' ? transferIntent(chain.sdk, address, numAmount) : undefined}
         value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }} error={passError || undefined}
         onComplete={(_, viaBiometric) => { if (!loading) { setPaidViaBiometric(!!viaBiometric); handleConfirm() } }}
         // Right passcode → the processing page comes in over the sheet.

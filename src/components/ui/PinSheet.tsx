@@ -6,7 +6,7 @@
 // The error shows in one place on both: under the title, in red, and the
 // dots shake. With no passcode set, a plain confirm button stands in for the
 // keypad, so it's still an explicit "are you sure" step.
-import { type ReactNode } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { ActionSheet } from './ActionSheet'
 import { DesktopTransactionAuthDialog } from './DesktopTransactionAuthDialog'
@@ -14,6 +14,8 @@ import { PinKeypad } from './PinKeypad'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY } from '@/lib/motion'
 import type { BiometricVerb } from '@/lib/biometricWording'
+import type { ApprovalIntent } from '@/wallet/protocol'
+import { SecurePinPad, secureWallet, frameHasSecureKeypad } from './SecurePinPad'
 
 export interface PinSheetProps {
   open: boolean
@@ -62,12 +64,35 @@ export interface PinSheetProps {
    *  is right → processing): it leaves underneath that page - no slide down
    *  or fade on top of it. */
   leaveUnder?: boolean
+  /** What this approval is for, in exact terms (docs/SECURE-APPROVALS.md):
+   *  the wallet frame shows it and binds the approval to it. Without one,
+   *  the approval covers no Express move (it goes the normal way). */
+  intent?: ApprovalIntent
+}
+
+/** The wallet frame's own keypad when this account's passcode lives there (and the frame has it). */
+function useSecureKeypad(open: boolean, fallback: boolean): [boolean, () => void] {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    if (!open || fallback || !secureWallet()) { setOn(false); return }
+    let cancelled = false
+    void frameHasSecureKeypad().then(ok => { if (!cancelled) setOn(ok) })
+    return () => { cancelled = true }
+  }, [open, fallback])
+  return [on, () => setOn(false)]
 }
 
 export function PinSheet(p: PinSheetProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const close = p.locked ? () => {} : p.onClose
-  const pad = p.fallbackConfirm ? (
+  const [secure, notSecure] = useSecureKeypad(p.open, !!p.fallbackConfirm)
+  const said0 = typeof p.subtitle === 'string' ? p.subtitle : ''
+  const pad = secure && !p.fallbackConfirm ? (
+    <SecurePinPad key={p.id ?? 'secure'} intent={p.intent} title={p.title}
+      name={p.card?.name} label={p.card ? `${p.card.label} ${p.card.amount}${p.card.unit ? ' ' + p.card.unit : ''}` : said0}
+      onChange={p.onChange} onComplete={p.onComplete} onCancel={close} onUnavailable={notSecure}
+      biometricAvailable={p.biometricAvailable} autoBiometric={p.autoBiometric} />
+  ) : p.fallbackConfirm ? (
     <button type="button" onClick={p.fallbackConfirm.onConfirm}
       className="w-full rounded-2xl py-4 text-[15px] font-bold text-white bg-brand active:scale-[0.98] transition-transform">
       {p.fallbackConfirm.label}

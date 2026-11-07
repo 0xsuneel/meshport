@@ -40,6 +40,15 @@ const permit2Tx = { type: 'eip1559', chainId: 5042002, nonce: 0, to: '0x00000000
 
 const OWNER = '0x1111111111111111111111111111111111111111'
 const PIN = '123456'
+// Approve through the keypad page's channel (confirm.html), for permit2Tx's payment.
+async function approveVia(ask: (m: string, p: unknown) => Promise<any>) {
+  const { result } = await ask('confirm:open', { owner: OWNER, wallet: 'circle', intent: { kind: 'pay', token: '0x3600000000000000000000000000000000000000', to: '0x9999999999999999999999999999999999999999', amount: '1' } })
+  const ch = new BroadcastChannel('meshport-wallet-confirm')
+  const out = await new Promise<any>(res => { ch.onmessage = e => { if (e.data.type === 'confirm:result' && e.data.ticket === result.ticket) res(e.data) }; ch.postMessage({ type: 'confirm:pin', ticket: result.ticket, pin: PIN }) })
+  ch.close()
+  expect(out.ok).toBe(true)
+  await ask('fastpay:approve', { owner: OWNER, passcode: 'frame-ticket:' + result.ticket })
+}
 async function withPin() {
   const ask = await frame()
   if (!storage.getItem('mp.circle.passcode')) await ask('circle-passcode:set', { passcode: PIN })
@@ -55,7 +64,7 @@ describe('Fast Pay session key kept across a restart', () => {
     expect(saved.owner).toBe(OWNER)
     expect(saved.sealed.startsWith('dv1:')).toBe(true)    // device-sealed
     expect(saved.sealed).not.toMatch(/[0-9a-f]{64}/i)      // no readable key in it
-    await ask('fastpay:approve', { owner: OWNER, passcode: PIN })
+    await approveVia(ask)
     const before = (await ask('session:sign', { address: result.address, transaction: permit2Tx })).result.serialized
 
     const ask2 = await frame() // the app closed and reopened: a new frame, empty memory
@@ -63,7 +72,7 @@ describe('Fast Pay session key kept across a restart', () => {
     expect((await ask2('session:restore', { address: result.address })).result).toEqual({ restored: true })
     // A fresh frame: the approval did not survive; the passcode is checked again.
     expect((await ask2('session:sign', { address: result.address, transaction: permit2Tx })).error.code).toBe('approval-required')
-    await ask2('fastpay:approve', { owner: OWNER, passcode: PIN })
+    await approveVia(ask2)
     const after = (await ask2('session:sign', { address: result.address, transaction: permit2Tx })).result.serialized
     expect(after).toBe(before) // the same key
   })

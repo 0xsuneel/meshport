@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { swapIntent } from '@/lib/approvalIntents'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import { quoteAccount } from '@/wallet/account'
 import { timeQuote } from '@/lib/quoteTiming'
@@ -2072,6 +2073,7 @@ export function SwapPage() {
           amount: trimTrailingZeros(parseFloat(amountIn || '0').toFixed(swapTokenDecimals(tokenIn.id))), unit: tokenIn.id,
         }}
         bioVerb="Swap"
+        intent={swapIntent(tokenIn.id, parseFloat(amountIn || '0'))}
         anchor={desktopColumnRef.current}
         value={passEntry}
         onChange={v => { setPassEntry(v); setPassError('') }}

@@ -1,4 +1,5 @@
 import { backLayerPop } from '@/lib/backLayers'
+import { payIntent } from '@/lib/approvalIntents'
 import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
 import { SendIcon } from '@/components/ui/SendIcon'
@@ -5415,6 +5416,7 @@ export function ChatConversationPage() {
         id="chat-pay-pin"
         inPanel
         bioVerb="Pay"
+        intent={payIntent(payToken, otherUser?.wallet_address, parseFloat(payAmount) || 0)}
         title="Authorize Payment"
         subtitle={isDesktop ? `To ${recipientClean}.arc` : 'Enter passcode to confirm'}
         value={payPassEntry}

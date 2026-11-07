@@ -27,6 +27,7 @@
 //           gets no session (a new one needs the Circle wallet's signature).
 
 import { encryptPrivateKey, decryptPrivateKey, sealForDevice } from '@/lib/security'
+import type { ApprovalIntent } from '@/wallet/protocol'
 
 const PIN = 'mp.circle.passcode'
 const LOCK = 'mp.circle.lockout'
@@ -119,21 +120,29 @@ function dropOldChecks(): void {
 }
 
 // ── One approval = one payment signature, for one wallet ─────────────────────
-const approvals = new Map<string, number>() // owner → approved until (ms)
+// owner → approved until (ms), and what it was for when it came from the
+// frame's own keypad page (confirm.html). No intent: the passcode reached the
+// frame through the app (an older app) - it covers no Express pull.
+const approvals = new Map<string, { until: number; intent: ApprovalIntent | null }>()
 
 /** One payment approved. `full`: the slow check ran (first one since the frame loaded). */
 export async function approve(owner: string, passcode: string): Promise<{ validForMs: number; full: boolean }> {
   const full = await checkPasscode(passcode)
-  approvals.set(norm(owner), Date.now() + APPROVAL_MS)
+  approvals.set(norm(owner), { until: Date.now() + APPROVAL_MS, intent: null })
   return { validForMs: APPROVAL_MS, full }
 }
 
-/** Use the approval for one payment signature (true), if there is a fresh one. */
-export function takeApproval(owner: string): boolean {
+/** An approval the frame's keypad page already checked, for this intent. */
+export function grant(owner: string, intent: ApprovalIntent): void {
+  approvals.set(norm(owner), { until: Date.now() + APPROVAL_MS, intent })
+}
+
+/** Use the approval for one payment signature, if there is a fresh one: what it was for (null intent: unbound), or null. */
+export function takeApproval(owner: string): { intent: ApprovalIntent | null } | null {
   const a = norm(owner)
-  const until = approvals.get(a) ?? 0
+  const ap = approvals.get(a)
   approvals.delete(a)
-  return until > Date.now()
+  return ap && ap.until > Date.now() ? { intent: ap.intent } : null
 }
 
 /** Test hook. */

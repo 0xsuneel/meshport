@@ -203,6 +203,21 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
   const tokenPermit = (spender: string) => encodeFunctionData({ abi: parseAbi(['function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)']), functionName: 'permit',
     args: [OWNER, spender as `0x${string}`, 1n, 1n, 27, `0x${'11'.repeat(32)}`, `0x${'22'.repeat(32)}`] })
   let pinSet = false
+  // Approve through the keypad page's channel, as confirm.html does: the
+  // passcode goes to the frame over BroadcastChannel, the app gets a ticket.
+  const PAY_INTENT = { kind: 'pay', token: USDC, to: '0x9999999999999999999999999999999999999999', amount: '1' }
+  async function approveVia(intent: Record<string, unknown> = PAY_INTENT, pin = PIN, owner = OWNER): Promise<{ ok: boolean; error?: string }> {
+    const opened = (await ask('confirm:open', { owner, wallet: 'circle', intent }))!.msg
+    if (!opened.result) return { ok: false, error: opened.error?.code }
+    const ticket = opened.result.ticket
+    const ch = new BroadcastChannel('meshport-wallet-confirm')
+    const shown = await new Promise<any>(res => { ch.onmessage = e => { if (e.data.type === 'confirm:show' && e.data.ticket === ticket) res(e.data) }; ch.postMessage({ type: 'confirm:hello', ticket }) })
+    expect(shown.display.lines.length).toBeGreaterThan(0)
+    const out = await new Promise<any>(res => { ch.onmessage = e => { if (e.data.type === 'confirm:result' && e.data.ticket === ticket) res(e.data) }; ch.postMessage({ type: 'confirm:pin', ticket, pin }) })
+    ch.close()
+    if (out.ok) expect((await ask('fastpay:approve', { owner, passcode: 'frame-ticket:' + ticket }))!.msg.result.approved).toBe(true)
+    return { ok: out.ok, error: out.error }
+  }
   async function session(): Promise<string> {
     if (!pinSet) { expect((await ask('circle-passcode:set', { passcode: PIN }))!.msg.result).toEqual({ ok: true }); pinSet = true }
     return (await ask('session:create', { owner: OWNER }))!.msg.result.address
@@ -221,14 +236,14 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
     }
     // A token permit for anything but Permit2 is refused.
     expect((await ask('session:sign', { address, transaction: tx(USDC, tokenPermit('0x9999999999999999999999999999999999999999')) }))!.msg.error?.code).toBe('invalid')
-    await ask('fastpay:approve', { owner: OWNER, passcode: PIN })
+    await approveVia()
     expect((await ask('session:sign', { address, transaction: tx(PERMIT2, PAY) }))!.msg.result.serialized).toMatch(/^0x02/)
     // A plain value send (native USDC): only back to the owner or the relayer, never elsewhere.
     expect((await ask('session:sign', { address, transaction: { ...tx(OWNER), data: undefined, value: 5n } }))!.msg.result.serialized).toMatch(/^0x02/)
     expect((await ask('session:sign', { address, transaction: { ...tx('0x7218ec7dd868444a7655599551520ac5bcca7c0d'), data: undefined, value: 5n } }))!.msg.result.serialized).toMatch(/^0x02/)
     expect((await ask('session:sign', { address, transaction: { ...tx('0x9999999999999999999999999999999999999999'), data: undefined, value: 5n } }))!.msg.error?.code).toBe('invalid')
     // A pull from anyone but the owner is refused, even with an approval.
-    await ask('fastpay:approve', { owner: OWNER, passcode: PIN })
+    await approveVia()
     const notOwner = encodeFunctionData({ abi: parseAbi(['function transferFrom((address from, address to, uint160 amount, address token)[] details)']), functionName: 'transferFrom',
       args: [[{ from: '0x2222222222222222222222222222222222222222', to: OWNER, amount: 1n, token: USDC }]] })
     expect((await ask('session:sign', { address, transaction: tx(PERMIT2, notOwner) }))!.msg.error?.code).toBe('invalid')
@@ -246,7 +261,14 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
       minFinalityThreshold: 1000, hookDataHash: '0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470', salt: '0x' + 'ab'.repeat(32), deadline: DEADLINE }
     const sign = async (b = bring, owner = OWNER) => (await ask('bring:sign', { owner, chainId: 84532, router: ROUTER, bring: b }))!.msg
     expect((await sign()).error?.code).toBe('approval-required')
+    // A raw passcode (through the app) covers no Bring; nor one for another chain or a smaller amount.
     await ask('fastpay:approve', { owner: OWNER, passcode: PIN })
+    expect((await sign()).error?.code).toBe('invalid')
+    await approveVia({ kind: 'bring', chainId: 1, amount: '10050000' })
+    expect((await sign()).error?.code).toBe('invalid')
+    await approveVia({ kind: 'bring', chainId: 84532, amount: '10000000' })
+    expect((await sign()).error?.code).toBe('invalid')
+    await approveVia({ kind: 'bring', chainId: 84532, amount: '10050000' })
     const ok = await sign()
     const { recoverTypedDataAddress } = await import('viem')
     const signer = await recoverTypedDataAddress({
@@ -264,7 +286,7 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
     // One approval, one signature.
     expect((await sign()).error?.code).toBe('approval-required')
     // Never for another wallet.
-    await ask('fastpay:approve', { owner: OWNER, passcode: PIN })
+    await approveVia({ kind: 'bring', chainId: 84532, amount: '10050000' })
     expect((await sign({ ...bring, owner: '0x2222222222222222222222222222222222222222' })).error?.code).toBe('invalid')
     await ask('bring:forget', { owner: OWNER })
     expect((await ask('bring:key', { owner: OWNER }))!.msg.result.address).toBeNull()
@@ -309,9 +331,16 @@ describe('Fast Pay session keys: kept in the frame, sign only Fast Pay calls on 
     expect((await sign()).error?.code).toBe('approval-required')
     expect((await ask('fastpay:approve', { owner: OWNER, passcode: '000000' }))!.msg.error?.code).toBe('bad-passcode')
     expect((await sign()).error?.code).toBe('approval-required')
+    // A raw passcode (handed in by the app) approves, but covers no Express pull.
     expect((await ask('fastpay:approve', { owner: OWNER, passcode: PIN }))!.msg.result.approved).toBe(true)
+    expect((await sign()).error?.code).toBe('invalid')
+    // The keypad page's approval for this payment: one signature.
+    expect((await approveVia()).ok).toBe(true)
     expect((await sign()).result.serialized).toMatch(/^0x02/)
     expect((await sign()).error?.code).toBe('approval-required') // used up
+    // A wrong passcode on the keypad approves nothing.
+    expect((await approveVia(PAY_INTENT, '000000')).ok).toBe(false)
+    expect((await sign()).error?.code).toBe('approval-required')
   })
 
   it('changing the check needs the current passcode; forget drops every session key of that wallet', async () => {
@@ -408,5 +437,50 @@ describe('session key permits (Express Swap)', () => {
     expect(bad(t => { t.primaryType = 'PermitBatch' })).not.toBeNull()
     expect(bad(t => { t.message.deadline = String(Math.floor(Date.now() / 1000) + 86_400) })).not.toBeNull()
     expect(bad(t => { t.types.Permit = t.types.Permit.slice(0, 4) })).not.toBeNull()
+  })
+})
+
+describe('secure approvals: what a bound approval covers (docs/SECURE-APPROVALS.md)', () => {
+  const USDC = '0x3600000000000000000000000000000000000000'
+  const OWNER = '0x0baf9b2c44f377208b3c5f833afbab8414d69d5d'
+  const KEY = '0x2cd38840dddb2dbe208f963794690665bf5f8781'
+  const BOB = '0x5555555555555555555555555555555555555555'
+  const EVE = '0x9999999999999999999999999999999999999999'
+  const FEE = '0x7218ec7dd868444a7655599551520ac5bcca7c0d'
+  const pull = (legs: Array<[string, string, bigint, string?]>) => encodeFunctionData({
+    abi: parseAbi(['function transferFrom((address from, address to, uint160 amount, address token)[] details)']), functionName: 'transferFrom',
+    args: [legs.map(([from, to, amount, token]) => ({ from: from as `0x${string}`, to: to as `0x${string}`, amount, token: (token ?? USDC) as `0x${string}` }))],
+  })
+  it('the keypad shows the intent itself, not the app\'s words', async () => {
+    const { confirmDisplay } = await import('./main')
+    const d = confirmDisplay({ intent: { kind: 'pay', token: USDC, to: BOB, amount: '5250000' }, title: 'Anything the app says', name: 'bob.arc', label: '' })
+    expect(d.lines[0]).toBe('Pay 5.25 USDC')
+    expect(d.lines[1]).toBe('To 0x5555…5555 (bob.arc)')
+    const t = confirmDisplay({ intent: { kind: 'transfer', amount: '10000000', destinationDomain: 0, recipient: BOB }, title: '', name: '', label: '' })
+    expect(t.lines).toEqual(['Send up to 10 USDC', 'To 0x5555…5555', 'On Ethereum'])
+  })
+  it('a payment: exactly the approved recipient, up to the approved amount, plus capped gas refund and fee', async () => {
+    const { pullRefusal } = await import('./main')
+    const intent = { kind: 'pay' as const, token: USDC as `0x${string}`, to: BOB as `0x${string}`, amount: '5000000' }
+    expect(pullRefusal(pull([[OWNER, BOB, 5_000_000n], [OWNER, KEY, 3_000n], [OWNER, FEE, 10_000n]]), intent, OWNER, KEY)).toBeNull()
+    expect(pullRefusal(pull([[OWNER, EVE, 5_000_000n]]), intent, OWNER, KEY)).not.toBeNull()           // another recipient
+    expect(pullRefusal(pull([[OWNER, BOB, 5_000_001n]]), intent, OWNER, KEY)).not.toBeNull()           // more than approved
+    expect(pullRefusal(pull([[OWNER, BOB, 5_000_000n], [OWNER, EVE, 1n]]), intent, OWNER, KEY)).not.toBeNull() // an extra leg
+    expect(pullRefusal(pull([[OWNER, BOB, 5_000_000n], [OWNER, KEY, 300_000n]]), intent, OWNER, KEY)).not.toBeNull() // refund above cap
+    expect(pullRefusal(pull([[OWNER, BOB, 5_000_000n]]), null, OWNER, KEY)).not.toBeNull()              // unbound approval
+  })
+  it('a transfer: the pull to the key, then a burn of the approved amount to the approved recipient and chain', async () => {
+    const { pullRefusal, burnRefusal } = await import('./main')
+    const intent = { kind: 'transfer' as const, amount: '10000000', destinationDomain: 0, recipient: BOB as `0x${string}` }
+    expect(pullRefusal(pull([[OWNER, KEY, 10_060_000n]]), intent, OWNER, KEY)).toBeNull()
+    expect(pullRefusal(pull([[OWNER, EVE, 10_000_000n]]), intent, OWNER, KEY)).not.toBeNull()
+    const burnAbi = parseAbi(['function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold)'])
+    const b32 = (a: string) => `0x${a.slice(2).padStart(64, '0')}` as `0x${string}`
+    const burn = (amount: bigint, domain: number, to: string) => encodeFunctionData({ abi: burnAbi, functionName: 'depositForBurn', args: [amount, domain, b32(to), USDC, b32('0x0'), 0n, 1000] })
+    expect(burnRefusal(burn(10_000_000n, 0, BOB), intent)).toBeNull()
+    expect(burnRefusal(burn(10_000_000n, 0, EVE), intent)).not.toBeNull()
+    expect(burnRefusal(burn(10_000_000n, 6, BOB), intent)).not.toBeNull()
+    expect(burnRefusal(burn(10_000_001n, 0, BOB), intent)).not.toBeNull()
+    expect(burnRefusal(burn(10_000_000n, 0, BOB), undefined)).not.toBeNull()
   })
 })

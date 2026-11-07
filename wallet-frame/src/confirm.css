@@ -1,0 +1,24 @@
+:root { --bg: #161a1e; --cell: #1e2329; --key: #2b3139; --text: #eaecef; --muted: #848e9c; --accent: #14b8a6; --danger: #f6465d; }
+:root[data-theme="light"] { --bg: #ffffff; --cell: #f5f5f5; --key: #eaecef; --text: #1e2329; --muted: #707a8a; --accent: #0f766e; --danger: #d9304e; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; user-select: none; }
+main { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.badge { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+h1 { font-size: 17px; margin: 0; }
+.card { background: var(--cell); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.card .line:first-child { font-weight: 650; font-size: 16px; }
+.card .line { overflow-wrap: anywhere; }
+.dots { display: flex; justify-content: center; gap: 12px; margin: 4px 0; }
+.dots span { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--muted); }
+.dots span.on { background: var(--text); border-color: var(--text); }
+.dots.shake { animation: shake 320ms; }
+@keyframes shake { 20%, 60% { transform: translateX(-6px) } 40%, 80% { transform: translateX(6px) } }
+.msg { min-height: 18px; text-align: center; font-size: 13px; color: var(--muted); margin: 0; }
+.msg.error { color: var(--danger); }
+.keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.keys button { height: 50px; border: 0; border-radius: 12px; background: var(--key); color: var(--text); font-size: 20px; font-weight: 600; cursor: pointer; }
+.keys button:disabled { opacity: .45; cursor: default; }
+.keys button.ghost { background: transparent; font-size: 15px; color: var(--muted); }
+.error { color: var(--danger); margin: 0; }
+.muted { color: var(--muted); margin: 0; }
