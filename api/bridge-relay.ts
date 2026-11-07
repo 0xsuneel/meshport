@@ -356,6 +356,34 @@ async function rpcTransport(chainKey: string, primary: string) {
   return withoutNodeFill(hedgedTransport(http, fallback, list))
 }
 
+// One relayer send at a time per chain in this instance (audit 7 Nov H9):
+// two requests reading the same pending nonce made one of them fail after a
+// Circle signing round trip. A send that still loses its nonce (another
+// instance got there first) is tried once more with a fresh one.
+const sendQueues = new Map<string, Promise<unknown>>()
+const NONCE_LOST = /nonce too low|replacement transaction underpriced|nonce has already been used/i // never 'already known': that one may be our own send arriving twice
+export function serialSends<W extends { sendTransaction: (a: any) => Promise<any>; writeContract?: (a: any) => Promise<any> } | null>(chainKey: string, wallet: W): W {
+  if (!wallet || (wallet as any).__serial) return wallet
+  const wrap = (orig: (a: any) => Promise<any>) => (args: any) => {
+    const run = async () => {
+      try { return await orig(args) } catch (e: any) {
+        if (!NONCE_LOST.test(String(e?.shortMessage || e?.message || e))) throw e
+        const { nonce: _stale, ...fresh } = args ?? {}
+        return await orig(fresh)
+      }
+    }
+    const prev = sendQueues.get(chainKey) ?? Promise.resolve()
+    const p = prev.then(run, run)
+    sendQueues.set(chainKey, p.catch(() => {}))
+    return p
+  }
+  const w: any = wallet
+  w.sendTransaction = wrap(w.sendTransaction.bind(w))
+  if (typeof w.writeContract === 'function') w.writeContract = wrap(w.writeContract.bind(w))
+  w.__serial = true
+  return wallet
+}
+
 async function clients(chainKey: string) {
   const { createPublicClient, createWalletClient, defineChain } = await import('viem')
   const c = CHAINS[chainKey]
@@ -372,7 +400,7 @@ async function clients(chainKey: string) {
   const pub: any = createPublicClient({ chain, transport, pollingInterval: pollMsFor(c.id) })
   // The relayer account: Circle's wallet (RELAYER_MODE=circle) or the private key.
   const account = await relayerAccount(c.id)
-  const wallet: any = account ? createWalletClient({ chain, transport, account }) : null
+  const wallet: any = serialSends(chainKey, account ? createWalletClient({ chain, transport, account }) : null)
   return { pub, wallet }
 }
 
@@ -531,6 +559,60 @@ function arcRouter(): `0x${string}` | null {
 }
 const ARC_USDC_ERC20 = '0x3600000000000000000000000000000000000000' as const
 
+// ── Which mints the relayer pays for (audit 7 Nov H2) ───────────────────────
+// A CCTP V2 message: 148-byte header (version, sourceDomain, destinationDomain,
+// nonce, sender, recipient, destinationCaller, two thresholds), then the burn
+// body (version, burnToken, mintRecipient, amount, messageSender, ...).
+export function cctpMessageParts(message: string): { destinationDomain: number; mintRecipient: string; messageSender: string } | null {
+  if (!isHex(message) || message.length < 2 + 280 * 2) return null
+  const b = message.slice(2)
+  const word = (byteOffset: number) => b.slice(byteOffset * 2, byteOffset * 2 + 64)
+  return {
+    destinationDomain: parseInt(b.slice(16, 24), 16),
+    mintRecipient: '0x' + word(184).slice(24),
+    messageSender: '0x' + word(248).slice(24),
+  }
+}
+const PERMIT2_ADDR = '0x000000000022d473030f116ddee9f6b43ac78ba3'
+const expressKeyCache = new Map<string, { ok: boolean; exp: number }>()
+/** Whether `key` is (or was within the hour) an Express key of `owner`: a Permit2 allowance on Arc. */
+async function isExpressKeyOf(owner: string, key: string): Promise<boolean> {
+  const ck = `${owner}:${key}`
+  const hit = expressKeyCache.get(ck)
+  if (hit && hit.exp > Date.now()) return hit.ok
+  let ok = false
+  const cl = await callClients('Arc_Testnet').catch(() => null)
+  if (cl) {
+    const pad = (a: string) => a.slice(2).toLowerCase().padStart(64, '0')
+    for (const token of [ARC_USDC_ERC20, '0x89b50855aa3be2f677cd6303cec089b5f319d72a', '0xf0c4a4ce82a5746abaad9425360ab04fbba432bf']) {
+      try {
+        const out = String(await cl.pub.request({ method: 'eth_call', params: [{ to: PERMIT2_ADDR, data: '0x927da105' + pad(owner) + pad(token) + pad(key) }, 'latest'] }))
+        // (amount, expiration, nonce): the allowance may be used up by now; its expiry says it was granted.
+        if (out.length >= 2 + 128 && Number(BigInt('0x' + out.slice(66, 130))) > Date.now() / 1000 - 3600) { ok = true; break }
+      } catch { /* next token */ }
+    }
+  }
+  expressKeyCache.set(ck, { ok, exp: Date.now() + (ok ? 60_000 : 10_000) })
+  return ok
+}
+/**
+ * Null when the relayer may pay the gas to mint `message` for `caller`, else
+ * why not. On Arc any attested message (a Bring; Arc gas is ~$0.005). Elsewhere
+ * only burns MeshPort is paid for or that are the caller's own: from a
+ * MeshPort router, the caller's wallet, or the caller's Express key - not any
+ * attested message (the relayer's destination gas, ~$0.0006+ on Ethereum).
+ */
+export async function mintRefusal(chainKey: string, message: string, caller: string): Promise<string | null> {
+  if (chainKey === 'Arc_Testnet') return null
+  const m = cctpMessageParts(message)
+  if (!m) return 'Not a CCTP message'
+  const sender = m.messageSender.toLowerCase()
+  const known = new Set([...Object.values(routers()), arcRouter() ?? ''].map(a => a.toLowerCase()).filter(Boolean))
+  if (known.has(sender) || sender === caller.toLowerCase()) return null
+  if (await isExpressKeyOf(caller.toLowerCase(), sender)) return null
+  return 'This transfer was not sent through MeshPort'
+}
+
 async function arcTransfer(req: VercelRequest, res: VercelResponse) {
   const router = arcRouter()
   if (!router) return res.status(400).json({ error: 'One-signature transfers are not set up on Arc' })
@@ -642,12 +724,12 @@ async function callClients(chainKey: string) {
   const pub: any = createPublicClient({ chain, transport, pollingInterval: pollMsFor(id) })
   const account = await relayerAccount(id)
   if (!account) return { pub, wallet: null as any, keyWallet: null as any }
-  const wallet: any = createWalletClient({ chain, transport, account })
+  const wallet: any = serialSends(chainKey, createWalletClient({ chain, transport, account }))
   // Circle mode: the private-key wallet too, when set and different - P2P
   // offers made before the switch name the OLD relayer address as operator.
   const key = relayerMode() === 'circle' ? await keyRelayerAccount() : null
   const keyWallet: any = key && key.address.toLowerCase() !== account.address.toLowerCase()
-    ? createWalletClient({ chain, transport, account: key }) : null
+    ? serialSends(`${chainKey}:key`, createWalletClient({ chain, transport, account: key })) : null
   return { pub, wallet, keyWallet }
 }
 
@@ -814,6 +896,11 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
   if (SPEND_CALLS.has(fnName)) {
     const block = spendBlock(session?.canSpend)
     if (block) return res.status(block.status).json({ error: block.error })
+  }
+  if (fnName === 'receiveMessage') {
+    const args = (decodeFunctionData({ abi: RELAYABLE_ABI, data }) as { args: readonly unknown[] }).args
+    const why = await mintRefusal(chainKey, String(args[0]), caller)
+    if (why) return res.status(403).json({ error: why })
   }
   const cl = await callClients(chainKey)
   if (!cl) return res.status(400).json({ error: 'This chain is not supported' })
@@ -1177,9 +1264,13 @@ async function transferMintStart(req: VercelRequest, res: VercelResponse) {
   if (!done(msg)) return res.status(200).json({ pending: true })
   const attestedAt = Date.now()
   const d = msg.decodedMessage
-  if (d?.destinationDomain != null && Number(d.destinationDomain) !== dest.domain) return res.status(400).json({ error: 'Not a transfer to this chain' })
+  const parts = cctpMessageParts(String(msg.message))
+  if (!parts || parts.destinationDomain !== dest.domain) return res.status(400).json({ error: 'Not a transfer to this chain' })
   const hook = d?.decodedMessageBody?.hookData
   if (hook && hook !== '0x') return res.status(200).json({ pending: true, forwarder: true }) // Circle's forwarder mints it
+  // Only a burn sent through MeshPort, or the caller's own (audit 7 Nov H2).
+  const refused = await mintRefusal(chainKey, String(msg.message), caller)
+  if (refused) return res.status(403).json({ error: refused })
 
   const cl = await clP
   if (!cl?.wallet) return res.status(400).json({ error: 'Relayer not available on this chain' })
@@ -1195,7 +1286,11 @@ async function transferMintStart(req: VercelRequest, res: VercelResponse) {
       cl.pub.getTransactionCount({ address: from, blockTag: 'pending' }) as Promise<number>,
     ])
   } catch (e: any) {
-    return res.status(200).json({ alreadyMinted: true, error: e?.shortMessage || 'Call would fail' })
+    // A revert means the message was already received (CCTP mints once); a
+    // network error doesn't (audit 7 Nov M10) - the app then mints its own way.
+    const text = String(e?.shortMessage || e?.message || e)
+    if (/revert|already|nonce/i.test(text)) return res.status(200).json({ alreadyMinted: true, error: text.slice(0, 120) })
+    return res.status(502).json({ error: 'Could not check the mint - try again' })
   }
   const txHash = await cl.wallet.sendTransaction({ to, data, gas: gas * 6n / 5n, nonce, ...(await feesP) })
   const sentAt = Date.now()
@@ -1654,6 +1749,8 @@ async function expressSetup(req: VercelRequest, res: VercelResponse) {
   if (!CHAINS[chainKey] || !router) return res.status(400).json({ error: 'Express Bring is not available for this chain' })
   const session = await sessionInfo(req)
   if (!session) return res.status(403).json({ error: 'Not signed in' })
+  // Each set-up costs the relayer two transactions (audit 7 Nov M8).
+  if (!allowRelay(session.wallet)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
   const owner = session.wallet as `0x${string}`
   if (!bk || !isHex(bk.key, 20) || !isUint(bk.expiry) || !isHex(bk.sig)) return res.status(400).json({ error: 'Malformed bring key' })
   const expiry = Number(bk.expiry)
@@ -1703,6 +1800,7 @@ async function expressBringRelay(req: VercelRequest, res: VercelResponse) {
   const relayerMints = hook === '0x'
   const session = await sessionInfo(req)
   if (!session || session.wallet !== String(b.owner).toLowerCase()) return res.status(403).json({ error: 'Not signed in to this wallet' })
+  if (!allowRelay(session.wallet)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
   const block = spendBlock(session.canSpend)
   if (block) return res.status(block.status).json({ error: block.error })
   const amount = BigInt(b.amount), fee = BigInt(b.fee), maxFee = BigInt(b.maxFee)
@@ -1832,8 +1930,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // bundle). The actual work is still done by the Supabase Edge Function;
     // this is just a server-side proxy that adds real authentication.
     if ((req.body as any)?.action === 'claim_recovery_scan') {
-      const wallet = sessionOwns ? await sessionWallet(req) : null
+      const wallet = await sessionWallet(req)
       if (!wallet) return res.status(401).json({ error: 'Not authenticated' })
+      if (!allowRelay(wallet)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
       const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
       const svcKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
       if (!supabaseUrl || !svcKey) return res.status(500).json({ error: 'server misconfigured' })
@@ -1853,6 +1952,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
       const svcKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
       if (!supabaseUrl || !svcKey) return res.status(500).json({ error: 'server misconfigured' })
+      // Only the claim's own wallet may kick it (audit 7 Nov H11: anyone with a
+      // claim id could run the worker with the service key), within the relay limit.
+      const caller = await sessionWallet(req)
+      if (!caller) return res.status(403).json({ error: 'Not signed in' })
+      if (!allowRelay(caller)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
+      const own = await fetch(`${supabaseUrl}/rest/v1/claims?id=eq.${claimId}&select=wallet_address`, {
+        headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` }, signal: AbortSignal.timeout(6_000),
+      }).then(r => r.ok ? r.json() : []).catch(() => []) as Array<{ wallet_address?: string }>
+      if (String(own[0]?.wallet_address ?? '').toLowerCase() !== caller) return res.status(403).json({ error: 'Not your claim' })
       const r = await fetch(`${supabaseUrl}/functions/v1/claim-worker`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${svcKey}`, 'Content-Type': 'application/json' },
@@ -1900,6 +2008,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const session = await sessionInfo(req)
     if (!session || session.wallet !== String(a.from).toLowerCase()) return res.status(403).json({ error: 'Not signed in to this wallet' })
+    if (!allowRelay(session.wallet)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
     const block = spendBlock(session.canSpend)
     if (block) return res.status(block.status).json({ error: block.error })
 
