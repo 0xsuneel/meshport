@@ -631,7 +631,11 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
   const express = await (async (): Promise<SwapOutcome | null> => {
     let ex: import('./fastPay').ExpressSwap
     // Why Express didn't take this swap - reported, so a silent "normal way" can be explained.
-    const skip = (why: string) => { void import('./errorReport').then(m => m.reportPerf(`[perf express swap] not used: ${why}`)).catch(() => {}); return null }
+    const skip = (why: string) => {
+      void import('./errorReport').then(m => m.reportPerf(`[perf express swap] not used: ${why}`)).catch(() => {})
+      void import('./fastPay').then(m => m.noteExpressFallback('swap', why)).catch(() => {})
+      return null
+    }
     try {
       const fp = await import('./fastPay')
       if (!fp.fastPayEnabled()) return null // Express off: nothing to report
@@ -673,6 +677,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
       // Not swapped (not sent, or reverted): tokenIn back to the wallet, then the normal way.
       if (await ex.finish(true)) {
         void import('./errorReport').then(m => m.reportPerf(`[perf express swap] normal way: ${String((e as any)?.message ?? e).slice(0, 260)}`)).catch(() => {})
+        void import('./fastPay').then(m => m.noteExpressFallback('swap', `swap failed: ${String((e as any)?.message ?? e)}`)).catch(() => {})
         return null
       }
       throw Object.assign(new Error("The swap couldn't finish and your tokens are held for you - check Activity or contact support before trying again."), { isUncertain: true, isLiquidity: false })

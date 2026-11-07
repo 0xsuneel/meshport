@@ -807,6 +807,27 @@ function reportFastPayTiming(lap: Record<string, number>, total: number, fullChe
 /** Thrown before anything was broadcast: the caller may pay the normal way. */
 export class FastPayNotSent extends Error {}
 
+/**
+ * Express is on but this move went the normal (slower) way: say why, in a
+ * word, instead of falling back silently (audit 7 Nov M7). Reasons that are
+ * the app's own business (no passcode on this screen) stay quiet.
+ */
+let lastFallbackNote = 0
+export function noteExpressFallback(what: 'payment' | 'transfer' | 'swap' | 'bring', why: string): void {
+  if (!session || Date.now() - lastFallbackNote < 30_000) return
+  if (/phase (off|starting|error)/.test(why)) return // Express isn't ready yet: nothing the user did
+  const reason = /limit|left/i.test(why) ? 'it is more than what is left of your Express limit'
+    : /refund|reserve|gas/i.test(why) ? 'network fees are high right now'
+    : /frame cannot|older|unsupported/i.test(why) ? 'reopen the app to update Express'
+    : /passcode/i.test(why) && /refused|bad|wrong/i.test(why) ? 'the passcode was not accepted'
+    : /route|quote|swap/i.test(why) ? 'Express could not get a route'
+    : /pull|relay|rejected|failed/i.test(why) ? 'Express could not send it'
+    : null
+  if (!reason) return
+  lastFallbackNote = Date.now()
+  void import('@/store').then(m => m.useUIStore.getState().showToastMessage(`Express wasn't used for this ${what}: ${reason}. It went the normal way.`, 'info')).catch(() => {})
+}
+
 const sentByKey = new Map<string, string>() // idempotency key → tx hash (a retry never pays twice)
 
 /**
