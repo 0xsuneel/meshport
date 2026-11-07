@@ -95,13 +95,23 @@ clearLegacyData()
   // The wallet frame: loaded now, so it is ready (or reloading if its first
   // load failed - wallet/frameClient.ts) by the time the lock screen or the
   // first payment needs it.
-  if (auth.isAuthenticated && auth.walletSource) import('./wallet/frameClient').then(m => m.walletReady()).catch(() => {})
+  // Also on the sign-in screens: Create / Import then answer at once instead
+  // of loading the frame only when tapped (field 7 Nov: 10-18 s on 4G).
+  const onAuthScreen = location.pathname === '/auth' || location.pathname.startsWith('/auth/')
+  if ((auth.isAuthenticated && auth.walletSource) || onAuthScreen) import('./wallet/frameClient').then(m => m.walletReady()).catch(() => {})
   // Start fetching the lock screen now, so the splash goes straight to it.
-  if (useAuthStore.getState().isLocked) {
-    import('./features/auth/PasscodeSetup').catch(() => {})
-    // And Home behind it, so it shows the instant the fingerprint / passcode
-    // is accepted instead of loading only then (~1s on a mid-range phone).
-    setTimeout(() => { import('./features/home/HomePage').catch(() => {}) }, 400)
+  if (useAuthStore.getState().isLocked) import('./features/auth/PasscodeSetup').catch(() => {})
+  if (auth.isAuthenticated && auth.walletAddress) {
+    // Home and the balance reads start now, behind the lock screen - not
+    // after unlock. Field 7 Nov (first open after a release): Home's code
+    // was still downloading 9 s after the passcode, so the first balance
+    // read went out at 12 s. The reads fill the shared cache Home reads from.
+    import('./features/home/HomePage').catch(() => {})
+    const wallet = auth.walletAddress
+    void import('./blockchain/BlockchainManager').then(m => {
+      for (const asset of ['USDC', 'EURC', 'CIRBTC'] as const) m.readArcBalance(wallet, asset).catch(() => {})
+    }).catch(() => {})
+    void import('./lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
   }
 }
 
