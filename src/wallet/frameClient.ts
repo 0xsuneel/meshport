@@ -157,7 +157,18 @@ export function walletReady(): Promise<void> {
 
 export async function callWallet<M extends WalletMethod>(method: M, params: WalletParams<M>): Promise<WalletResult<M>> {
   await walletReady()
-  return post(method, params, SLOW_METHODS.has(method) ? 120_000 : DEFAULT_TIMEOUT_MS)
+  try {
+    return await post(method, params, SLOW_METHODS.has(method) ? 120_000 : DEFAULT_TIMEOUT_MS)
+  } catch (e) {
+    // A quick request that never came back: if the frame doesn't answer a
+    // ping either (its process was discarded, say), load a fresh one so the
+    // next request doesn't hang on a dead frame until the page reloads.
+    if (e instanceof WalletFrameError && e.code === 'timeout' && !SLOW_METHODS.has(method)) {
+      const alive = await post('ping', {}, 2_000).then(() => true, () => false)
+      if (!alive) { replaceFrame('dead-after-timeout'); readyPromise = null }
+    }
+    throw e
+  }
 }
 
 /** Test hook: tear the frame down. */

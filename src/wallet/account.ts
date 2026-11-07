@@ -78,7 +78,7 @@ export function walletAccount(address: string): WalletAccount {
   const base = toAccount({
     address: address as Hex,
     async signMessage({ message }) {
-      return (await timedFrame('signMessage', () => callWallet('sign:message', { address, message: plainMessage(message) }))).signature
+      return (await timedFrame('signMessage', () => withApproval(() => callWallet('sign:message', { address, message: plainMessage(message) })))).signature
     },
     async signTransaction(transaction) {
       return (await timedFrame('signTransaction', () => withApproval(() => callWallet('sign:transaction', { address, transaction: plainTransaction(transaction) })))).serialized
