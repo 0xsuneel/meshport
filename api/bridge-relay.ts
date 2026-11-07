@@ -575,7 +575,7 @@ export function cctpMessageParts(message: string): { destinationDomain: number; 
 }
 const PERMIT2_ADDR = '0x000000000022d473030f116ddee9f6b43ac78ba3'
 const expressKeyCache = new Map<string, { ok: boolean; exp: number }>()
-/** Whether `key` is (or was within the hour) an Express key of `owner`: a Permit2 allowance on Arc. */
+/** Whether `key` is (or ever was) an Express key of `owner`: the owner signed it a Permit2 grant on Arc. */
 async function isExpressKeyOf(owner: string, key: string): Promise<boolean> {
   const ck = `${owner}:${key}`
   const hit = expressKeyCache.get(ck)
@@ -587,8 +587,12 @@ async function isExpressKeyOf(owner: string, key: string): Promise<boolean> {
     for (const token of [ARC_USDC_ERC20, '0x89b50855aa3be2f677cd6303cec089b5f319d72a', '0xf0c4a4ce82a5746abaad9425360ab04fbba432bf']) {
       try {
         const out = String(await cl.pub.request({ method: 'eth_call', params: [{ to: PERMIT2_ADDR, data: '0x927da105' + pad(owner) + pad(token) + pad(key) }, 'latest'] }))
-        // (amount, expiration, nonce): the allowance may be used up by now; its expiry says it was granted.
-        if (out.length >= 2 + 128 && Number(BigInt('0x' + out.slice(66, 130))) > Date.now() / 1000 - 3600) { ok = true; break }
+        // (amount, expiration, nonce). The nonce counts the owner's signed
+        // grants to this key and never goes back: above 0, the owner made it
+        // their Express key at some point - true for good, so a transfer it
+        // burned can still be finished (Recover) long after the session ended.
+        // (7 Nov: an expiry-based check refused Recover once the session was over.)
+        if (out.length >= 2 + 192 && BigInt('0x' + out.slice(130, 194)) > 0n) { ok = true; break }
       } catch { /* next token */ }
     }
   }
