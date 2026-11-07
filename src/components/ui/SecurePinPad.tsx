@@ -11,10 +11,10 @@
 // there), onUnavailable lets PinSheet show the app's own keypad as before.
 
 import { useEffect, useRef, useState } from 'react'
-import { Fingerprint, ScanFace } from 'lucide-react'
 import { FRAME_TICKET_PREFIX, type ApprovalIntent } from '@/wallet/protocol'
 import { useAuthStore } from '@/store'
-import { hasBiometricRegistered, unlockWithBiometric, biometricLabel, isBiometricSupported } from '@/lib/biometric'
+import { hasBiometricRegistered, unlockWithBiometric, isBiometricSupported } from '@/lib/biometric'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 
 const FRAME_SOURCES = new Set(['create', 'import-seed', 'import-privkey', 'social-auto'])
 
@@ -50,7 +50,8 @@ export function SecurePinPad({ intent, title, name, label, onChange, onComplete,
   biometricAvailable?: boolean
   autoBiometric?: boolean
 }) {
-  const [src, setSrc] = useState<string | null>(null)
+  const [ticketUrl, setTicketUrl] = useState<string | null>(null)
+  const short = useMediaQuery('(max-height: 700px)')
   const [drawn, setDrawn] = useState(false)
   const ticketRef = useRef<string | null>(null)
   const frameRef = useRef<HTMLIFrameElement>(null)
@@ -81,7 +82,7 @@ export function SecurePinPad({ intent, title, name, label, onChange, onComplete,
         if (cancelled) return
         ticketRef.current = ticket
         const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
-        setSrc(`${walletOrigin()}/confirm.html#t=${ticket}&theme=${theme}`)
+        setTicketUrl(`${walletOrigin()}/confirm.html#t=${ticket}&theme=${theme}`)
       } catch {
         if (!cancelled) onUnavailable()
       }
@@ -90,41 +91,26 @@ export function SecurePinPad({ intent, title, name, label, onChange, onComplete,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // The keypad page says: drawn, approved, cancelled (never the digits).
-  useEffect(() => {
-    if (!src) return
-    let origin = ''
-    void import('@/wallet/frameClient').then(m => { origin = m.walletOrigin() })
-    const onMessage = (e: MessageEvent) => {
-      if (!origin || e.origin !== origin || e.source !== frameRef.current?.contentWindow) return
-      const d = (e.data ?? {}) as { type?: string; ticket?: string; drawn?: boolean; approved?: boolean; cancelled?: boolean }
-      if (d.type !== 'mp-confirm' || d.ticket !== ticketRef.current) return
-      if (d.drawn) setDrawn(true)
-      if (d.cancelled) onCancel()
-      if (d.approved) finish(FRAME_TICKET_PREFIX + d.ticket, false)
-    }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src])
-
-  // Fingerprint, as before (its passcode still opens in the app until phase 2).
+  // Fingerprint, as before (its passcode still opens in the app until phase 2):
+  // its key sits in the keypad's bottom-left cell, the scan runs here.
   const walletAddress = useAuthStore(s => s.walletAddress)
   const biometricEnabled = useAuthStore(s => s.biometricEnabled)
   const storedHash = useAuthStore(s => s.passcode)
-  const [bioOk, setBioOk] = useState(false)
-  const [trying, setTrying] = useState(false)
+  const bioRegistered = biometricAvailable !== false && biometricEnabled && !!walletAddress && hasBiometricRegistered(walletAddress)
+  const [bioOk, setBioOk] = useState<boolean | null>(bioRegistered ? null : false)
   useEffect(() => {
-    if (biometricAvailable === false || !biometricEnabled || !walletAddress || !hasBiometricRegistered(walletAddress)) return
+    if (!bioRegistered) { setBioOk(false); return }
     let cancelled = false
     void isBiometricSupported().then(ok => { if (!cancelled) setBioOk(ok) })
     return () => { cancelled = true }
-  }, [biometricAvailable, biometricEnabled, walletAddress])
+  }, [bioRegistered])
+  const src = ticketUrl && bioOk !== null ? `${ticketUrl}${bioOk ? '&bio=1' : ''}${short ? '&short=1' : ''}` : null
+  const trying = useRef(false)
   const tryBiometric = async () => {
-    if (!walletAddress || trying || done.current) return
-    setTrying(true)
+    if (!walletAddress || trying.current || done.current) return
+    trying.current = true
     const r = await unlockWithBiometric(walletAddress, storedHash ?? undefined)
-    setTrying(false)
+    trying.current = false
     if (r.ok) finish(r.passcode, true)
   }
   const autoTried = useRef(false)
@@ -132,28 +118,41 @@ export function SecurePinPad({ intent, title, name, label, onChange, onComplete,
     if (bioOk && autoBiometric && !autoTried.current) { autoTried.current = true; void tryBiometric() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bioOk])
-  const BioIcon = biometricLabel() === 'Face ID' ? ScanFace : Fingerprint
 
+  // The keypad page says: drawn, approved, cancelled, fingerprint (never the digits).
+  useEffect(() => {
+    if (!src) return
+    let origin = ''
+    void import('@/wallet/frameClient').then(m => { origin = m.walletOrigin() })
+    const onMessage = (e: MessageEvent) => {
+      if (!origin || e.origin !== origin || e.source !== frameRef.current?.contentWindow) return
+      const d = (e.data ?? {}) as { type?: string; ticket?: string; drawn?: boolean; approved?: boolean; cancelled?: boolean; biometric?: boolean }
+      if (d.type !== 'mp-confirm' || d.ticket !== ticketRef.current) return
+      if (d.drawn) setDrawn(true)
+      if (d.cancelled) onCancel()
+      if (d.biometric) void tryBiometric()
+      if (d.approved) finish(FRAME_TICKET_PREFIX + d.ticket, false)
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src])
+
+  // Sized to the keypad exactly (no box around it, nothing cut off): the
+  // dots and four rows, as PinKeypad lays them out.
+  const h = short ? 256 : 308
   return (
-    <div className="flex flex-col gap-3">
-      <div className="relative w-full" style={{ height: 430 }}>
-        {src && (
-          <iframe
-            ref={frameRef}
-            src={src}
-            title="Enter your passcode in the MeshPort wallet"
-            referrerPolicy="no-referrer"
-            className="absolute inset-0 w-full rounded-2xl border border-border"
-            style={{ height: 430, colorScheme: 'normal', opacity: drawn ? 1 : 0, transition: 'opacity 160ms ease-out' }}
-          />
-        )}
-        {!drawn && <div aria-hidden className="absolute inset-0 rounded-2xl bg-surface border border-border mp-pulse" />}
-      </div>
-      {bioOk && (
-        <button type="button" onClick={() => void tryBiometric()} disabled={trying}
-          className="flex items-center justify-center gap-2 rounded-2xl py-3 text-[14px] font-semibold text-brand-text bg-bg active:scale-[0.98] transition-transform">
-          <BioIcon className="w-5 h-5" /> {trying ? `Waiting for ${biometricLabel()}…` : `Use ${biometricLabel()}`}
-        </button>
+    <div className="relative w-full" style={{ height: h }}>
+      {src && (
+        <iframe
+          ref={frameRef}
+          src={src}
+          title="Enter your passcode in the MeshPort wallet"
+          referrerPolicy="no-referrer"
+          scrolling="no"
+          className="absolute inset-0 w-full border-0"
+          style={{ height: h, colorScheme: 'normal', background: 'transparent', opacity: drawn ? 1 : 0, transition: 'opacity 160ms ease-out' }}
+        />
       )}
     </div>
   )

@@ -5,13 +5,13 @@ describe('approval intents (docs/SECURE-APPROVALS.md)', () => {
   const BOB = '0x5555555555555555555555555555555555555555'
   it('a payment: the Arc token, the recipient, the amount in base units (Express rounding)', () => {
     expect(payIntent('USDC', BOB, 5.25)).toEqual({ kind: 'pay', token: '0x3600000000000000000000000000000000000000', to: BOB, amount: '5250000' })
-    expect(payIntent('cirBTC', BOB, 0.0001)?.amount).toBe('10000')
+    expect((payIntent('cirBTC', BOB, 0.0001) as any)?.amount).toBe('10000')
     expect(payIntent('USDC', 'bob.arc', 1)).toBeUndefined()
     expect(payIntent('USDC', BOB, 0)).toBeUndefined()
   })
   it('a transfer: the CCTP domain of the chain and the recipient', () => {
     expect(transferIntent('Ethereum_Sepolia', BOB, 10)).toEqual({ kind: 'transfer', amount: '10000000', destinationDomain: 0, recipient: BOB })
-    expect(transferIntent('Base_Sepolia', BOB, 1)?.destinationDomain).toBe(6)
+    expect((transferIntent('Base_Sepolia', BOB, 1) as any)?.destinationDomain).toBe(6)
     expect(transferIntent('Nowhere', BOB, 1)).toBeUndefined()
   })
   it('a swap and a Bring', () => {
