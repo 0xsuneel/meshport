@@ -575,7 +575,9 @@ async function start(gen: number): Promise<boolean> {
   if (auth.walletSource !== 'circle' || auth.isLocked || !auth.walletAddress || !auth.signer) return false
   const { isCircleAccount } = await import('@/wallet/circle')
   if (!isCircleAccount(auth.signer)) return false
-  const signer = auth.signer as unknown as CircleSigner
+  const raw = auth.signer as unknown as CircleSigner & { signTypedDataBackground?: (td: any) => Promise<Hex> }
+  // Set-up runs in the background: its signatures wait behind the user's own.
+  const signer: CircleSigner = { address: raw.address, signTypedData: (td: any) => (raw.signTypedDataBackground ?? raw.signTypedData).call(raw, td) }
   const owner = auth.walletAddress as Hex
   if (await resume(owner, gen)) return true
   publish('starting')

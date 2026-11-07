@@ -89,8 +89,25 @@ export function sendStartupReport(): void {
     error: t.signer == null ? 'wallet not able to sign 30 s after page load' : undefined,
   })).catch(() => {})
 }
+// When the passcode screen let the user in: the times after it are the app's;
+// before it, the user typing (audit 7 Nov: a 20 s "cold start" was 19 s of
+// lock screen). A start still on the lock screen at 30 s isn't "not ready".
+let unlockedAt: number | null = null
+let startedLocked = false
+export function noteStartedLocked(): void { startedLocked = true }
 if (typeof window !== 'undefined') {
-  setTimeout(() => { if (!startupReported && startup.size) sendStartupReport() }, 30_000)
+  try {
+    window.addEventListener('meshport:wallet-unlocked', () => {
+      if (unlockedAt != null) return
+      unlockedAt = now()
+      noteStartupDetail('unlock', (unlockedAt / 1000).toFixed(2))
+    })
+  } catch { /* no window */ }
+  setTimeout(() => {
+    if (startupReported || !startup.size) return
+    if (startedLocked && unlockedAt == null) { startupReported = true; return } // still on the lock screen: nothing to report
+    sendStartupReport()
+  }, 30_000)
 }
 
 // Which page load this is, for wallet_events: the browser's own navigation

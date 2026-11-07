@@ -250,9 +250,18 @@ async function deviceId(): Promise<string> {
   return id
 }
 
+/** A Google sign-in answer in the address: the SDK must be built by the code that handles it. */
+function onSignInReturn(): boolean {
+  try { return /(^|[#&])(id_token|access_token|state|error)=/.test(window.location.hash) } catch { return false }
+}
+/** Load Circle's SDK (and its frame's code) ahead of the first signature (audit 7 Nov D2: a cached device id skipped it). */
+function warmSdk(): Promise<unknown> {
+  return onSignInReturn() ? Promise.resolve() : sdk().catch(() => {})
+}
+
 /** Load Circle's SDK and this browser's device id ahead of a sign-in tap. */
 export function warmCircle(): void {
-  if (circleGoogleConfigured()) void deviceId().catch(() => {})
+  if (circleGoogleConfigured()) { void deviceId().catch(() => {}); void warmSdk() }
 }
 
 function loginResult(error: unknown, result: unknown): CircleSession {
@@ -383,7 +392,18 @@ export interface ChallengeOutcome { status?: string; type?: string; signature?: 
 // Circle's SDK runs one challenge at a time: one frame, one callback - a
 // second execute() replaces the first one's callback, which then never
 // finishes (a payment screen waiting forever). Challenges queue here.
-let challengeQueue: Promise<unknown> = Promise.resolve()
+// User signatures go before background ones (Express set-up), which used to
+// hold a payment made right after opening the app for up to ~12 s (audit 7 Nov D1).
+type ChallengeJob = { run: () => Promise<ChallengeOutcome>; resolve: (v: ChallengeOutcome) => void; reject: (e: unknown) => void; low: boolean }
+const challengeJobs: ChallengeJob[] = []
+let challengeRunning = false
+function pumpChallenges(): void {
+  if (challengeRunning || !challengeJobs.length) return
+  const user = challengeJobs.findIndex(j => !j.low)
+  const job = challengeJobs.splice(user >= 0 ? user : 0, 1)[0]
+  challengeRunning = true
+  job.run().then(job.resolve, job.reject).finally(() => { challengeRunning = false; pumpChallenges() })
+}
 // A signature normally takes a few seconds; Circle's SDK's own 10 s guard
 // stops working after its frame first answers (receivedResponseFromService
 // is never reset), so this is the limit a stuck one is held to.
@@ -393,16 +413,15 @@ const CHALLENGE_TIMEOUT_MS = 30_000
 const SESSION_ERRORS = new Set([155103, 155104, 155105])
 
 /** Run a challenge in Circle's SDK (no screen while Confirmation UIs are off), one at a time. */
-export function executeChallenge(uid: string, challengeId: string, steps?: Record<string, number>): Promise<ChallengeOutcome> {
-  const run = () => runChallenge(uid, challengeId, steps)
-  const next = challengeQueue.then(run, run)
-  challengeQueue = next.catch(() => {})
-  return next
+export function executeChallenge(uid: string, challengeId: string, steps?: Record<string, number>, low = false): Promise<ChallengeOutcome> {
+  return new Promise((resolve, reject) => {
+    challengeJobs.push({ run: () => runChallenge(uid, challengeId, steps), resolve, reject, low })
+    pumpChallenges()
+  })
 }
 
 async function runChallenge(uid: string, challengeId: string, steps?: Record<string, number>): Promise<ChallengeOutcome> {
-  const s = await freshCircleSession(uid)
-  const w = await sdk()
+  const [s, w] = await Promise.all([freshCircleSession(uid), sdk()])
   w.setAuthentication({ userToken: s.userToken, encryptionKey: s.encryptionKey })
   // wallet_events: how the ~3 s splits - Circle's frame page loading
   // (`frame`: until it says it's ready) and Circle's own work after that
@@ -443,6 +462,8 @@ export type CircleAccount = WalletAccount & {
   prepareTransaction(transaction: TransactionSerializable): void
   /** The same for typed data (permits, authorizations). Never signs. */
   prepareTypedData(typedData: TypedDataDefinition): void
+  /** Signs typed data after any signature the user is waiting for (background work). */
+  signTypedDataBackground(typedData: TypedDataDefinition): Promise<Hex>
 }
 
 /** The sign-typed request body - the same for preparing and for signing, so a prepared one matches. */
@@ -502,7 +523,7 @@ export function circleAccount(address: string, uid: string): CircleAccount {
   const key = `${uid}:${address.toLowerCase()}`
   const hit = accounts.get(key)
   if (hit) return hit
-  async function sign(action: string, body: Record<string, unknown>): Promise<ChallengeOutcome> {
+  async function sign(action: string, body: Record<string, unknown>, low = false): Promise<ChallengeOutcome> {
     // wallet_events: each Circle signature's time and outcome, like the other wallets'.
     const started = performance.now()
     const what = action === 'sign-transaction' ? 'signTransaction' : action === 'sign-typed' ? 'signTypedData' : 'signMessage'
@@ -513,7 +534,7 @@ export function circleAccount(address: string, uid: string): CircleAccount {
     const log = (ok: boolean, error?: string) => void import('@/lib/walletEvents')
       .then(m => m.logWalletEvent({ kind: 'circle', event: 'sign', ok, ms: performance.now() - started, detail: what, error, steps })).catch(() => {})
     try {
-      const out = await signOnce(action, body, steps)
+      const out = await signOnce(action, body, steps, low)
       log(true)
       return out
     } catch (e) {
@@ -538,7 +559,7 @@ export function circleAccount(address: string, uid: string): CircleAccount {
     void p.challengeId.then(() => { if (p.relayed) steps.preparedRelayed = 1 }, () => {})
     return p.challengeId
   }
-  async function signOnce(action: string, body: Record<string, unknown>, steps: Record<string, number>): Promise<ChallengeOutcome> {
+  async function signOnce(action: string, body: Record<string, unknown>, steps: Record<string, number>, low = false): Promise<ChallengeOutcome> {
     let prepared = takePrepared(action, body, steps)
     if (!prepared) signingStartedFor.set(`${key}\n${preparedKey(action, body)}`, Date.now())
     for (let attempt = 0; ; attempt++) {
@@ -559,7 +580,7 @@ export function circleAccount(address: string, uid: string): CircleAccount {
       steps.challenge = (steps.challenge ?? 0) + performance.now() - t0
       try {
         const t1 = performance.now()
-        const out = await executeChallenge(uid, challengeId, steps)
+        const out = await executeChallenge(uid, challengeId, steps, low)
         steps.execute = (steps.execute ?? 0) + performance.now() - t1
         readyAddresses.set(address.toLowerCase(), uid) // it signed: as ready as the warm-up makes it
         notifyReadiness()
@@ -624,7 +645,13 @@ export function circleAccount(address: string, uid: string): CircleAccount {
   const prepareTypedData = (typedData: TypedDataDefinition) => {
     try { prepare('sign-typed', typedBody(typedData)) } catch { /* purely a head start */ }
   }
-  const account = Object.assign(base, { meshportWallet: true as const, circleWallet: true as const, prepareTransaction, prepareTypedData }) as CircleAccount
+  // Background work (Express set-up): queued behind the user's own signatures.
+  const signTypedDataBackground = async (typedData: TypedDataDefinition): Promise<Hex> => {
+    const r = await sign('sign-typed', typedBody(typedData), true)
+    if (!r.signature) throw new CircleError(502, 'challenge', 'Circle returned no signature')
+    return r.signature
+  }
+  const account = Object.assign(base, { meshportWallet: true as const, circleWallet: true as const, prepareTransaction, prepareTypedData, signTypedDataBackground }) as CircleAccount
   accounts.set(key, account)
   return account
 }
@@ -700,7 +727,8 @@ export function warmCircleSigner(address: string): Promise<boolean> {
     if (!acct || acct.anonymous || !loadCircleSession(acct.uid)) return false
     const [w] = await Promise.all([
       circleCall<{ address: string }>(acct.uid, 'wallet'),
-      deviceId(), // loads the SDK and Circle's frame
+      deviceId(),
+      warmSdk(), // the SDK itself (deviceId() is a storage read once cached)
     ])
     if (w.address.toLowerCase() !== a) return false
     readyAddresses.set(a, acct.uid)
