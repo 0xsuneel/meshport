@@ -345,5 +345,10 @@ describe('Express Transfer: what a session key may sign', () => {
     expect(sessionTxRefusal(t('0x89b50855aa3be2f677cd6303cec089b5f319d72a', approve(ADAPTER)))).toBeNull()
     expect(sessionTxRefusal(t(ADAPTER, '0xaa3e079c' + '00'.repeat(32)))).toBeNull()
     expect(sessionTxRefusal(t(ADAPTER, '0x12345678'))).not.toBeNull()
+    // increaseAllowance (the swap kit's approval) - same spender rule as approve.
+    const inc = (spender: string) => '0x39509351' + spender.slice(2).padStart(64, '0') + '00'.repeat(32)
+    expect(sessionTxRefusal(t(USDC, inc(ADAPTER)))).toBeNull()
+    expect(sessionTxRefusal(t(USDC, inc(TM)))).toBeNull()
+    expect(sessionTxRefusal(t(USDC, inc('0x9999999999999999999999999999999999999999')))).not.toBeNull()
   })
 })

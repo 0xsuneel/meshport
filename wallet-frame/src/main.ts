@@ -89,6 +89,9 @@ const ARC_EURC = '0x89b50855aa3be2f677cd6303cec089b5f319d72a'
 const ARC_CIRBTC = '0xf0c4a4ce82a5746abaad9425360ab04fbba432bf'
 const EIP2612_PERMIT = new Set(['0xd505accf']) // permit(owner, spender, value, deadline, v, r, s)
 const ERC20_APPROVE = '0x095ea7b3' // approve(spender, amount)
+// increaseAllowance(spender, amount) - what Circle's swap kit sends for its
+// approval (seen 7 Nov). Same rule as approve: only to the spenders below.
+const ERC20_INCREASE_ALLOWANCE = '0x39509351'
 const ERC20_TRANSFER = '0xa9059cbb' // transfer(to, amount) - only back to the session's owner
 // Express Transfer: Circle's CCTP TokenMessengerV2 on Arc.
 const TOKEN_MESSENGER_V2 = '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa'
@@ -100,9 +103,9 @@ const SESSION_CALLS: Record<string, ReadonlySet<string>> = {
   [PERMIT2]: new Set(['0x2b67b570', '0x2a2d80d1', '0x0d58b1db']),
   // The tokens Express pays in: their one-time permit for Permit2; USDC also
   // approve - only to TokenMessengerV2 (see APPROVE_SPENDERS), for a Transfer.
-  [ARC_USDC_ERC20]: new Set([...EIP2612_PERMIT, ERC20_APPROVE, ERC20_TRANSFER]),
-  [ARC_EURC]: new Set([...EIP2612_PERMIT, ERC20_APPROVE, ERC20_TRANSFER]),
-  [ARC_CIRBTC]: new Set([...EIP2612_PERMIT, ERC20_APPROVE, ERC20_TRANSFER]),
+  [ARC_USDC_ERC20]: new Set([...EIP2612_PERMIT, ERC20_APPROVE, ERC20_INCREASE_ALLOWANCE, ERC20_TRANSFER]),
+  [ARC_EURC]: new Set([...EIP2612_PERMIT, ERC20_APPROVE, ERC20_INCREASE_ALLOWANCE, ERC20_TRANSFER]),
+  [ARC_CIRBTC]: new Set([...EIP2612_PERMIT, ERC20_APPROVE, ERC20_INCREASE_ALLOWANCE, ERC20_TRANSFER]),
   // depositForBurn, depositForBurnWithHook - an Express Transfer's burn.
   [TOKEN_MESSENGER_V2]: new Set(['0x8e0250ee', '0x779b432d']),
   // execute - an Express Swap.
@@ -176,7 +179,7 @@ export function sessionTxRefusal(tx: Record<string, unknown>, owner?: string): s
   // so a refusal in the field says which call to look at.
   const what = (extra = '') => `Not a Fast Pay call (to ${to || '-'}, fn ${selector}${extra})`
   if (!allowed || !allowed.has(selector)) return what()
-  if (selector === ERC20_APPROVE && !APPROVE_SPENDERS.has('0x' + data.slice(34, 74))) return what(`, spender 0x${data.slice(34, 74)}`)
+  if ((selector === ERC20_APPROVE || selector === ERC20_INCREASE_ALLOWANCE) && !APPROVE_SPENDERS.has('0x' + data.slice(34, 74))) return what(`, spender 0x${data.slice(34, 74)}`)
   // A token transfer only back to the wallet the session spends for (returning an unfinished move).
   if (selector === ERC20_TRANSFER && (!owner || '0x' + data.slice(34, 74) !== owner.toLowerCase())) return what(', not to the owner')
   return null
