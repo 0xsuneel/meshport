@@ -1,4 +1,5 @@
 import { backLayerPop } from '@/lib/backLayers'
+import { payIntent } from '@/lib/approvalIntents'
 import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
 import { displayOrderNumber } from '@/lib/orderLabels'
 import { orderKindOf, orderTitle, paymentOrderTag, type OrderKind } from '@/lib/merchantPay'
@@ -1896,6 +1897,7 @@ export function PaySendPage() {
           amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))}`, unit: token,
         } : undefined}
         bioVerb="Pay"
+        intent={payIntent(token, recipient?.walletAddress, numAmount)}
         anchor={desktopColumnRef.current}
         value={pin}
         onChange={setPin}

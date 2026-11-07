@@ -13,6 +13,7 @@
  * MeshPort V2: Inspired by PayPal/Revolut/Cash App
  * "Sending money to friends" not "Managing blockchain infrastructure"
  */
+import { bringIntent } from '@/lib/approvalIntents'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import { backLayerPop } from '@/lib/backLayers'
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from 'react'
@@ -2025,6 +2026,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             amountLabel={`${coinChar}${fmtCoin(selectedTotal)} ${coin}`} placement="panel"
             card={{ label: 'Claiming from', name: selectedChain ? getMeta(selectedChain.chainId).label : 'Multichain', detail: 'To your Arc balance', amount: `${coinChar}${fmtCoin(selectedTotal)}`, unit: coin }}
             bioVerb="Claim"
+            intent={coin === 'USDC' && selectedChain ? bringIntent(selectedChain.chainId, selectedTotal) : undefined}
             value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }} error={passError || undefined}
             onComplete={(_, viaBiometric) => { setPaidViaBiometric(!!viaBiometric); handlePasscodeConfirm() }} />
         </motion.div>

@@ -113,6 +113,16 @@ export interface WalletRpc {
   'circle-passcode:forget': [Record<string, never>, { ok: true }]
   /** `full`: the frame ran its full (slow) check - the first since it loaded. */
   'fastpay:approve': [{ owner: string; passcode: string }, { approved: true; validForMs: number; full?: boolean }]
+  /**
+   * Secure approvals (docs/SECURE-APPROVALS.md): a one-time ticket for
+   * confirm.html, the keypad page on the wallet origin. The frame shows the
+   * intent itself and checks the passcode typed there; the app never sees it.
+   * `wallet`: whose passcode - a Google / email wallet's (circle) or a
+   * frame-kept wallet's (frame, `owner` is its address).
+   */
+  'confirm:open': [{ owner: string; wallet: 'circle' | 'frame'; intent: ApprovalIntent; title?: string; name?: string; label?: string }, { ticket: Hex }]
+  /** Whether the keypad page approved this ticket (the app's hint only - signing checks it itself). */
+  'confirm:status': [{ ticket: string }, { approved: boolean }]
   /** This wallet's chat identity seed (derived, domain-separated - not the wallet key). */
   'chat:seed': [{ address: string }, { seed: Hex }]
   /** This wallet's Solana public key (32 bytes; derived, domain-separated - lib/solanaKey.ts). */
@@ -180,6 +190,17 @@ export interface WalletResponse {
 
 /** Reveal page ↔ frame, over a same-origin BroadcastChannel (never the app). */
 export const REVEAL_CHANNEL = 'meshport-wallet-reveal'
+/** Keypad page (confirm.html) ↔ frame, same origin only. */
+export const CONFIRM_CHANNEL = 'meshport-wallet-confirm'
+/** What a passcode approval is for. Amounts in the token's base units (strings). */
+export type ApprovalIntent =
+  | { kind: 'pay'; token: Hex; to: Hex; amount: string }
+  | { kind: 'transfer'; amount: string; destinationDomain: number; recipient: Hex }
+  | { kind: 'swap'; tokenIn: Hex; amount: string }
+  | { kind: 'bring'; chainId: number; amount: string }
+  | { kind: 'other' }
+/** The app's stand-in for a passcode typed on the frame's keypad page: the approved ticket. */
+export const FRAME_TICKET_PREFIX = 'frame-ticket:'
 
 export function isWalletMessage(data: unknown): data is { tag: string; v: number; id: string } {
   return !!data && typeof data === 'object'
