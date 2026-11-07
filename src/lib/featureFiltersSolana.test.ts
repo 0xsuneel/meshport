@@ -8,26 +8,21 @@ import { canBringOverCctp } from './gaslessBridge'
 const row = (enabled: boolean) => ({ enabled }) as any
 const UB = { ub: true } // the Unified Balance Transfer route (off for now - TRANSFER_UB_ENABLED)
 
-describe('Transfer without Unified Balance (TRANSFER_UB_ENABLED off)', () => {
-  it('UB chains send over CCTP - they stay in Transfer', () => {
-    expect(transferRoutes({}, 'eth')).toEqual(['cctp'])
-    expect(transferRoutes({}, 'sol')).toEqual(['cctp'])
-    expect(transferRoutes({ ethereum_ub_enabled: row(true) }, 'eth')).toEqual(['cctp'])
-  })
-  it('the admin switches still decide: chain off, or CCTP turned off = not offered', () => {
-    expect(transferRoutes({ ethereum_transfer_enabled: row(false) }, 'eth')).toEqual([])
-    expect(transferRoutes({ ethereum_cctp_enabled: row(false) }, 'eth')).toEqual([])
+describe('Unified Balance back on (7 Nov): both routes by default', () => {
+  it('Transfer: Unified Balance and CCTP (CCTP carries Express) on every UB chain', () => {
+    expect(transferRoutes({}, 'eth')).toEqual(['ub', 'cctp'])
+    expect(transferRoutes({}, 'sol')).toEqual(['ub', 'cctp'])
     expect(transferRoutes({}, 'linea')).toEqual(['cctp'])
   })
-})
-
-describe('Bring without Unified Balance (BRING_UB_ENABLED off)', () => {
-  it('a chain that offered UB and CCTP brings over CCTP only', () => {
-    expect(bringRoutes({}, 'Base_Sepolia', 'personal', { ub: true, cctp: true })).toEqual(['cctp'])
-    expect(bringRoutes({ base_claim_ub_enabled: row(true) }, 'Base_Sepolia', 'personal', { ub: true, cctp: true })).toEqual(['cctp'])
+  it('the admin switches still decide', () => {
+    expect(transferRoutes({ ethereum_transfer_enabled: row(false) }, 'eth')).toEqual([])
+    expect(transferRoutes({ ethereum_cctp_enabled: row(false) }, 'eth')).toEqual(['ub'])
+    expect(transferRoutes({ ethereum_ub_enabled: row(false) }, 'eth')).toEqual(['cctp'])
   })
-  it('a UB-only chain (no CCTP router) is not offered for Bring', () => {
-    expect(bringRoutes({}, 'Base_Sepolia', 'personal', { ub: true, cctp: false })).toEqual([])
+  it('Bring: Unified Balance and CCTP where the chain has both; UB-only chains are offered again', () => {
+    expect(bringRoutes({}, 'Base_Sepolia', 'personal', { ub: true, cctp: true })).toEqual(['ub', 'cctp'])
+    expect(bringRoutes({}, 'Base_Sepolia', 'personal', { ub: true, cctp: false })).toEqual(['ub'])
+    expect(bringRoutes({ base_claim_ub_enabled: row(false) }, 'Base_Sepolia', 'personal', { ub: true, cctp: true })).toEqual(['cctp'])
   })
 })
 
@@ -36,8 +31,8 @@ describe('Solana routes, like the other chains', () => {
     expect(transferRoutes({}, 'sol', 'personal', UB)).toEqual(['ub', 'cctp'])
     expect(transferRoutes({ solana_cctp_enabled: row(false) }, 'sol', 'personal', UB)).toEqual(['ub'])
     expect(transferRoutes({ solana_ub_enabled: row(false) }, 'sol', 'personal', UB)).toEqual(['cctp'])
-    // other Unified Balance chains: CCTP starts off without a row
-    expect(transferRoutes({}, 'eth', 'personal', UB)).toEqual(['ub'])
+    // other Unified Balance chains too: CCTP is on without a row (it carries Express)
+    expect(transferRoutes({}, 'eth', 'personal', UB)).toEqual(['ub', 'cctp'])
   })
   it('admin switches for Transfer and Bring', () => {
     expect(isChainEnabledForTransfer({}, 'sol')).toBe(true)
@@ -95,7 +90,7 @@ describe('Personal and business switches are separate', () => {
   })
   it('business routes are their own', () => {
     expect(transferRoutes({ biz_ethereum_ub_enabled: row(false), biz_ethereum_cctp_enabled: row(true) }, 'eth', 'business', UB)).toEqual(['cctp'])
-    expect(transferRoutes({ biz_ethereum_ub_enabled: row(false), biz_ethereum_cctp_enabled: row(true) }, 'eth', 'personal', UB)).toEqual(['ub'])
+    expect(transferRoutes({ biz_ethereum_ub_enabled: row(false), biz_ethereum_cctp_enabled: row(true) }, 'eth', 'personal', UB)).toEqual(['ub', 'cctp'])
   })
   it('balance scan: a business reads chains it can Bring or Settle from', () => {
     const s = { biz_base_claim_enabled: row(false), biz_base_settle_enabled: row(true) }

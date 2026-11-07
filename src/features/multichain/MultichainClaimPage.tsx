@@ -39,6 +39,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountField, quickAmounts, percentAmounts } from '@/components/ui/AmountField'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import type { WalletAccount } from '@/wallet'
+import { quoteAccount } from '@/wallet/account'
 import { timeQuote } from '@/lib/quoteTiming'
 import { supabase } from '@/lib/supabase'
 import { formatAmount, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
@@ -60,6 +61,7 @@ import { useAccountKind } from '@/lib/merchant'
 import { readExternalBalances, refreshScope, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
 import { mintedOnArc as isMintedOnArc, useCctpProgress } from '@/lib/cctpTracker'
 import { ARC_RPCS } from '@/lib/arc'
+import { UB_CLAIM_CHAINS, runUbClaim, ubBringTime, ubClaimEta, estimateUbClaimFee, ubConfirmedOn } from '@/lib/ubClaim'
 import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
 import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
@@ -135,6 +137,20 @@ const CHAIN_META: Record<string, { label: string; color: string; short: string; 
   Solana_Devnet:       { label: 'Solana',      color: '#9945FF', short: 'SOL',  logo: '/logos/chains/solana.svg' },
 }
 
+// Bring Funds timing on CCTP: Fast Transfer attests before source finality
+// (docs.arc.io: attestation typically ~60 s), then the relayer mints on Arc.
+const CCTP_BRING_TIME = '20–90 s'
+
+/** Slow / Fast tag on a route button. */
+function SpeedTag({ fast, on }: { fast: boolean; on: boolean }) {
+  return (
+    <span style={{ fontSize: 11, fontWeight: 700, lineHeight: '14px', padding: '0 6px', borderRadius: 999, flexShrink: 0,
+      color: on ? '#fff' : fast ? 'var(--success-text)' : 'var(--warning-text)',
+      background: on ? 'rgba(255,255,255,0.2)' : `color-mix(in srgb, ${fast ? 'var(--success)' : 'var(--warning)'} 14%, transparent)` }}>
+      {fast ? 'Fast' : 'Slow'}
+    </span>
+  )
+}
 
 // Decimal places a claim amount can be typed with - the same cap for the
 // typed (desktop) input and the phone keypad. Claims are in whole cents:
@@ -218,6 +234,11 @@ const MIN_CLAIM_AMOUNT = 1.00
 /** EURC / cirBTC: the relayer's minimum (api/bridge-relay CCTPX_TOKENS). */
 const TOKEN_MIN_BRING: Record<CctpxToken, number> = { EURC: 1, cirBTC: 0.00001 }
 
+/** Bring: a Unified Balance fee above this (USD) picks CCTP and warns. */
+const UB_HIGH_FEE_USD = 0.5
+
+/** Unified Balance fee estimate error: the fee is more than the amount. */
+const UB_FEE_TOO_HIGH = 'Fee is more than this amount'
 
 const _arcProviderCache = new Map<string, any>()
 /** '/api/arc-rpc' → absolute (ethers' fetch needs a full URL for a static network). */
@@ -363,12 +384,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // business), and what each chain itself supports: Unified Balance (never
   // for merchants) and the gasless CCTP router.
   const accountKind = useAccountKind()
-  // Bring is CCTP only: Unified Balance is for Transfer (removed from Bring
-  // 1 Nov - every UB chain has the CCTP router, so no chain is lost).
   const canOf = useCallback((id: string) => ({
-    ub: false,
+    ub: !merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(id)),
     cctp: canBringOverCctp(id),
-  }), [])
+  }), [merchantMode])
 
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -446,6 +465,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // advancing them via Supabase regardless of what this page/tab does.
   const [claimRecords,   setClaimRecords]  = useState<Array<{ chainId: string; claimId: string; initialClaim?: ServerClaim | null }>>([])
   const [claimsByStatus, setClaimsByStatus] = useState<Record<string, ServerClaim>>({})
+  // Chains claimed via Unified Balance this session. UB claims have no
+  // `claims` row, so Track Progress follows their live chainProgress instead.
+  const [ubClaimChains,  setUbClaimChains] = useState<string[]>([])
   // Last non-error stage of the first chain - lets the stepper mark the step
   // that actually failed instead of the first one.
   const lastClaimStageRef = useRef<string>('waiting')
@@ -484,6 +506,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // always animating the same direction regardless of which way you went.
   const [direction,      setDirection]     = useState<NavDirection>('forward')
   const [claimAmounts,   setClaimAmounts]  = useState<Record<string, string>>({})
+  // Route for the claim: CCTP (burn → mint) or Unified Balance (Gateway deposit → spend).
+  // Merchants: CCTP only (gasless - MeshPort's relayer pays the gas).
+  const [claimRoute, setClaimRoute] = useState<'cctp' | 'ub'>('cctp')
   // Pre-claim fee estimate - shown on the amount screen, BEFORE the user
   // enters their passcode, so "You will receive" reflects what actually
   // lands instead of the raw claim amount. Previously the only fee number
@@ -1372,6 +1397,49 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             return { chainId: chain.chainId, amount: claimAmount }
           }
 
+          // ── Unified Balance route (Gateway): deposit on source → spend to Arc ──
+          const sdkId = toSdkChainId(chain.chainId)
+          if (!merchantMode && (claimRoute === 'ub' || !canBringOverCctp(chain.chainId)) && UB_CLAIM_CHAINS.has(sdkId)) {
+            const { AppKit } = sdkRef.current ?? await loadSdk()
+            const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
+            const adapter = await buildAdapter(wallet.signer)
+            setUbClaimChains(prev => prev.includes(chain.chainId) ? prev : [...prev, chain.chainId])
+            runUbClaim({
+              kit, adapter, walletAddr: wallet.addr, sdkChainId: sdkId,
+              chainLabel: getMeta(chain.chainId).label, amount: claimAmount,
+              onStep: (stage, msg, pct, extra) => {
+                setChain(chain.chainId, stage, msg, pct, extra)
+                if (stage === 'attesting') notifyExternalBalanceChanged(chain.chainId, wallet.addr, { spent: claimAmount })
+                // Submitted only once MeshPort's server holds the signed spend.
+                // Finishing on this device (hand-off failed) keeps the screen
+                // in "keep open" until the USDC lands.
+                if (stage === 'attesting' && extra?.handedOff) {
+                  setIsSubmitted(true)
+                  setConfirmPhase(phase => phase === 'processing' ? 'submitted' : phase)
+                }
+                // UB has no server row - the arrival on Arc is the success signal.
+                if (stage === 'done') {
+                  setConfirmPhase(phase => (phase === 'processing' || phase === 'submitted' || phase === 'tracking') ? 'done' : phase)
+                  // Refresh the Arc balance immediately (mint just landed) and drop
+                  // the stale external aggregate so the Hub hero card updates at once.
+                  refreshBalancesAfterTx(walletAddress)
+                  refreshScope({ kind: 'external', wallet: walletAddress, chains: [chain.chainId] })
+                  notifyExternalBalanceChanged(chain.chainId, walletAddress)
+                }
+              },
+            }).catch((e: any) => {
+              const msg = String(e?.shortMessage ?? e?.message ?? 'Claim failed').slice(0, 160)
+              setChain(chain.chainId, 'error', msg, 0)
+              // Failed before the deposit went through → nothing moved; show the failed screen.
+              // After the deposit, the funds sit in Unified Balance and Track Progress explains it.
+              setChainProgress(prev => {
+                const cp = prev.find(p => p.chainId === chain.chainId)
+                if (!cp?.txHash) { setError(msg); setTimeout(() => setStep('failed'), 300); noteNothingMoved(e, 'ub') }
+                return prev
+              })
+            })
+            return { chainId: chain.chainId, amount: claimAmount }
+          }
 
           // Burn confirmed on-chain - record the claim and show "Claim
           // Submitted" right away.
@@ -1469,7 +1537,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       setChainProgress(prev => prev.map(p => p.stage !== 'done' ? { ...p, stage: 'error', msg: 'Failed', pct: 0 } : p))
       setStep('failed')
     }
-  }, [walletAddress, selectedTotal, chains, selected, claimAmounts, getKey, loadSdk, merchantMode, token, tokenAddress, coin, minClaim, minText, coinChar, fmtCoin])
+  }, [walletAddress, selectedTotal, chains, selected, claimAmounts, getKey, loadSdk, claimRoute, merchantMode, token, tokenAddress, coin, minClaim, minText, coinChar, fmtCoin])
 
   const handleClaimTap = useCallback(async () => {
     if (selectedTotal <= 0) return
@@ -1479,11 +1547,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       setShowPasscodeSheet(true)
       return
     }
-    moveTimerRef.current = startMoveTimer('bring', { route: token ? 'cctpx' : 'cctp', chain: selected ?? undefined, token: coin })
+    moveTimerRef.current = startMoveTimer('bring', { route: token ? 'cctpx' : claimRoute, chain: selected ?? undefined, token: coin })
     setConfirmPhase('processing')
     setStep('confirm')
     await executeClaim()
-  }, [selectedTotal, storedPasscode, executeClaim, token, selected, coin])
+  }, [selectedTotal, storedPasscode, executeClaim, token, claimRoute, selected, coin])
 
   const handlePasscodeConfirm = useCallback(async () => {
     if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
@@ -1494,7 +1562,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     // back-to-back). `silent: true` so a wrong PIN doesn't flip on the
     // wallet-recovery banner before "Incorrect passcode" below even shows.
     prepareSigner(passEntry)
-    const timer = startMoveTimer('bring', { route: token ? 'cctpx' : 'cctp', chain: selected ?? undefined, token: coin })
+    const timer = startMoveTimer('bring', { route: token ? 'cctpx' : claimRoute, chain: selected ?? undefined, token: coin })
     const { verifyPasscode } = await import('@/lib/security')
     if (!await verifyPasscode(passEntry, storedPasscode!)) {
       setPassError('Incorrect passcode. Try again.'); setPassEntry(''); return
@@ -1510,7 +1578,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     // BUG FIX comment) - never used for the speculative restore above (that
     // one is already in flight/done via the shared single-flight guard).
     await executeClaim(enteredPasscode)
-  }, [passEntry, storedPasscode, executeClaim, token, selected, coin])
+  }, [passEntry, storedPasscode, executeClaim, token, claimRoute, selected, coin])
 
   const selectedChain = chains.find(c => c.chainId === selected)
 
@@ -1523,11 +1591,52 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const claimEstimateIsLive = feeEstimate.forKey === `${selected}|${claimAmt}`
   const showClaimEstimateRow = claimAmt >= minClaim
   const estimateReady = showClaimEstimateRow && claimEstimateIsLive && !feeEstimate.loading && !feeEstimate.error
-  // Bring is CCTP only (the gasless router), where the Admin Panel has it on.
-  // EURC / cirBTC: MeshPortRouter's CCTPx route.
+  // Route (CCTP vs Unified Balance) - UB only for chains Gateway supports.
+  const selectedSdkId = selected ? toSdkChainId(selected) : ''
+  // What the chain supports (merchants: never Unified Balance; CCTP is the
+  // gasless router) and what the Admin Panel has on for this account.
+  // EURC / cirBTC: only MeshPortRouter's CCTPx route (no Unified Balance for them).
   const selectedRoutes = !selected ? [] : token ? ['cctp'] : bringRoutes(settingsMap, selected, accountKind, canOf(selected))
+  const ubAvailable = selectedRoutes.includes('ub')
   const cctpAvailable = selectedRoutes.includes('cctp')
-  const reviewEnabled = claimAmt >= minClaim && claimAmt <= (selectedChain?.claimable ?? 0) && cctpAvailable && estimateReady
+  const effectiveRoute: 'cctp' | 'ub' = !ubAvailable ? 'cctp' : !cctpAvailable ? 'ub' : claimRoute
+  const reviewEnabled = claimAmt >= minClaim && claimAmt <= (selectedChain?.claimable ?? 0) && (effectiveRoute === 'ub' || estimateReady)
+  // Unified Balance route: Circle Gateway's fee quote for this exact claim
+  // (read-only, signs nothing), fetched ~600ms after the amount settles.
+  const [ubFee, setUbFee] = useState<{ forKey: string; loading: boolean; error: string; needsUnlock: boolean
+    gatewayFee: number; forwarderFee: number; otherFee: number; total: number; receiveAtLeast: number; approx?: boolean }>(
+    { forKey: '', loading: false, error: '', needsUnlock: false, gatewayFee: 0, forwarderFee: 0, otherFee: 0, total: 0, receiveAtLeast: 0 })
+  const ubFeeKey = `${selected}|${claimAmt}`
+  // The Unified Balance already held on this chain: when it covers the amount,
+  // Bring spends it straight to Arc in seconds (no deposit, no finality wait).
+  const [ubHeld, setUbHeld] = useState<{ forKey: string; amount: number }>({ forKey: '', amount: 0 })
+  useEffect(() => {
+    // Quoted whichever route is picked, so the switch can show both fees.
+    if (step !== 'select' || !selected || !ubAvailable || claimAmt < minClaim) return
+    let cancelled = false
+    setUbFee(prev => ({ ...prev, loading: true, error: '', needsUnlock: false, forKey: ubFeeKey }))
+    const t = setTimeout(async () => {
+      try {
+        const { signer: openSigner, walletAddress } = useAuthStore.getState()
+        if (!walletAddress) { if (!cancelled) setUbFee(prev => ({ ...prev, loading: false, needsUnlock: true })); return }
+        // A quote signs nothing: the address alone until the wallet is open
+        // (it used to wait for the signer - no fee until Privy had opened it).
+        const signer = openSigner ?? quoteAccount(walletAddress)
+        const { AppKit } = sdkRef.current ?? await loadSdk()
+        const kit = new AppKit({ disableErrorReporting: true, disableAnalytics: true } as any)
+        const adapter = await buildAdapter(signer)
+        void ubConfirmedOn(kit, walletAddress, selectedSdkId).then(amount => { if (!cancelled) setUbHeld({ forKey: ubFeeKey, amount }) }).catch(() => {})
+        const r = await timeQuote(`bring ub ${selectedSdkId}`, () => estimateUbClaimFee({ kit, adapter, walletAddr: walletAddress, fromChain: selectedSdkId, amount: claimAmt }))
+        if (!cancelled) setUbFee({ approx: false, ...r, forKey: ubFeeKey, loading: false, error: '', needsUnlock: false })
+      } catch (e: any) {
+        console.warn('[bring] Unified Balance fee estimate failed', e)
+        // Raw SDK errors are long and technical - keep the card readable.
+        if (!cancelled) setUbFee(prev => ({ ...prev, loading: false, error: /too small/i.test(e?.message ?? '') ? UB_FEE_TOO_HIGH : "Couldn't load fees - shown on the next screen" }))
+      }
+    }, 600)
+    return () => { cancelled = true; clearTimeout(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, selected, ubAvailable, claimAmt, selectedSdkId])
   // BUG FIX (live report): previously showed the raw, fee-less amount here
   // the instant it was typed while the fee row below still said
   // "Estimating…" -- two numbers appearing at different times, one of
@@ -1584,12 +1693,92 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     </div>
   )
 
-  const bringEnabled = reviewEnabled
+  const ubFeeLive = ubFee.forKey === ubFeeKey && !ubFee.loading
+  // Unified Balance fee bigger than the amount (Ethereum: Circle charges the
+  // gas to move USDC out of Ethereum, ~$1+): nothing would arrive. Bring is
+  // refused up front - it used to go ahead, deposit, then fail to send,
+  // leaving the USDC stuck in the Unified Balance on that chain.
+  const ubFeeTooHigh = ubFeeLive && !ubFee.needsUnlock
+    && (ubFee.error === UB_FEE_TOO_HIGH || (!ubFee.error && ubFee.receiveAtLeast <= 0))
+  const bringEnabled = reviewEnabled && !(effectiveRoute === 'ub' && ubFeeTooHigh)
+  // Unified Balance fee above UB_HIGH_FEE_USD (Circle's gas to move USDC out
+  // of that chain - Ethereum ~$1.1): CCTP costs cents, so Bring picks CCTP
+  // and says why. Every Unified Balance chain, Bring only. The person can
+  // still pick Unified Balance (unless its fee is more than the amount) -
+  // a deliberate pick for this chain + amount is never switched back.
+  const ubFeeHigh = ubFeeLive && !ubFee.needsUnlock && !ubFee.error && ubFee.total > UB_HIGH_FEE_USD
+  const ubPickedFor = useRef('')
+  const cctpPickedFor = useRef('')
+  // Unified Balance already covers this amount on this chain: it's the fast
+  // way (seconds), so it's picked - unless its fee is more than the amount, or
+  // the person chose CCTP for this chain and amount.
+  const ubCovers = ubAvailable && ubHeld.forKey === ubFeeKey && ubHeld.amount >= claimAmt * 0.999 && claimAmt > 0
+  useEffect(() => {
+    if (ubCovers && !ubFeeTooHigh && claimRoute !== 'ub' && cctpPickedFor.current !== ubFeeKey) setClaimRoute('ub')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ubCovers, ubFeeTooHigh, ubFeeKey])
+  useEffect(() => {
+    if (effectiveRoute === 'ub' && cctpAvailable && selected
+      && (ubFeeTooHigh || (ubFeeHigh && !ubCovers && ubPickedFor.current !== ubFeeKey))) setClaimRoute('cctp')
+     
+  }, [effectiveRoute, ubFeeTooHigh, ubFeeHigh, ubCovers, cctpAvailable, selected, ubFeeKey])
+  const pickRoute = (id: 'ub' | 'cctp') => {
+    if (id === 'ub') ubPickedFor.current = ubFeeKey
+    else cctpPickedFor.current = ubFeeKey
+    setClaimRoute(id)
+  }
+  const cctpFeeText = claimEstimateIsLive && !feeEstimate.loading && !feeEstimate.error ? `up to ${fmtFee(feeEstimate.totalFee)}` : 'a few cents'
+  // Short money for the one-line fee warning: $1.1, $0.03 (never "$0" for a real fee).
+  const shortFee = (n: number) => n > 0 && n < 0.01 ? '<$0.01' : `$${trimTrailingZeros(n.toFixed(2))}`
+  const cctpFeeShort = claimEstimateIsLive && !feeEstimate.loading && !feeEstimate.error ? shortFee(feeEstimate.totalFee) : 'a few cents'
+  const ubHighWarning = (ubFeeHigh || ubFeeTooHigh) && cctpAvailable && selected
+    ? `Unified Balance fee is high: Circle charges ${ubFee.approx ? 'up to' : 'about'} ${fmtFee(ubFee.total)} to move USDC out of ${getMeta(selected).label}'s Unified Balance${ubFeeTooHigh ? ' - more than this amount' : ''}. CCTP costs ${cctpFeeText}${effectiveRoute === 'cctp' ? ', so CCTP is selected.' : '.'}`
+    : ''
+  const ubSummaryCard = (
+    <div style={{ width: '100%', marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 12, color: COLORS.muted }}>You will receive</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>
+          {!showClaimEstimateRow ? `$${formatAmount(claimAmt)} on Arc`
+            : ubFeeLive && !ubFee.error && !ubFee.needsUnlock ? `At least $${formatAmount(ubFee.receiveAtLeast)} on Arc`
+            : ubFeeLive ? 'Shown on the next screen' : 'Calculating…'}
+        </span>
+      </div>
+      {showClaimEstimateRow && (
+        <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${COLORS.border}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {!ubFeeLive ? (
+            <div style={feeRowStyle}><span>Fees</span><span>Calculating…</span></div>
+          ) : ubFee.needsUnlock ? (
+            <div style={feeRowStyle}><span>Fees</span><span>Shown on the next screen</span></div>
+          ) : ubFeeTooHigh ? (
+            <div style={{ ...feeRowStyle, color: COLORS.error }}>
+              <span>Fees</span>
+              <span style={{ textAlign: 'right' }}>
+                {ubFee.total > 0 ? `About ${fmtFee(ubFee.total)} - more than this amount.` : 'More than this amount.'}
+                {cctpAvailable ? ' Switch to CCTP, or bring more.' : ' Bring a larger amount.'}
+              </span>
+            </div>
+          ) : ubFee.error ? (
+            <div style={{ ...feeRowStyle, color: COLORS.error }}><span>Fees</span><span style={{ textAlign: 'right' }}>{ubFee.error}</span></div>
+          ) : (
+            <>
+              <div style={feeRowStyle}><span>Circle Gateway fee</span><span>{ubFee.approx ? 'Up to ' : ''}{fmtFee(ubFee.gatewayFee)}</span></div>
+              {ubFee.forwarderFee > 0 && <div style={feeRowStyle}><span>Forwarding fee</span><span>{fmtFee(ubFee.forwarderFee)}</span></div>}
+              {ubFee.otherFee > 0 && <div style={feeRowStyle}><span>Other fees</span><span>{fmtFee(ubFee.otherFee)}</span></div>}
+              <div style={{ ...feeRowStyle, color: COLORS.text, fontWeight: 600 }}><span>Total fees</span><span>Up to {fmtFee(ubFee.total)}</span></div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
 
   const chainsWithFunds  = chains
     .filter(c => c.claimable > 0 || c.pending > 0)
     // Only chains Bring can move from, for this kind of account: its chain
-    // switch on and the gasless CCTP router supported and on in the Admin Panel.
+    // switch on and at least one route the chain supports and the Admin
+    // Panel has on (Unified Balance - never for merchants - and the gasless
+    // CCTP router).
     .filter(c => isChainEnabledForBring(settingsMap, c.chainId, accountKind, canOf(c.chainId)))
     // Highest balance first - makes the biggest claimable amounts the most
     // prominent/easiest to act on instead of showing in arbitrary chain
@@ -1944,26 +2133,84 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 {!desktopInput && !amountConfirmed && !keypadOpen && !claimAmt && (
                   <p style={{ fontSize: 12, color: COLORS.muted, margin: '6px 0 0' }}>Tap the amount to enter a value</p>
                 )}
-                {!claimOver && receiveSummaryCard}
+                {!claimOver && (effectiveRoute === 'cctp' ? receiveSummaryCard : ubSummaryCard)}
               </div>
 
               {/* Route: a two-way switch, with one line on how the chosen one works */}
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 8 }}>How should it travel?</div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '0 4px' }}>
+                {ubAvailable && cctpAvailable && (
+                  <div role="radiogroup" aria-label="Route" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4, padding: 4, borderRadius: 16,
+                    background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
+                    {([['ub', 'Unified Balance'], ['cctp', 'CCTP']] as const).map(([id, name]) => {
+                      const on = effectiveRoute === id
+                      // Each route's fee under its name; Unified Balance is
+                      // marked and can't be picked when Circle's fee from this
+                      // chain is more than the amount.
+                      const tooHigh = id === 'ub' && ubFeeTooHigh
+                      const feeLine = !showClaimEstimateRow ? ''
+                        : id === 'ub'
+                          ? (!ubFeeLive ? 'Fee …' : ubFee.needsUnlock ? '' : tooHigh ? (ubFee.total > 0 ? `Fee ${fmtFee(ubFee.total).replace(' USDC', '')} · too high` : 'Fee too high')
+                            : ubFeeHigh ? `Fee ${ubFee.approx ? 'up to ' : ''}${fmtFee(ubFee.total).replace(' USDC', '')} · high`
+                            : ubFee.error ? '' : `Fee ${ubFee.approx ? 'up to ' : ''}${fmtFee(ubFee.total).replace(' USDC', '')}`)
+                          : (!claimEstimateIsLive || feeEstimate.loading ? 'Fee …' : feeEstimate.error ? '' : `Fee up to ${fmtFee(feeEstimate.totalFee).replace(' USDC', '')}`)
+                      return (
+                        <button key={id} role="radio" aria-checked={on} aria-disabled={tooHigh} onClick={() => { if (!tooHigh) pickRoute(id) }}
+                          style={{ minHeight: 42, padding: '6px 6px', borderRadius: 12, border: 'none', cursor: tooHigh ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: on ? 700 : 600,
+                            background: on ? 'var(--brand)' : 'transparent', color: on ? '#fff' : COLORS.muted, opacity: tooHigh ? 0.75 : 1,
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5, maxWidth: '100%' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                            <SpeedTag fast={id === 'cctp'} on={on} />
+                          </span>
+                          <span style={{ fontSize: 11, fontWeight: 500, color: on ? 'rgba(255,255,255,0.85)' : COLORS.muted }}>
+                            {id === 'ub' ? ubBringTime(selectedSdkId) : CCTP_BRING_TIME}
+                          </span>
+                          {feeLine && (
+                            <span style={{ fontSize: 11, fontWeight: 500, color: tooHigh ? COLORS.error : (id === 'ub' && ubFeeHigh) ? 'var(--warning-text)' : on ? 'rgba(255,255,255,0.85)' : COLORS.muted }}>{feeLine}</span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: ubAvailable && cctpAvailable ? 10 : 0, padding: '0 4px' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
-                    <path d="M4 8h14l-3-3M20 16H6l3 3"/>
+                    {effectiveRoute === 'ub' ? <path d="M13 2L4 14h7l-1 8 9-12h-7z"/> : <path d="M4 8h14l-3-3M20 16H6l3 3"/>}
                   </svg>
                   <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: COLORS.muted, alignSelf: 'center' }}>
                     {/* One short line - the long version pushed the fee warning and
                         the Bring button off shorter screens. */}
                     {token
                       ? <><b style={{ color: COLORS.text, fontWeight: 600 }}>Via Circle CCTPx</b> · gasless, native {coin} on Arc</>
+                      : effectiveRoute === 'ub'
+                      ? <><b style={{ color: COLORS.text, fontWeight: 600 }}>Via Unified Balance</b> · finish in Recover if you leave</>
                       : <><b style={{ color: COLORS.text, fontWeight: 600 }}>Burn & mint</b> · fast, gasless, arrives on Arc</>}
                   </p>
                 </div>
               </div>
 
+              {/* High Unified Balance fee: one line, with a one-tap switch to CCTP
+                  while Unified Balance is picked. The full sentence stays as the
+                  accessible description. */}
+              {ubHighWarning && (
+                <div role="status" aria-label={ubHighWarning} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 8px 8px 12px', borderRadius: 12, fontSize: 13, lineHeight: 1.35,
+                  color: COLORS.text, background: 'color-mix(in srgb, var(--warning) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)' }}>
+                  <span aria-hidden style={{ color: 'var(--warning-text)', fontWeight: 700 }}>!</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    {effectiveRoute === 'ub'
+                      ? <>Fee {shortFee(ubFee.total)} is high · CCTP {cctpFeeShort}</>
+                      : <>Unified Balance fee {shortFee(ubFee.total)} is high · using CCTP</>}
+                  </span>
+                  {effectiveRoute === 'ub' && (
+                    <button onClick={e => { e.stopPropagation(); pickRoute('cctp') }}
+                      style={{ flexShrink: 0, minHeight: 30, padding: '0 12px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+                        background: 'var(--warning)', color: '#1A1205' }}>
+                      Use CCTP
+                    </button>
+                  )}
+                </div>
+              )}
 
               {error && <p role="alert" style={{ fontSize: 13, color: COLORS.error, margin: 0, textAlign: 'center' }}>{error}</p>}
 
@@ -1975,7 +2222,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     const amt = parseFloat(claimAmounts[selected!] ?? '0') || 0
                     if (amt < minClaim) { setError(minText); return }
                     if (amt > selectedChain.claimable) { setError('Exceeds available balance'); return }
-                    if (!estimateReady) return
+                    if (effectiveRoute === 'cctp' && !estimateReady) return
+                    if (effectiveRoute === 'ub' && ubFeeTooHigh) return
                     setAmountConfirmed(true)
                     setKeypadOpen(false)
                     handleClaimTap()
@@ -2066,21 +2314,24 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             if (!errored && cp0) lastClaimStageRef.current = stage
             const reached = errored ? lastClaimStageRef.current : stage
             const chainId = cp0?.chainId ?? trackRec?.chainId
-            // Bring is CCTP only.
-            const route = 'cctp' as const
+            // Same route decision claimOneChain makes.
+            const isUbRoute = !token && !!cp0 && (ubClaimChains.includes(cp0.chainId)
+              || (!merchantMode && (claimRoute === 'ub' || !canBringOverCctp(cp0.chainId)) && UB_CLAIM_CHAINS.has(toSdkChainId(cp0.chainId))))
+            const route = isUbRoute ? 'ub' : 'cctp'
             const srcLabel = chainId ? getMeta(chainId).label : 'source chain'
             const steps = moveSteps({
               kind: 'bring', route, from: srcLabel, to: 'Arc', amount: fmtCoin(displayTotal || trackClaimRow?.amount || 0),
+              fastFinality: isUbRoute && !!chainId && ubClaimEta(toSdkChainId(chainId)) === 'under a minute',
               token: coin,
             })
             let current = cp0 ? indexFromBringStage(route, reached, cp0.handedOff) : 1
-            if (trackClaimRow) current = Math.max(current, indexFromClaimStatus(trackClaimRow.status))
-            if (bringIris && bringIris.stage !== 'error') current = Math.max(current, indexFromCctpStage(bringIris.stage))
+            if (!isUbRoute && trackClaimRow) current = Math.max(current, indexFromClaimStatus(trackClaimRow.status))
+            if (!isUbRoute && bringIris && bringIris.stage !== 'error') current = Math.max(current, indexFromCctpStage(bringIris.stage))
             if (confirmPhase === 'done') current = steps.length
             const failed = errored ? (cp0?.msg || 'Something went wrong')
               : trackClaimRow?.status === 'failed' ? (trackClaimRow.error || 'This bring needs attention – finish it from Multichain Hub → Recover.')
               : null
-            const safe = confirmPhase === 'submitted' || confirmPhase === 'tracking'
+            const safe = confirmPhase === 'submitted' || confirmPhase === 'tracking' || (isUbRoute && !!cp0?.handedOff)
             const srcTx = cp0?.txHash || trackClaimRow?.txHash || undefined
             const mintTx = cp0?.mintTxHash || trackClaimRow?.destinationTxHash || undefined
             const srcLink = srcTx && chainId ? { hash: srcTx, href: explorerTxUrl(chainId, srcTx) } : undefined
@@ -2099,7 +2350,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 amount={displayTotal || trackClaimRow?.amount || 0}
                 steps={steps} current={current} failed={failed} safe={safe} timeSteps
                 loading={!cp0 && !trackClaimRow}
-                txs={[undefined, srcLink, undefined, mintLink]}
+                txs={isUbRoute ? [srcLink, undefined, undefined, mintLink] : [undefined, srcLink, undefined, mintLink]}
                 holdText="Please wait – don't close this screen until the bring is submitted."
                 onViewHub={() => navigate('/multichain', { state: { tab: 'activity' } })}
               />
@@ -2139,8 +2390,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             const circleFeeLabel = fees.final ? usdc(fees.circle) : `Up to ${usdc(fees.circle + fees.circleCap)} (final once it arrives)`
             // Process checklist - the same four steps the progress page
             // showed, all done (this only mounts once the bring landed).
+            const doneUb = fromChainIds.some(id => ubClaimChains.includes(id))
             const processSteps = moveSteps({
-              kind: 'bring', route: 'cctp',
+              kind: 'bring', route: doneUb ? 'ub' : 'cctp',
               from: fromChainIds.length === 1 ? getMeta(fromChainIds[0]).label : `${fromChainIds.length} chains`, to: 'Arc',
               amount: fmtCoin(displayTotal), token: coin,
             })
