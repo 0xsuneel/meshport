@@ -5,8 +5,8 @@
 //
 //   prepareSigner(passcode?)   - as early as possible (the moment the
 //                                passcode is typed, or the screen opens):
-//                                starts opening the wallet, warms a Circle
-//                                wallet. Never waits, never shows a banner.
+//                                starts opening the wallet. Never waits,
+//                                never shows a banner.
 //   getReadySigner(passcode?)  - right before signing: the signer for THIS
 //                                account, or null. Joins whatever
 //                                prepareSigner started (restorePrivateKey is
@@ -25,31 +25,15 @@ import { useAuthStore } from '@/store'
 import type { WalletAccount } from '@/wallet'
 import { startWalletReadiness, walletGeneration, useWalletReadiness, type WalletPhase } from './walletReadiness'
 
-/** Starts a Circle wallet's warm-up (session, backend, SDK - wallet/circle.ts) when it isn't warm yet. */
-function warmCircle(address: string): void {
-  void import('@/wallet/circle')
-    .then(m => { if (!m.circleSignerReady(address)) void m.warmCircleSigner(address) })
-    .catch(() => {})
-}
-
-/** The provider warm-up for this kind of wallet, if it has one. */
-function warmProvider(walletSource: string | null, address: string): void {
-  if (walletSource === 'circle') warmCircle(address)
-}
-
 /**
  * Starts getting the signer ready without waiting: opens the wallet (with
- * the passcode when the person just typed it), warms a Circle wallet. Safe
- * to call any number of times.
+ * the passcode when the person just typed it). Safe to call any number of
+ * times.
  */
 export function prepareSigner(passcode?: string): void {
   startWalletReadiness()
-  const { walletAddress, walletSource, signer } = useAuthStore.getState()
-  if (!walletAddress) return
-  if (signer) {
-    warmProvider(walletSource, walletAddress)
-    return
-  }
+  const { walletAddress, signer } = useAuthStore.getState()
+  if (!walletAddress || signer) return
   // Silent: a mistyped passcode here must not raise the recovery banner.
   void import('./restoreWallet')
     .then(m => m.restorePrivateKey(passcode || undefined, { silent: true }))
@@ -80,7 +64,6 @@ export async function getReadySigner(passcode?: string, opts?: { silent?: boolea
   const now = useAuthStore.getState()
   if (!signer || generation !== walletGeneration() || !now.walletAddress) return null
   if (signer.address.toLowerCase() !== now.walletAddress.toLowerCase()) return null
-  warmProvider(now.walletSource, now.walletAddress)
   return signer
 }
 
@@ -102,6 +85,6 @@ export function usePaymentReadiness(): { phase: WalletPhase; ready: boolean; ope
   return {
     phase,
     ready: phase === 'signer_ready',
-    opening: phase === 'initializing' || phase === 'recovering' || phase === 'wallet_discovered',
+    opening: phase === 'initializing' || phase === 'recovering',
   }
 }

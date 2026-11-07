@@ -74,22 +74,6 @@ Deno.serve(async req => {
   } catch { ok = false }
   if (!ok) return jsonFor(req, { error: 'Signature does not match this account' }, 403)
 
-  // A guest (anonymous) session never takes an account away from a real
-  // Google / email sign-in. Otherwise a device that briefly fell back to a
-  // guest session would re-point the account at it, and the owner's next
-  // Google login would no longer find their account ("already belongs to a
-  // MeshPort account" error). Guest → guest moves (wallet users) still work.
-  if (user.auth_uid && user.auth_uid !== sessionId && authData?.user?.is_anonymous) {
-    const { data: current } = await db.auth.admin.getUserById(user.auth_uid).catch(() => ({ data: null as any }))
-    if (current?.user && !current.user.is_anonymous) return jsonFor(req, { ok: true, changed: false, kept: true })
-  }
-  // One MeshPort account per Google / email login: a real sign-in already
-  // linked to another account never takes on a second one. (Guest sessions
-  // are per device, not an identity - a wallet identifies those accounts.)
-  if (user.auth_uid !== sessionId && !authData?.user?.is_anonymous) {
-    const { data: other } = await db.from('users').select('id').eq('auth_uid', sessionId).neq('id', userId).limit(1).maybeSingle()
-    if (other) return jsonFor(req, { error: 'This login already has a MeshPort account' }, 409)
-  }
   if (user.auth_uid !== sessionId) {
     const { error } = await db.from('users').update({ auth_uid: sessionId }).eq('id', userId)
     if (error) return jsonFor(req, { error: 'Could not link session' }, 500)

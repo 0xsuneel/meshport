@@ -7,7 +7,6 @@
 //                 authenticated      signed in, no wallet address yet
 //                 initializing       the wallet is being opened (restoreWallet)
 //                 recovering         it was open this session and is being opened again
-//                 wallet_discovered  the provider knows the wallet, signing not ready yet (Circle)
 //                 signer_ready       it can sign
 //                 locked             it needs the passcode / an unlock to open
 //                 error              the last open failed (`error` says why) - retryable
@@ -25,7 +24,7 @@ import { markStartup, reportResume } from './perfTrace'
 
 export type WalletPhase =
   | 'idle' | 'authenticated' | 'initializing' | 'recovering'
-  | 'wallet_discovered' | 'signer_ready' | 'locked' | 'error'
+  | 'signer_ready' | 'locked' | 'error'
 
 export interface WalletReadiness {
   phase: WalletPhase
@@ -43,8 +42,6 @@ let generation = 0
 let restoring = false
 let lastError: string | null = null
 let hadSigner = false
-// Circle: is the session valid, confirmed and Circle's SDK loaded? Set once circle.ts is loaded.
-let circleReady: ((address: string) => boolean) | null = null
 
 /** Changes on logout / account switch - see the file comment. */
 export function walletGeneration(): number { return generation }
@@ -65,25 +62,18 @@ export function noteNetworkReady(): void {
   useWalletReadiness.setState({ networkReady: true })
 }
 
-/** circle.ts: lets readiness tell "a Circle session is stored" from "can sign now". */
-export function setCircleReadyProbe(probe: (address: string) => boolean): void {
-  circleReady = probe
-  recompute()
-}
 
 
 export function recompute(): void {
-  const { walletAddress, walletSource, signer, isAuthenticated, isLocked } = useAuthStore.getState()
+  const { walletAddress, signer, isAuthenticated, isLocked } = useAuthStore.getState()
   let phase: WalletPhase
   if (!walletAddress) phase = isAuthenticated ? 'authenticated' : 'idle'
-  else if (signer) {
-    const circleWaiting = walletSource === 'circle' && (!circleReady || !circleReady(walletAddress))
-    phase = circleWaiting ? 'wallet_discovered' : 'signer_ready'
-  } else if (restoring) phase = hadSigner ? 'recovering' : 'initializing'
+  else if (signer) phase = 'signer_ready'
+  else if (restoring) phase = hadSigner ? 'recovering' : 'initializing'
   else if (lastError) phase = 'error'
   else phase = 'locked'
 
-  if (phase === 'wallet_discovered' || phase === 'signer_ready') markStartup('discovered')
+  if (phase === 'signer_ready') markStartup('discovered')
   if (phase === 'signer_ready') { markStartup('signer'); hadSigner = true; finishResume() }
 
   const prev = useWalletReadiness.getState()
@@ -144,8 +134,7 @@ export function startWalletReadiness(): void {
 /**
  * Resolves true once the wallet can sign (signer_ready), false if it settles
  * without that (locked, error, signed out) - or after `timeoutMs`, so no
- * caller can wait forever on a phase that never settles (a Circle wallet
- * whose warm-up keeps failing stays 'wallet_discovered'). Event-driven.
+ * caller can wait forever on a phase that never settles. Event-driven.
  */
 export function untilSignerReady(timeoutMs = 60_000): Promise<boolean> {
   const settled = (p: WalletPhase): boolean | null =>
@@ -163,5 +152,5 @@ export function untilSignerReady(timeoutMs = 60_000): Promise<boolean> {
 
 /** Test hook. */
 export function resetWalletReadiness(): void {
-  generation = 0; restoring = false; lastError = null; hadSigner = false; circleReady = null; resumeStartedAt = null
+  generation = 0; restoring = false; lastError = null; hadSigner = false; resumeStartedAt = null
 }

@@ -112,9 +112,8 @@ export function PasscodeSetupPage() {
         // see App.tsx's comment on the returning=1 route.
         //
         // Bug fix: this used to `await restorePrivateKey(...)` BEFORE
-        // deciding where to navigate - for a social-auto (Google/Email)
-        // account, that's a real server round-trip that can take several
-        // seconds, during which the screen just sat there with the
+        // deciding where to navigate - a restore that took a while left
+        // the screen waiting, during which the screen just sat there with the
         // confirm dots already filled and nothing else happening. That's
         // exactly what read as the keypad "stuck." Navigate immediately
         // and let the restore happen in the background - same pattern
@@ -125,14 +124,12 @@ export function PasscodeSetupPage() {
         navigateRef.current('/', { replace: true })
         import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(firstRef.current)).catch(() => {})
       } else {
-        // New signup (create/import/social) - go straight to the next
-        // step (create-wallet / import-wallet / auto-wallet / wallet-
-        // setup). No biometric offer during registration either - it
+        // New signup (create/import) - go straight to the next step
+        // (create-wallet / import-wallet / wallet-setup). No biometric offer during registration either - it
         // stays available afterward from Settings, same as relogin above.
         const next =
           nextRef.current === 'create' ? '/auth/create-wallet'
           : nextRef.current === 'import' ? '/auth/import-wallet'
-          : loginTypeRef.current === 'social' ? '/auth/auto-wallet'
           : '/auth/wallet-setup'
         navigateRef.current(next, { replace: true })
       }
@@ -255,19 +252,13 @@ export function PasscodeLockPage() {
   const [opening,   setOpening]   = useState(false)
 
   // Get the wallet ready while this screen is up, so it's open the moment
-  // the passcode is accepted - not loaded only then. Google / email wallets
-  // (Circle, and the old device-kept ones) need no passcode to open: start
-  // now. Created / imported wallets need it: load the wallet frame now, and
-  // open it with the passcode in handleUnlock.
+  // the passcode is accepted - not loaded only then: load the wallet frame
+  // now, and open it with the passcode in handleUnlock.
   useEffect(() => {
-    const { walletAddress: address, signer, walletSource } = useAuthStore.getState()
+    const { walletAddress: address, signer } = useAuthStore.getState()
     if (!address || signer) return
-    if (walletSource === 'circle' || walletSource === 'social-auto') {
-      import('@/lib/restoreWallet').then(m => m.restorePrivateKey(undefined, { silent: true })).catch(() => {})
-    } else {
-      import('@/wallet').then(w => w.walletReady()).catch(() => {})
-      import('@/lib/restoreWallet').catch(() => {})
-    }
+    import('@/wallet').then(w => w.walletReady()).catch(() => {})
+    import('@/lib/restoreWallet').catch(() => {})
   }, [])
 
   const displayName = user?.displayName || user?.username?.replace('.arc','') || 'Welcome back'
@@ -332,15 +323,11 @@ export function PasscodeLockPage() {
       // Open the app with the wallet open, like MetaMask / Phantom: Send,
       // Swap and the rest work on the first tap, and the passcode asked
       // there only confirms the payment. The frame was loaded while this
-      // screen was up (Google / email wallets started opening then), so
-      // this is usually short. Capped: a slow Circle sign-in or a stuck frame
+      // screen was up, so this is usually short. Capped: a stuck frame
       // doesn't hold the lock screen - the same attempt carries on in the
       // background and sets the recovery banner itself if it fails.
       // Never started twice: a second run would only repeat the same wait.
-      // "Open" means it can sign: a Google / email (Circle) wallet whose
-      // session is stored but whose warm-up hasn't finished isn't ready yet,
-      // and a payment right after unlocking would wait on it. Wait for real
-      // readiness here instead.
+      // "Open" means it can sign: wait for real readiness here.
       const open = import('@/lib/restoreWallet').then(m => m.restorePrivateKey(val))
         .then(async ok => ok && (await import('@/lib/walletReadiness')).untilSignerReady())
         .catch(() => false)
@@ -368,15 +355,15 @@ export function PasscodeLockPage() {
       // BUG FIX - it used to also require `!signer`, meant to detect a
       // genuine fresh login (key actually cleared, e.g. by logout()) vs a
       // routine re-lock (offline / browser closed) where the key stays in
-      // memory. That worked by accident for import-privkey/social-auto,
-      // whose restores need a passcode or a network round trip and so are
+      // memory. That worked by accident for import-privkey, whose
+      // restore needs a passcode and so is
       // still in flight when this runs - but for create/import-seed
       // wallets, App.tsx's mount-time restore derives the key from the
       // mnemonic synchronously, no network, and reliably finishes BEFORE
       // the user is even done typing their unlock passcode. `signer`
       // was therefore already populated here on every seed-phrase unlock,
       // permanently and silently skipping the offer for that wallet type
-      // only - never for import-privkey or social-auto, which is exactly
+      // only - never for import-privkey, which is exactly
       // the asymmetry reported.
       const skippedRecently = walletAddress ? wasBiometricOfferSkippedRecently(walletAddress) : false
       // Only offer it where the device can actually do it - otherwise that

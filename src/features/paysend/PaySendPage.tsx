@@ -1,5 +1,4 @@
 import { backLayerPop } from '@/lib/backLayers'
-import { payIntent } from '@/lib/approvalIntents'
 import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
 import { displayOrderNumber } from '@/lib/orderLabels'
 import { orderKindOf, orderTitle, paymentOrderTag, type OrderKind } from '@/lib/merchantPay'
@@ -661,9 +660,6 @@ export function PaySendPage() {
   // exact username.arc finds yourself, tagged "You" at render time.
   const { results, searching } = useUserSearch(isValidAddress(query.trim()) ? '' : query, savedContacts)
 
-  // Fast Pay (beta, Circle wallets - lib/fastPay.ts): make sure a session is
-  // starting in the background while the payment is being entered.
-  useEffect(() => { import('@/lib/fastPay').then(m => { void m.maybeStartFastPay() }).catch(() => {}) }, [])
 
   // Warm the RPC proxy as soon as the passcode sheet opens.
   useEffect(() => {
@@ -1897,7 +1893,6 @@ export function PaySendPage() {
           amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))}`, unit: token,
         } : undefined}
         bioVerb="Pay"
-        intent={payIntent(token, recipient?.walletAddress, numAmount)}
         anchor={desktopColumnRef.current}
         value={pin}
         onChange={setPin}

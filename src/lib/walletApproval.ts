@@ -10,15 +10,12 @@
 //   - background work (claims finishing, recoveries, expired P2P trades)
 //     never asks: it runs only while an approval is fresh (`approvalFresh`)
 //     and otherwise waits for the next passcode.
-// Google / email (Circle) wallets: their passcode is checked in the frame
-// too (lib/circlePasscode.ts), but they have no key there to approve.
 
 import { create } from 'zustand'
 import { useAuthStore } from '@/store'
 import { FRAME_PASSCODE, WALLET_UNAVAILABLE, onPasscodeVerified, setFramePasscodeCheck } from './security'
-import { isCircleWallet, checkCirclePasscode } from './circlePasscode'
 
-const FRAME_SOURCES = new Set(['create', 'import-seed', 'import-privkey', 'social-auto'])
+const FRAME_SOURCES = new Set(['create', 'import-seed', 'import-privkey'])
 // A little under the frame's own 2 minutes, so a job that starts never runs out.
 const FRESH_MS = 100_000
 let approvedAt = 0
@@ -51,8 +48,6 @@ export async function approveWallet(passcode: string): Promise<{ ok: boolean; re
 // frame (security.ts FRAME_PASSCODE). A frame with no passcode for this
 // wallet never counts as a match.
 setFramePasscodeCheck(async passcode => {
-  // Google / email wallets: the frame's own check of their passcode (lib/circlePasscode).
-  if (isCircleWallet()) return checkCirclePasscode(passcode)
   const r = await approveWallet(passcode)
   if (r.ok) return r.required === true
   if (r.error === 'bad-passcode' || r.error === 'rate-limited') return false

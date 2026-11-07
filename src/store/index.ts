@@ -97,9 +97,9 @@ interface AuthStore {
    * locked. The app never holds the key itself; see docs/WALLET_FRAME.md.
    */
   signer: WalletAccount | null
-  walletSource: 'create' | 'import-seed' | 'import-privkey' | 'social-auto' | 'circle' | null
+  walletSource: 'create' | 'import-seed' | 'import-privkey' | null
   username: string | null
-  loginType: 'social' | 'wallet' | null
+  loginType: 'wallet' | null
   backupEmail: string | null
   passcode: string | null
   biometricEnabled: boolean
@@ -108,9 +108,9 @@ interface AuthStore {
   setUser: (user: User) => void
   updateAvatar: (avatarUrl: string | null) => void
   updateDisplayName: (name: string) => void
-  setWallet: (address: string, signer: WalletAccount | null, source?: 'create' | 'import-seed' | 'import-privkey' | 'social-auto' | 'circle') => void
+  setWallet: (address: string, signer: WalletAccount | null, source?: 'create' | 'import-seed' | 'import-privkey') => void
   setUsername: (username: string) => void
-  setLoginType: (type: 'social' | 'wallet') => void
+  setLoginType: (type: 'wallet') => void
   setBackupEmail: (email: string | null) => void
   setPasscode: (code: string) => void
   setBiometricEnabled: (enabled: boolean) => void
@@ -185,7 +185,7 @@ export const useAuthStore = create<AuthStore>()(
         //
         // An open wallet means recovery is no longer needed - no matter which
         // of the several paths got us here (frame session copy, passcode,
-        // passkey, Recovery QR, a fresh create/import). This is the single
+        // passkey, a fresh create/import). This is the single
         // choke point every one of those funnels through; see restoreWallet.ts
         // for why the banner must be cleared here and not only there.
         if (signer) {
@@ -218,14 +218,12 @@ export const useAuthStore = create<AuthStore>()(
           } catch { /* storage blocked */ }
         }
         import('@/lib/chatCrypto').then(({ clearChatSessionSeeds }) => clearChatSessionSeeds()).catch(() => {})
-        // Google / email wallets: this device's sealed copy goes too - signing
-        // back in opens the wallet with the passkey or Recovery QR. Done here,
-        // synchronously: a lazy import could still be loading when the page
-        // navigates away to Google, leaving the copy behind.
+        // The activity cache goes too. Done here, synchronously: a lazy
+        // import could still be loading when the page navigates away.
         try {
           for (let i = localStorage.length - 1; i >= 0; i--) {
             const k = localStorage.key(i)
-            if (k?.startsWith('meshport_social_dv_') || k?.startsWith('meshport_social_secured_') || k?.startsWith('meshport_activity_cache_')) localStorage.removeItem(k)
+            if (k?.startsWith('meshport_activity_cache_')) localStorage.removeItem(k)
           }
         } catch { /* storage blocked */ }
         import('@/hooks/useActivity').then(({ clearActivityCache }) => clearActivityCache()).catch(() => {})
@@ -275,12 +273,8 @@ export const useAuthStore = create<AuthStore>()(
         // logging out should mean the next login for ANY account on this
         // browser starts from a real passcode prompt, not a leftover cache.
         clearSessionPrivateKey(currentAddr)
-        if (get().walletSource === 'circle') {
-          import('@/wallet/circle').then(m => m.discardPreparedSignatures()).catch(() => {})
-          import('@/lib/fastPay').then(m => m.endFastPaySession()).catch(() => {})
-        }
-        // The frame's open key, session copy and (Google / email) device copy
-        // go too. Passcode copies stay, exactly as before.
+        // The frame's open key and session copy go too. Passcode copies stay,
+        // exactly as before.
         import('@/wallet').then(({ forgetWallet }) => forgetWallet(currentAddr ?? undefined)).catch(() => {})
 
         // Clear ALL wallet-specific localStorage keys so next account starts clean
@@ -296,10 +290,9 @@ export const useAuthStore = create<AuthStore>()(
         // IMPORTANT: this used to only clear MeshPort's own local state -
         // it never actually revoked the underlying Supabase Auth session.
         // That meant "logging out" was cosmetic: the Supabase JWT stayed
-        // fully valid, and (for Google logins) the browser's Google session
-        // cookie was untouched too - so re-authenticating could skip
-        // straight through with no real prompt, since there was nothing to
-        // actually re-authenticate. Fire-and-forget (not awaited) so the
+        // fully valid - so re-authenticating could skip straight through
+        // with no real prompt, since there was nothing to actually
+        // re-authenticate. Fire-and-forget (not awaited) so the
         // local state clear above still happens instantly, same UX as
         // before - this just also does the part that was silently missing.
         import('@/lib/supabase').then(({ supabase, resetAnonSession }) => {
@@ -335,11 +328,6 @@ export const useAuthStore = create<AuthStore>()(
         const addr = get().walletAddress
         set({ isLocked: true })
         import('@/lib/security').then(({ clearSessionPrivateKey, forgetVerifiedPasscodes }) => { clearSessionPrivateKey(addr); forgetVerifiedPasscodes() }).catch(() => {})
-        // A Circle wallet's signing requests prepared for a payment (wallet/circle.ts) go too.
-        // Its Fast Pay session stays (lib/fastPay.ts): like a mobile wallet's, it
-        // outlives the lock screen - every payment still needs the passcode, and
-        // the session's own limit and expiry are enforced on-chain.
-        if (get().walletSource === 'circle') import('@/wallet/circle').then(m => m.discardPreparedSignatures()).catch(() => {})
       },
       unlock: () => {
         set({ isLocked: false, lastActivityAt: Date.now() })

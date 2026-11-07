@@ -284,9 +284,7 @@ export function ProfilePage() {
         </div>
         <div className="px-5 pb-6 space-y-4">
           <p className="text-sm text-text-secondary">
-            {loginType === 'social'
-              ? "You'll need your Gmail and the OTP sent to it to sign back in."
-              : walletSource === 'import-privkey'
+            {walletSource === 'import-privkey'
               ? "You'll need your private key to sign back in."
               : "You'll need your recovery phrase (seed phrase) to sign back in."}
           </p>

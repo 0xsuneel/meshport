@@ -4,8 +4,7 @@ vi.stubEnv('SUPABASE_SERVICE_KEY', 'test')
 const { paymentProof } = await import('../../api/chat')
 
 // A payment card needs a real payment from the sender's wallet to the other
-// person (api/chat.ts paymentProof) - including Fast Pay payments, which a
-// session key sends through Permit2.
+// person (api/chat.ts paymentProof): the token's own Transfer log.
 const FROM = '0x0baf9b2c44f377208b3c5f833afbab8414d69d5d'
 const TO = '0x2222222222222222222222222222222222222222'
 const KEY = '0x7777777777777777777777777777777777777777'
@@ -17,9 +16,9 @@ const log = (from: string, to: string, units: bigint, address = USDC) => ({ addr
 const ok = { status: '0x1' }
 
 describe('chat payment card proof', () => {
-  it('a Fast Pay payment: sent by the session key, the USDC Transfer from the wallet to the recipient proves it', () => {
+  it('an ERC-20 payment: the USDC Transfer from the wallet to the recipient proves it, whoever sent the tx', () => {
     const tx = { from: KEY, to: PERMIT2, value: '0x0' }
-    const rc = { ...ok, logs: [log(FROM, TO, 2_500_000n), log(FROM, KEY, 1435n)] } // the payment, and its gas refund to the key
+    const rc = { ...ok, logs: [log(FROM, TO, 2_500_000n), log(FROM, KEY, 1435n)] }
     expect(paymentProof(tx, rc, FROM, TO, 'USDC', 2.5)).toBe('ok')
     expect(paymentProof(tx, rc, FROM, TO, 'USDC', 2.6)).toBe('invalid') // not that much
   })

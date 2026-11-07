@@ -408,17 +408,6 @@ export async function fastCctpTransfer(p: FastCctpParams): Promise<FastCctpResul
     : encodeFunctionData({ abi: MESSENGER, functionName: 'depositForBurn', args: [amount, dst, pad(p.recipient as Hex, { size: 32 }), ARC_USDC, ZERO32, maxFee, p.speed === 'FAST' ? FAST_FINALITY : SLOW_FINALITY] })
   const approveData = encodeFunctionData({ abi: ERC20, functionName: 'approve', args: [TOKEN_MESSENGER_V2, amount] })
 
-  // Express (lib/fastPay): no Circle signature - the session key burns it,
-  // within the shared Express limit. Anything it can't do (over the limit,
-  // not ready, an older wallet frame, a failure before the burn) goes on below.
-  const express = await expressBurn(p, amount, burnData)
-  if (express) {
-    p.onStep('approve', { values: { state: 'success' } })
-    p.onBurnSent?.(express)
-    p.onStep('burn', { values: { state: 'success', txHash: express } })
-    return settle(p, express, undefined, pollMs)
-  }
-
   // MeshPortRouter on Arc: one signature, nothing left approved.
   const router = arcRouterAddress()
   if (router) {
@@ -461,38 +450,6 @@ export async function fastCctpTransfer(p: FastCctpParams): Promise<FastCctpResul
 }
 
 /** 3 and 4: Circle's attestation, then the mint - the same for both ways of burning. */
-/**
- * The Express way, when it covers this transfer: the burn's hash, or null to
- * go the normal way. MeshPort's fee is the same as the router path's.
- */
-async function expressBurn(p: FastCctpParams, amount: bigint, burnData: Hex): Promise<Hex | null> {
-  let fp: typeof import('./fastPay')
-  let args: Parameters<typeof import('./fastPay')['expressTransfer']>[0]
-  // Anything before Express sends: the normal way.
-  try {
-    fp = await import('./fastPay')
-    const owner = p.account.address
-    if (!fp.fastPayEnabled()) return null
-    const { currentGasPrice } = await import('./arcService')
-    const fee = routerFee(await currentGasPrice(), amount, p.useForwarder ? 0n : (p.destMintGas ?? 0n))
-    if (!fp.expressCoversTransfer(owner, Number(amount + fee) / 1e6)) return null
-    const fw = String((import.meta.env.VITE_FEE_WALLET as string | undefined) ?? '').trim()
-    args = { owner, amount, fee, feeWallet: /^0x[0-9a-fA-F]{40}$/.test(fw) ? fw as Hex : null, burnData }
-  } catch { return null }
-  try {
-    return (await fp.expressTransfer(args)).burnHash
-  } catch (e) {
-    // Nothing moved (or it was returned): the normal way. Anything else - a
-    // burn still confirming, funds held - is the user's to see, not retried.
-    if (e instanceof fp.FastPayNotSent) {
-      void import('./errorReport').then(m => m.reportPerf(`[perf express transfer] normal way: ${(e.message || '').slice(0, 140)}`)).catch(() => {})
-      fp.noteExpressFallback('transfer', e.message || '')
-      return null
-    }
-    throw e
-  }
-}
-
 /**
  * MeshPort's relayer mints from the server: it waits for Circle's attestation
  * itself and submits the mint the moment it's there (api/bridge-relay

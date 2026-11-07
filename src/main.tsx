@@ -2,28 +2,6 @@ import { Buffer } from 'buffer'
 if (typeof window !== 'undefined') (window as any).Buffer = Buffer
 
 
-// Suppress Circle SDK telemetry CORS errors - these are internal Circle logging
-// calls that fail in localhost due to CORS. They don't affect functionality.
-const _origFetch = window.fetch.bind(window)
-window.fetch = function(input: RequestInfo | URL, init?: RequestInit) {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url
-  if (url?.includes('api.circle.com') && url?.includes('/logs')) {
-    return Promise.resolve(new Response('{}', { status: 200 }))
-  }
-  return _origFetch(input, init)
-} as typeof fetch
-
-// Suppress Circle SDK telemetry CORS errors on localhost
-// The SDK sends logs to api.circle.com which blocks x-user-agent header from localhost
-const _originalFetch = window.fetch.bind(window)
-window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url
-  if (url?.includes('api.circle.com') && url?.includes('/logs')) {
-    return Promise.resolve(new Response('{}', { status: 200 }))
-  }
-  return _originalFetch(input, init)
-}) as typeof fetch
-
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { MotionConfig } from 'framer-motion'
@@ -105,7 +83,7 @@ clearLegacyData()
   // A wallet kind this version no longer has (a removed provider, saved on
   // this device by an older version): sign out cleanly, so the next sign-in
   // sets up the wallet this version uses.
-  const KNOWN_SOURCES = new Set(['create', 'import-seed', 'import-privkey', 'social-auto', 'circle'])
+  const KNOWN_SOURCES = new Set(['create', 'import-seed', 'import-privkey'])
   const savedSource = useAuthStore.getState().walletSource as string | null
   if (savedSource && !KNOWN_SOURCES.has(savedSource)) useAuthStore.getState().logout()
   const auth = useAuthStore.getState()
@@ -114,18 +92,10 @@ clearLegacyData()
   // Wallet readiness (lib/walletReadiness): tracking starts before the first
   // render, so the first Arc answer and the first open are both seen.
   startWalletReadiness()
-  // A Google / email (Circle) wallet: load Circle's SDK and frame now, before
-  // React has mounted, so the wallet is ready by the first payment.
-  if (auth.isAuthenticated && auth.walletSource === 'circle') {
-    import('./wallet/circle').then(m => m.warmCircle()).catch(() => {})
-    // Its passcode check and Express keys live in the wallet frame too: load
-    // it now, while the lock screen shows, not on the unlock tap (audit 7 Nov D7).
-    import('./wallet/frameClient').then(m => m.walletReady()).catch(() => {})
-  }
-  // A created / imported wallet: load its wallet frame now too, so it is
-  // ready (or reloading if its first load failed - wallet/frameClient.ts)
-  // by the time the lock screen or the first payment needs it.
-  else if (auth.isAuthenticated && auth.walletSource) import('./wallet/frameClient').then(m => m.walletReady()).catch(() => {})
+  // The wallet frame: loaded now, so it is ready (or reloading if its first
+  // load failed - wallet/frameClient.ts) by the time the lock screen or the
+  // first payment needs it.
+  if (auth.isAuthenticated && auth.walletSource) import('./wallet/frameClient').then(m => m.walletReady()).catch(() => {})
   // Start fetching the lock screen now, so the splash goes straight to it.
   if (useAuthStore.getState().isLocked) {
     import('./features/auth/PasscodeSetup').catch(() => {})

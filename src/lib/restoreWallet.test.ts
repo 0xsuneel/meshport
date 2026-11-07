@@ -35,13 +35,6 @@ vi.mock('@/wallet', () => ({
   WalletFrameError: FrameError,
 }))
 
-// A Circle signer's warm-up (Google / email accounts).
-const circleWarm = { ready: false, warmCircleSigner: vi.fn(async (_a: string) => true) }
-vi.mock('@/wallet/circle', () => ({
-  restoreCircleAccount: async () => null,
-  circleSignerReady: () => circleWarm.ready,
-  warmCircleSigner: (a: string) => circleWarm.warmCircleSigner(a),
-}))
 
 import { restorePrivateKey } from './restoreWallet'
 import { useWalletReadiness } from './walletReadiness'
@@ -95,19 +88,6 @@ describe('restorePrivateKey', () => {
     expect(await typo).toBe(false)
     expect(await mount).toBe(false)
     expect(ui.setWalletRecoveryNeeded).not.toHaveBeenCalled()
-  })
-
-  it('a Google / email wallet is not opened twice for a passcode it does not use', async () => {
-    auth.walletSource = 'social-auto'
-    try {
-      const mount = restorePrivateKey(undefined, { silent: true })
-      const unlock = restorePrivateKey('123456')
-      await flush()
-      for (let i = 0; i < 5; i++) { releaseFrame(); await flush() }
-      expect(await mount).toBe(false)
-      expect(await unlock).toBe(false)
-      expect(unlockWallet).toHaveBeenCalledTimes(1)
-    } finally { auth.walletSource = 'create' }
   })
 
   it('a logout while the wallet is opening: the old wallet is not brought back', async () => {
@@ -167,20 +147,5 @@ describe('restorePrivateKey', () => {
     expect(await restorePrivateKey()).toBe(false)
     expect(auth.walletAddress).toBeTruthy()
     expect(useWalletReadiness.getState().phase).toBe('locked')
-  })
-
-  it('an existing Circle signer that is not warm yet: restore starts its warm-up instead of just saying OK', async () => {
-    circleWarm.ready = false; circleWarm.warmCircleSigner.mockClear()
-    setAuth({ walletSource: 'circle', signer: {} })
-    expect(await restorePrivateKey()).toBe(true)
-    await vi.waitFor(() => expect(circleWarm.warmCircleSigner).toHaveBeenCalledWith('0x1111111111111111111111111111111111111111'))
-  })
-
-  it('an already-warm Circle signer is left alone', async () => {
-    circleWarm.ready = true; circleWarm.warmCircleSigner.mockClear()
-    setAuth({ walletSource: 'circle', signer: {} })
-    expect(await restorePrivateKey()).toBe(true)
-    await flush(); await flush()
-    expect(circleWarm.warmCircleSigner).not.toHaveBeenCalled()
   })
 })

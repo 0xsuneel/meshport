@@ -6,14 +6,13 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 // ── Terms & Privacy ──────────────────────────────────────────────────────────
 // Linked from Profile → Support → Terms & Privacy. Draft legal content
 // grounded in what the app actually does (every wallet self-custodial - keys
-// made on the device, passkey / Recovery QR for Google & email accounts,
+// made on the device and locked by the passcode,
 // end-to-end encrypted chat, testnet only). NOT reviewed by a lawyer -
 // flagged in-page and should be reviewed by one before any real-money launch.
 //
 // Reachable at three URLs - /terms and /privacy each land directly on their
-// own document (needed for Google OAuth consent screen verification, which
-// wants a distinct direct link to each, not a single combined page with
-// tabs), and /legal keeps working as a general entry point defaulting to
+// own document (a distinct direct link to each, not a single combined
+// page with tabs), and /legal keeps working as a general entry point defaulting to
 // Terms. All three render the same component; only which tab is selected
 // on load differs, driven by the URL rather than always starting on
 // 'terms' regardless of which link was actually followed.
@@ -32,8 +31,7 @@ export function TermsPrivacyPage() {
     // bare /terms or /privacy route on every tab switch - correct for the
     // public, pre-login /terms /privacy /legal paths (wrapped in
     // AuthShell, deliberately phone-width with no sidebar - see that
-    // file's own comment; needed for Google OAuth consent screen
-    // verification, which wants each document at its own distinct URL),
+    // file's own comment; each document at its own distinct URL),
     // but wrong when this page was reached via Profile → Support's
     // in-app /terms-privacy route (nested inside AppLayout, with the
     // desktop sidebar). Tapping a tab there bounced the user OUT of the
@@ -120,10 +118,9 @@ function TermsContent() {
       </Block>
 
       <Block title="4. Your wallet is yours">
-        <p>Every MeshPort wallet is <span className="text-text-primary">self-custodial</span>. Whether you create a wallet, import one, or sign in with Google, the wallet’s private key is generated or kept on your own device. MeshPort never receives it and never stores it - not in plain form, not encrypted. MeshPort cannot move, freeze, recover or reverse funds in your wallet.</p>
-        <p><span className="text-text-primary">Google / email accounts.</span> Signing in proves who you are, but doesn’t open the wallet. On a new device you open it with a <span className="text-text-primary">passkey</span> (Face ID, fingerprint or device PIN) or your <span className="text-text-primary">Recovery QR</span> and its password. Keep at least one of them safe. If you lose access to both, the wallet cannot be recovered - by you or by MeshPort.</p>
-        <p><span className="text-text-primary">Created or imported wallets.</span> Your 12 secret words or private key are the only way to restore the wallet. Store them offline and never share them. MeshPort has no copy.</p>
-        <p>You’re responsible for your passcode, passkeys, Recovery QR and its password, secret words, and the devices you use MeshPort on.</p>
+        <p>Every MeshPort wallet is <span className="text-text-primary">self-custodial</span>. Whether you create a wallet or import one, the wallet’s private key is generated or kept on your own device. MeshPort never receives it and never stores it - not in plain form, not encrypted. MeshPort cannot move, freeze, recover or reverse funds in your wallet.</p>
+        <p>Your 12 secret words or private key are the only way to restore the wallet. Store them offline and never share them. MeshPort has no copy.</p>
+        <p>You’re responsible for your passcode, passkeys, secret words or private key, and the devices you use MeshPort on.</p>
       </Block>
 
       <Block title="5. Payments are final">
@@ -168,8 +165,8 @@ function PrivacyContent() {
       </Block>
 
       <Block title="2. What we collect">
-        <p><span className="text-text-primary">Account</span> - your email address (from the Google account you sign in with), username, display name and profile photo if you add one.</p>
-        <p><span className="text-text-primary">Wallet</span> - your public wallet address. For Google and email accounts we also store your passkeys’ public details (credential id, the device name it was added on, the date) and your wallet key <em>encrypted by your passkey</em>, which only your passkey can unlock. For the Recovery QR we store only the date you made it.</p>
+        <p><span className="text-text-primary">Account</span> - your username, display name and profile photo if you add one.</p>
+        <p><span className="text-text-primary">Wallet</span> - your public wallet address.</p>
         <p><span className="text-text-primary">Activity</span> - payments, swaps, multichain transfers, claims, bulk payouts, rewards, P2P trades and business bills you make in the app, to show your history, Insights and notifications. Most of this is also public on the blockchain.</p>
         <p><span className="text-text-primary">Chats</span> - messages, photos and files are end-to-end encrypted, so we store and relay them only as ciphertext. We can see who you chat with and when, and the details of payment cards (amount, token, transaction), which are public on the blockchain anyway. Your chat key’s public half and your wallet’s signature over it are stored so others can verify it’s really you.</p>
         <p><span className="text-text-primary">Business accounts and support</span> - what you enter when you apply for a business account (business name, type, optional contact) and the tickets you send to Help & Support.</p>
@@ -177,7 +174,7 @@ function PrivacyContent() {
       </Block>
 
       <Block title="3. What we never collect">
-        <p>Your private key or secret words - for any kind of wallet. Your Recovery QR’s contents or its password. The secret your passkey produces. Your passcode (only a scrambled check of it stays on your device). The contents of your chats.</p>
+        <p>Your private key or secret words - for any kind of wallet. The secret your passkey produces. Your passcode (only a scrambled check of it stays on your device). The contents of your chats.</p>
         <p>On your device, MeshPort keeps a copy of your wallet key sealed with a key that never leaves your browser, so reopening the app is instant. Logging out removes it.</p>
       </Block>
 
@@ -188,7 +185,6 @@ function PrivacyContent() {
       <Block title="5. Who we share it with">
         <p><span className="text-text-primary">Supabase</span> - our database and sign-in provider. It stores your account data, activity and encrypted messages.</p>
         <p><span className="text-text-primary">Vercel</span> - hosts the app and builds payment-link previews (name, photo and amount of a link you share).</p>
-        <p><span className="text-text-primary">Google</span> - if you choose “Continue with Google,” it confirms your email to us.</p>
         <p><span className="text-text-primary">Circle and blockchain networks</span> - Arc, Circle’s Gateway and CCTP, and public blockchain nodes process your transactions. Nodes can see the requests your device sends, like any blockchain app.</p>
         <p>We don’t sell your personal data or share it with advertisers. We may disclose information if the law requires it.</p>
       </Block>
@@ -202,7 +198,7 @@ function PrivacyContent() {
       </Block>
 
       <Block title="8. Your choices">
-        <p>Edit your name and photo in Edit Profile, manage passkeys and your Recovery QR in Security, turn notifications on or off in your device settings, and contact us to access or delete your data.</p>
+        <p>Edit your name and photo in Edit Profile, manage your passcode and fingerprint unlock in Security, turn notifications on or off in your device settings, and contact us to access or delete your data.</p>
       </Block>
 
       <Block title="9. Children">

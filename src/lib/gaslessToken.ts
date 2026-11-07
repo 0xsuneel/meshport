@@ -200,11 +200,6 @@ export async function bringTokenGasless(p: {
       primaryType: 'BridgePermit' as const,
       message: { from: account.address, value: total, deadline: until, nonce },
     }
-    // Two signatures in a row: a Google / email (Circle) wallet asks Circle
-    // for both signing requests now, together, so the second doesn't wait for
-    // its own (~0.5-1.6 s, wallet_events 3 Nov). Signs nothing by itself.
-    const { prepareTypedSignatures } = await import('@/wallet/circle')
-    prepareTypedSignatures(account, [permitTd as any, bridgeTd as any])
     const signature = await account.signTypedData(permitTd)
     const bridgeSignature = await account.signTypedData(bridgeTd)
     body = { permit: { from: account.address, value: total.toString(), deadline: until.toString(), signature, bridgeSignature } }

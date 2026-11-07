@@ -3,8 +3,7 @@
 // On-chain usernames (MeshPortNames on Arc testnet, foundry/src/MeshPortNames.sol).
 //
 // Sign-up starts with a choice - personal account or business - kept here
-// for the rest of the flow (it survives the Google redirect, which returns
-// to the same tab). After the username is saved in Supabase as before, the
+// for the rest of the flow. After the username is saved in Supabase as before, the
 // user signs an EIP-712 Register request with their own wallet key and the
 // name-register edge function sends it from the registrar wallet, so the
 // user pays no gas and the registrar can't register a name for anyone else.
@@ -47,7 +46,7 @@ export function getAuthMode(): 'create' | 'login' {
   try { return sessionStorage.getItem(AUTH_MODE_KEY) === 'login' ? 'login' : 'create' } catch { return 'create' }
 }
 
-/** Create account / Log in plus the chosen type, kept across the Google redirect. */
+/** Create account / Log in plus the chosen type, kept for the rest of the sign-up. */
 export function setAuthIntent(mode: 'create' | 'login', kind: AccountKind | null) {
   try { sessionStorage.setItem(AUTH_MODE_KEY, mode) } catch { /* storage unavailable */ }
   setSignupKind(kind)

@@ -7,15 +7,15 @@ import { Reveal } from './Reveal'
 const FAQS = [
   {
     q: 'Is MeshPort self-custodial?',
-    a: 'Yes - every wallet. Whether you create one, import one, or sign in with Google, the wallet key is generated on your own device and is never sent to MeshPort. MeshPort cannot move your funds.',
+    a: 'Yes - every wallet. Whether you create one or import one, the wallet key is generated on your own device and is never sent to MeshPort. MeshPort cannot move your funds.',
   },
   {
-    q: 'How are Google/email wallets secured?',
-    a: 'The key is made on your device and kept there, sealed by your browser. To use it on another device you unlock it with a passkey (Face ID, fingerprint or device PIN) or scan your Recovery QR and enter its password. MeshPort stores none of these secrets - no private key, no recovery password, no seed phrase.',
+    q: 'How is my wallet secured?',
+    a: 'The key is made on your device and kept there, sealed by your browser and locked by your passcode. MeshPort stores none of your secrets - no private key, no seed phrase.',
   },
   {
     q: 'What if I lose my phone?',
-    a: 'Sign in on your new device and unlock with your passkey (if it syncs through iCloud Keychain or Google Password Manager), or scan your Recovery QR and type its password. Without either one the wallet can’t be recovered - not even by MeshPort - so save your Recovery QR somewhere safe.',
+    a: 'Choose Import Existing Wallet on your new device and enter your 12 secret words or private key. Without them the wallet can’t be recovered - not even by MeshPort - so keep them somewhere safe and offline.',
   },
   {
     q: 'Are my chats private?',

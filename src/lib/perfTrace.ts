@@ -12,10 +12,10 @@ const now = () => (typeof performance !== 'undefined' ? performance.now() : Date
 export type StartupMark =
   | 'shell'          // first screen painted (splash removed)
   | 'auth'           // signed-in session known (persisted store read)
-  | 'provider'       // wallet provider code running (Circle SDK loaded / wallet frame mounted)
+  | 'provider'       // wallet provider code running (wallet frame mounted)
   | 'frameLoaded'    // the wallet frame's page finished loading (iframe load event - also fires for an error page)
-  | 'frame'          // wallet frame answered (create / import / old Google wallets)
-  | 'discovered'     // the wallet is known to its provider (Circle session found)
+  | 'frame'          // wallet frame answered (create / import)
+  | 'discovered'     // the wallet is known (marked with signer readiness)
   | 'signer'         // the wallet can sign
   | 'rpcSent'        // first Arc RPC request sent (rpc minus this = network time; this itself = app scheduling)
   | 'rpc'            // first Arc RPC answer

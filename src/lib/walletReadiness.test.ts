@@ -11,7 +11,7 @@ vi.mock('@/store', () => ({ useAuthStore: { getState: () => auth, subscribe: (l:
 const reports: string[] = []
 vi.mock('./errorReport', () => ({ reportPerf: (l: string) => reports.push(l) }))
 
-import { useWalletReadiness, startWalletReadiness, noteRestoring, setCircleReadyProbe, walletGeneration, noteNetworkReady, recompute, untilSignerReady } from './walletReadiness'
+import { useWalletReadiness, startWalletReadiness, noteRestoring, walletGeneration, noteNetworkReady, untilSignerReady } from './walletReadiness'
 
 const W = '0x4cb2ff6492d51edfb54f0cff3b517d7f207d80a1'
 const phase = () => useWalletReadiness.getState().phase
@@ -39,15 +39,6 @@ describe('wallet readiness', () => {
     expect(phase()).toBe('initializing')
   })
 
-  it('Circle: a stored session is "discovered", not ready to sign, until its warm-up confirms it', () => {
-    let ready = false
-    setCircleReadyProbe(() => ready)
-    setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'circle', signer: {} })
-    expect(phase()).toBe('wallet_discovered')
-    ready = true; recompute()
-    expect(phase()).toBe('signer_ready')
-  })
-
   it('the app lock and the network are separate from the wallet', () => {
     setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'create', signer: {}, isLocked: true })
     expect(useWalletReadiness.getState()).toMatchObject({ phase: 'signer_ready', appLocked: true })
@@ -64,19 +55,6 @@ describe('wallet readiness', () => {
     expect(walletGeneration()).toBe(g + 2)
   })
 
-  it('after unlock, waits until a Circle wallet can really sign - not just until its session is stored', async () => {
-    let connected = false
-    setCircleReadyProbe(() => connected)
-    setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'circle', signer: {} })
-    let done: boolean | null = null
-    void untilSignerReady().then(v => { done = v })
-    await Promise.resolve()
-    expect(done).toBeNull() // session stored, warm-up still running
-    connected = true; recompute() // warm-up confirmed it
-    await Promise.resolve()
-    expect(done).toBe(true)
-  })
-
   it('settles false when the wallet ends up locked instead', async () => {
     setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'create', signer: null })
     noteRestoring(true)
@@ -85,17 +63,4 @@ describe('wallet readiness', () => {
     expect(await r).toBe(false)
   })
 
-  it('never waits forever: a Circle wallet that never becomes ready settles false after the timeout', async () => {
-    vi.useFakeTimers()
-    try {
-      setCircleReadyProbe(() => false)
-      setAuth({ isAuthenticated: true, walletAddress: W, walletSource: 'circle', signer: {} })
-      let done: boolean | null = null
-      void untilSignerReady(5_000).then(v => { done = v })
-      await vi.advanceTimersByTimeAsync(4_999)
-      expect(done).toBeNull()
-      await vi.advanceTimersByTimeAsync(1)
-      expect(done).toBe(false)
-    } finally { vi.useRealTimers() }
-  })
 })

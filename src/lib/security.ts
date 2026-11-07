@@ -1,22 +1,16 @@
 /**
  * MeshPort Security Utils
  * - hashPasscode / verifyPasscode: the 6-digit app-lock passcode, used for
- *   EVERY account (social-login and create/import alike) purely to lock
- *   the app UI and gate sensitive actions (send, reveal seed, export key).
- *   This passcode is NEVER used to derive a wallet-encryption key for
- *   social-login (Google/Email-OTP) accounts - those wallets are
- *   self-custodial, locked with a passkey / Recovery QR (lib/socialWallet.ts)
- *   and have nothing to do with this file's passcode functions.
+ *   every account to lock the app UI and gate sensitive actions (send,
+ *   reveal seed, export key).
  * - encryptPrivateKey / decryptPrivateKey / storeEncryptedKey / getEncryptedKey:
  *   passcode-derived AES-GCM private-key encryption for LOCAL, self-custodial
- *   wallets only (walletSource 'create' / 'import-seed' / 'import-privkey').
- *   restoreWallet.ts explicitly skips these for walletSource 'social-auto'.
+ *   wallets (walletSource 'create' / 'import-seed' / 'import-privkey').
  *
  * IMPORTANT: Salt is embedded in the stored hash string so it works across
  * devices and after localStorage clears.
  * Format: "v2:<base64-salt>:<base64-hash>"
  */
-import { FRAME_TICKET_PREFIX } from '@/wallet/protocol'
 
 const PBKDF2_ITERATIONS = 100000          // legacy "v2"/"v2enc" records (still readable)
 // Current records ("v3"/"v3enc"): 600,000 iterations - the OWASP figure for
@@ -190,19 +184,6 @@ async function passcodeVerified(passcode: string): Promise<void> {
 
 // ─── Verify passcode against stored hash ─────────────────────────────────────
 export async function verifyPasscode(passcode: string, storedHash: string): Promise<boolean> {
-  // The wallet frame's keypad page approved this (docs/SECURE-APPROVALS.md):
-  // a ticket stands in for the passcode, which the app never saw. The frame
-  // keeps its own lockout; nothing here is cached or counted.
-  if (passcode.startsWith(FRAME_TICKET_PREFIX)) {
-    if (storedHash !== FRAME_PASSCODE) return false
-    let ok = false
-    try {
-      const { callWallet } = await import('@/wallet/frameClient')
-      ok = (await callWallet('confirm:status', { ticket: passcode })).approved
-    } catch { ok = false }
-    if (ok) await passcodeVerified(passcode)
-    return ok
-  }
   const lockout = readLockoutState()
   if (lockout.lockedUntil > Date.now()) return false
 

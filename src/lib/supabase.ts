@@ -432,15 +432,12 @@ export async function upsertUserProfile(params: {
   username: string
   displayName: string
   walletAddress: string
-  loginType?: 'social' | 'wallet'
+  loginType?: 'wallet'
 }): Promise<{ error: string | null }> {
 
   // loginType is included only when the caller actually knows it, via a
   // conditional spread - omitting the key on upsert leaves any existing
-  // value alone rather than overwriting it with null. See
-  // supabase/migrations/20260722100000_*.sql for why this column exists:
-  // it tells a Google / email account apart from a create / import one
-  // server-side.
+  // value alone rather than overwriting it with null.
   const loginTypeField = params.loginType ? { login_type: params.loginType } : {}
 
   // users.email is private (not readable by the app), so it's only written
@@ -480,7 +477,7 @@ export async function updateUserProfile(params: {
   if (params.avatarUrl !== undefined) updates.avatar_url = params.avatarUrl
 
 
-  // Try by id first (social login users have real Supabase UUIDs)
+  // Try by id first (a real Supabase UUID)
   if (params.id && !params.id.startsWith('usr_')) {
     const { error } = await supabase.from('users').update(updates).eq('id', params.id).select('id')
     if (!error) return { error: null }

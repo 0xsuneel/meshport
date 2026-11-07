@@ -12,7 +12,6 @@ import { ARC, ARC_TOKENS, ARC_CHAIN_INLINE as REGISTRY_ARC_CHAIN_INLINE } from '
 import { isSlowNetwork } from './connectivity'
 import { ARC_MEMO_CONTRACT, memoTransferData, checkoutAddress, checkoutPayData, type OrderMemo } from './arcMemo'
 import { assertAccountUnlocked } from './accountLockRule'
-import { fastPayCovers, sendFastPay, FastPayNotSent } from './fastPay'
 
 // ─── Chain/token constants re-exported from the shared registry ─────────────
 // Definitions moved to src/blockchain/chains.ts (Phase 0 of
@@ -123,7 +122,7 @@ function arcClient(retryCount: number, timeout: number, pollingInterval?: number
 // basis of the fee cap every send signs (sendFeeCap).
 const GAS_PRICE_TTL_MS = 15_000
 let gasPriceCache: { at: number; price: Promise<bigint> } | null = null
-/** Arc's current gas price (wei per gas, USDC 18-dec), cached briefly - for Fast Pay's gas refund (lib/fastPay.ts). */
+/** Arc's current gas price (wei per gas, USDC 18-dec), cached briefly. */
 export function currentGasPrice(): Promise<bigint> { return estimateGasPrice() }
 function estimateGasPrice(): Promise<bigint> {
   if (gasPriceCache && Date.now() - gasPriceCache.at < GAS_PRICE_TTL_MS) return gasPriceCache.price
@@ -232,28 +231,6 @@ function signingTx(tx: SendTx, maxFeePerGas: bigint) {
     maxPriorityFeePerGas: parseGwei('1'),
   }
 }
-/** The send for a preflight: what sendUSDC / sendEURC / sendCirBtc pass to relaySend. */
-function sendTxFor(tx: ReturnType<typeof payTx>, pf: SendInputs): SendTx | null {
-  if (!pf.intent.success || pf.intent.existingTxHash || typeof pf.intent.nonce !== 'number') return null
-  return { to: tx.to, value: tx.value, data: tx.data, gas: (pf.gas * 120n) / 100n, nonce: pf.intent.nonce, maxFeePerGas: pf.feeCap }
-}
-
-/**
- * A Google / email (Circle) wallet: ask Circle for this payment's signing
- * request now, while the PIN is typed (wallet/circle.ts "Prepared signing
- * requests"). Signs nothing; used only if the send signs this exact
- * transaction after the PIN. Fire-and-forget.
- */
-async function prepareCircleSignature(sender: string, tx: ReturnType<typeof payTx>, pf: SendInputs): Promise<void> {
-  const send = sendTxFor(tx, pf)
-  if (!send) return
-  const { useAuthStore } = await import('@/store')
-  const { signer, walletSource, isLocked } = useAuthStore.getState()
-  if (walletSource !== 'circle' || isLocked || !signer || signer.address.toLowerCase() !== sender.toLowerCase()) return
-  const { isCircleAccount } = await import('@/wallet/circle')
-  if (isCircleAccount(signer)) signer.prepareTransaction(signingTx(send, pf.feeCap))
-}
-
 /** Starts a send's preflight early (see comment above). Fire-and-forget; never throws. */
 // Wakes the RPC proxy (a serverless function that may be cold) with one
 // cheap call when the passcode screen opens, so the payment's own calls
@@ -276,17 +253,10 @@ export function preparePayment(params: { token: PayToken; from: string; to: stri
     const sender = getAddress(params.from)
     const destination = getAddress(params.to)
     const memo = params.token === 'USDC' ? params.memo ?? null : null
-    // Covered by a Fast Pay session: no pay-intent reservation and no Circle
-    // signing request to prepare (sendUSDC sends it through the session).
-    if (!memo && fastPayCovers(sender, params.amount, params.token)) return
     const sig = preflightSig(params.token, sender, destination, payTx(params.token, destination, params.amount).amountAtomic, memo)
     const existing = preflights.get(params.idempotencyKey)
     if (existing && existing.sig === sig && Date.now() - existing.at < PREFLIGHT_TTL_MS) return
-    // Circle wallets: the signing request too, as soon as the transaction is
-    // known (nonce, gas, fee cap) - not after the balance read as well.
-    const tx = payTx(params.token, destination, params.amount, memo)
-    const promise = runPreflight(params.token, sender, destination, params.amount, params.idempotencyKey, params.recipientUsername, memo,
-      inputs => { void prepareCircleSignature(sender, tx, inputs).catch(() => {}) })
+    const promise = runPreflight(params.token, sender, destination, params.amount, params.idempotencyKey, params.recipientUsername, memo)
     promise.catch(() => { /* surfaced (or retried fresh) by the send that consumes it */ })
     preflights.set(params.idempotencyKey, { sig, at: Date.now(), promise })
   } catch { /* purely an optimization - the send runs its own preflight */ }
@@ -581,30 +551,6 @@ function assertSendable(to: string, amount: number) {
   if (/^0x0{40}$/i.test(String(to))) throw new Error('Cannot send to the zero address')
 }
 
-/**
- * Fast Pay (lib/fastPay.ts): a Google / email (Circle) wallet with an open
- * session pays from its own address through the session key - no Circle
- * signature. Null: not covered, or nothing was broadcast - pay the normal way.
- */
-async function tryFastPay(token: 'USDC' | 'EURC' | 'cirBTC', senderAddress: string, destination: `0x${string}`, amount: number, idempotencyKey?: string): Promise<SendResult | null> {
-  if (!fastPayCovers(senderAddress, amount, token)) return null
-  try {
-    const out = await sendFastPay({ owner: senderAddress, to: destination, amount, idempotencyKey, token })
-    return {
-      txHash: out.txHash,
-      explorerUrl: `${ARC_TESTNET.explorerUrl}/tx/${out.txHash}`,
-      state: out.state,
-      blockNumber: out.blockNumber,
-      senderAddress,
-      recipientAddress: destination,
-    }
-  } catch (e) {
-    if (!(e instanceof FastPayNotSent)) throw e
-    console.warn('[Fast Pay] not sent, paying the normal way:', e.message)
-    return null
-  }
-}
-
 export async function sendUSDC(params: {
   signer: WalletAccount
   to: string
@@ -628,16 +574,6 @@ export async function sendUSDC(params: {
   // Self-transfer is now permitted (previously blocked here). A self-send
   // still costs real gas with no net balance change -- that tradeoff is now
   // the user's own choice, not something this function decides for them.
-
-  // Fast Pay (lib/fastPay.ts): a Google / email (Circle) wallet with an open
-  // session pays from its own address through the session key - no Circle
-  // signature for this payment. Plain USDC transfers within what's left of
-  // the session only; anything else continues below unchanged. If nothing
-  // was broadcast, it falls through to the normal path.
-  if (!params.memo) {
-    const fast = await tryFastPay('USDC', senderAddress, destination, params.amount, params.idempotencyKey)
-    if (fast) return fast
-  }
 
   // Gas estimation lives in the shared preflight; signing happens locally in
   // relaySend (no wallet client / RPC round trips needed to sign).
@@ -811,8 +747,6 @@ export async function sendEURC(params: {
   const destination = getAddress(params.to)
   // Self-transfer is now permitted (previously blocked here) -- same
   // reasoning as sendUSDC above.
-  const fast = await tryFastPay('EURC', senderAddress, destination, params.amount, params.idempotencyKey)
-  if (fast) return fast
 
   // EURC is 6-decimal ERC-20
   const amountWei = parseUnits(toPlainDecimalString(params.amount, 6), 6)
@@ -934,8 +868,6 @@ export async function sendCirBTC(params: {
   if (!isAddress(params.to)) throw new Error(`Invalid destination address: ${params.to}`)
   const destination = getAddress(params.to)
   // Self-transfer is now permitted -- same reasoning as sendUSDC above.
-  const fast = await tryFastPay('cirBTC', senderAddress, destination, params.amount, params.idempotencyKey)
-  if (fast) return fast
 
   // cirBTC is 8-decimal ERC-20
   const amountWei = parseUnits(toPlainDecimalString(params.amount, 8), 8)

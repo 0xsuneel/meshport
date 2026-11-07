@@ -9,7 +9,7 @@ const row = (enabled: boolean) => ({ enabled }) as any
 const UB = { ub: true } // the Unified Balance Transfer route (off for now - TRANSFER_UB_ENABLED)
 
 describe('Unified Balance back on (7 Nov): both routes by default', () => {
-  it('Transfer: Unified Balance and CCTP (CCTP carries Express) on every UB chain', () => {
+  it('Transfer: Unified Balance and CCTP on every UB chain', () => {
     expect(transferRoutes({}, 'eth')).toEqual(['ub', 'cctp'])
     expect(transferRoutes({}, 'sol')).toEqual(['ub', 'cctp'])
     expect(transferRoutes({}, 'linea')).toEqual(['cctp'])
@@ -31,7 +31,7 @@ describe('Solana routes, like the other chains', () => {
     expect(transferRoutes({}, 'sol', 'personal', UB)).toEqual(['ub', 'cctp'])
     expect(transferRoutes({ solana_cctp_enabled: row(false) }, 'sol', 'personal', UB)).toEqual(['ub'])
     expect(transferRoutes({ solana_ub_enabled: row(false) }, 'sol', 'personal', UB)).toEqual(['cctp'])
-    // other Unified Balance chains too: CCTP is on without a row (it carries Express)
+    // other Unified Balance chains too: CCTP is on without a row
     expect(transferRoutes({}, 'eth', 'personal', UB)).toEqual(['ub', 'cctp'])
   })
   it('admin switches for Transfer and Bring', () => {

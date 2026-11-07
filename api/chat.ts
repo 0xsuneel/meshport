@@ -149,9 +149,8 @@ async function verifyPayment(txHash: string, from: string, to: string, token: st
  * Does this mined transaction pay `amount` of `token` from `from` to `to`?
  * Native USDC (Arc's gas token): a plain value transfer sent by `from`.
  * ERC-20 (USDC's 6-decimal interface too): a Transfer(from → to) log on the
- * token's own contract - whoever sent the transaction. Fast Pay payments
- * (src/lib/fastPay.ts) are sent by a session key through Permit2, so the
- * log - emitted by the token contract itself - is the proof, not tx.from.
+ * token's own contract - the log, emitted by the token contract itself, is
+ * the proof, not tx.from.
  */
 export function paymentProof(tx: any, rc: any, from: string, to: string, token: string, amount: number): 'ok' | 'invalid' {
   const t = PAY_TOKENS[token]

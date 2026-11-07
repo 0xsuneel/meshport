@@ -1,9 +1,8 @@
 // src/wallet/useSolanaWallet.ts
 //
 // This account's Solana wallet for screens (docs/SOLANA.md): its address and
-// its USDC balance on Solana devnet. Created / imported wallets have one (the
-// frame-derived key, wallet/solana.ts); Google / email accounts (Circle
-// wallets) don't. { address: null } until the wallet is open, or without one.
+// its USDC balance on Solana devnet. Every wallet has one (the frame-derived
+// key, wallet/solana.ts). { address: null } until the wallet is open, or without one.
 
 import { useCallback, useEffect, useState } from 'react'
 import { useAuthStore } from '@/store'
@@ -20,7 +19,7 @@ export function useSolanaWallet(): { address: string | null; usdc: string | null
   const refresh = useCallback(() => setTick(t => t + 1), [])
 
   useEffect(() => {
-    if (source === 'circle' || !evm || !unlocked) { setFrameAddress(null); return }
+    if (!evm || !unlocked) { setFrameAddress(null); return }
     let cancelled = false
     getSolanaAddress().then(a => { if (!cancelled) setFrameAddress(a) }).catch(() => { if (!cancelled) setFrameAddress(null) })
     return () => { cancelled = true }
