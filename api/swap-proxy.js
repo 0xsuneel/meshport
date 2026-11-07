@@ -65,6 +65,8 @@ async function verifyOwnsAddress(req, walletAddress) {
 // call fails or Supabase env vars aren't configured for this function.
 async function recordSwapActivity(walletAddress, txHash, amountIn, amountOut, tokenIn, tokenOut, intentId) {
   if (!SUPABASE_SERVICE_KEY || !walletAddress || !txHash) return
+  // A real 32-byte transaction hash only (audit 7 Nov M12).
+  if (!/^0x[0-9a-fA-F]{64}$/.test(String(txHash))) return
   try {
     // A row that already exists is kept - except that a real output amount
     // replaces a placeholder 0 written earlier (a swap recorded before its
@@ -117,6 +119,8 @@ async function recordSwapActivity(walletAddress, txHash, amountIn, amountOut, to
 // whichever lands first wins and the second is simply a no-op.
 async function markAttemptSubmittedServerSide(attemptId, txHash, walletAddress) {
   if (!SUPABASE_SERVICE_KEY || !attemptId || !txHash) return
+  // A real 32-byte transaction hash only (audit 7 Nov M12).
+  if (!/^0x[0-9a-fA-F]{64}$/.test(String(txHash))) return
   try {
     // wallet_address=eq. scopes this to an attempt the verified caller
     // actually owns - closes the "guess someone else's attemptId" injection.
