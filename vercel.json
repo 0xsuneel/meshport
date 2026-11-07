@@ -130,5 +130,6 @@
     }
   ],
   "installCommand": "npm install --legacy-peer-deps",
-  "framework": "vite"
+  "framework": "vite",
+  "fluid": true
 }
