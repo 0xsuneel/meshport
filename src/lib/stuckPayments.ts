@@ -83,15 +83,15 @@ export async function cancelStuckPayments(
     signed.push({ nonce, raw, hash: keccak256(raw) })
   }
 
-  // Replacements first, to every node (the relay sends to all of them; a 1 ms
-  // wait - 0 means its default 8 s, and a queued one has no receipt to wait for) -
+  // Replacements first, to every node (the relay sends to all of them; no
+  // wait - a queued one has no receipt to wait for) -
   // twice, so a node that missed the first send still gets it. Only then the
   // missing nonce, which lets the queue run.
   onStep?.('Replacing the stuck payments')
   const replacements = signed.filter(t => t.nonce > s.chainNonce)
   for (let round = 0; round < 2; round++) {
     for (const t of replacements) {
-      try { await arcRpcJson({ jsonrpc: '2.0', id: 1, method: RELAY, params: [t.raw, t.hash, 1] }, 20_000) } catch { /* checked on Arc below */ }
+      try { await arcRpcJson({ jsonrpc: '2.0', id: 1, method: RELAY, params: [t.raw, t.hash, 0] }, 20_000) } catch { /* checked on Arc below */ }
     }
   }
   onStep?.('Confirming on Arc')

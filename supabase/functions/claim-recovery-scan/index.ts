@@ -40,7 +40,9 @@
 
 import { createClient, SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 import { isKnownInternalContract } from '../_shared/knownInternalContracts.ts'
+import { isServerCaller } from '../_shared/cronAuth.ts'
 import { findCorrelatedTrackedFeature } from '../_shared/trackedFeatureCorrelation.ts'
+import { getServiceRoleKey } from '../_shared/serviceKey.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin':  '*',
@@ -453,26 +455,6 @@ async function getBlockTimestamp(blockNumber: number): Promise<string | null> {
 // Same reasoning as claim-worker/index.ts's getServiceRoleKey - legacy name
 // tried first (currently verified working), new SUPABASE_SECRET_KEYS format
 // only as a fallback, clear error instead of a silent crash if neither is set.
-function getServiceRoleKey(): string {
-  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (legacy) return legacy
-
-  const secretKeysRaw = Deno.env.get('SUPABASE_SECRET_KEYS')
-  if (secretKeysRaw) {
-    try {
-      const parsed = JSON.parse(secretKeysRaw)
-      const candidate = parsed?.service_role ?? parsed?.SUPABASE_SERVICE_ROLE_KEY ?? Object.values(parsed ?? {})[0]
-      if (typeof candidate === 'string' && candidate) return candidate
-    } catch (e) {
-      console.error('[claim-recovery-scan] SUPABASE_SECRET_KEYS present but failed to parse:', e instanceof Error ? e.message : e)
-    }
-  }
-
-  throw new Error(
-    'No Supabase service role key found - checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS. ' +
-    'Set one of these as a project secret.'
-  )
-}
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = getServiceRoleKey()
@@ -768,11 +750,15 @@ Deno.serve(async (req: Request) => {
   const preflight = handleOptions(req)
   if (preflight) return preflight
   if (req.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405)
+  // Servers only: /api/bridge-relay claim_recovery_scan checks the session and
+  // passes the caller's own wallet. The public anon key must not start a
+  // service-key scan for any wallet.
+  if (!isServerCaller(req)) return json({ success: false, error: 'Forbidden' }, 403)
 
   let body: any = {}
   try { body = await req.json() } catch { /* ignore */ }
   const walletAddress: string | undefined = body?.walletAddress
-  if (!walletAddress) return json({ success: false, error: 'walletAddress required' }, 400)
+  if (!walletAddress || !/^0x[0-9a-fA-F]{40}$/.test(walletAddress)) return json({ success: false, error: 'walletAddress required' }, 400)
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 

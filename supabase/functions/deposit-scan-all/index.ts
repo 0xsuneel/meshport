@@ -119,6 +119,7 @@
 // per its own (much less frequent) invocation, exactly as before.
 import { createClient, SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
+import { getServiceRoleKey } from '../_shared/serviceKey.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin':  '*',
@@ -303,21 +304,6 @@ const LOG_CHUNK_CONCURRENCY = 5
 // down to fix a problem they do not have.
 const MAX_NATIVE_USDC_LOG_BLOCKS_PER_PASS = 500
 
-function getServiceRoleKey(): string {
-  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (legacy) return legacy
-  const secretKeysRaw = Deno.env.get('SUPABASE_SECRET_KEYS')
-  if (secretKeysRaw) {
-    try {
-      const parsed = JSON.parse(secretKeysRaw)
-      const candidate = parsed?.service_role ?? parsed?.SUPABASE_SERVICE_ROLE_KEY ?? Object.values(parsed ?? {})[0]
-      if (typeof candidate === 'string' && candidate) return candidate
-    } catch (e) {
-      console.error('[deposit-scan-all] SUPABASE_SECRET_KEYS present but failed to parse:', e instanceof Error ? e.message : e)
-    }
-  }
-  throw new Error('No Supabase service role key found - checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS.')
-}
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = getServiceRoleKey()

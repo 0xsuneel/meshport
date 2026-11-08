@@ -11,6 +11,9 @@
 //                   device key - a copy of this storage alone can't be
 //                   brute-forced elsewhere
 //   phrase copy     localStorage, same, for wallets that have a phrase
+//   session phrase  sessionStorage, device-sealed, only between create/import
+//                   and set-passcode - so a reload in between doesn't lose
+//                   the phrase (the key survives it through the session copy)
 //
 // Passcode guesses: one at a time per wallet (a queue), and each guess is
 // counted BEFORE the slow check runs, so a burst of parallel guesses can't
@@ -25,6 +28,7 @@ import type { Hex, WalletKind, WalletStatus } from '@/wallet/protocol'
 
 const P = 'mpw_'
 const SESSION = P + 'ss_'   // sessionStorage
+const SESSION_PHRASE = SESSION + 'ph_'   // sessionStorage; removed with SESSION on lock
 const PASSCODE = P + 'pc_'
 const PHRASE = P + 'pm_'
 const WORDS = P + 'wc_'
@@ -122,6 +126,10 @@ export async function store(address: string, privateKey: string, opts: StoreOpti
     if (!opts.passcode) openPhrase.set(a, opts.mnemonic)
   } else del(ls(), WORDS + a)
   await keepOpen(address, privateKey, since)
+  // Until set-passcode saves it: a device-sealed session copy, like the key's.
+  const sealedPhrase = opts.mnemonic && !opts.passcode ? await sealForDevice(opts.mnemonic) : null
+  if (sealedPhrase && since === epoch) put(ss(), SESSION_PHRASE + a, sealedPhrase)
+  else del(ss(), SESSION_PHRASE + a)
 }
 
 /** PBKDF2 passcode encryption, then the device seal (dv1:). decryptPrivateKey opens both layers. */
@@ -241,7 +249,16 @@ export async function unlock(address: string, passcode?: string): Promise<boolea
   const session = get(ss(), SESSION + a)
   if (session) {
     const k = await openFromDevice(session)
-    if (k && norm(addressOf(k)) === a) { await keepOpen(address, k, since); return true }
+    if (k && norm(addressOf(k)) === a) {
+      await keepOpen(address, k, since)
+      // Reloaded between create/import and set-passcode: bring the phrase back too.
+      const sp = get(ss(), SESSION_PHRASE + a)
+      if (sp && !openPhrase.has(a)) {
+        const phrase = await openFromDevice(sp)
+        if (phrase && since === epoch) openPhrase.set(a, phrase)
+      }
+      return true
+    }
   }
   if (!passcode) return false
   if (!get(ls(), PASSCODE + a)) return false
@@ -262,6 +279,7 @@ export async function setPasscode(address: string, passcode: string, oldPasscode
     put(ls(), WORDS + a, String(phrase.split(/\s+/).length))
   }
   openPhrase.delete(a)
+  del(ss(), SESSION_PHRASE + a)
 }
 
 /** The recovery phrase: in memory right after create/import, else passcode-decrypted. */
@@ -279,7 +297,7 @@ export function lock(address?: string) {
   const targets = address ? [norm(address)] : [...open.keys()]
   for (const a of targets) {
     open.delete(a); openPhrase.delete(a); verified.delete(a)
-    del(ss(), SESSION + a)
+    del(ss(), SESSION + a); del(ss(), SESSION_PHRASE + a)
   }
   if (!address) {
     openPhrase.clear()

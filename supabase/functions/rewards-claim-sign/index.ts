@@ -16,28 +16,9 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts'
+import { getServiceRoleKey } from '../_shared/serviceKey.ts'
 
 // ── Supabase service-role client (same pattern as claim-submit) ───────────────
-function getServiceRoleKey(): string {
-  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (legacy) return legacy
-
-  const secretKeysRaw = Deno.env.get('SUPABASE_SECRET_KEYS')
-  if (secretKeysRaw) {
-    try {
-      const parsed = JSON.parse(secretKeysRaw)
-      const candidate = parsed?.service_role ?? parsed?.SUPABASE_SERVICE_ROLE_KEY ?? Object.values(parsed ?? {})[0]
-      if (typeof candidate === 'string' && candidate) return candidate
-    } catch (e) {
-      console.error('[rewards-claim-sign] SUPABASE_SECRET_KEYS present but failed to parse:', e instanceof Error ? e.message : e)
-    }
-  }
-
-  throw new Error(
-    'No Supabase service role key found - checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS. ' +
-    'Set one of these as a project secret.',
-  )
-}
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = getServiceRoleKey()

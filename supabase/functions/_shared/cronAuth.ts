@@ -51,3 +51,29 @@ export function isCronOrLegacyServiceCaller(req: Request): boolean {
 
   return false
 }
+
+/**
+ * True for MeshPort's own servers: cron (above), the function's own service
+ * key, or a token whose role claim is service_role. Users (anon key or a
+ * session, role anon / authenticated) are refused.
+ *
+ * The role-claim check is safe ONLY for functions deployed with
+ * verify_jwt=true: Supabase's gateway has then already checked the token's
+ * signature, so the claim can't be forged. Use it only there.
+ */
+export function isServerCaller(req: Request): boolean {
+  if (isCronOrLegacyServiceCaller(req)) return true
+  const provided = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
+  if (!provided) return false
+  for (const name of ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY']) {
+    const v = Deno.env.get(name) ?? ''
+    if (v && timingSafeEqual(provided, v)) return true
+  }
+  const parts = provided.split('.')
+  if (parts.length !== 3) return false
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const payload = JSON.parse(atob(b64 + '='.repeat((4 - b64.length % 4) % 4)))
+    return payload?.role === 'service_role'
+  } catch { return false }
+}

@@ -237,9 +237,11 @@ export async function selfMintClaim(id: string, _privateKey?: string): Promise<{
 export async function listPendingUbRecoveries(walletAddress: string): Promise<Array<{ id: string; amount: number; createdAt: string; readyAt: string }>> {
   // SUPABASE REDUCTION: replaced supabase.from('activity') with the
   // /api/bridge-relay?ub_pending_recoveries= proxy. The server applies the
-  // ub_recovery:true filter and returns only safe-to-expose fields.
+  // ub_recovery:true filter, returns only safe-to-expose fields, and only
+  // for the signed-in account's own wallet (session token sent).
   try {
-    const r = await fetch(`/api/bridge-relay?ub_pending_recoveries=${encodeURIComponent(walletAddress.toLowerCase())}`)
+    const { authApiHeaders } = await import('@/lib/supabase')
+    const r = await fetch(`/api/bridge-relay?ub_pending_recoveries=${encodeURIComponent(walletAddress.toLowerCase())}`, { headers: await authApiHeaders() })
     if (!r.ok) return []
     const rows = await r.json().catch(() => []) as Array<{ id: string; amount: number; createdAt: string; readyAt: string }>
     return rows.map(row => ({
