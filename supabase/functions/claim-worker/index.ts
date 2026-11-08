@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from 'jsr:@supabase/supabase-js@2'
-import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
+import { isCronOrLegacyServiceCaller, isServerCaller } from '../_shared/cronAuth.ts'
+import { getServiceRoleKey } from '../_shared/serviceKey.ts'
 const corsHeaders = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -344,24 +345,6 @@ async function getBlockTimestamp(blockNumber: number): Promise<string | null> {
   } catch {
     return null
   }
-}
-function getServiceRoleKey(): string {
-  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (legacy) return legacy
-  const secretKeysRaw = Deno.env.get('SUPABASE_SECRET_KEYS')
-  if (secretKeysRaw) {
-    try {
-      const parsed = JSON.parse(secretKeysRaw)
-      const candidate = parsed?.service_role ?? parsed?.SUPABASE_SERVICE_ROLE_KEY ?? Object.values(parsed ?? {})[0]
-      if (typeof candidate === 'string' && candidate) return candidate
-    } catch (e) {
-      console.error('[claim-worker] SUPABASE_SECRET_KEYS present but failed to parse:', e instanceof Error ? e.message : e)
-    }
-  }
-  throw new Error(
-    'No Supabase service role key found - checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS. ' +
-    'Set one of these as a project secret.'
-  )
 }
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = getServiceRoleKey()
@@ -944,12 +927,16 @@ Deno.serve(async (req: Request) => {
   let body: any = {}
   try { body = await req.json() } catch { /* sweep may send no body */ }
   const mode = body?.mode === 'single' ? 'single' : 'sweep'
-  // Cron-only gate on the sweep path (unchanged: mode:'single' has never had
-  // an auth check here, and this doesn't add one - kicking processing of a
-  // specific already-submitted claimId grants no privilege beyond what that
-  // claim can already do). Key-migration cutover: accepts CRON_SECRET or the
-  // legacy service_role key - see _shared/cronAuth.ts.
+  // Cron-only gate on the sweep path. Key-migration cutover: accepts
+  // CRON_SECRET or the legacy service_role key - see _shared/cronAuth.ts.
   if (mode === 'sweep' && !isCronOrLegacyServiceCaller(req)) {
+    return json({ success: false, error: 'Forbidden' }, 403)
+  }
+  // 'single' is for MeshPort's servers only (claim-submit's kick, and
+  // /api/bridge-relay kick_claim_worker after checking the claim is the
+  // caller's): the public anon key would let anyone run the worker with the
+  // service key for any claim (audit H11).
+  if (mode === 'single' && !isServerCaller(req)) {
     return json({ success: false, error: 'Forbidden' }, 403)
   }
   if (mode === 'single' && body?.claimId) {

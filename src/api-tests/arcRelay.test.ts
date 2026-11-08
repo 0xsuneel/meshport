@@ -116,4 +116,27 @@ describe('meshport_sendRawTransactionAndWait', () => {
     expect((await relay(['nothex', HASH])).error.code).toBe(-32602)
     expect((await relay([RAW, '0x12'])).error.code).toBe(-32602)
   })
+
+  it('an explicit 0 wait returns at once (it used to mean the 8 s default)', async () => {
+    stub(m => m === 'eth_sendRawTransaction' ? { result: HASH } : { result: null })
+    const t = Date.now()
+    const r = await relay([RAW, HASH, 0])
+    expect(r.result).toMatchObject({ hash: HASH, status: 'pending' })
+    expect(Date.now() - t).toBeLessThan(2000)
+  })
+})
+
+describe('/api/arc-rpc per-IP budget', () => {
+  beforeEach(() => { vi.resetModules() })
+  it('counts every call in a batch, eth_getLogs heavier, and refuses past the minute budget', async () => {
+    const mod: any = await import('../../api/arc-rpc.js')
+    const { allowIp, callWeight, IP_BUDGET_PER_MIN } = mod._limits
+    expect(callWeight({ method: 'eth_call' })).toBe(1)
+    expect(callWeight([{ method: 'eth_call' }, { method: 'eth_getLogs' }])).toBe(11)
+    const now = 1_000_000
+    expect(allowIp('1.2.3.4', IP_BUDGET_PER_MIN, now)).toBe(true)
+    expect(allowIp('1.2.3.4', 1, now + 1000)).toBe(false)
+    expect(allowIp('5.6.7.8', 1, now + 1000)).toBe(true) // per IP
+    expect(allowIp('1.2.3.4', 1, now + 61_000)).toBe(true) // next minute
+  })
 })

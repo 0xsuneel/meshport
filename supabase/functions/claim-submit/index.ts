@@ -15,30 +15,11 @@ import { callerWallet, callerCanSpend, ACCOUNT_LOCKED_ERROR } from '../_shared/c
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts'
 import { getArcNativeBalance } from '../_shared/chains.ts'
+import { getServiceRoleKey } from '../_shared/serviceKey.ts'
 
 // Same reasoning as claim-worker/index.ts's getServiceRoleKey - legacy name
 // tried first (currently verified working), new SUPABASE_SECRET_KEYS format
 // only as a fallback, clear error instead of a silent crash if neither is set.
-function getServiceRoleKey(): string {
-  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (legacy) return legacy
-
-  const secretKeysRaw = Deno.env.get('SUPABASE_SECRET_KEYS')
-  if (secretKeysRaw) {
-    try {
-      const parsed = JSON.parse(secretKeysRaw)
-      const candidate = parsed?.service_role ?? parsed?.SUPABASE_SERVICE_ROLE_KEY ?? Object.values(parsed ?? {})[0]
-      if (typeof candidate === 'string' && candidate) return candidate
-    } catch (e) {
-      console.error('[claim-submit] SUPABASE_SECRET_KEYS present but failed to parse:', e instanceof Error ? e.message : e)
-    }
-  }
-
-  throw new Error(
-    'No Supabase service role key found - checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS. ' +
-    'Set one of these as a project secret.'
-  )
-}
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = getServiceRoleKey()

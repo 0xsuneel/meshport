@@ -1739,13 +1739,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ── ub_pending_recoveries: replaces supabase.from('activity') in cctpRecovery ──
       if (req.query.ub_pending_recoveries) {
-        const wallet = String(req.query.ub_pending_recoveries)
-        if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) return res.status(400).json({ error: 'invalid wallet' })
+        // Only the signed-in account's own withdrawals (anyone could read any
+        // wallet's pending recoveries with just its address before).
+        const asked = String(req.query.ub_pending_recoveries)
+        if (!/^0x[0-9a-fA-F]{40}$/.test(asked)) return res.status(400).json({ error: 'invalid wallet' })
+        const wallet = await sessionWallet(req)
+        if (!wallet) return res.status(401).json({ error: 'Not signed in' })
+        if (wallet !== asked.toLowerCase()) return res.status(403).json({ error: 'Not your wallet' })
+        res.setHeader('Cache-Control', 'no-store')
         const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
         const svcKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
         if (!supabaseUrl || !svcKey) return res.status(500).json({ error: 'server misconfigured' })
         const r = await fetch(
-          `${supabaseUrl}/rest/v1/activity?activity_type=eq.withdraw&status=eq.pending&wallet_address=ilike.${wallet}&select=id,amount,created_at,metadata&order=created_at.desc&limit=20`,
+          `${supabaseUrl}/rest/v1/activity?activity_type=eq.withdraw&status=eq.pending&wallet_address=ilike.${encodeURIComponent(wallet)}&select=id,amount,created_at,metadata&order=created_at.desc&limit=20`,
           { headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` } }
         )
         const rows = await r.json().catch(() => [])

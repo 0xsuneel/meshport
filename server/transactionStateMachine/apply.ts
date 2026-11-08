@@ -133,7 +133,10 @@ async function applyConditionalTransition<TStatus extends string>(
   // actually is at write time, not this possibly-stale read.
   validate(from, to)
 
-  const updatePayload: Record<string, unknown> = { [statusColumn]: to, ...(extraFields ?? {}) }
+  // The validated target always wins: extraFields can't carry its own status
+  // (it used to be spread last, writing an unvalidated status).
+  const { [statusColumn]: _ignored, ...extra } = extraFields ?? {}
+  const updatePayload: Record<string, unknown> = { ...extra, [statusColumn]: to }
 
   const { data: updated, error: updateError } = await client
     .from(table)

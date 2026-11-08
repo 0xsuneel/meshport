@@ -112,6 +112,17 @@ describe('transitionAttempt — idempotency', () => {
   })
 })
 
+describe('transition extraFields', () => {
+  it('cannot override the validated status (extra fields are written, the status is the checked target)', async () => {
+    const { client, getTable } = makeFakeClient({
+      transaction_attempts: [{ id: 'att-1', intent_id: 'int-1', status: 'SUBMITTED' }],
+    })
+    const r = await transitionAttempt(client, 'att-1', 'UNKNOWN', { status: 'CONFIRMED', note: 'kept' })
+    expect(r.status).toBe('UNKNOWN')
+    expect(getTable('transaction_attempts')[0]).toMatchObject({ status: 'UNKNOWN', note: 'kept' })
+  })
+})
+
 describe('transitionAttempt — concurrency', () => {
   it('two racing calls to the SAME target status: both succeed, exactly one write happens', async () => {
     const { client, setRaceHook, getTable } = makeFakeClient({

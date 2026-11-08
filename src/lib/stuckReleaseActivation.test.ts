@@ -197,6 +197,8 @@ describe('verdicts for the scenarios required before activation', () => {
 describe('p2p-release-reconcile - structurally cannot move funds', () => {
   const src = readFileSync(
     resolve(process.cwd(), 'supabase/functions/p2p-release-reconcile/index.ts'), 'utf8')
+  const serviceKeySrc = readFileSync(
+    resolve(process.cwd(), 'supabase/functions/_shared/serviceKey.ts'), 'utf8')
 
   it('performs ONLY read-only eth_call - no transaction-sending RPC methods', () => {
     expect(src).toContain("'eth_call'")
@@ -279,7 +281,10 @@ describe('p2p-release-reconcile - structurally cannot move funds', () => {
   })
 
   it('reads credentials only from the environment - none embedded', () => {
-    expect(src).toContain("Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')")
+    // The key comes from the shared helper, which reads only the environment.
+    expect(src).toContain("import { getServiceRoleKey } from '../_shared/serviceKey.ts'")
+    expect(serviceKeySrc).toContain("Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')")
+    expect(serviceKeySrc).not.toMatch(/eyJ[A-Za-z0-9_-]{20,}/)
     // No JWT-looking literal and no long hex secret pasted into source.
     expect(src).not.toMatch(/eyJ[A-Za-z0-9_-]{20,}/)
     expect(src).not.toMatch(/sb_secret_[A-Za-z0-9]/)

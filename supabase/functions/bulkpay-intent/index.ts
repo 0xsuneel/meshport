@@ -14,6 +14,7 @@ import { callerWallet, attemptOwnedBy, callerCanSpend, ACCOUNT_LOCKED_ERROR } fr
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { createBulkPayIntent, markBulkPayAttemptSubmitted } from './logic.ts'
 import type { IntentRepository, NonceFetcher, CreateBulkPayIntentRequest } from './logic.ts'
+import { getServiceRoleKey } from '../_shared/serviceKey.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin':  '*',
@@ -57,19 +58,6 @@ async function rpcCall(method: string, params: unknown[]): Promise<unknown> {
   throw lastErr ?? new Error(`RPC call ${method} failed on all endpoints`)
 }
 
-function getServiceRoleKey(): string {
-  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (legacy) return legacy
-  const secretKeysRaw = Deno.env.get('SUPABASE_SECRET_KEYS')
-  if (secretKeysRaw) {
-    try {
-      const parsed = JSON.parse(secretKeysRaw)
-      const candidate = parsed?.service_role ?? parsed?.SUPABASE_SERVICE_ROLE_KEY ?? Object.values(parsed ?? {})[0]
-      if (typeof candidate === 'string' && candidate) return candidate
-    } catch { /* fall through to the error below */ }
-  }
-  throw new Error('No Supabase service role key found -- checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS.')
-}
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = getServiceRoleKey()

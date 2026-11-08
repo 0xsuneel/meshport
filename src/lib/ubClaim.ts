@@ -19,6 +19,18 @@ import type { WalletAccount } from '@/wallet'
 import { realTxHash } from './relayedProvider'
 import { UB_CLAIM_CHAINS } from './ubChains'
 import { FORWARDER_MINT_FAILING_SDK_CHAINS, forwarderMintFailing, noteForwarderMintFailed } from '@/blockchain/chains'
+
+/**
+ * Round USDC down to whole base units (6 decimals) without float error
+ * dropping one: 2.01 * 1e6 is 2009999.9999999998, which a plain floor turns
+ * into 2.009999 and leaves 0.000001 stranded. A tolerance far below one base
+ * unit absorbs that, so it still never rounds up past the amount.
+ */
+export function floorUsdc(amount: number): number {
+  if (!Number.isFinite(amount) || amount <= 0) return 0
+  return Math.floor(amount * 1e6 + 1e-6) / 1e6
+}
+
 export { UB_CLAIM_CHAINS }
 
 import { isMerchantNow } from './merchant'
@@ -505,7 +517,7 @@ export async function spendDustToArc(params: {
   const ratio = (total - fee - ubSpendMargin(fee)) / total
   if (ratio <= 0) throw new Error(`Leftover balance is too small to cover the Gateway fee (${fee.toFixed(4)} USDC)`)
   const allocations = dust
-    .map(d => ({ chain: d.chain, amount: Math.floor(d.amount * ratio * 1e6) / 1e6 }))
+    .map(d => ({ chain: d.chain, amount: floorUsdc(d.amount * ratio) }))
     .filter(a => a.amount > 0)
   const send = allocations.reduce((s, a) => s + a.amount, 0)
   const r: any = await ubSpend(kit, {
@@ -648,7 +660,7 @@ export async function signSpendAllToArc(params: {
   const ratio = (total - fee - ubSpendMargin(fee)) / total
   if (ratio <= 0) throw new Error(`Too small to cover the Gateway fee (${fee.toFixed(4)} USDC)`)
   const allocations = parts
-    .map(p => ({ chain: p.chain, amount: Math.floor(p.amount * ratio * 1e6) / 1e6 }))
+    .map(p => ({ chain: p.chain, amount: floorUsdc(p.amount * ratio) }))
     .filter(a => a.amount > 0)
   const send = allocations.reduce((s, a) => s + a.amount, 0)
 
@@ -817,7 +829,7 @@ export async function merchantClaimAll(p: {
     ])
     const due = p.chains.filter(c => c.balance >= CLAIM_ALL_MIN_CHAIN && canBringOverCctp(c.chainId))
     for (const c of due) {
-      const amount = Math.floor(c.balance * 1e6) / 1e6
+      const amount = floorUsdc(c.balance)
       step(c.chainId, 'working', 'Signing…')
       try {
         // Solana: one burn signed by the account's Solana wallet, MeshPort

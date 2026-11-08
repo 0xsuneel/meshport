@@ -590,7 +590,9 @@ async function sendAndWait(id, params) {
     return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Invalid transaction hash' } }
   }
   const started = Date.now()
-  const waitMs = Math.min(Math.max(Number(waitMsIn) || SEND_WAIT_MAX_MS, 0), SEND_WAIT_MAX_MS)
+  // An explicit 0 means "don't wait"; only a missing / invalid value gets the default.
+  const asked = waitMsIn == null || waitMsIn === '' ? NaN : Number(waitMsIn)
+  const waitMs = Math.min(Math.max(Number.isFinite(asked) ? asked : SEND_WAIT_MAX_MS, 0), SEND_WAIT_MAX_MS)
   const b = await broadcastToAll(raw)
   if (!b.accepted && !b.maybeSent && b.nonceTaken) {
     // Its nonce is used. By this very transaction (mined already, or still
@@ -614,6 +616,30 @@ async function sendAndWait(id, params) {
   return { jsonrpc: '2.0', id, result: { hash, status: 'pending', broadcast: 'sent' } }
 }
 
+// Per-IP budget (per warm instance). The proxy injects keyed upstreams and has
+// no sign-in, so without this one script could burn the paid RPC quota and get
+// the keyed endpoints rate-limited for every user. Each call in a batch counts
+// once, eth_getLogs (the expensive one) counts LOGS_WEIGHT; a send counts 1.
+// Generous for the app (balance polls, receipt checks, activity scans).
+const IP_BUDGET_PER_MIN = 1200
+const LOGS_WEIGHT = 10
+const ipUse = new Map()
+function callWeight(body) {
+  const reqs = Array.isArray(body) ? body : [body]
+  let w = 0
+  for (const r of reqs) w += r && r.method === 'eth_getLogs' ? LOGS_WEIGHT : 1
+  return Math.max(w, 1)
+}
+function allowIp(ip, weight, now = Date.now()) {
+  let e = ipUse.get(ip)
+  if (!e || now - e.start >= 60_000) { e = { start: now, used: 0 }; ipUse.delete(ip) }
+  if (e.used + weight > IP_BUDGET_PER_MIN) { ipUse.set(ip, e); return false }
+  e.used += weight
+  ipUse.set(ip, e)
+  if (ipUse.size > 5000) ipUse.delete(ipUse.keys().next().value)
+  return true
+}
+
 module.exports = async function handler(req, res) {
   const origin = req.headers.origin || ''
   const localDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
@@ -627,6 +653,12 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
+
+  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown'
+  if (!allowIp(ip, callWeight(req.body))) {
+    res.setHeader('Retry-After', '30')
+    return res.status(429).json({ jsonrpc: '2.0', id: (req.body && !Array.isArray(req.body) && req.body.id) ?? null, error: { code: -32005, message: 'Too many requests - slow down' } })
+  }
 
   const startedAt = Date.now()
   const countClient = async (outcome) => {
@@ -670,3 +702,4 @@ module.exports.forward = forward
 // For tests: the ranking and the stats it learns from.
 module.exports._ranking = { healthScore, orderEndpoints, recordSuccess, ARC_RPCS }
 module.exports.sendAndWait = sendAndWait
+module.exports._limits = { allowIp, callWeight, IP_BUDGET_PER_MIN }

@@ -9,8 +9,8 @@
 // account if it has none (Arc → Solana transfers need it). → { account, created }.
 // GET → { feePayer } (the address to use).
 //
-// Only signed-in MeshPort accounts (a Supabase session; Google / email or a
-// wallet login), rate-limited per account and per IP. Env: SOLANA_FEE_PAYER_SECRET (base58,
+// Only signed-in MeshPort accounts (a Supabase session linked to the account,
+// users.auth_uid; Google / email or a wallet login), rate-limited per account and per IP. Env: SOLANA_FEE_PAYER_SECRET (base58,
 // 64-byte secret key; sensitive), SUPABASE_URL, SUPABASE_SERVICE_KEY.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getBase58Encoder, getBase64EncodedWireTransaction, getSignatureFromTransaction } from '@solana/kit'
@@ -31,26 +31,43 @@ function getPayer() {
   return payer
 }
 
-async function caller(req: VercelRequest): Promise<{ uid: string; anonymous: boolean } | null> {
+// A Supabase session alone isn't enough: anyone can mint anonymous sessions.
+// The session must be linked to a MeshPort account (users.auth_uid, set by
+// bind-session with a wallet signature); limits are counted per account.
+async function caller(req: VercelRequest): Promise<{ account: string } | null> {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
   if (!token || !SERVICE_KEY || !SUPABASE_URL) return null
   const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` } })
   if (!r.ok) return null
-  const u = await r.json().catch(() => null) as { id?: string; is_anonymous?: boolean } | null
-  return u?.id ? { uid: u.id, anonymous: u.is_anonymous === true } : null
+  const u = await r.json().catch(() => null) as { id?: string } | null
+  if (!u?.id || !/^[0-9a-f-]{36}$/i.test(u.id)) return null
+  const ur = await fetch(`${SUPABASE_URL}/rest/v1/users?auth_uid=eq.${u.id}&select=id&limit=1`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+  })
+  const rows = ur.ok ? await ur.json().catch(() => []) as Array<{ id?: string }> : []
+  return rows[0]?.id ? { account: String(rows[0].id) } : null
 }
 
 // Per warm instance: 10 a minute and 100 an hour per account, 30 a minute per
-// IP; opening USDC accounts also 30 a day per account and per IP.
+// IP; opening USDC accounts (on their own or inside a submitted transaction)
+// also 30 a day per account and per IP.
 const recent = new Map<string, number[]>()
-function allow(key: string, max: number, windowMs: number): boolean {
+function allow(key: string, max: number, windowMs: number, n = 1): boolean {
   const now = Date.now()
   const hits = (recent.get(key) ?? []).filter(t => now - t < windowMs)
-  if (hits.length >= max) return false
-  hits.push(now)
+  if (hits.length + n > max) return false
+  for (let i = 0; i < n; i++) hits.push(now)
   recent.set(key, hits)
   if (recent.size > 5000) recent.delete(recent.keys().next().value!)
   return true
+}
+/** Opening USDC accounts costs MeshPort rent (~0.002 SOL each): 30 a day per account and per IP. */
+function allowOpens(account: string, ip: string, n: number): boolean {
+  const day = 86_400_000
+  const now = Date.now()
+  const room = (k: string) => (recent.get(k) ?? []).filter(t => now - t < day).length + n <= 30
+  if (!room('od:' + account) || !room('oi:' + ip)) return false
+  return allow('od:' + account, 30, day, n) && allow('oi:' + ip, 30, day, n)
 }
 const clientIp = (req: VercelRequest) => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown'
 
@@ -78,7 +95,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const who = await caller(req)
   if (!who) return send(401, { error: 'Sign in to MeshPort first' })
-  if (!allow('ip:' + clientIp(req), 30, 60_000) || !allow('m:' + who.uid, 10, 60_000) || !allow('h:' + who.uid, 100, 3_600_000)) {
+  const acct = who.account
+  if (!allow('ip:' + clientIp(req), 30, 60_000) || !allow('m:' + acct, 10, 60_000) || !allow('h:' + acct, 100, 3_600_000)) {
     return send(429, { error: 'Too many Solana transactions - try again shortly' })
   }
 
@@ -89,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try { ok = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(body.openAccount) && getBase58Encoder().encode(body.openAccount).length === 32 } catch { /* not base58 */ }
     if (!ok) return send(400, { error: 'Not a valid Solana address' })
     // Opening an account costs MeshPort its rent (~0.002 SOL): 30 a day per account and per IP.
-    if (!allow('od:' + who.uid, 30, 86_400_000) || !allow('oi:' + clientIp(req), 30, 86_400_000)) {
+    if (!allowOpens(acct, clientIp(req), 1)) {
       return send(429, { error: 'Too many new Solana accounts today - try again tomorrow' })
     }
     try {
@@ -121,6 +139,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { keys, address } = await getPayer()
     const checked = checkFeePayerTransaction(new Uint8Array(Buffer.from(b64, 'base64')), address)
+    // Accounts opened inside the transaction cost MeshPort rent too: same daily cap.
+    if (checked.accountsOpened > 0 && !allowOpens(acct, clientIp(req), checked.accountsOpened)) {
+      return send(429, { error: 'Too many new Solana accounts today - try again tomorrow' })
+    }
     const signed = await coSign(checked, keys)
     const signature = getSignatureFromTransaction(signed)
     await rpc('sendTransaction', [getBase64EncodedWireTransaction(signed), { encoding: 'base64', preflightCommitment: 'confirmed' }])
