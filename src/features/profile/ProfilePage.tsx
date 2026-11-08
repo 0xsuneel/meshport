@@ -168,42 +168,17 @@ export function ProfilePage() {
       )}
 
       {/*
-        Backup menu items - rules by wallet type:
-        'create'         → Seed Phrase Backup  +  Private Key Backup
-        'import-seed'    → Seed Phrase Backup  +  Private Key Backup
-        'import-privkey' → Private Key Backup only (no seed exists)
+        One backup entry for every wallet (8 Nov): "Back up wallet" shows the
+        recovery phrase - it restores the whole wallet, private key included.
+        A wallet imported from a private key has no phrase, so it shows the key.
       */}
       {isWallet && (
-        <>
-          {/* Seed Phrase Backup - only for wallets that have a seed (create or import-seed) */}
-          {(walletSource === 'create' || walletSource === 'import-seed' || walletSource === null) && (
-            <MenuItem
-              icon={<Upload className="w-5 h-5" />}
-              label="Backup Seed Phrase"
-              color="bg-accent/20 text-accent-text"
-              onClick={() => navigate('/backup')}
-            />
-          )}
-
-          {/* Private Key Backup - shown for ALL self-custody wallet types */}
-          {walletSource === 'import-privkey' ? (
-            /* Private-key-imported wallet: goes straight to the private-key-only backup page */
-            <MenuItem
-              icon={<Key className="w-5 h-5" />}
-              label="Backup Private Key"
-              color="bg-warning/20 text-warning"
-              onClick={() => navigate('/backup')}
-            />
-          ) : (
-            /* Seed wallets: also show Private Key Backup (opens backup page → Private Key tab) */
-            <MenuItem
-              icon={<Key className="w-5 h-5" />}
-              label="Backup Private Key"
-              color="bg-warning/20 text-warning"
-              onClick={() => navigate('/backup?tab=key')}
-            />
-          )}
-        </>
+        <MenuItem
+          icon={walletSource === 'import-privkey' ? <Key className="w-5 h-5" /> : <Upload className="w-5 h-5" />}
+          label="Back up wallet"
+          color="bg-accent/20 text-accent-text"
+          onClick={() => navigate('/backup')}
+        />
       )}
     </Section>
   )

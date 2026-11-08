@@ -20,7 +20,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import {
   ArrowLeft, Shield, Fingerprint, Lock, KeyRound, ChevronRight,
-  Bell, BellOff, CheckCircle, EyeOff, Key, FileText,
+  Bell, BellOff, CheckCircle, EyeOff,
   ShoppingCart, Tag, Wallet, Ban, Clock as ClockIcon, Scale, RefreshCw,
   Check, Sun, Moon, Monitor, X, Palette,
   Store,
@@ -505,13 +505,12 @@ export function ChangePasscodePage() {
 
 // ─── Backup - routes based on loginType and walletSource ───────────────────────
 // Route map:
-//   create (generated seed)  → BackupRecoveryPhrasePage  (Seed + Private Key tabs)
-//   import-seed              → BackupRecoveryPhrasePage  (Seed + Private Key tabs)
+//   create (generated seed)  → BackupRecoveryPhrasePage  (recovery phrase - it
+//   import-seed              → BackupRecoveryPhrasePage   restores the key too)
 //   import-privkey           → BackupPrivateKeyOnlyPage  (Private Key only - no seed)
 export function BackupPage() {
   const walletSource = useAuthStore(s => s.walletSource)
   if (walletSource === 'import-privkey') return <BackupPrivateKeyOnlyPage />
-  // 'create' and 'import-seed' both use BackupRecoveryPhrasePage with both tabs visible
   return <BackupRecoveryPhrasePage />
 }
 
@@ -553,7 +552,7 @@ function BackupPrivateKeyOnlyPage() {
             <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
         )}
-        <h1 className="text-xl font-bold text-text-primary">Backup Private Key</h1>
+        <h1 className="text-xl font-bold text-text-primary">Back up wallet</h1>
       </div>
       <div className="px-4 space-y-4">
         <div className="p-3 bg-warning/10 border border-warning/30 rounded-2xl">
@@ -619,14 +618,6 @@ function BackupRecoveryPhrasePage() {
   const [revealPasscode, setRevealPasscode] = useState('')
   const [passcodeError, setPasscodeError] = useState('')
   const [, setVerifying] = useState(false)
-  // Both 'create' and 'import-seed' wallets expose both Seed + Private Key tabs.
-  // The router already guarantees this component only renders for non-import-privkey wallets.
-  const showPrivateKeyTab = true
-  // Support deep-linking to the private key tab via ?tab=key
-  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
-  const [activeTab, setActiveTab] = useState<'seed' | 'key'>(
-    searchParams.get('tab') === 'key' ? 'key' : 'seed'
-  )
 
   const handleReveal = async () => {
     if (passcode.length < 6) { setPasscodeError('Enter your 6-digit passcode'); return }
@@ -644,14 +635,7 @@ function BackupRecoveryPhrasePage() {
     setPasscode('')
     setVerifying(false)
   }
-  const hide = () => { setRevealed(false); setRevealPasscode(''); setOpenedTabs(new Set()) }
-  // Tabs opened since the passcode: their frame stays mounted (just hidden)
-  // when switching tabs, so switching back doesn't reload it - each reload
-  // opened a new one-time link and flashed the placeholder.
-  const [openedTabs, setOpenedTabs] = useState<Set<'seed' | 'key'>>(new Set())
-  useEffect(() => {
-    if (revealed) setOpenedTabs(prev => prev.has(activeTab) ? prev : new Set(prev).add(activeTab))
-  }, [revealed, activeTab])
+  const hide = () => { setRevealed(false); setRevealPasscode('') }
 
   return (
     <div className="flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto">
@@ -661,7 +645,7 @@ function BackupRecoveryPhrasePage() {
             <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
         )}
-        <h1 className="text-xl font-bold text-text-primary">Backup & Recovery</h1>
+        <h1 className="text-xl font-bold text-text-primary">Back up wallet</h1>
       </div>
       <div className="px-4 space-y-4">
         {verified && (
@@ -671,13 +655,13 @@ function BackupRecoveryPhrasePage() {
           </Card>
         )}
         <div className="p-3 bg-warning/10 border border-warning/30 rounded-2xl">
-          <p className="text-sm text-warning">Never share your recovery phrase or private key. Anyone with them controls your wallet. Avoid taking a screenshot - write it down instead.</p>
+          <p className="text-sm text-warning">Your recovery phrase restores this whole wallet, on any device or wallet app. Never share it: anyone with it controls your wallet. Avoid taking a screenshot - write it down instead.</p>
         </div>
 
         {!revealed ? (
           <Card className="p-5 space-y-3">
-            <h3 className="font-bold text-text-primary">View Backup</h3>
-            <p className="text-sm text-text-secondary">Enter your passcode to view your recovery phrase and private key</p>
+            <h3 className="font-bold text-text-primary">Show recovery phrase</h3>
+            <p className="text-sm text-text-secondary">Enter your passcode to see your recovery phrase</p>
             <PinKeypad
               value={passcode}
               onChange={v => { setPasscode(v); setPasscodeError('') }}
@@ -692,50 +676,20 @@ function BackupRecoveryPhrasePage() {
           </Card>
         ) : (
           <>
-            {/* Tab selector - Seed Phrase / Private Key (hidden for seed-imported wallets) */}
-            {showPrivateKeyTab && (
-              <div className="flex bg-surface rounded-2xl p-1 border border-border">
-                <button onClick={() => setActiveTab('seed')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold ${activeTab === 'seed' ? 'bg-brand text-white' : 'text-text-secondary'}`}>
-                  <FileText className="w-4 h-4" /> Seed Phrase
-                </button>
-                <button onClick={() => setActiveTab('key')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold ${activeTab === 'key' ? 'bg-brand text-white' : 'text-text-secondary'}`}>
-                  <Key className="w-4 h-4" /> Private Key
+            <Card className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-text-primary">Recovery Phrase</h3>
+                <button onClick={hide} className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
+                  <EyeOff className="w-3.5 h-3.5" /> Hide
                 </button>
               </div>
-            )}
-
-            {/* Seed Phrase section */}
-            {openedTabs.has('seed') && (
-              <Card className={`p-5 space-y-4 ${activeTab === 'seed' ? '' : 'hidden'}`}>
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-text-primary">Recovery Phrase</h3>
-                  <button onClick={hide} className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
-                    <EyeOff className="w-3.5 h-3.5" /> Hide
-                  </button>
-                </div>
-                {walletAddress && <WalletSecretFrame address={walletAddress} what="mnemonic" passcode={revealPasscode} />}
-              </Card>
-            )}
-
-            {/* Private Key section - hidden for seed-imported wallets */}
-            {showPrivateKeyTab && openedTabs.has('key') && (
-              <Card className={`p-5 space-y-4 ${activeTab === 'key' ? '' : 'hidden'}`}>
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-text-primary">Private Key</h3>
-                  <button onClick={hide} className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
-                    <EyeOff className="w-3.5 h-3.5" /> Hide
-                  </button>
-                </div>
-                {walletAddress && <WalletSecretFrame address={walletAddress} what="privateKey" passcode={revealPasscode} />}
-              </Card>
-            )}
+              {walletAddress && <WalletSecretFrame address={walletAddress} what="mnemonic" passcode={revealPasscode} />}
+            </Card>
 
             {!verified && (
               <Card className="p-4 space-y-3">
                 <h3 className="font-bold text-text-primary">Verify Backup</h3>
-                <p className="text-sm text-text-secondary">Confirm you have saved your recovery phrase and private key securely.</p>
+                <p className="text-sm text-text-secondary">Confirm you have written your recovery phrase down and kept it safe.</p>
                 <Button fullWidth variant="secondary" onClick={() => { setVerified(true); if (walletAddress) import('@/lib/security').then(({ markWalletBackedUp }) => markWalletBackedUp(walletAddress)).catch(() => {}); showToastMessage('Backup verified!', 'success') }}>
                   <CheckCircle className="w-4 h-4" /> Mark as Verified
                 </Button>
