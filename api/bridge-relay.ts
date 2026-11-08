@@ -918,13 +918,26 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
     ])
     headBlock = head
   } catch (e: any) {
+    if (isOutOfGasError(String(e?.shortMessage || e?.message || e))) {
+      timing('no-gas', { simulateMs: Date.now() - checksDoneAt })
+      return outOfGas(res, chainKey, sender.account.address)
+    }
     timing('refused', { simulateMs: Date.now() - checksDoneAt })
     return res.status(400).json({ error: e?.shortMessage || 'Call would fail' })
   }
   const simulatedAt = Date.now()
   const fees = await relayFees(cl.pub, cl.pub.chain.id)
   const tipGwei = fees.maxPriorityFeePerGas != null ? Number(fees.maxPriorityFeePerGas) / 1e9 : undefined
-  const txHash = await sender.sendTransaction({ to, data, ...fees })
+  let txHash: `0x${string}`
+  try {
+    txHash = await sender.sendTransaction({ to, data, ...fees })
+  } catch (e: any) {
+    if (isOutOfGasError(String(e?.shortMessage || e?.message || e))) {
+      timing('no-gas', { simulateMs: simulatedAt - checksDoneAt })
+      return outOfGas(res, chainKey, sender.account.address)
+    }
+    throw e
+  }
   const sentAt = Date.now()
   const base = { simulateMs: simulatedAt - checksDoneAt, sendMs: sentAt - simulatedAt, headBlock, tipGwei }
   try {
@@ -1207,10 +1220,19 @@ async function transferMintStart(req: VercelRequest, res: VercelResponse) {
     // A revert means the message was already received (CCTP mints once); a
     // network error doesn't (audit 7 Nov M10) - the app then mints its own way.
     const text = String(e?.shortMessage || e?.message || e)
+    // Checked first: "Execution reverted ... gas required exceeds allowance (0)"
+    // is the relayer having no gas, not an already-minted message (8 Nov).
+    if (isOutOfGasError(text)) return outOfGas(res, chainKey, from)
     if (/revert|already|nonce/i.test(text)) return res.status(200).json({ alreadyMinted: true, error: text.slice(0, 120) })
     return res.status(502).json({ error: 'Could not check the mint - try again' })
   }
-  const txHash = await cl.wallet.sendTransaction({ to, data, gas: gas * 6n / 5n, nonce, ...(await feesP) })
+  let txHash: `0x${string}`
+  try {
+    txHash = await cl.wallet.sendTransaction({ to, data, gas: gas * 6n / 5n, nonce, ...(await feesP) })
+  } catch (e: any) {
+    if (isOutOfGasError(String(e?.shortMessage || e?.message || e))) return outOfGas(res, chainKey, from)
+    throw e
+  }
   const sentAt = Date.now()
   const log = (outcome: string) => console.log('[bridge-relay] transfer mint', JSON.stringify({
     chain: chainKey, burnTx, mintTx: txHash, outcome, attestMs: attestedAt - startedAt, sendMs: sentAt - attestedAt, receiptMs: Date.now() - sentAt,
@@ -1607,6 +1629,41 @@ async function destMintGasCost(chainKey: string): Promise<bigint> {
   const [gasPrice, usd] = await Promise.all([chainGasPrice(pub, chainKey), nativeUsd(chainKey)])
   return testnetGasCap(weiToUsdUnits(DEST_MINT_GAS * gasPrice, usd))
 }
+/** Native wei the relayer must hold on a chain to mint once: the mint's gas at
+ *  3x the current price (a transfer's mint raises the tip and leaves room for
+ *  the base fee to double). */
+export function destMintNeedsWei(gasPrice: bigint): bigint {
+  return DEST_MINT_GAS * gasPrice * 3n
+}
+/** A node or viem saying the sender can't pay the gas, as opposed to the call
+ *  itself reverting (an already-minted message reverts; that's not this). */
+export function isOutOfGasError(text: string): boolean {
+  return /insufficient funds|exceeds the balance of the account|gas required exceeds allowance \(0\)/i.test(text)
+}
+export const relayerOutOfGas = (chainName: string) => `MeshPort's relayer is out of gas on ${chainName}`
+function outOfGas(res: VercelResponse, chainKey: string, address: string) {
+  console.error('[bridge-relay] RELAYER OUT OF GAS', JSON.stringify({ chain: chainKey, address }))
+  destGasHealth.delete(chainKey) // the next plan re-reads the balance and picks Circle's forwarder
+  return res.status(503).json({ error: relayerOutOfGas(CHAINS[chainKey]?.name ?? chainKey.replace(/_/g, ' ')), noGas: true })
+}
+/** Whether MeshPort's relayer can pay a mint on `chainKey` right now (cached 60 s).
+ *  8 Nov: it had 0 ETH on Base Sepolia, the plan still said "relayer", and a
+ *  burned transfer sat unminted. With this false the app burns through
+ *  Circle's forwarder instead. */
+const destGasHealth = new Map<string, { at: number; ok: Promise<boolean> }>()
+function relayerHasDestGas(chainKey: string): Promise<boolean> {
+  return cached(destGasHealth, chainKey, 'ok', 60_000, async () => {
+    const cl = await clients(chainKey)
+    if (!cl.wallet) return false
+    const address = cl.wallet.account.address
+    const [balance, gasPrice] = await Promise.all([
+      cl.pub.getBalance({ address }) as Promise<bigint>, chainGasPrice(cl.pub, chainKey),
+    ])
+    const ok = balance >= destMintNeedsWei(gasPrice)
+    if (!ok) console.error('[bridge-relay] RELAYER LOW GAS', JSON.stringify({ chain: chainKey, address, balance: balance.toString(), needs: destMintNeedsWei(gasPrice).toString() }))
+    return ok
+  }).catch(() => false)
+}
 /** Circle's forwarding fee (base units) for Arc → `chainKey`, or null. */
 const forwardFeeCache = new Map<string, { at: number; fee: Promise<bigint | null> }>()
 function arcForwardFee(chainKey: string): Promise<bigint | null> {
@@ -1624,13 +1681,15 @@ function arcForwardFee(chainKey: string): Promise<bigint | null> {
 async function transferMint(req: VercelRequest, res: VercelResponse) {
   const chainKey = String(req.query.chain || '')
   if (!CHAINS[chainKey] || chainKey === 'Arc_Testnet') return res.status(200).json({ relayer: false })
-  const [destGas, forwardFee, cl] = await Promise.all([
-    destMintGasCost(chainKey).catch(() => null), arcForwardFee(chainKey).catch(() => null), clients(chainKey).catch(() => null),
+  const [destGas, forwardFee, hasGas] = await Promise.all([
+    destMintGasCost(chainKey).catch(() => null), arcForwardFee(chainKey).catch(() => null), relayerHasDestGas(chainKey),
   ])
-  const canMint = !!cl?.wallet && destGas != null
+  const canMint = hasGas && destGas != null
   const relayer = canMint && (FORWARDER_FAILING.has(chainKey) || (forwardFee != null && destGas! * 115n / 100n <= forwardFee))
   res.setHeader('Cache-Control', 'private, max-age=30')
-  return res.status(200).json({ relayer, destGas: (destGas ?? 0n).toString(), forwardFee: forwardFee?.toString() ?? null })
+  // relayerUnavailable: the relayer can't mint here now - use Circle's
+  // forwarder even where it is usually skipped (FORWARDER_FAILING).
+  return res.status(200).json({ relayer, relayerUnavailable: !canMint, destGas: (destGas ?? 0n).toString(), forwardFee: forwardFee?.toString() ?? null })
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

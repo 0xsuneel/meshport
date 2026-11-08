@@ -221,13 +221,16 @@ export function transferMintPlan(destination: string): Promise<MintPlan> {
   const hit = planCache.get(destination)
   if (hit && Date.now() - hit.at < 30_000) return hit.plan
   const plan = (async (): Promise<MintPlan> => {
-    const { circleForwarderMintsTo } = await import('@/blockchain/chains')
+    const { circleForwarderMintsTo, chainSupportsForwarder } = await import('@/blockchain/chains')
     const fallback = circleForwarderMintsTo(destination)
     try {
       const r = await fetch(`/api/bridge-relay?action=transfer_mint&chain=${encodeURIComponent(destination)}`, { signal: AbortSignal.timeout(6_000) })
-      const j = await r.json().catch(() => null) as { relayer?: boolean; destGas?: string } | null
+      const j = await r.json().catch(() => null) as { relayer?: boolean; relayerUnavailable?: boolean; destGas?: string } | null
       if (!r.ok || !j) throw new Error('no plan')
-      const forward = j.relayer ? false : fallback
+      // The relayer can't mint there right now (e.g. out of gas): Circle's
+      // forwarder, wherever Circle offers it - even on a chain where it is
+      // usually skipped, since a hookless burn would then sit unminted.
+      const forward = j.relayer ? false : (j.relayerUnavailable ? chainSupportsForwarder(destination) || fallback : fallback)
       return { forward, destMintGas: forward ? 0n : BigInt(j.destGas ?? '0') }
     } catch {
       planCache.delete(destination)
@@ -501,8 +504,14 @@ async function settle(p: FastCctpParams, burnHash: string, approveHash: string |
     // No forwarder, or it failed / is late: MeshPort's relayer finishes it
     // with Circle's attestation (it refuses an already-minted message).
     const { finishCctpMintViaRelayer } = await import('./cctpRecovery')
-    const done = await finishCctpMintViaRelayer({ sourceChain: ARC_KEY, destinationChain: p.destination, burnTxHash: burnHash, timeoutMs: 60_000, pollMs }).catch(() => null)
+    let relayError = ''
+    const done = await finishCctpMintViaRelayer({ sourceChain: ARC_KEY, destinationChain: p.destination, burnTxHash: burnHash, timeoutMs: 60_000, pollMs })
+      .catch((e: any) => { relayError = String(e?.message || ''); return null })
     mintHash = done?.mintTxHash ?? null
+    // Don't promise "on its own": a hookless burn needs someone to mint it.
+    if (!mintHash && /out of gas/i.test(relayError)) {
+      throw new FastCctpError(`Circle has confirmed this transfer, but MeshPort can't deliver it to ${p.destination.replace(/_/g, ' ')} right now. Your USDC is safe - finish it later from Activity with Recover.`, 'settling')
+    }
   }
   if (!mintHash) {
     throw new FastCctpError('Circle has confirmed this transfer and it is being delivered. It will arrive on its own - check your balance in a few minutes.', 'settling')
