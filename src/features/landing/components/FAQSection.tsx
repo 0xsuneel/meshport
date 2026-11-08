@@ -19,7 +19,7 @@ const FAQS = [
   },
   {
     q: 'Are my chats private?',
-    a: 'Yes. Messages are end-to-end encrypted: they are locked on your device and only unlocked on the other person’s. Each person’s chat key is signed by their wallet, and MeshPort warns you if a contact’s key ever changes.',
+    a: 'Yes. Messages are end-to-end encrypted: they are locked on your device and only unlocked on the other person’s. Each person’s chat key is signed by their wallet, and MeshPort warns you if a contact’s key ever changes. Messages are deleted from our servers once delivered and live only on your phone - there’s no chat backup, so a new device shows your payment history but not old messages.',
   },
   {
     q: 'What is Arc?',

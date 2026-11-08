@@ -14,7 +14,7 @@ const PILLARS = [
   },
   {
     icon: MessageCircle, title: 'Chat and pay in one place',
-    body: 'Message friends and send money in the same conversation. Chats, photos and files are end-to-end encrypted - only you and the other person can read them.',
+    body: 'Message friends and send money in the same conversation. Chats, photos and files are end-to-end encrypted - only you and the other person can read them. They’re kept only on your phone and aren’t backed up; on a new device you’ll see your payment history, not old messages.',
   },
   {
     icon: Globe2, title: 'One balance, every chain',

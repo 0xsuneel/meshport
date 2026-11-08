@@ -30,9 +30,14 @@ export function parseSignal(content: string | null | undefined): Signal | null {
 export async function applySignal(userId: string, from: string, sig: Signal): Promise<void> {
   if (sig.kind === 'delete') {
     // Only the person who wrote a message can delete it for everyone.
-    await patchMessages(userId, sig.ids, m => (m.sender_id === from
-      ? { content: '[deleted]', type: 'text', deleted_at: sig.at }
-      : {}))
+    const removed: string[] = []
+    await patchMessages(userId, sig.ids, m => {
+      if (m.sender_id !== from) return {}
+      if (m.content && m.content !== '[deleted]') removed.push(m.content)
+      return { content: '[deleted]', type: 'text', deleted_at: sig.at }
+    })
+    // Its photo / file goes too: from this phone and from the server.
+    if (removed.length) await import('./chatDeleteMedia').then(d => d.forgetFilesOf(removed, from)).catch(() => {})
     return
   }
   // Receipts are for my own messages only.
