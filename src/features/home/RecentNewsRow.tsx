@@ -245,6 +245,10 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
   const [cur, setCur] = useState(0)
   const [paused, setPaused] = useState(false)
   const [broken, setBroken] = useState<Record<string, true>>({})
+  // Cover pictures that have fully downloaded (keyed by URL). Until a cover is
+  // in, its slot keeps showing the skeleton instead of a half-drawn image.
+  const [imgLoaded, setImgLoaded] = useState<Record<string, true>>({})
+  const markLoaded = (url: string) => setImgLoaded(m => (m[url] ? m : { ...m, [url]: true }))
   const reconnects = useReconnectCount() // back online → load again
 
   useEffect(() => {
@@ -263,6 +267,10 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
 
   const x0 = useRef<number | null>(null)
   const item = items[cur] ?? items[0]
+  // A story has nothing left to wait for when it has no picture (a drawn cover
+  // is used), its picture failed, or the picture has fully loaded.
+  const coverReady = (it: NewsItem | undefined) => !it || !it.image_url || !!broken[it.id] || !!imgLoaded[it.image_url]
+  const curReady = coverReady(item)
 
   let content: ReactNode
   if (!n && !loaded) {
@@ -299,12 +307,24 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
               <div style={{ position: 'relative', height: NEWS_PIC_H, borderRadius: 10, overflow: 'hidden', background: NEWS_SOURCE_TINT[it.source] }}>
                 {it.image_url && !broken[it.id] ? (
                   <>
-                    <img decoding="async" src={it.image_url} alt="" draggable={false} loading={k === 0 ? 'eager' : 'lazy'}
+                    {/* All four covers load up front (not lazily), so the next one is
+                        usually in before its turn. Hidden until fully downloaded. */}
+                    <img decoding="async" src={it.image_url} alt="" draggable={false} loading="eager"
+                      ref={el => { if (el && el.complete && el.naturalWidth > 0) markLoaded(it.image_url!) }}
+                      onLoad={() => markLoaded(it.image_url!)}
                       onError={() => setBroken(b => ({ ...b, [it.id]: true }))}
                       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
-                        transform: on || reduce ? 'scale(1)' : 'scale(1.08)', transition: reduce ? 'none' : 'transform 5.5s cubic-bezier(.2,.6,.3,1)' }} />
-                    <span style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(0,0,0,0.45)', borderRadius: 999, padding: '1px 7px',
-                      color: '#fff', fontSize: 11, fontWeight: 700, lineHeight: '15px' }}>{NEWS_SOURCE_LABEL[it.source]}</span>
+                        opacity: imgLoaded[it.image_url] ? 1 : 0,
+                        transform: on || reduce ? 'scale(1)' : 'scale(1.08)',
+                        transition: reduce ? 'none' : 'transform 5.5s cubic-bezier(.2,.6,.3,1), opacity .3s ease' }} />
+                    {!imgLoaded[it.image_url] && (
+                      // Stays until the picture has fully loaded.
+                      <Skeleton className="rounded-none" style={{ position: 'absolute', inset: 0 }} />
+                    )}
+                    {imgLoaded[it.image_url] && (
+                      <span style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(0,0,0,0.45)', borderRadius: 999, padding: '1px 7px',
+                        color: '#fff', fontSize: 11, fontWeight: 700, lineHeight: '15px' }}>{NEWS_SOURCE_LABEL[it.source]}</span>
+                    )}
                   </>
                 ) : (
                   // No picture: a drawn cover (icon + label) instead of an empty block.
@@ -313,18 +333,18 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
               </div>
               <div style={{ marginTop: 4, fontSize: 12, fontWeight: 650, lineHeight: '14px', color: 'var(--text-primary)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {it.title}
+                {coverReady(it) ? it.title : <Skeleton className="rounded-full" style={{ height: 9, width: '70%', marginTop: 2 }} />}
               </div>
             </div>
           )
         })}
-        {n > 1 && (
+        {n > 1 && curReady && (
           // A soft dark band along the cover's foot, so the dots read on a
           // cover with its own text printed on it (Arc's).
           <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, top: NEWS_PIC_H - 20, height: 20, borderRadius: '0 0 10px 10px', pointerEvents: 'none',
             background: 'linear-gradient(transparent, rgba(0,0,0,0.5))' }} />
         )}
-        {n > 1 && (
+        {n > 1 && curReady && (
           // Bottom-right of the cover, clear of the source label and of a drawn cover's text.
           <div aria-hidden style={{ position: 'absolute', top: NEWS_PIC_H - 11, right: 6, display: 'flex', gap: 3 }}>
             {items.map((it, k) => (
