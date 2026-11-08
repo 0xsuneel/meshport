@@ -572,6 +572,9 @@ function BackupPrivateKeyOnlyPage() {
                 length={6}
                 error={!!passcodeError}
                 onComplete={() => handleReveal()}
+                // Backup is passcode only: never fingerprint / face (8 Nov).
+                biometricAvailable={false}
+                autoBiometric={false}
               />
               {passcodeError && <p role="alert" className="text-xs text-danger text-center">{passcodeError}</p>}
               {verifying && <p className="text-xs text-text-secondary text-center">Opening…</p>}
@@ -681,6 +684,9 @@ function BackupRecoveryPhrasePage() {
               length={6}
               error={!!passcodeError}
               onComplete={() => handleReveal()}
+              // Backup is passcode only: never fingerprint / face (8 Nov).
+              biometricAvailable={false}
+              autoBiometric={false}
             />
             {passcodeError && <p role="alert" className="text-xs text-danger text-center">{passcodeError}</p>}
           </Card>

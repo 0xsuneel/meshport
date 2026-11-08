@@ -62,6 +62,26 @@ function copyButton(secret: string, label: string) {
   return b
 }
 
+// Blurred until tapped (OKX-style), so the secret isn't on screen by
+// accident when the page opens. Copy works only once it's shown.
+function blurred(content: HTMLElement, copy: HTMLButtonElement, what: 'mnemonic' | 'privateKey') {
+  const box = el('div', 'secret hidden')
+  content.setAttribute('aria-hidden', 'true')
+  const cover = el('button', 'cover')
+  cover.type = 'button'
+  cover.append(el('span', 'cover-title', what === 'mnemonic' ? 'Tap to view your recovery phrase' : 'Tap to view your private key'),
+    el('span', 'cover-sub', 'Make sure nobody can see your screen.'))
+  copy.disabled = true
+  cover.onclick = () => {
+    box.classList.remove('hidden')
+    content.removeAttribute('aria-hidden')
+    cover.remove()
+    copy.disabled = false
+  }
+  box.append(content, cover)
+  return box
+}
+
 function render(what: 'mnemonic' | 'privateKey', secret: string) {
   if (what === 'mnemonic') {
     const grid = el('ol', 'words')
@@ -70,9 +90,11 @@ function render(what: 'mnemonic' | 'privateKey', secret: string) {
       li.append(el('span', 'n', String(i + 1)), el('span', 'w', w))
       grid.append(li)
     })
-    root.replaceChildren(grid, copyButton(secret, 'Copy phrase'))
+    const copy = copyButton(secret, 'Copy phrase')
+    root.replaceChildren(blurred(grid, copy, what), copy)
   } else {
-    root.replaceChildren(el('code', 'key', secret), copyButton(secret, 'Copy key'))
+    const copy = copyButton(secret, 'Copy key')
+    root.replaceChildren(blurred(el('code', 'key', secret), copy, what), copy)
   }
   drawn()
 }
