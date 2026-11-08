@@ -696,9 +696,11 @@ function BackupRecoveryPhrasePage() {
         </div>
 
         {!revealed ? (
-          <Card className="p-5 space-y-3">
-            <h3 className="font-bold text-text-primary">Show backup</h3>
-            <p className="text-sm text-text-secondary">Enter your passcode to see your recovery phrase and private key</p>
+          <Card className="p-5 space-y-4">
+            <div className="text-center">
+              <h3 className="text-base font-extrabold text-text-primary">Enter your passcode</h3>
+              <p className="text-[13px] text-text-secondary mt-1">to see your recovery phrase and private key</p>
+            </div>
             <PinKeypad
               value={passcode}
               onChange={v => { setPasscode(v); setPasscodeError('') }}
