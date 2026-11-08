@@ -566,6 +566,16 @@ export function ImportWalletPage() {
       const found = await lookupAccountByWallet(result.address)
       if (found.kind === 'error') { setError("Couldn't reach MeshPort. Please try again."); setLoading(false); return }
       const decision = decideAccountAccess(getChosenKind(), foundAccountOf(found.user), getAuthMode())
+      // The wallet already has an account of the type picked (or none was
+      // picked): it's this person logging in, so log in - no "you already
+      // have an account" stop. Also covers the Create/Log in choice being
+      // lost (session storage reset), which reads as Create. A wallet of the
+      // other type is still refused (mismatch).
+      if (decision.kind === 'already_exists') {
+        setAuthIntent('login', decision.existing)
+        await finishImport(result, walletSource)
+        return
+      }
       if (decision.kind !== 'allow') { setBlocked({ decision, result, walletSource }); setLoading(false); return }
     }
 

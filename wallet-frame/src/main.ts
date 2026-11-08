@@ -78,9 +78,6 @@ function requireApproval(address: string) {
   if (vault.hasPasscode(address) && (approvedUntil.get(address.toLowerCase()) ?? 0) > Date.now()) return
   throw new RpcError('approval-required', 'Enter your passcode to approve this')
 }
-function approvalFresh(address: string) {
-  return vault.hasPasscode(address) && (approvedUntil.get(address.toLowerCase()) ?? 0) > Date.now()
-}
 
 const ARC_CHAIN_ID = 5042002
 // At most this much in fees for a self-cancel (Arc pays gas in USDC, 18 decimals natively).
@@ -292,9 +289,10 @@ const handlers: Handlers = {
   async 'reveal:grant'({ address, what, passcode }) {
     const a = addr(address)
     if (what === 'privateKey') {
-      // The private key needs the passcode too (or an approval from the
-      // passcode the person just typed).
-      if (!approvalFresh(a)) await vault.checkPasscode(a, String(passcode ?? ''))
+      // The private key needs the passcode typed for this reveal, every time.
+      // Not a recent signing approval: that can come from fingerprint / face,
+      // and backup is passcode only (8 Nov).
+      await vault.checkPasscode(a, String(passcode ?? ''))
       return { ticket: newTicket(a, vault.keyFor(a), what) }
     }
     if (what !== 'mnemonic') throw new RpcError('invalid', 'Nothing to reveal')

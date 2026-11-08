@@ -210,12 +210,13 @@ describe('approval: value-moving signatures need the passcode, checked by the fr
     expect((await ask('status', { address }))!.msg.result.passcode).toBe(true)
   })
 
-  it('the private key is revealed only with the passcode or a fresh approval', async () => {
+  it('the private key is revealed only with the passcode, never on a recent approval', async () => {
     const address = await walletWithPasscode()
     expect((await ask('reveal:grant', { address, what: 'privateKey' }))!.msg.error.code).toBe('bad-passcode')
     expect((await ask('reveal:grant', { address, what: 'privateKey', passcode: '123456' }))!.msg.result.ticket).toMatch(/^0x/)
+    // An approval (which fingerprint / face can give) doesn't open the backup.
     await ask('approve', { address, passcode: '123456' })
-    expect((await ask('reveal:grant', { address, what: 'privateKey' }))!.msg.result.ticket).toMatch(/^0x/)
+    expect((await ask('reveal:grant', { address, what: 'privateKey' }))!.msg.error.code).toBe('bad-passcode')
   })
 
   it('wiping a wallet needs its passcode', async () => {
