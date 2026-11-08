@@ -5,9 +5,12 @@
 // IDENTITY - one per person, on every device.
 //   Each user's chat identity is an X25519 key pair DERIVED from their wallet
 //   private key (deriveMyChatIdentity). Logging in on any device restores the
-//   wallet (from the recovery phrase / private key), and with it the exact same chat
-//   identity, so every
-//   device the user signs in on reads their whole chat history, old and new.
+//   wallet (from the recovery phrase / private key), and with it the exact same
+//   chat identity, so messages that arrive there open. Old messages do NOT
+//   come back: chat is device-only with no backup (lib/localChat.ts) - the
+//   server deletes each message once the recipient's phone has it, and
+//   undelivered ones after 30 days (chat-expiry). Only payment cards show on
+//   every device.
 //   Only the PUBLIC key is uploaded (users.chat_public_key), together with
 //   a signature by the WALLET over it (users.chat_key_sig).
 //
@@ -39,10 +42,10 @@
 //   messages show as locked). One message's key opens that message only.
 //
 //   This is not WhatsApp's Signal protocol: WhatsApp gives every DEVICE its
-//   own keys, so a new device does not get old history unless the old phone
-//   transfers it. MeshPort ties chat to the WALLET instead, which is what
-//   lets any signed-in device read everything. The trade-off: whoever holds
-//   the wallet key can read that wallet's chats (as they can move its funds).
+//   own keys and keeps changing them (forward secrecy). MeshPort ties the
+//   chat key to the WALLET instead. The trade-off: whoever holds the wallet
+//   key can open that wallet's messages - those on its phone, or sealed
+//   copies someone saved off the server (as they can move its funds).
 //
 // WAITING FOR THE RECIPIENT - format "e2e:q2:".
 //   Someone who hasn't signed in since chat encryption started has no key to

@@ -1,7 +1,10 @@
 // lib/localChat.ts
 //
-// Device-only chat (owner's decision, 1 Nov): text, photos and files live on
-// this phone, in IndexedDB - one database per MeshPort account. The server
+// Device-only chat (owner's decision, 1 Nov; confirmed 8 Nov: no backup,
+// like WhatsApp without a chat backup): text, photos and files live on this
+// phone, in IndexedDB - one database per MeshPort account. Nothing is backed
+// up: a new phone, a reinstall or cleared site data starts with no old
+// messages (payment cards still show - they're kept in Supabase). The server
 // only passes a chat message along (chat_take_mail hands it over and deletes
 // it - lib/chatMailbox.ts). Payment cards are not kept here: they stay in
 // Supabase and are merged in by the screens, so payment history shows on
@@ -20,7 +23,23 @@ export const LOCAL_CHAT_EVENT = 'meshport:local-chat'
 
 const dbs = new Map<string, Promise<IDBDatabase>>()
 
+// Chats live only on this phone and aren't backed up, so ask the browser not
+// to clear this site's storage on its own (e.g. under storage pressure).
+// Best-effort: a browser may decline, and Safari still clears a site that
+// isn't on the Home Screen after 7 days unused.
+let askedToKeep = false
+function keepStorage(): void {
+  if (askedToKeep) return
+  askedToKeep = true
+  try {
+    const storage = (globalThis.navigator as Navigator | undefined)?.storage
+    if (typeof storage?.persist !== 'function') return
+    void storage.persisted().then(already => (already ? true : storage.persist())).catch(() => {})
+  } catch { /* best-effort */ }
+}
+
 function open(userId: string): Promise<IDBDatabase> {
+  keepStorage()
   let p = dbs.get(userId)
   if (!p) {
     p = new Promise<IDBDatabase>((resolve, reject) => {

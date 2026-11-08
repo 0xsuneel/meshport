@@ -3418,6 +3418,9 @@ export function ChatConversationPage() {
     for (const [conv, list] of byConv) {
       const ids = list.map(m => m.id as string)
       if (!(await sendSignal(conv, 'delete', ids))) { failed += ids.length; continue }
+      // The photo / file goes too: the server copy and my copy on this phone
+      // (the other phone removes its own when the signal arrives).
+      void import('@/lib/chatDeleteMedia').then(d => d.forgetFilesOf(list.map(m => m.content), otherUser?.id)).catch(() => {})
       const at = new Date().toISOString()
       if (user?.id) await patchMessages(user.id, ids, { content: '[deleted]', type: 'text', deleted_at: at }).catch(() => {})
       setMessages(prev => prev.map(x => ids.includes(x.id) ? { ...x, content: '[deleted]', type: 'text', deleted_at: at } : x))

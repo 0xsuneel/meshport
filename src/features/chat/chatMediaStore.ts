@@ -117,6 +117,27 @@ export function chatStoragePath(url: string): string | null {
   const m = /\/storage\/v1\/object\/public\/attachments\/(chat\/[^?#]+)$/.exec(bare(url))
   return m ? decodeURIComponent(m[1]) : null
 }
+/**
+ * Removes a chat file everywhere this phone can reach: its saved copy here,
+ * the session cache and - with `server` - the server copy (either person in
+ * the chat may delete chat/<conversation>/…). For "delete for everyone".
+ */
+export async function forgetChatFile(url: string, opts?: { server?: boolean }): Promise<void> {
+  const k = bare(url)
+  const hit = cache.get(k)
+  if (hit) { cache.delete(k); try { URL.revokeObjectURL(hit.url) } catch { /* not an object URL */ } }
+  try {
+    const db = await openFiles()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('files', 'readwrite')
+      tx.objectStore('files').delete(k)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch { /* storage blocked */ }
+  if (opts?.server) await removeFromServer(k).catch(() => {})
+}
+
 async function removeFromServer(url: string): Promise<void> {
   const path = chatStoragePath(url)
   if (!path) return
