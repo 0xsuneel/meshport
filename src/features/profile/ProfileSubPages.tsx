@@ -505,8 +505,8 @@ export function ChangePasscodePage() {
 
 // ─── Backup - routes based on loginType and walletSource ───────────────────────
 // Route map:
-//   create (generated seed)  → BackupRecoveryPhrasePage  (recovery phrase - it
-//   import-seed              → BackupRecoveryPhrasePage   restores the key too)
+//   create (generated seed)  → BackupRecoveryPhrasePage  (recovery phrase and
+//   import-seed              → BackupRecoveryPhrasePage   private key, side by side)
 //   import-privkey           → BackupPrivateKeyOnlyPage  (Private Key only - no seed)
 export function BackupPage() {
   const walletSource = useAuthStore(s => s.walletSource)
@@ -611,13 +611,24 @@ function BackupRecoveryPhrasePage() {
   const storedPasscode = useAuthStore(s => s.passcode)
   const { showToastMessage } = useUIStore()
   const [revealed, setRevealed] = useState(false)
-  const [verified, setVerified] = useState(false)
   const [passcode, setPasscode] = useState('')
   // The verified passcode, kept only while the backup is shown: the wallet
-  // frame needs it to open the passcode-encrypted recovery phrase.
+  // frame needs it to open the recovery phrase and the private key, and to
+  // check the words below.
   const [revealPasscode, setRevealPasscode] = useState('')
   const [passcodeError, setPasscodeError] = useState('')
   const [, setVerifying] = useState(false)
+
+  // "Check my backup" (8 Nov - replaces "Mark as Verified", which only took
+  // the user's word for it): 3 words at random, typed from the written copy
+  // with the phrase hidden, checked by the wallet frame - as when the wallet
+  // was created. Passing marks this wallet as backed up on this phone.
+  const [checking, setChecking] = useState(false)
+  const [checkIdx, setCheckIdx] = useState<number[]>([])
+  const [checkWords, setCheckWords] = useState(['', '', ''])
+  const [checkError, setCheckError] = useState('')
+  const [checkBusy, setCheckBusy] = useState(false)
+  const [checked, setChecked] = useState(false)
 
   const handleReveal = async () => {
     if (passcode.length < 6) { setPasscodeError('Enter your 6-digit passcode'); return }
@@ -635,7 +646,35 @@ function BackupRecoveryPhrasePage() {
     setPasscode('')
     setVerifying(false)
   }
-  const hide = () => { setRevealed(false); setRevealPasscode('') }
+  const hide = () => { setRevealed(false); setRevealPasscode(''); setChecking(false) }
+
+  const startCheck = async () => {
+    if (!walletAddress) return
+    const { walletStatus } = await import('@/wallet')
+    const words = (await walletStatus(walletAddress).catch(() => null))?.wordCount || 12
+    const picked = new Set<number>()
+    const r = new Uint32Array(1)
+    while (picked.size < 3) { crypto.getRandomValues(r); picked.add(r[0] % words) }
+    setCheckIdx([...picked].sort((a, b) => a - b))
+    setCheckWords(['', '', '']); setCheckError(''); setChecking(true)
+  }
+  const runCheck = async () => {
+    if (!walletAddress) return
+    setCheckBusy(true); setCheckError('')
+    try {
+      const { checkRecoveryWords } = await import('@/wallet')
+      const answers: Record<number, string> = {}
+      checkIdx.forEach((wi, i) => { answers[wi] = checkWords[i] })
+      const r = await checkRecoveryWords(walletAddress, answers, revealPasscode)
+      if (!r.ok) { setCheckError(`One or more of words ${checkIdx.map(i => `#${i + 1}`).join(', ')} is incorrect. Check your written backup.`); return }
+      setChecked(true); setChecking(false)
+      const { markWalletBackedUp } = await import('@/lib/security')
+      await markWalletBackedUp(walletAddress).catch(() => {})
+      showToastMessage('Backup checked', 'success')
+    } catch (e) {
+      setCheckError(e instanceof Error ? e.message : "Couldn't check the words. Try again.")
+    } finally { setCheckBusy(false) }
+  }
 
   return (
     <div className="flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto">
@@ -648,20 +687,20 @@ function BackupRecoveryPhrasePage() {
         <h1 className="text-xl font-bold text-text-primary">Back up wallet</h1>
       </div>
       <div className="px-4 space-y-4">
-        {verified && (
+        {checked && (
           <Card className="p-4 flex items-center gap-3 bg-success/10 border-success/30">
             <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
-            <p className="text-sm font-bold text-success">Backup verified</p>
+            <p className="text-sm font-bold text-success">Backup checked - your written recovery phrase is correct</p>
           </Card>
         )}
         <div className="p-3 bg-warning/10 border border-warning/30 rounded-2xl">
-          <p className="text-sm text-warning">Your recovery phrase restores this whole wallet, on any device or wallet app. Never share it: anyone with it controls your wallet. Avoid taking a screenshot - write it down instead.</p>
+          <p className="text-sm text-warning">Your recovery phrase restores this whole wallet, on any device or wallet app; the private key restores this one account. Never share either: anyone with them controls your wallet. Avoid taking a screenshot - write them down instead.</p>
         </div>
 
         {!revealed ? (
           <Card className="p-5 space-y-3">
-            <h3 className="font-bold text-text-primary">Show recovery phrase</h3>
-            <p className="text-sm text-text-secondary">Enter your passcode to see your recovery phrase</p>
+            <h3 className="font-bold text-text-primary">Show backup</h3>
+            <p className="text-sm text-text-secondary">Enter your passcode to see your recovery phrase and private key</p>
             <PinKeypad
               value={passcode}
               onChange={v => { setPasscode(v); setPasscodeError('') }}
@@ -676,22 +715,54 @@ function BackupRecoveryPhrasePage() {
           </Card>
         ) : (
           <>
-            <Card className="p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-text-primary">Recovery Phrase</h3>
-                <button onClick={hide} className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
-                  <EyeOff className="w-3.5 h-3.5" /> Hide
-                </button>
-              </div>
-              {walletAddress && <WalletSecretFrame address={walletAddress} what="mnemonic" passcode={revealPasscode} />}
-            </Card>
+            <div className="flex justify-end">
+              <button onClick={hide} className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
+                <EyeOff className="w-3.5 h-3.5" /> Hide all
+              </button>
+            </div>
 
-            {!verified && (
+            {/* Side by side on a wide screen, one under the other on a phone.
+                Hidden while checking, so the words come from the written copy. */}
+            {!checking && (
+              <div className="grid gap-4 lg:grid-cols-2 items-start">
+                <Card className="p-5 space-y-3 min-w-0">
+                  <div>
+                    <h3 className="font-bold text-text-primary">Recovery phrase</h3>
+                    <p className="text-xs text-text-secondary mt-0.5">Restores the whole wallet - write all the words down, in order.</p>
+                  </div>
+                  {walletAddress && <WalletSecretFrame address={walletAddress} what="mnemonic" passcode={revealPasscode} />}
+                </Card>
+                <Card className="p-5 space-y-3 min-w-0">
+                  <div>
+                    <h3 className="font-bold text-text-primary">Private key</h3>
+                    <p className="text-xs text-text-secondary mt-0.5">This account only - for importing it into another wallet app.</p>
+                  </div>
+                  {walletAddress && <WalletSecretFrame address={walletAddress} what="privateKey" passcode={revealPasscode} />}
+                </Card>
+              </div>
+            )}
+
+            {checking ? (
+              <Card className="p-5 space-y-4">
+                <div>
+                  <h3 className="font-bold text-text-primary">Check your backup</h3>
+                  <p className="text-sm text-text-secondary mt-1">Type these words from the recovery phrase you wrote down.</p>
+                </div>
+                {checkIdx.map((wi, i) => (
+                  <Input key={wi} label={`Word #${wi + 1}`} placeholder="Type the word..." value={checkWords[i]}
+                    onChange={e => { const v = e.target.value; setCheckWords(ws => ws.map((w, j) => j === i ? v : w)); setCheckError('') }}
+                    autoFocus={i === 0} autoComplete="off" autoCapitalize="none" spellCheck={false} />
+                ))}
+                {checkError && <p role="alert" className="text-sm text-danger">{checkError}</p>}
+                <Button fullWidth loading={checkBusy} disabled={checkWords.some(w => !w.trim())} onClick={runCheck}>Check</Button>
+                <button onClick={() => setChecking(false)} className="w-full py-2 text-sm font-semibold text-text-secondary">Show my backup again</button>
+              </Card>
+            ) : !checked && (
               <Card className="p-4 space-y-3">
-                <h3 className="font-bold text-text-primary">Verify Backup</h3>
-                <p className="text-sm text-text-secondary">Confirm you have written your recovery phrase down and kept it safe.</p>
-                <Button fullWidth variant="secondary" onClick={() => { setVerified(true); if (walletAddress) import('@/lib/security').then(({ markWalletBackedUp }) => markWalletBackedUp(walletAddress)).catch(() => {}); showToastMessage('Backup verified!', 'success') }}>
-                  <CheckCircle className="w-4 h-4" /> Mark as Verified
+                <h3 className="font-bold text-text-primary">Check your backup</h3>
+                <p className="text-sm text-text-secondary">Make sure the recovery phrase you wrote down is right: you'll type 3 of its words, with the phrase hidden.</p>
+                <Button fullWidth variant="secondary" onClick={startCheck}>
+                  <CheckCircle className="w-4 h-4" /> Check my backup
                 </Button>
               </Card>
             )}

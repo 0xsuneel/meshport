@@ -275,4 +275,17 @@ describe('confirm-word check', () => {
     for (let i = 0; i < 4; i++) await ask('mnemonic:check', { address, answers: { 0: 'a', 1: 'b', 2: 'c' } })
     expect((await ask('mnemonic:check', { address, answers: { 0: 'a', 1: 'b', 2: 'c' } }))!.msg.error.code).toBe('rate-limited')
   })
+
+  it('later (Back up wallet), opens the saved phrase with the passcode to check it', async () => {
+    const phrase = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+    const imported = await ask('import', { kind: 'import-seed', secret: phrase, passcode: '123456' })
+    const address = imported!.msg.result.address
+    await ask('lock', { address })                    // phrase no longer in memory
+    await ask('unlock', { address, passcode: '123456' })
+    const right = { 0: 'abandon', 5: 'abandon', 11: 'about' }
+    expect((await ask('mnemonic:check', { address, answers: right }))!.msg.error.code).toBe('locked')
+    expect((await ask('mnemonic:check', { address, answers: right, passcode: '123456' }))!.msg.result.ok).toBe(true)
+    expect((await ask('mnemonic:check', { address, answers: { ...right, 11: 'zoo' }, passcode: '123456' }))!.msg.result.ok).toBe(false)
+    expect((await ask('mnemonic:check', { address, answers: right, passcode: '999999' }))!.msg.error.code).toBe('bad-passcode')
+  })
 })

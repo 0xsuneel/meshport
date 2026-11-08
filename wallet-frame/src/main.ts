@@ -280,9 +280,12 @@ const handlers: Handlers = {
     return { ok: true as const }
   },
 
-  async 'mnemonic:check'({ address, answers }) {
+  async 'mnemonic:check'({ address, answers, passcode }) {
     const a = addr(address)
+    // Right after create / import the phrase is in memory; later (Back up
+    // wallet → Check my backup) it's opened with the passcode just entered.
     const phrase = vault.phraseInMemory(a)
+      ?? (passcode != null ? await vault.readPhrase(a, passcodeParam(passcode, true)) : null)
     if (!phrase) throw new RpcError('locked', 'The recovery phrase is no longer open - reveal it again')
     const words = phrase.split(' ')
     const entries = answers && typeof answers === 'object' ? Object.entries(answers) : []
