@@ -228,6 +228,27 @@ export interface UseActivityResult {
 
 /** `initialFilter`: the tab the page opens on (Activity → P2P from a link),
  *  so it loads that list straight away instead of All first. */
+/**
+ * A reload of the first page (opening the page, a filter change, Refresh).
+ * The fresh rows replace the list, but incoming payments the on-chain layer
+ * found and the database hasn't caught up to yet (synthetic `onchain_` rows)
+ * are kept. Dropping them made the page jump on open (8 Nov): the saved list
+ * showed them, the reload removed them, the next on-chain poll put them back.
+ */
+export function refreshFirstPage(
+  walletAddress: string,
+  prev: ActivityRecord[],
+  fresh: ActivityRecord[],
+  buffered: OnchainReceivedTx[],
+): ActivityRecord[] {
+  const base = buffered.length ? mergeOnchainIntoRecords(walletAddress, fresh, buffered) : fresh
+  const known = new Set(base.map(r => (r.txHash ? `${r.activityType}:${r.txHash.toLowerCase()}` : `id:${r.id}`)))
+  const carried = prev.filter(r => r.id.startsWith('onchain_') && r.txHash && !known.has(`${r.activityType}:${r.txHash.toLowerCase()}`))
+  if (!carried.length) return base
+  return [...base, ...carried].sort((a, b) =>
+    a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : a.id < b.id ? 1 : a.id > b.id ? -1 : 0)
+}
+
 export function useActivity(walletAddress: string | null, initialFilter?: ActivityType): UseActivityResult {
   const [records,     setRecords]     = useState<ActivityRecord[]>(() => (walletAddress && readCache(walletAddress, initialFilter)) || [])
   // Current records for event handlers (state updaters may run later).
@@ -267,7 +288,10 @@ export function useActivity(walletAddress: string | null, initialFilter?: Activi
       offsetRef.current = 0; cursorRef.current = null
       // Show the last-seen list for this view at once; the fetch below refreshes it.
       const cached = readCache(walletAddress, filter, search || undefined)
-      if (cached) { setRecords(cached); setLoading(false) } else setLoading(true)
+      // Nothing saved for this view (e.g. a filter not opened before): clear
+      // the list so the loading cards show - keeping the previous view's rows
+      // hid both the list and the cards, a blank gap, then a jump.
+      if (cached) { setRecords(cached); setLoading(false) } else { setRecords([]); setLoading(true) }
     }
     // The error is cleared only once a load succeeds (below). Clearing it up
     // front made a failing load-more flip the page between the empty state
@@ -305,7 +329,7 @@ export function useActivity(walletAddress: string | null, initialFilter?: Activi
         // Refresh, then comes back later" bug. mergeOnchainIntoRecords
         // dedupes by hash, so once the real row lands this is a no-op.
         const buffered = getRecentArcDeposits()
-        setRecords(buffered.length ? mergeOnchainIntoRecords(walletAddress, data, buffered) : data)
+        setRecords(prev => refreshFirstPage(walletAddress, prev, data, buffered))
         writeCache(walletAddress, filter, search || undefined, data)
       } else {
         setRecords(prev => {

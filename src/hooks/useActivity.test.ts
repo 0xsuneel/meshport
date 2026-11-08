@@ -37,7 +37,7 @@ vi.mock('@/lib/onchainReceivedActivity', () => ({
   fetchRecentOnchainReceived: vi.fn(),
 }))
 
-import { mergeOnchainIntoRecords } from '@/hooks/useActivity'
+import { mergeOnchainIntoRecords, refreshFirstPage } from '@/hooks/useActivity'
 import type { ActivityRecord } from '@/lib/ActivityService'
 import type { OnchainReceivedTx } from '@/lib/onchainReceivedActivity'
 
@@ -573,5 +573,29 @@ describe('mergeOnchainIntoRecords - FIX 3: bulk self-payout legs both survive', 
     // Same order regardless of input order - a pure function of the
     // records themselves, not of array arrival order.
     expect(ids(result1)).toEqual(ids(result2))
+  })
+})
+
+describe('refreshFirstPage (reload without the page jumping)', () => {
+  const H1 = '0x' + 'a1'.repeat(32), H2 = '0x' + 'b2'.repeat(32), H3 = '0x' + 'c3'.repeat(32)
+  const onchainRow = (h: string, at: string) => row({ id: `onchain_${h}`, txHash: h, createdAt: at, metadata: { source: 'onchain_direct' } })
+
+  it("keeps an on-chain receive the database hasn't caught up to yet, in time order", () => {
+    const prev = [onchainRow(H3, '2026-11-08T10:00:00.000Z'), row({ id: 'a', txHash: H1, createdAt: '2026-11-08T09:00:00.000Z' })]
+    const fresh = [row({ id: 'a', txHash: H1, createdAt: '2026-11-08T09:00:00.000Z' }), row({ id: 'b', txHash: H2, createdAt: '2026-11-07T09:00:00.000Z' })]
+    const out = refreshFirstPage(WALLET, prev, fresh, [])
+    expect(out.map(r => r.id)).toEqual([`onchain_${H3}`, 'a', 'b'])
+  })
+
+  it('drops the on-chain copy once the database has the same payment', () => {
+    const prev = [onchainRow(H1, '2026-11-08T09:00:00.000Z')]
+    const fresh = [row({ id: 'real', txHash: H1, createdAt: '2026-11-08T09:00:00.000Z' })]
+    expect(refreshFirstPage(WALLET, prev, fresh, []).map(r => r.id)).toEqual(['real'])
+  })
+
+  it('otherwise is just the fresh page (rows no longer there are not kept)', () => {
+    const prev = [row({ id: 'gone', txHash: H2, createdAt: '2026-11-08T09:00:00.000Z' })]
+    const fresh = [row({ id: 'a', txHash: H1, createdAt: '2026-11-08T08:00:00.000Z' })]
+    expect(refreshFirstPage(WALLET, prev, fresh, [])).toBe(fresh)
   })
 })
