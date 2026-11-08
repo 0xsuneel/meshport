@@ -37,12 +37,21 @@ vi.mock('@/lib/supabase', () => ({ supabase: { from: (t: string) => builder(t) }
 const patchMessages = vi.fn(async (..._a: unknown[]) => {})
 vi.mock('@/lib/localChat', () => ({ patchMessages: (...a: unknown[]) => patchMessages(...a) }))
 vi.mock('@/lib/homeBootstrap', () => ({ bootPart: async () => undefined }))
-vi.mock('@/lib/security', () => ({ sealForDevice: async () => null, openFromDevice: async () => null }))
-// Alice's wallet is open; her chat seed comes from the wallet frame (stood in here).
+// Alice's wallet is open.
 vi.mock('@/store', () => ({ useAuthStore: { getState: () => ({ signer: { address: privateKeyToAccount(ALICE_PK as `0x${string}`).address } }) } }))
+// The wallet frame's chat operations, stood in with the same code the frame
+// runs (lib/chatWrap) - the app itself never gets the seed (audit M15).
 vi.mock('@/wallet', async () => {
   const { deriveChatSeed } = await vi.importActual<typeof import('./chatIdentity')>('./chatIdentity')
-  return { chatSeed: async () => deriveChatSeed(ALICE_PK) }
+  const w = await vi.importActual<typeof import('./chatWrap')>('./chatWrap')
+  const seed = () => deriveChatSeed(ALICE_PK)
+  return {
+    chatPublicKey: async () => w.chatPublicKey(seed()),
+    chatWrap: async (_a: string, rpk: Uint8Array, key: Uint8Array) => w.wrapMessageKey(seed(), rpk, key),
+    chatUnwrap: async (_a: string, h: { spk: Uint8Array; rpk: Uint8Array; iv: Uint8Array; wrapped: Uint8Array }, peer: Uint8Array | null) =>
+      w.unwrapMessageKey(seed(), h.spk, h.rpk, h.iv, h.wrapped, peer),
+    chatOpenV1: async (_a: string, peer: Uint8Array, iv: Uint8Array, data: Uint8Array) => w.openV1(seed(), peer, iv, data),
+  }
 })
 
 import {

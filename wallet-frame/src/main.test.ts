@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
-import { verifyMessage } from 'viem'
+import { verifyMessage, bytesToHex, hexToBytes } from 'viem'
 import { WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION } from '@/wallet/protocol'
 
 // The frame's message boundary: who it answers, what it answers with.
@@ -83,6 +83,42 @@ describe('wallet frame transport', () => {
     expect((await ask('export-key', { address }))!.msg.error.code).toBe('unsupported')
     expect((await ask('__proto__', {}))!.msg.error.code).toBe('unsupported')
     expect((await ask('status', { address: 'nope' }))!.msg.error.code).toBe('invalid')
+  })
+
+  it('chat (audit M15): the chat key never leaves the frame; it seals and opens message keys', async () => {
+    const pk = generatePrivateKey()
+    const { address } = privateKeyToAccount(pk)
+    // Locked wallet: no chat key either.
+    expect((await ask('chat:pub', { address }))!.msg.error.code).toBe('locked')
+    await ask('import', { kind: 'import-privkey', secret: pk, passcode: '123456' })
+    // The seed itself can't be asked for any more.
+    expect((await ask('chat:seed', { address }))!.msg.error.code).toBe('unsupported')
+
+    const { deriveChatSeed } = await import('@/lib/chatIdentity')
+    const w = await import('@/lib/chatWrap')
+    const seed = deriveChatSeed(pk)
+    const pub = (await ask('chat:pub', { address }))!.msg.result.pub
+    expect(pub).toBe(bytesToHex(w.chatPublicKey(seed)))
+
+    // A contact; a message key sealed for them by the frame opens on their side.
+    const bob = deriveChatSeed(generatePrivateKey())
+    const bobPub = w.chatPublicKey(bob)
+    const key = bytesToHex(crypto.getRandomValues(new Uint8Array(32)))
+    const sealed = (await ask('chat:wrap', { address, rpk: bytesToHex(bobPub), key }))!.msg.result
+    expect(sealed.spk).toBe(pub)
+    const atBob = await w.unwrapMessageKey(bob, hexToBytes(sealed.spk), bobPub, hexToBytes(sealed.iv), hexToBytes(sealed.wrapped))
+    expect(bytesToHex(atBob!)).toBe(key)
+
+    // ...and the frame opens it back, but only with the real other side.
+    const back = { address, spk: sealed.spk, rpk: bytesToHex(bobPub), iv: sealed.iv, wrapped: sealed.wrapped }
+    expect((await ask('chat:unwrap', { ...back, peer: bytesToHex(bobPub) }))!.msg.result.key).toBe(key)
+    const eve = bytesToHex(w.chatPublicKey(deriveChatSeed(generatePrivateKey())))
+    expect((await ask('chat:unwrap', { ...back, peer: eve }))!.msg.result.key).toBeNull()
+
+    // Bad params are refused, and no reply ever carries the chat seed.
+    expect((await ask('chat:wrap', { address, rpk: '0x12', key }))!.msg.error.code).toBe('invalid')
+    const posted = JSON.stringify(parent.postMessage.mock.calls.map(c => c[0]))
+    expect(posted).not.toContain(bytesToHex(seed).slice(2))
   })
 
   it('rejects an invalid phrase without echoing it', async () => {

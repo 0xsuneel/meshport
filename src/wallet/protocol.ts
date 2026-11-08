@@ -77,8 +77,14 @@ export interface WalletRpc {
   'sign:message': [{ address: string; message: string | { raw: Hex } }, { signature: Hex }]
   'sign:typed-data': [{ address: string; typedData: Record<string, unknown> }, { signature: Hex }]
   'sign:transaction': [{ address: string; transaction: FrameTransaction }, { serialized: Hex }]
-  /** This wallet's chat identity seed (derived, domain-separated - not the wallet key). */
-  'chat:seed': [{ address: string }, { seed: Hex }]
+  /** This wallet's chat public key (X25519, 32 bytes). The private half never leaves the frame (audit M15). */
+  'chat:pub': [{ address: string }, { pub: Hex }]
+  /** Seal a message's own 32-byte key from this wallet's chat identity to `rpk` (lib/chatWrap). */
+  'chat:wrap': [{ address: string; rpk: Hex; key: Hex }, { spk: Hex; iv: Hex; wrapped: Hex }]
+  /** Open a sealed message key; null when it isn't this identity's or doesn't open. `peer`: the other side must be this key (or me). */
+  'chat:unwrap': [{ address: string; spk: Hex; rpk: Hex; iv: Hex; wrapped: Hex; peer?: Hex | null }, { key: Hex | null }]
+  /** Open an old e2e:v1 text / file from the chat with `peer`. */
+  'chat:v1': [{ address: string; peer: Hex; iv: Hex; data: Hex }, { plain: Hex }]
   /** This wallet's Solana public key (32 bytes; derived, domain-separated - lib/solanaKey.ts). */
   'solana:key': [{ address: string }, { publicKey: Hex }]
   /** ed25519-sign a Solana transaction's message bytes with this wallet's Solana key. */
