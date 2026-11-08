@@ -21,6 +21,7 @@ import {
 } from '@/wallet/protocol'
 import * as keys from './keys'
 import { deriveChatSeed } from '@/lib/chatIdentity'
+import { chatPublicKey, wrapMessageKey, unwrapMessageKey, openV1 } from '@/lib/chatWrap'
 import { solanaPublicKey, solanaSign, solanaHexToBytes } from '@/lib/solanaKey'
 import * as vault from './vault'
 import { VaultError } from './vault'
@@ -38,6 +39,19 @@ const ADDRESS = /^0x[0-9a-fA-F]{40}$/
 function addr(address: unknown): string {
   if (typeof address !== 'string' || !ADDRESS.test(address)) throw new RpcError('invalid', 'Not a wallet address')
   return address
+}
+/** Hex param → bytes, of exactly `len` bytes when given (old chat files: up to 40 MB). */
+function hexBytes(v: unknown, len?: number): Uint8Array {
+  if (typeof v !== 'string' || !/^0x(?:[0-9a-fA-F]{2})*$/.test(v) || v.length > 2 + 80_000_000) throw new RpcError('invalid', 'Bad chat data')
+  const out = new Uint8Array((v.length - 2) / 2)
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(v.slice(2 + i * 2, 4 + i * 2), 16)
+  if (len != null && out.length !== len) throw new RpcError('invalid', 'Bad chat data')
+  return out
+}
+/** Runs `use` with this wallet's chat identity seed, wiped afterwards. */
+async function withChatSeed<T>(address: unknown, use: (seed: Uint8Array) => T | Promise<T>): Promise<T> {
+  const seed = deriveChatSeed(vault.keyFor(addr(address)))
+  try { return await use(seed) } finally { seed.fill(0) }
 }
 const KINDS = new Set(['create', 'import-seed', 'import-privkey'])
 function passcodeParam(passcode: unknown, required = false): string | undefined {
@@ -339,11 +353,34 @@ const handlers: Handlers = {
     return { serialized: await signer(a).signTransaction(transaction as any) }
   },
 
-  // The chat identity seed: derived from the key with its own domain
-  // (lib/chatIdentity), so it can't sign or move anything.
-  async 'chat:seed'({ address }) {
-    const seed = deriveChatSeed(vault.keyFor(addr(address)))
-    try { return { seed: bytesToHex(seed) } } finally { seed.fill(0) }
+  // Chat (audit M15): the chat identity is derived from the wallet key here
+  // (lib/chatIdentity) and never leaves the frame. The app gets the public
+  // key and asks the frame to seal / open each message's own key
+  // (lib/chatWrap). Needs the wallet open, like signing.
+  async 'chat:pub'({ address }) {
+    return withChatSeed(address, seed => ({ pub: bytesToHex(chatPublicKey(seed)) }))
+  },
+
+  async 'chat:wrap'({ address, rpk, key }) {
+    const r = await withChatSeed(address, seed => wrapMessageKey(seed, hexBytes(rpk, 32), hexBytes(key, 32)))
+    return { spk: bytesToHex(r.spk), iv: bytesToHex(r.iv), wrapped: bytesToHex(r.wrapped) }
+  },
+
+  async 'chat:unwrap'({ address, spk, rpk, iv, wrapped, peer }) {
+    const k = await withChatSeed(address, seed => unwrapMessageKey(seed, hexBytes(spk, 32), hexBytes(rpk, 32), hexBytes(iv, 12),
+      hexBytes(wrapped, 48), peer == null ? null : hexBytes(peer, 32)))
+    if (!k) return { key: null }
+    try { return { key: bytesToHex(k) } } finally { k.fill(0) }
+  },
+
+  async 'chat:v1'({ address, peer, iv, data }) {
+    try {
+      const plain = await withChatSeed(address, seed => openV1(seed, hexBytes(peer, 32), hexBytes(iv, 12), hexBytes(data)))
+      return { plain: bytesToHex(plain) }
+    } catch (e) {
+      if (e instanceof RpcError || e instanceof VaultError) throw e
+      throw new RpcError('invalid', 'This message does not open')
+    }
   },
 
   async 'solana:key'({ address }) {

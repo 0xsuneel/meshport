@@ -55,12 +55,31 @@ export async function setWalletPasscode(address: string, passcode: string, oldPa
 export function lockWallet(address?: string) { return callWallet('lock', { address }).catch(() => undefined) }
 export function forgetWallet(address?: string, everything = false) { return callWallet('forget', { address, everything }).catch(() => undefined) }
 
-export async function chatSeed(address: string): Promise<Uint8Array> {
-  const { seed } = await callWallet('chat:seed', { address })
-  const h = seed.slice(2)
-  const out = new Uint8Array(h.length / 2)
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16)
+// ── Chat (audit M15): the chat key stays in the frame ──────────────────────
+const toHexStr = (b: Uint8Array): `0x${string}` => { let h = '0x'; for (const x of b) h += x.toString(16).padStart(2, '0'); return h as `0x${string}` }
+const fromHexStr = (h: string): Uint8Array => {
+  const c = h.slice(2), out = new Uint8Array(c.length / 2)
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(c.slice(i * 2, i * 2 + 2), 16)
   return out
+}
+
+/** This wallet's chat public key (needs the wallet open). */
+export async function chatPublicKey(address: string): Promise<Uint8Array> {
+  return fromHexStr((await callWallet('chat:pub', { address })).pub)
+}
+/** Seals a message's own key for `rpk` (and me). */
+export async function chatWrap(address: string, rpk: Uint8Array, key: Uint8Array): Promise<{ spk: Uint8Array; iv: Uint8Array; wrapped: Uint8Array }> {
+  const r = await callWallet('chat:wrap', { address, rpk: toHexStr(rpk), key: toHexStr(key) })
+  return { spk: fromHexStr(r.spk), iv: fromHexStr(r.iv), wrapped: fromHexStr(r.wrapped) }
+}
+/** Opens a sealed message key, or null when it isn't mine. */
+export async function chatUnwrap(address: string, h: { spk: Uint8Array; rpk: Uint8Array; iv: Uint8Array; wrapped: Uint8Array }, peer: Uint8Array | null): Promise<Uint8Array | null> {
+  const r = await callWallet('chat:unwrap', { address, spk: toHexStr(h.spk), rpk: toHexStr(h.rpk), iv: toHexStr(h.iv), wrapped: toHexStr(h.wrapped), peer: peer ? toHexStr(peer) : null })
+  return r.key ? fromHexStr(r.key) : null
+}
+/** Opens an old e2e:v1 text / file from the chat with `peer`. */
+export async function chatOpenV1(address: string, peer: Uint8Array, iv: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
+  return fromHexStr((await callWallet('chat:v1', { address, peer: toHexStr(peer), iv: toHexStr(iv), data: toHexStr(data) })).plain)
 }
 
 /** Confirm-word check right after a new wallet's phrase was shown. */
