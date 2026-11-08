@@ -55,6 +55,9 @@ export function mirrorToSystem(n: AppNotification): void {
     if (n.isRead || isOwnActionNotification(n)) return
     if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) return
     if (Notification.permission !== 'granted') return
+    // Like WhatsApp: nothing in the phone's shade while MeshPort is on screen
+    // (the app shows it itself) - only when it's running in the background.
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') return
     const t = Date.parse(n.timestamp)
     if (!Number.isFinite(t) || Date.now() - t > FRESH_MS) return
     navigator.serviceWorker.ready.then(reg => reg.showNotification(n.title, {
@@ -65,4 +68,15 @@ export function mirrorToSystem(n: AppNotification): void {
       data:  { url: urlFor(n) },
     })).catch(() => {})
   } catch { /* never let a system-notification problem affect the app */ }
+}
+
+/** Opening a chat clears its message notifications from the phone's shade. */
+export function clearChatNotifications(conversationId: string | null | undefined): void {
+  try {
+    if (!conversationId || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    navigator.serviceWorker.ready.then(reg => {
+      reg.active?.postMessage({ type: 'meshport:clear-chat-notifications', conversationId })
+      return reg.getNotifications({ tag: `chat-${conversationId}` }).then(list => list.forEach(n => n.close()))
+    }).catch(() => {})
+  } catch { /* never let this affect the app */ }
 }

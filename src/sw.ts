@@ -145,20 +145,42 @@ self.addEventListener('push', (event: PushEvent) => {
   }
 
   const title = payload.title || 'MeshPort'
-  const options: NotificationOptions = {
+  const data = payload.data || {}
+  const options: NotificationOptions & { renotify?: boolean } = {
     body:  payload.body || '',
     icon:  payload.icon  || '/notification-icon.png',
     // Android draws the badge (status bar + header icon) from its alpha only,
     // so it must be a white mark on transparent - not the solid app icon.
     badge: payload.badge || '/notification-badge.png',
     tag:   payload.tag,
-    data:  payload.data || {},
+    data,
   }
 
-  // Always shown in the phone's notification shade. Duplicates are avoided
-  // by tag: the app mirrors its own in-app notification with the same tag
-  // (lib/systemNotify.ts), so the OS keeps a single entry per event.
-  event.waitUntil(self.registration.showNotification(title, options))
+  // Like WhatsApp (8 Nov): while MeshPort is on screen nothing goes to the
+  // phone's shade - the app shows it itself. Otherwise it's shown; duplicates
+  // are avoided by tag (lib/systemNotify.ts mirrors with the same tag).
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true }) as WindowClient[]
+    if (windows.some(w => w.visibilityState === 'visible')) return
+    // A chat: one entry per conversation, counting its new messages, and the
+    // phone alerts again for each one.
+    if (data.kind === 'chat' && payload.tag) {
+      const prev = (await self.registration.getNotifications({ tag: payload.tag }))[0]
+      const count = (Number(prev?.data?.count) || (prev ? 1 : 0)) + 1
+      options.data = { ...data, count }
+      if (count > 1 && options.body === 'New message') options.body = `${count} new messages`
+      options.renotify = true
+    }
+    await self.registration.showNotification(title, options)
+  })())
+})
+
+// The app asks to clear a chat's notifications when that chat is opened.
+self.addEventListener('message', (event) => {
+  const d = event.data
+  if (d?.type !== 'meshport:clear-chat-notifications' || typeof d.conversationId !== 'string') return
+  event.waitUntil?.(self.registration.getNotifications({ tag: `chat-${d.conversationId}` })
+    .then(list => list.forEach(n => n.close())).catch(() => {}))
 })
 
 // Asks the app in `client` to open `url` in place (AppLayout listens for
