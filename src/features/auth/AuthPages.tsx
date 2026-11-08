@@ -16,7 +16,7 @@ import { Card } from '@/components/ui/Card'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { validateMnemonic } from '@/lib/arc'
 import { createWallet, importWallet, walletStatus, setWalletPasscode, lockWallet, WalletFrameError, type WalletAccount } from '@/wallet'
-import { WalletSecretFrame } from '@/components/wallet/WalletSecretFrame'
+import { WalletSecretFrame, phraseFrameHeight } from '@/components/wallet/WalletSecretFrame'
 import {
   supabase, upsertUserProfile,
   isUsernameTakenDb, getUserByWalletAddress, ensureAnonSession, lookupAccountByWallet,
@@ -425,7 +425,7 @@ export function CreateWalletPage() {
               <p className="text-sm text-warning">Never share this. Anyone with it controls your wallet. Avoid taking a screenshot - write it down instead.</p>
             </div>
             {/* Rendered by the wallet frame - the phrase never enters the app. */}
-            <WalletSecretFrame address={walletData.address} what="mnemonic" height={walletData.wordCount > 12 ? 360 : 260} />
+            <WalletSecretFrame address={walletData.address} what="mnemonic" height={phraseFrameHeight(walletData.wordCount)} />
             <Button fullWidth onClick={() => { setConfirmError(''); setStep('confirm') }}>I've Written It Down →</Button>
           </motion.div>
         )}

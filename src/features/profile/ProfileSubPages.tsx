@@ -20,7 +20,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import {
   ArrowLeft, Shield, Fingerprint, Lock, KeyRound, ChevronRight,
-  Bell, BellOff, CheckCircle, EyeOff, AlertTriangle,
+  Bell, BellOff, CheckCircle, AlertTriangle, Key, FileText,
   ShoppingCart, Tag, Wallet, Ban, Clock as ClockIcon, Scale, RefreshCw,
   Check, Sun, Moon, Monitor, X, Palette,
   Store,
@@ -37,7 +37,7 @@ import { timeAgo } from '@/lib/utils'
 import { biometricLabel, removeBiometric, type PendingBiometricRegistration } from '@/lib/biometric'
 import { markP2PNotificationRead, markAllP2PNotificationsReadOnServer, P2P_TYPES } from '@/lib/p2pNotifications'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { WalletSecretFrame } from '@/components/wallet/WalletSecretFrame'
+import { WalletSecretFrame, phraseFrameHeight } from '@/components/wallet/WalletSecretFrame'
 
 /** Small uppercase heading above a Security page card. */
 function SecSectionLabel({ children }: { children: React.ReactNode }) {
@@ -613,16 +613,27 @@ function BackupRecoveryPhrasePage() {
   const [revealed, setRevealed] = useState(false)
   const [passcode, setPasscode] = useState('')
   // The verified passcode, kept only while the backup is shown: the wallet
-  // frame needs it to open the recovery phrase and the private key, and to
-  // check the words below.
+  // frame needs it to open the recovery phrase and the private key, and for
+  // the backup check.
   const [revealPasscode, setRevealPasscode] = useState('')
   const [passcodeError, setPasscodeError] = useState('')
   const [, setVerifying] = useState(false)
 
-  // "Check my backup" (8 Nov), like Rabby / OKX: replaces "Mark as Verified",
-  // which only took the user's word for it. The wallet frame asks for 3
-  // words as taps (4 choices each, the phrase hidden) and tells the app only
-  // that it passed. Passing is remembered with the date on this phone.
+  // 8 Nov design: two choices side by side - Recovery phrase (picked on
+  // open) and Private key - and only the chosen one shows below, blurred in
+  // the wallet frame until "Tap to view". A choice opened once stays mounted
+  // (hidden) so switching back doesn't reload it.
+  const [show, setShow] = useState<'phrase' | 'key'>('phrase')
+  const [opened, setOpened] = useState<Set<'phrase' | 'key'>>(new Set(['phrase']))
+  const pick = (k: 'phrase' | 'key') => { setShow(k); setOpened(prev => prev.has(k) ? prev : new Set(prev).add(k)) }
+  const [wordCount, setWordCount] = useState(12)
+  useEffect(() => {
+    if (!walletAddress) return
+    import('@/wallet').then(m => m.walletStatus(walletAddress)).then(st => { if (st?.wordCount) setWordCount(st.wordCount) }).catch(() => {})
+  }, [walletAddress])
+
+  // "Check my backup", like Rabby / OKX: the wallet frame asks for 3 words as
+  // taps and tells the app only that it passed; remembered with the date.
   const [checking, setChecking] = useState(false)
   const [checked, setChecked] = useState(false)
   const [checkedAt, setCheckedAt] = useState<Date | null>(null)
@@ -646,7 +657,7 @@ function BackupRecoveryPhrasePage() {
       const { verifyPasscode } = await import('@/lib/security')
       const correct = !!storedPasscode && await verifyPasscode(passcode, storedPasscode)
       if (!correct) setPasscodeError('Incorrect passcode. Try again.')
-      else if (await openForReveal(passcode)) { setRevealPasscode(passcode); setRevealed(true) }
+      else if (await openForReveal(passcode)) { setRevealPasscode(passcode); setShow('phrase'); setOpened(new Set(['phrase'])); setRevealed(true) }
       else setPasscodeError('Could not open your wallet. Go to Home to unlock it first, then try again.')
     } catch (e) {
       console.error('[Backup] Verification failed:', e)
@@ -657,36 +668,31 @@ function BackupRecoveryPhrasePage() {
   }
   const hide = () => { setRevealed(false); setRevealPasscode(''); setChecking(false) }
 
+  const tile = (on: boolean) => `flex flex-col items-start gap-1 text-left px-3 py-2.5 rounded-2xl border-2 transition-colors ${on ? 'bg-brand/10 border-brand' : 'bg-surface border-border'}`
+  const tileIcon = (on: boolean) => `w-[30px] h-[30px] rounded-[10px] flex items-center justify-center ${on ? 'bg-brand text-white' : 'bg-bg text-brand-text'}`
+
   return (
     <div className="flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto">
       <div className="header-row mp-glass-header sticky top-0 z-20 gap-3 px-5 pt-header pb-header">
         {!isDesktop && (
-          <button onClick={() => navigate(-1)} className="back-btn">
+          <button onClick={() => navigate(-1)} className="back-btn" aria-label="Back">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
         )}
-        <h1 className="text-xl font-bold text-text-primary">Back up wallet</h1>
+        <h1 className="text-xl font-bold text-text-primary flex-1">Back up wallet</h1>
+        {checkedAt
+          ? <span className="flex items-center gap-1 text-xs font-bold text-success bg-success/15 rounded-full px-2.5 py-1"><CheckCircle className="w-3.5 h-3.5" /> Backed up</span>
+          : <span className="text-xs font-bold text-warning bg-warning/15 rounded-full px-2.5 py-1">Not checked</span>}
       </div>
-      <div className="px-4 space-y-4">
-        {checkedAt ? (
-          <Card className="p-4 flex items-center gap-3 bg-success/10 border-success/30">
-            <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
-            <div>
-              <p className="text-sm font-bold text-success">Backed up</p>
-              <p className="text-xs text-text-secondary">Checked on {checkedAt.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-            </div>
-          </Card>
-        ) : (
-          <Card className="p-4 flex items-center gap-3 bg-warning/10 border-warning/30">
-            <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0" />
-            <div>
-              <p className="text-sm font-bold text-warning">Backup not checked yet</p>
-              <p className="text-xs text-text-secondary">Write down your recovery phrase, then check it below.</p>
-            </div>
-          </Card>
-        )}
-        <div className="p-3 bg-warning/10 border border-warning/30 rounded-2xl">
-          <p className="text-sm text-warning">Your recovery phrase restores this whole wallet, on any device or wallet app; the private key restores this one account. Never share either: anyone with them controls your wallet. Avoid taking a screenshot - write them down instead.</p>
+      <div className="px-2.5 space-y-3">
+        <div className="flex items-start gap-2.5 p-3 bg-surface border border-border rounded-2xl">
+          {checkedAt
+            ? <CheckCircle className="w-[18px] h-[18px] text-success flex-shrink-0 mt-0.5" />
+            : <AlertTriangle className="w-[18px] h-[18px] text-warning flex-shrink-0 mt-0.5" />}
+          <p className="text-[13px] leading-[1.45] text-text-secondary">
+            {checkedAt ? `Checked on ${checkedAt.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}. ` : ''}
+            Write it down on paper. Anyone with it controls your wallet - never share it or take a screenshot.
+          </p>
         </div>
 
         {!revealed ? (
@@ -705,50 +711,49 @@ function BackupRecoveryPhrasePage() {
             />
             {passcodeError && <p role="alert" className="text-xs text-danger text-center">{passcodeError}</p>}
           </Card>
+        ) : checking ? (
+          <Card className="p-3 space-y-3">
+            <h3 className="font-bold text-text-primary">Check your backup</h3>
+            {walletAddress && <WalletSecretFrame address={walletAddress} what="verify" passcode={revealPasscode} onVerified={onCheckPassed} />}
+            <button onClick={() => setChecking(false)} className="w-full py-2 text-sm font-semibold text-text-secondary">Show my backup again</button>
+          </Card>
         ) : (
           <>
-            <div className="flex justify-end">
-              <button onClick={hide} className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
-                <EyeOff className="w-3.5 h-3.5" /> Hide all
+            <div className="grid grid-cols-2 gap-2.5">
+              <button type="button" onClick={() => pick('phrase')} aria-pressed={show === 'phrase'} className={tile(show === 'phrase')}>
+                <span className={tileIcon(show === 'phrase')}><FileText className="w-[18px] h-[18px]" /></span>
+                <span className="text-sm font-extrabold text-text-primary">Recovery phrase</span>
+                <span className="text-[11.5px] font-semibold text-text-secondary leading-snug">{wordCount} words · whole wallet</span>
+              </button>
+              <button type="button" onClick={() => pick('key')} aria-pressed={show === 'key'} className={tile(show === 'key')}>
+                <span className={tileIcon(show === 'key')}><Key className="w-[18px] h-[18px]" /></span>
+                <span className="text-sm font-extrabold text-text-primary">Private key</span>
+                <span className="text-[11.5px] font-semibold text-text-secondary leading-snug">64 characters · this account</span>
               </button>
             </div>
 
-            {/* Side by side on a wide screen, one under the other on a phone.
-                Hidden while checking, so the words come from the written copy. */}
-            {!checking && (
-              <div className="grid gap-4 lg:grid-cols-2 items-start">
-                <Card className="p-5 space-y-3 min-w-0">
-                  <div>
-                    <h3 className="font-bold text-text-primary">Recovery phrase</h3>
-                    <p className="text-xs text-text-secondary mt-0.5">Restores the whole wallet - write all the words down, in order.</p>
-                  </div>
-                  {walletAddress && <WalletSecretFrame address={walletAddress} what="mnemonic" passcode={revealPasscode} />}
-                </Card>
-                <Card className="p-5 space-y-3 min-w-0">
-                  <div>
-                    <h3 className="font-bold text-text-primary">Private key</h3>
-                    <p className="text-xs text-text-secondary mt-0.5">This account only - for importing it into another wallet app.</p>
-                  </div>
-                  {walletAddress && <WalletSecretFrame address={walletAddress} what="privateKey" passcode={revealPasscode} />}
-                </Card>
-              </div>
-            )}
+            <Card className="p-2.5 space-y-2">
+              <p className="text-[12.5px] text-text-secondary px-1">
+                {show === 'phrase' ? `Write all ${wordCount} words down, in this order.` : 'Use it to import this account into MetaMask, Rabby or OKX.'}
+              </p>
+              {walletAddress && opened.has('phrase') && (
+                <div className={show === 'phrase' ? '' : 'hidden'}>
+                  <WalletSecretFrame address={walletAddress} what="mnemonic" passcode={revealPasscode} height={phraseFrameHeight(wordCount)} />
+                </div>
+              )}
+              {walletAddress && opened.has('key') && (
+                <div className={show === 'key' ? '' : 'hidden'}>
+                  <WalletSecretFrame address={walletAddress} what="privateKey" passcode={revealPasscode} />
+                </div>
+              )}
+            </Card>
 
-            {checking ? (
-              <Card className="p-5 space-y-3">
-                <h3 className="font-bold text-text-primary">Check your backup</h3>
-                {walletAddress && <WalletSecretFrame address={walletAddress} what="verify" passcode={revealPasscode} onVerified={onCheckPassed} />}
-                <button onClick={() => setChecking(false)} className="w-full py-2 text-sm font-semibold text-text-secondary">Show my backup again</button>
-              </Card>
-            ) : (
-              <Card className="p-4 space-y-3">
-                <h3 className="font-bold text-text-primary">Check your backup</h3>
-                <p className="text-sm text-text-secondary">Make sure the recovery phrase you wrote down is right: tap the correct word for 3 of its numbers, with the phrase hidden.</p>
-                <Button fullWidth variant="secondary" onClick={() => setChecking(true)}>
-                  <CheckCircle className="w-4 h-4" /> {checkedAt ? 'Check again' : 'Check my backup'}
-                </Button>
-              </Card>
-            )}
+            <div className="space-y-2 pt-1">
+              <Button fullWidth onClick={() => setChecking(true)} variant={checkedAt ? 'secondary' : undefined}>
+                <CheckCircle className="w-4 h-4" /> {checkedAt ? 'Check again' : "I've written it down - check my backup"}
+              </Button>
+              <button onClick={hide} className="w-full py-2.5 text-[13px] font-bold text-text-secondary">Hide</button>
+            </div>
           </>
         )}
       </div>
