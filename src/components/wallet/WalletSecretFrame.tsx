@@ -18,13 +18,16 @@ const LEGACY_SHOW_MS = 900
 /** Not on screen after this long: explain, and offer Try again. */
 const SLOW_MS = 15_000
 
-export function WalletSecretFrame({ address, what, passcode, height, onError }: {
+export function WalletSecretFrame({ address, what, passcode, height, onError, onVerified }: {
   address: string
-  what: 'mnemonic' | 'privateKey'
+  /** 'verify': the backup check (tap the right words) - the phrase isn't shown. */
+  what: 'mnemonic' | 'privateKey' | 'verify'
   /** The passcode just entered: the frame checks it before showing either secret. */
   passcode?: string
   height?: number
   onError?: (e: WalletFrameError | Error) => void
+  /** 'verify': the person picked the right words (the page says only that). */
+  onVerified?: () => void
 }) {
   const [src, setSrc] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
@@ -34,8 +37,10 @@ export function WalletSecretFrame({ address, what, passcode, height, onError }: 
   const [slow, setSlow] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const frameRef = useRef<HTMLIFrameElement>(null)
-  const h = height ?? (what === 'mnemonic' ? 260 : 150)
-  const label = what === 'mnemonic' ? 'recovery phrase' : 'private key'
+  const onVerifiedRef = useRef(onVerified)
+  onVerifiedRef.current = onVerified
+  const h = height ?? (what === 'mnemonic' ? 260 : what === 'verify' ? 480 : 150)
+  const label = what === 'privateKey' ? 'private key' : what === 'verify' ? 'backup check' : 'recovery phrase'
 
   useEffect(() => {
     if (drawn || failed) { setSlow(false); return }
@@ -60,7 +65,9 @@ export function WalletSecretFrame({ address, what, passcode, height, onError }: 
     const origin = walletOrigin()
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== origin || e.source !== frameRef.current?.contentWindow) return
-      if ((e.data as { type?: string } | null)?.type === 'mp-reveal') setDrawn(true)
+      const d = e.data as { type?: string; ok?: boolean } | null
+      if (d?.type === 'mp-reveal') setDrawn(true)
+      if (d?.type === 'mp-verify' && d.ok === true) onVerifiedRef.current?.()
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
@@ -79,7 +86,7 @@ export function WalletSecretFrame({ address, what, passcode, height, onError }: 
         <iframe
           ref={frameRef}
           src={src}
-          title={what === 'mnemonic' ? 'Your recovery phrase' : 'Your private key'}
+          title={what === 'mnemonic' ? 'Your recovery phrase' : what === 'verify' ? 'Check your backup' : 'Your private key'}
           allow="clipboard-write"
           referrerPolicy="no-referrer"
           // Older reveal pages never send the message: show them shortly after they load.

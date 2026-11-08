@@ -82,7 +82,67 @@ function blurred(content: HTMLElement, copy: HTMLButtonElement, what: 'mnemonic'
   return box
 }
 
-function render(what: 'mnemonic' | 'privateKey', secret: string) {
+// ── Backup check (what = 'verify'), like Rabby / OKX ─────────────────────────
+// Three word positions at random; for each, four word chips - the right word
+// and other words from the same phrase - in random order. Everything happens
+// in this page: the app is told only that the check passed (or the person
+// gave up), never the words, so it can't learn the phrase from this.
+function tellApp(msg: Record<string, unknown>) {
+  if (parent === window) return
+  for (const origin of PARENTS) { try { parent.postMessage(msg, origin) } catch { /* */ } }
+}
+function randomInt(n: number): number {
+  const r = new Uint32Array(1); crypto.getRandomValues(r); return r[0] % n
+}
+function shuffled<T>(xs: T[]): T[] {
+  const a = [...xs]
+  for (let i = a.length - 1; i > 0; i--) { const j = randomInt(i + 1); [a[i], a[j]] = [a[j], a[i]] }
+  return a
+}
+function renderQuiz(words: string[], note?: string) {
+  const positions = new Set<number>()
+  while (positions.size < Math.min(3, words.length)) positions.add(randomInt(words.length))
+  const asked = [...positions].sort((a, b) => a - b)
+  const picked = new Map<number, string>()
+  const form = el('div', 'quiz')
+  if (note) form.append(el('p', 'error', note))
+  const confirm = el('button', 'copy', 'Confirm')
+  confirm.type = 'button'
+  confirm.disabled = true
+  for (const pos of asked) {
+    const right = words[pos]
+    const others = shuffled([...new Set(words.filter(w => w !== right))]).slice(0, 3)
+    const row = el('div', 'quiz-row')
+    row.append(el('span', 'quiz-n', `Word #${pos + 1}`))
+    const chips = el('div', 'chips')
+    for (const w of shuffled([right, ...others])) {
+      const b = el('button', 'chip', w)
+      b.type = 'button'
+      b.setAttribute('aria-pressed', 'false')
+      b.onclick = () => {
+        picked.set(pos, w)
+        for (const c of chips.querySelectorAll('button')) c.setAttribute('aria-pressed', String(c === b))
+        confirm.disabled = picked.size < asked.length
+      }
+      chips.append(b)
+    }
+    row.append(chips)
+    form.append(row)
+  }
+  confirm.onclick = () => {
+    const ok = asked.every(p => picked.get(p) === words[p])
+    if (!ok) { renderQuiz(words, "That's not right. Check your written recovery phrase and try again."); return }
+    root.replaceChildren(el('p', 'quiz-done', '✓ Backup checked - your recovery phrase is written down correctly.'))
+    tellApp({ type: 'mp-verify', ok: true })
+    drawn()
+  }
+  form.append(confirm)
+  root.replaceChildren(form)
+  drawn()
+}
+
+function render(what: 'mnemonic' | 'privateKey' | 'verify', secret: string) {
+  if (what === 'verify') { renderQuiz(secret.split(' ')); return }
   if (what === 'mnemonic') {
     const grid = el('ol', 'words')
     secret.split(' ').forEach((w, i) => {

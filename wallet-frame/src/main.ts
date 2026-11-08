@@ -134,7 +134,7 @@ function isFreeMessage(message: unknown): boolean {
 // app's origin. Tickets die at expiry and on lock / forget.
 const REVEAL_TTL_MS = 2 * 60_000
 const MAX_TICKETS = 4
-const tickets = new Map<string, { secret: string; what: 'mnemonic' | 'privateKey'; address: string; expires: number }>()
+const tickets = new Map<string, { secret: string; what: 'mnemonic' | 'privateKey' | 'verify'; address: string; expires: number }>()
 try {
   const channel = new BroadcastChannel(REVEAL_CHANNEL)
   channel.onmessage = (e) => {
@@ -156,7 +156,7 @@ function dropTickets(address?: string | null) {
   }
 }
 
-function newTicket(address: string, secret: string, what: 'mnemonic' | 'privateKey'): string {
+function newTicket(address: string, secret: string, what: 'mnemonic' | 'privateKey' | 'verify'): string {
   dropTickets(null) // expired ones only
   while (tickets.size >= MAX_TICKETS) tickets.delete(tickets.keys().next().value!)
   const ticket = bytesToHex(crypto.getRandomValues(new Uint8Array(16)))
@@ -312,7 +312,10 @@ const handlers: Handlers = {
       await vault.checkPasscode(a, String(passcode ?? ''))
       return { ticket: newTicket(a, vault.keyFor(a), what) }
     }
-    if (what !== 'mnemonic') throw new RpcError('invalid', 'Nothing to reveal')
+    // 'verify': the backup check (Rabby / OKX style) - reveal.html asks for
+    // a few words as taps and tells the app only pass / fail; the phrase is
+    // never shown in that mode.
+    if (what !== 'mnemonic' && what !== 'verify') throw new RpcError('invalid', 'Nothing to reveal')
     vault.keyFor(a) // the wallet must be open too
     const phrase = await vault.readPhrase(a, typeof passcode === 'string' ? passcode : undefined)
     if (!phrase) throw new RpcError('not-found', 'This wallet has no recovery phrase on this device')
