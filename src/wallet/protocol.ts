@@ -67,7 +67,7 @@ export interface WalletRpc {
    * One-time ticket for reveal.html to show a secret inside the frame.
    * Both need the passcode (or, for the key, an approval from the last 2 minutes).
    */
-  'reveal:grant': [{ address: string; what: 'mnemonic' | 'privateKey'; passcode?: string }, { ticket: string }]
+  'reveal:grant': [{ address: string; what: 'mnemonic' | 'privateKey' | 'verify'; passcode?: string }, { ticket: string }]
   /**
    * The person just entered the passcode (or a fingerprint released it): the
    * frame checks it itself and then signs value-moving requests for

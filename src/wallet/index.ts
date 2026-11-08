@@ -91,7 +91,7 @@ export async function checkRecoveryWords(address: string, answers: Record<number
  * URL for wallet-frame/reveal.html showing this wallet's phrase or key - to
  * be put in a visible iframe (components/wallet/WalletSecretFrame.tsx).
  */
-export async function revealUrl(address: string, what: 'mnemonic' | 'privateKey', opts: { passcode?: string; theme?: 'dark' | 'light' } = {}): Promise<string> {
+export async function revealUrl(address: string, what: 'mnemonic' | 'privateKey' | 'verify', opts: { passcode?: string; theme?: 'dark' | 'light' } = {}): Promise<string> {
   const { ticket } = await callWallet('reveal:grant', { address, what, passcode: opts.passcode })
   return `${walletOrigin()}/reveal.html#t=${ticket}&theme=${opts.theme ?? 'dark'}`
 }

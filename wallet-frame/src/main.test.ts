@@ -276,6 +276,19 @@ describe('confirm-word check', () => {
     expect((await ask('mnemonic:check', { address, answers: { 0: 'a', 1: 'b', 2: 'c' } }))!.msg.error.code).toBe('rate-limited')
   })
 
+  it('the tap-the-words check (reveal.html verify) needs the phrase open or the passcode, like showing it', async () => {
+    // Just created (before the passcode is set): the phrase is in memory.
+    const created = (await ask('create', {}))!.msg.result.address
+    expect((await ask('reveal:grant', { address: created, what: 'verify' }))!.msg.result.ticket).toMatch(/^0x/)
+    // Later: only with the passcode.
+    const phrase = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+    const address = (await ask('import', { kind: 'import-seed', secret: phrase, passcode: '123456' }))!.msg.result.address
+    await ask('lock', { address }); await ask('unlock', { address, passcode: '123456' })
+    expect((await ask('reveal:grant', { address, what: 'verify' }))!.msg.error.code).toBe('not-found')
+    expect((await ask('reveal:grant', { address, what: 'verify', passcode: '123456' }))!.msg.result.ticket).toMatch(/^0x/)
+    expect((await ask('reveal:grant', { address, what: 'other' }))!.msg.error.code).toBe('invalid')
+  })
+
   it('later (Back up wallet), opens the saved phrase with the passcode to check it', async () => {
     const phrase = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
     const imported = await ask('import', { kind: 'import-seed', secret: phrase, passcode: '123456' })

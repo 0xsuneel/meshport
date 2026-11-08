@@ -492,6 +492,24 @@ export function markWalletBackedUp(walletAddress: string): Promise<void> {
   try { localStorage.setItem(BACKUP_OK_PREFIX + walletAddress.toLowerCase(), '1') } catch { /* storage blocked */ }
   return bindWalletToDevice(walletAddress)
 }
+const BACKUP_CHECKED_PREFIX = 'meshport_backup_checked_at_'
+/**
+ * The person passed a backup check (picked the right words of their written
+ * recovery phrase - at creation or from Back up wallet): remembered with the
+ * time on this phone, like the "backed up" mark other wallets show.
+ */
+export function markBackupChecked(walletAddress: string): Promise<void> {
+  try { localStorage.setItem(BACKUP_CHECKED_PREFIX + walletAddress.toLowerCase(), new Date().toISOString()) } catch { /* storage blocked */ }
+  return markWalletBackedUp(walletAddress)
+}
+/** When this wallet's backup was last checked on this phone, or null. */
+export function backupCheckedAt(walletAddress: string): Date | null {
+  try {
+    const v = localStorage.getItem(BACKUP_CHECKED_PREFIX + walletAddress.toLowerCase())
+    const d = v ? new Date(v) : null
+    return d && Number.isFinite(d.getTime()) ? d : null
+  } catch { return null }
+}
 export function isWalletBackedUp(walletAddress: string): boolean {
   try { return localStorage.getItem(BACKUP_OK_PREFIX + walletAddress.toLowerCase()) === '1' } catch { return false }
 }

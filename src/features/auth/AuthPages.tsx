@@ -15,13 +15,13 @@ import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { validateMnemonic } from '@/lib/arc'
-import { createWallet, importWallet, walletStatus, checkRecoveryWords, setWalletPasscode, lockWallet, WalletFrameError, type WalletAccount } from '@/wallet'
+import { createWallet, importWallet, walletStatus, setWalletPasscode, lockWallet, WalletFrameError, type WalletAccount } from '@/wallet'
 import { WalletSecretFrame } from '@/components/wallet/WalletSecretFrame'
 import {
   supabase, upsertUserProfile,
   isUsernameTakenDb, getUserByWalletAddress, ensureAnonSession, lookupAccountByWallet,
 } from '@/lib/supabase'
-import { markWalletBackedUp } from '@/lib/security'
+import { markWalletBackedUp, markBackupChecked } from '@/lib/security'
 import { LoadingDots } from '@/components/ui/LoadingDots'
 import {
   getSignupKind, getChosenKind, getAuthMode, setAuthIntent, clearAuthIntent, registerNameOnchain, type AccountKind,
@@ -299,14 +299,6 @@ export function WalletSetupPage() {
 }
 
 // ─── Create Wallet ─────────────────────────────────────────────────────────────
-/** Three distinct, ascending word positions for the backup check. */
-function pickVerifyIndexes(wordCount: number): number[] {
-  const picked = new Set<number>()
-  const rand = new Uint32Array(1)
-  while (picked.size < 3) { crypto.getRandomValues(rand); picked.add(rand[0] % wordCount) }
-  return [...picked].sort((a, b) => a - b)
-}
-
 export function CreateWalletPage() {
   const navigate = useNavigate()
   const setWallet = useAuthStore(s => s.setWallet)
@@ -323,11 +315,9 @@ export function CreateWalletPage() {
   // (WalletSecretFrame) and the confirm words are checked there.
   const [walletData, setWalletData] = useState<{ address: string; signer: WalletAccount; wordCount: number } | null>(null)
   const [loading, setLoading] = useState(false)
-  const [confirmWords, setConfirmWords] = useState<string[]>(['', '', ''])
   const [confirmError, setConfirmError] = useState('')
   // Three random positions, picked per wallet and only revealed on the verify
   // screen - one fixed, highlighted word could be noted without saving the rest.
-  const [verifyIdx, setVerifyIdx] = useState<number[]>([])
   // No inline guards - handled entirely by RequireNoWallet in App.tsx router
 
   const handleGenerate = async () => {
@@ -335,24 +325,17 @@ export function CreateWalletPage() {
     try {
       const signer = await createWallet('create')
       const { wordCount } = await walletStatus(signer.address)
-      setVerifyIdx(pickVerifyIndexes(wordCount || 12))
-      setConfirmWords(['', '', ''])
       setWalletData({ address: signer.address, signer, wordCount: wordCount || 12 }); setStep('backup')
     } catch (e) {
       showToastMessage(e instanceof Error ? e.message : "Couldn't create a wallet", 'error')
     } finally { setLoading(false) }
   }
 
+  // The backup check (8 Nov, like Rabby / OKX): the wallet frame asks for 3
+  // words as taps and reports only that they were right; then the wallet is
+  // set up.
   const handleConfirm = async () => {
     if (!walletData) return
-    const answers: Record<number, string> = {}
-    verifyIdx.forEach((wi, i) => { answers[wi] = confirmWords[i] })
-    let check: { ok: boolean; wrong: number[] }
-    try { check = await checkRecoveryWords(walletData.address, answers) }
-    catch (e) { setConfirmError(e instanceof Error ? e.message : "Couldn't check the words"); return }
-    if (!check.ok) {
-      setConfirmError(`One or more of words ${verifyIdx.map(wi => `#${wi + 1}`).join(', ')} is incorrect. Check your backup.`); return
-    }
     setConfirmError('')
     setWallet(walletData.address, walletData.signer, 'create')
     setBalance(0)
@@ -393,7 +376,7 @@ export function CreateWalletPage() {
         // The frame now checks this passcode: no hash kept here (security.ts FRAME_PASSCODE).
         { const { FRAME_PASSCODE } = await import('@/lib/security'); useAuthStore.getState().setPasscode(FRAME_PASSCODE) }
         // The word check on the previous screen proved the phrase was saved.
-        await markWalletBackedUp(walletData.address)
+        await markBackupChecked(walletData.address)
       } catch (e) { console.warn('[Wallet] Local key backup failed:', e) }
       finally { const { clearRawPasscode } = await import('@/lib/restoreWallet'); clearRawPasscode() }
     }
@@ -405,7 +388,7 @@ export function CreateWalletPage() {
       <button onClick={() => {
         if (step === 'generate') navigate(-1)
         else if (step === 'backup') setStep('generate')
-        else if (step === 'confirm') { setStep('backup'); setConfirmWords(['', '', '']); setConfirmError('') }
+        else if (step === 'confirm') { setStep('backup'); setConfirmError('') }
       }} className="back-btn" style={{marginBottom:14}}>
         <ArrowLeft className="w-5 h-5 text-text-primary" />
       </button>
@@ -443,22 +426,17 @@ export function CreateWalletPage() {
             </div>
             {/* Rendered by the wallet frame - the phrase never enters the app. */}
             <WalletSecretFrame address={walletData.address} what="mnemonic" height={walletData.wordCount > 12 ? 360 : 260} />
-            <Button fullWidth onClick={() => { setConfirmWords(['', '', '']); setConfirmError(''); setStep('confirm') }}>I've Written It Down →</Button>
+            <Button fullWidth onClick={() => { setConfirmError(''); setStep('confirm') }}>I've Written It Down →</Button>
           </motion.div>
         )}
         {step === 'confirm' && walletData && (
           <motion.div key="confirm" initial={false} className="space-y-6">
-            <div><h2 className="text-2xl font-bold text-text-primary">Verify Your Backup</h2>
-              <p className="text-text-secondary mt-1">Enter these 3 words from your recovery phrase</p></div>
-            <div className="space-y-4">
-              {verifyIdx.map((wi, i) => (
-                <Input key={wi} label={`Word #${wi + 1}`} placeholder="Type the word..." value={confirmWords[i]}
-                  onChange={e => { const v = e.target.value; setConfirmWords(ws => ws.map((w, j) => j === i ? v : w)); setConfirmError('') }}
-                  autoFocus={i === 0} autoComplete="off" autoCapitalize="none" spellCheck={false} />
-              ))}
-            </div>
+            <div><h2 className="text-2xl font-bold text-text-primary">Check your backup</h2>
+              <p className="text-text-secondary mt-1">Tap the right word for each number, from the recovery phrase you just wrote down.</p></div>
+            {/* In the wallet frame: the app never sees the words, only that they were right. */}
+            <WalletSecretFrame address={walletData.address} what="verify" onVerified={() => { void handleConfirm() }} />
             {confirmError && <div role="alert" className="flex items-start gap-2 p-3 bg-danger/10 border border-danger/30 rounded-2xl"><XCircle className="w-4 h-4 text-danger mt-0.5" /><p className="text-sm text-danger">{confirmError}</p></div>}
-            <Button fullWidth onClick={handleConfirm} disabled={confirmWords.some(w => !w.trim())}>Confirm & Create Wallet</Button>
+            <button type="button" onClick={() => setStep('backup')} className="w-full py-2 text-sm font-semibold text-text-secondary">Show my recovery phrase again</button>
           </motion.div>
         )}
         {step === 'success' && walletData && (

@@ -20,7 +20,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import {
   ArrowLeft, Shield, Fingerprint, Lock, KeyRound, ChevronRight,
-  Bell, BellOff, CheckCircle, EyeOff,
+  Bell, BellOff, CheckCircle, EyeOff, AlertTriangle,
   ShoppingCart, Tag, Wallet, Ban, Clock as ClockIcon, Scale, RefreshCw,
   Check, Sun, Moon, Monitor, X, Palette,
   Store,
@@ -619,16 +619,25 @@ function BackupRecoveryPhrasePage() {
   const [passcodeError, setPasscodeError] = useState('')
   const [, setVerifying] = useState(false)
 
-  // "Check my backup" (8 Nov - replaces "Mark as Verified", which only took
-  // the user's word for it): 3 words at random, typed from the written copy
-  // with the phrase hidden, checked by the wallet frame - as when the wallet
-  // was created. Passing marks this wallet as backed up on this phone.
+  // "Check my backup" (8 Nov), like Rabby / OKX: replaces "Mark as Verified",
+  // which only took the user's word for it. The wallet frame asks for 3
+  // words as taps (4 choices each, the phrase hidden) and tells the app only
+  // that it passed. Passing is remembered with the date on this phone.
   const [checking, setChecking] = useState(false)
-  const [checkIdx, setCheckIdx] = useState<number[]>([])
-  const [checkWords, setCheckWords] = useState(['', '', ''])
-  const [checkError, setCheckError] = useState('')
-  const [checkBusy, setCheckBusy] = useState(false)
   const [checked, setChecked] = useState(false)
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null)
+  useEffect(() => {
+    if (!walletAddress) return
+    import('@/lib/security').then(m => setCheckedAt(m.backupCheckedAt(walletAddress))).catch(() => {})
+  }, [walletAddress, checked])
+  const onCheckPassed = async () => {
+    if (!walletAddress) return
+    const { markBackupChecked } = await import('@/lib/security')
+    await markBackupChecked(walletAddress).catch(() => {})
+    setChecked(true)
+    showToastMessage('Backup checked', 'success')
+    setTimeout(() => setChecking(false), 1200) // let the ✓ in the frame show first
+  }
 
   const handleReveal = async () => {
     if (passcode.length < 6) { setPasscodeError('Enter your 6-digit passcode'); return }
@@ -648,34 +657,6 @@ function BackupRecoveryPhrasePage() {
   }
   const hide = () => { setRevealed(false); setRevealPasscode(''); setChecking(false) }
 
-  const startCheck = async () => {
-    if (!walletAddress) return
-    const { walletStatus } = await import('@/wallet')
-    const words = (await walletStatus(walletAddress).catch(() => null))?.wordCount || 12
-    const picked = new Set<number>()
-    const r = new Uint32Array(1)
-    while (picked.size < 3) { crypto.getRandomValues(r); picked.add(r[0] % words) }
-    setCheckIdx([...picked].sort((a, b) => a - b))
-    setCheckWords(['', '', '']); setCheckError(''); setChecking(true)
-  }
-  const runCheck = async () => {
-    if (!walletAddress) return
-    setCheckBusy(true); setCheckError('')
-    try {
-      const { checkRecoveryWords } = await import('@/wallet')
-      const answers: Record<number, string> = {}
-      checkIdx.forEach((wi, i) => { answers[wi] = checkWords[i] })
-      const r = await checkRecoveryWords(walletAddress, answers, revealPasscode)
-      if (!r.ok) { setCheckError(`One or more of words ${checkIdx.map(i => `#${i + 1}`).join(', ')} is incorrect. Check your written backup.`); return }
-      setChecked(true); setChecking(false)
-      const { markWalletBackedUp } = await import('@/lib/security')
-      await markWalletBackedUp(walletAddress).catch(() => {})
-      showToastMessage('Backup checked', 'success')
-    } catch (e) {
-      setCheckError(e instanceof Error ? e.message : "Couldn't check the words. Try again.")
-    } finally { setCheckBusy(false) }
-  }
-
   return (
     <div className="flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto">
       <div className="header-row mp-glass-header sticky top-0 z-20 gap-3 px-5 pt-header pb-header">
@@ -687,10 +668,21 @@ function BackupRecoveryPhrasePage() {
         <h1 className="text-xl font-bold text-text-primary">Back up wallet</h1>
       </div>
       <div className="px-4 space-y-4">
-        {checked && (
+        {checkedAt ? (
           <Card className="p-4 flex items-center gap-3 bg-success/10 border-success/30">
             <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
-            <p className="text-sm font-bold text-success">Backup checked - your written recovery phrase is correct</p>
+            <div>
+              <p className="text-sm font-bold text-success">Backed up</p>
+              <p className="text-xs text-text-secondary">Checked on {checkedAt.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+            </div>
+          </Card>
+        ) : (
+          <Card className="p-4 flex items-center gap-3 bg-warning/10 border-warning/30">
+            <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-warning">Backup not checked yet</p>
+              <p className="text-xs text-text-secondary">Write down your recovery phrase, then check it below.</p>
+            </div>
           </Card>
         )}
         <div className="p-3 bg-warning/10 border border-warning/30 rounded-2xl">
@@ -743,26 +735,17 @@ function BackupRecoveryPhrasePage() {
             )}
 
             {checking ? (
-              <Card className="p-5 space-y-4">
-                <div>
-                  <h3 className="font-bold text-text-primary">Check your backup</h3>
-                  <p className="text-sm text-text-secondary mt-1">Type these words from the recovery phrase you wrote down.</p>
-                </div>
-                {checkIdx.map((wi, i) => (
-                  <Input key={wi} label={`Word #${wi + 1}`} placeholder="Type the word..." value={checkWords[i]}
-                    onChange={e => { const v = e.target.value; setCheckWords(ws => ws.map((w, j) => j === i ? v : w)); setCheckError('') }}
-                    autoFocus={i === 0} autoComplete="off" autoCapitalize="none" spellCheck={false} />
-                ))}
-                {checkError && <p role="alert" className="text-sm text-danger">{checkError}</p>}
-                <Button fullWidth loading={checkBusy} disabled={checkWords.some(w => !w.trim())} onClick={runCheck}>Check</Button>
+              <Card className="p-5 space-y-3">
+                <h3 className="font-bold text-text-primary">Check your backup</h3>
+                {walletAddress && <WalletSecretFrame address={walletAddress} what="verify" passcode={revealPasscode} onVerified={onCheckPassed} />}
                 <button onClick={() => setChecking(false)} className="w-full py-2 text-sm font-semibold text-text-secondary">Show my backup again</button>
               </Card>
-            ) : !checked && (
+            ) : (
               <Card className="p-4 space-y-3">
                 <h3 className="font-bold text-text-primary">Check your backup</h3>
-                <p className="text-sm text-text-secondary">Make sure the recovery phrase you wrote down is right: you'll type 3 of its words, with the phrase hidden.</p>
-                <Button fullWidth variant="secondary" onClick={startCheck}>
-                  <CheckCircle className="w-4 h-4" /> Check my backup
+                <p className="text-sm text-text-secondary">Make sure the recovery phrase you wrote down is right: tap the correct word for 3 of its numbers, with the phrase hidden.</p>
+                <Button fullWidth variant="secondary" onClick={() => setChecking(true)}>
+                  <CheckCircle className="w-4 h-4" /> {checkedAt ? 'Check again' : 'Check my backup'}
                 </Button>
               </Card>
             )}
