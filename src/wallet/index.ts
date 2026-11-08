@@ -83,8 +83,8 @@ export async function chatOpenV1(address: string, peer: Uint8Array, iv: Uint8Arr
 }
 
 /** Confirm-word check right after a new wallet's phrase was shown. */
-export async function checkRecoveryWords(address: string, answers: Record<number, string>): Promise<{ ok: boolean; wrong: number[] }> {
-  return callWallet('mnemonic:check', { address, answers })
+export async function checkRecoveryWords(address: string, answers: Record<number, string>, passcode?: string): Promise<{ ok: boolean; wrong: number[] }> {
+  return callWallet('mnemonic:check', { address, answers, ...(passcode ? { passcode } : {}) })
 }
 
 /**

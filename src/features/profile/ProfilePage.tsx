@@ -169,8 +169,8 @@ export function ProfilePage() {
 
       {/*
         One backup entry for every wallet (8 Nov): "Back up wallet" shows the
-        recovery phrase - it restores the whole wallet, private key included.
-        A wallet imported from a private key has no phrase, so it shows the key.
+        recovery phrase and the private key side by side. A wallet imported
+        from a private key has no phrase, so it shows the key.
       */}
       {isWallet && (
         <MenuItem

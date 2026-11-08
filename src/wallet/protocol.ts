@@ -62,7 +62,7 @@ export interface WalletRpc {
    * Confirm-word check after backup: { wordIndex: word }, 3+ positions.
    * Pass / fail for the whole set only (`wrong` is always empty).
    */
-  'mnemonic:check': [{ address: string; answers: Record<number, string> }, { ok: boolean; wrong: number[] }]
+  'mnemonic:check': [{ address: string; answers: Record<number, string>; passcode?: string }, { ok: boolean; wrong: number[] }]
   /**
    * One-time ticket for reveal.html to show a secret inside the frame.
    * Both need the passcode (or, for the key, an approval from the last 2 minutes).
