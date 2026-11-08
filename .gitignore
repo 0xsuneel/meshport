@@ -49,3 +49,10 @@ android/*.apk
 android/app/
 android/build/
 android/.gradle/
+
+# Build output of tsc -b (tsconfig.node.json is composite) - never commit
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+vitest.config.js
+vitest.config.d.ts

@@ -6,7 +6,7 @@ Thanks for your interest in MeshPort. This is a testnet financial application â€
 
 1. Read the [README](./README.md), especially [Architecture](./README.md#architecture), [Transaction Lifecycle](./README.md#transaction-lifecycle), and the [Developer Guide](./README.md#developer-guide--where-to-start).
 2. For anything touching transactions, the ledger, multichain, or custody, also read [`ARCHITECTURE.md`](./ARCHITECTURE.md) and the relevant deep-dive documents under [`docs/`](./docs/) â€” several past bugs and their fixes are documented there in detail, and repeating them is avoidable.
-3. Check `LAUNCH_CHECKLIST.md` and `CHANGES.md` for recent context on what's actively in flux.
+3. Check the recent git history (`git log`) for context on what's actively in flux.
 
 ## Setup
 

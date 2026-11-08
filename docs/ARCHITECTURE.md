@@ -532,9 +532,9 @@ Cron-triggered functions (`claim-worker` in `sweep` mode, `deposit-scan-all`) re
 - **Client/server separation for secrets:** RPC provider API keys (`DRPC_KEY`, `ALCHEMY_KEY`, etc.) are never placed in `VITE_`-prefixed variables; the browser only ever talks to same-origin proxy endpoints (`/api/arc-rpc`, `/api/swap-proxy`, `/api/relay-*`) that hold the real credentials server-side.
 - **Transaction authorization:** every fund-moving action (send, swap, multichain transfer, bulk pay, escrow release) requires an explicit passcode confirmation step in the UI before a transaction is signed.
 - **P2P escrow contract hardening:** `P2PMeshportEscrowV2.sol` is a from-scratch security pass over the original escrow, fixing (with rationale documented in the contract's own comments): a first-depositor offer-hijack vulnerability, a `release()` call that trusted caller-supplied buyer/amount instead of on-chain state, and adds a proper INVESTIGATOR role alongside PAUSER/ADMIN. It uses OpenZeppelin's `ReentrancyGuard` and follows checks-effects-interactions throughout.
-- **What this repository does *not* claim:** there is no multi-party computation (MPC) key management, no hardware security module integration, and no independent third-party security audit report included in this repo (`docs/SECURITY_AUDIT_FINAL.md` is an internal audit document, not an external attestation). Treat this as testnet-grade security posture unless you've independently verified otherwise for your deployment.
+- **What this repository does *not* claim:** there is no multi-party computation (MPC) key management, no hardware security module integration, and no independent third-party security audit report included in this repo. Treat this as testnet-grade security posture unless you've independently verified otherwise for your deployment.
 
-See `docs/SECURITY_ARCHITECTURE.md` and `docs/SECURITY_AUDIT_FINAL.md` for the full internal design and audit notes this summary is drawn from.
+See `docs/SECURITY_ARCHITECTURE.md` for the full internal design this summary is drawn from.
 
 ## Transaction Lifecycle
 
@@ -686,7 +686,7 @@ Before making a structural change to transaction/ledger/state-machine logic, rea
 
 ## Troubleshooting
 
-These are drawn from the repository's own `LAUNCH_CHECKLIST.md` and inline code comments, not invented:
+These are drawn from the repository's inline code comments, not invented:
 
 - **Multichain claims from a specific external chain fail or hang** — the relay wallet (`RELAY_PRIVATE_KEY`) may be underfunded with that chain's native gas token. Check `/api/relay-gas` logs and fund the relay wallet on that chain.
 - **A claim sits in "settling" with no progress** — confirm `claim-worker`'s `pg_cron` schedule (migration `20260702120100_claim_worker_cron.sql`) is actually installed; the worker is designed to self-heal via that cron sweep, and a missing/disabled cron job removes that safety net.
@@ -702,7 +702,7 @@ These are drawn from the repository's own `LAUNCH_CHECKLIST.md` and inline code 
 - **Implemented and working:** authentication (Google/Email OTP + passcode), username system, Send/Receive, QR + payment links, Chat & Pay, Multichain Claim (CCTP), Multichain Transfer (CCTP + Unified Balance), Swap, Bulk Pay (Multicall3), Activity/history, notifications (in-app + push), P2P trading with on-chain escrow, rewards accrual + on-chain claim, admin panel.
 - **Dependent on external infrastructure that can bottleneck it:** Multichain Claim/Transfer depend on Circle's CCTP attestation service and a manually-funded relay wallet per external chain; Swap depends on Arc Testnet's own liquidity for EURC/cirBTC.
 - **Informational only, not a real backend feature:** the Treasury (staking) page.
-- **No independent external security audit** is included in this repo — `docs/SECURITY_AUDIT_FINAL.md` is an internal document, treat it accordingly.
+- **No independent external security audit** is included in this repo.
 - **Licensed under MIT** (see [License](#license)).
 
 ## Roadmap

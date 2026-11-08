@@ -175,7 +175,7 @@ Every user-triggered financial action that can plausibly be retried (network bli
 
 ## 8. Shadow validation
 
-Several docs (`docs/SHADOW_VALIDATION_REPORT.md`, `docs/PHASE_4_SHADOW_VALIDATION.md`, `docs/LEDGER_REAL_TRANSACTION_SHADOW_VALIDATION.md`) and the `indexer_shadow_reports` table describe a pattern used while migrating to the current ledger/indexer pipeline: the new pipeline ran alongside the old one, comparing outputs on real production data before the old pipeline was retired (`docs/SHADOW_DEPLOYMENT_RUNBOOK.md`, migration `20260830080000_retire_redundant_deposit_activity_consumer_sweep.sql`). `src/blockchain/shadowEventBus.ts` and `shadowEventMap.ts` are the client-side half of this comparison mechanism. If you're touching indexing or ledger logic, these documents contain real historical discrepancies that were caught this way — worth reading before assuming a new change is safe to ship without a similar comparison period.
+`docs/LEDGER_REAL_TRANSACTION_SHADOW_VALIDATION.md` and the `indexer_shadow_reports` table describe a pattern used while migrating to the current ledger/indexer pipeline: the new pipeline ran alongside the old one, comparing outputs on real production data before the old pipeline was retired (migration `20260830080000_retire_redundant_deposit_activity_consumer_sweep.sql`). `src/blockchain/shadowEventBus.ts` and `shadowEventMap.ts` are the client-side half of this comparison mechanism. If you're touching indexing or ledger logic, it records real historical discrepancies that were caught this way — worth reading before assuming a new change is safe to ship without a similar comparison period.
 
 ## 9. Where correctness reasoning actually lives
 
@@ -183,7 +183,5 @@ This repository's `docs/` folder is unusually thorough and is the authoritative 
 
 - `docs/TRANSACTION_STATE_MACHINE.md`, `docs/TRANSACTION_SERVICE_BOUNDARY.md` — state machine contract and boundaries
 - `docs/LEDGER_CANONICAL_EVENT_DESIGN.md`, `docs/LEDGER_SCHEMA_GAP_AUDIT.md` — ledger schema and design gaps found along the way
-- `docs/SECURITY_ARCHITECTURE.md`, `docs/SECURITY_AUDIT_FINAL.md` — security model and internal audit findings
-- `docs/DISASTER_RECOVERY.md` — recovery procedures
+- `docs/SECURITY_ARCHITECTURE.md` — security model
 - `docs/BLOCKCHAIN_ARCHITECTURE_PROPOSAL.md` — the original proposal that led to consolidating `chains.ts`
-- `docs/PRODUCTION_READINESS_REPORT.md` — a snapshot assessment of readiness as of its writing (treat as historical, not a live status page)
