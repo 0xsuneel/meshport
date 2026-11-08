@@ -80,7 +80,7 @@ export function SettingsDesktopSplit() {
         <Item icon={<Shield size={17} />} label="Security" path="/security" active={is('/security')} onClick={go} />
         <Item icon={<Palette size={17} />} label="Appearance" path="/appearance" active={is('/appearance')} onClick={go} />
         {isWallet && (
-          <Item icon={walletSource === 'import-privkey' ? <Key size={17} /> : <Upload size={17} />} label="Backup & Recovery" path="/backup" active={is('/backup')} onClick={go} />
+          <Item icon={walletSource === 'import-privkey' ? <Key size={17} /> : <Upload size={17} />} label="Back up wallet" path="/backup" active={is('/backup')} onClick={go} />
         )}
         {merchant.status !== 'none' && (
           <Item icon={<Store size={17} />} label={merchant.status === 'approved' ? 'Business account' : 'Business verification'} path="/merchant" active={is('/merchant')} onClick={go} />

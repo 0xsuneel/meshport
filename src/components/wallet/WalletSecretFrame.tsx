@@ -15,6 +15,8 @@ import { revealUrl, walletOrigin, WalletFrameError } from '@/wallet'
 
 /** A reveal page from before the 'mp-reveal' message: shown this long after it loads. */
 const LEGACY_SHOW_MS = 900
+/** Not on screen after this long: explain, and offer Try again. */
+const SLOW_MS = 15_000
 
 export function WalletSecretFrame({ address, what, passcode, height, onError }: {
   address: string
@@ -27,19 +29,30 @@ export function WalletSecretFrame({ address, what, passcode, height, onError }: 
   const [src, setSrc] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [drawn, setDrawn] = useState(false)
+  // Still not shown after SLOW_MS (8 Nov: on a very slow mobile connection the
+  // box just sat blank): say so, and offer to try again.
+  const [slow, setSlow] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   const frameRef = useRef<HTMLIFrameElement>(null)
   const h = height ?? (what === 'mnemonic' ? 260 : 150)
+  const label = what === 'mnemonic' ? 'recovery phrase' : 'private key'
+
+  useEffect(() => {
+    if (drawn || failed) { setSlow(false); return }
+    const t = setTimeout(() => setSlow(true), SLOW_MS)
+    return () => clearTimeout(t)
+  }, [drawn, failed, attempt])
 
   useEffect(() => {
     let cancelled = false
-    setSrc(null); setFailed(null); setDrawn(false)
+    setSrc(null); setFailed(null); setDrawn(false); setSlow(false)
     const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
     revealUrl(address, what, { passcode, theme })
       .then(url => { if (!cancelled) setSrc(url) })
       .catch((e: Error) => { if (!cancelled) { setFailed(e.message || "Couldn't open it"); onError?.(e) } })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, what, passcode])
+  }, [address, what, passcode, attempt])
 
   // The reveal page says when it has drawn the secret (or its error).
   useEffect(() => {
@@ -53,7 +66,13 @@ export function WalletSecretFrame({ address, what, passcode, height, onError }: 
     return () => window.removeEventListener('message', onMessage)
   }, [src])
 
-  if (failed) return <p role="alert" className="text-sm text-danger">{failed}</p>
+  const retry = <button type="button" onClick={() => setAttempt(a => a + 1)}
+    className="mt-1 px-4 py-2 rounded-xl bg-brand text-white text-sm font-semibold">Try again</button>
+  if (failed) return (
+    <div role="alert" className="flex flex-col items-center gap-2 text-center p-4 rounded-2xl border border-border">
+      <p className="text-sm text-danger">{failed}</p>{retry}
+    </div>
+  )
   return (
     <div className="relative w-full" style={{ height: h }}>
       {src && (
@@ -70,7 +89,17 @@ export function WalletSecretFrame({ address, what, passcode, height, onError }: 
         />
       )}
       {!drawn && (
-        <div aria-hidden className="absolute inset-0 rounded-2xl bg-surface border border-border mp-pulse" />
+        <div className="absolute inset-0 rounded-2xl bg-surface border border-border flex flex-col items-center justify-center gap-2 p-4 text-center">
+          {slow ? (
+            <>
+              <p className="text-sm text-text-primary font-semibold">Still opening your {label}…</p>
+              <p className="text-xs text-text-secondary">Your connection looks slow. Keep this screen open, or try again.</p>
+              {retry}
+            </>
+          ) : (
+            <p className="text-sm text-text-secondary mp-pulse" role="status">Opening your {label}…</p>
+          )}
+        </div>
       )}
     </div>
   )
