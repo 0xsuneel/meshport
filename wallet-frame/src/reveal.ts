@@ -46,7 +46,7 @@ function showError(message: string) {
 }
 
 function copyButton(secret: string, label: string) {
-  const b = el('button', 'copy', label)
+  const b = el('button', 'copy outline', label)
   b.type = 'button'
   b.onclick = async () => {
     try {
@@ -62,6 +62,20 @@ function copyButton(secret: string, label: string) {
   return b
 }
 
+// The round eye mark on the cover (built as DOM - no innerHTML, no images).
+function eyeBadge(): HTMLElement {
+  const badge = el('span', 'cover-eye')
+  const NS = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(NS, 'svg')
+  for (const [k, v] of [['viewBox', '0 0 24 24'], ['width', '17'], ['height', '17'], ['fill', 'none'], ['stroke', 'currentColor'],
+    ['stroke-width', '2'], ['stroke-linecap', 'round'], ['stroke-linejoin', 'round'], ['aria-hidden', 'true']]) svg.setAttribute(k, v)
+  const path = document.createElementNS(NS, 'path'); path.setAttribute('d', 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z')
+  const dot = document.createElementNS(NS, 'circle'); dot.setAttribute('cx', '12'); dot.setAttribute('cy', '12'); dot.setAttribute('r', '3')
+  svg.append(path, dot)
+  badge.append(svg)
+  return badge
+}
+
 // Blurred until tapped (OKX-style), so the secret isn't on screen by
 // accident when the page opens. Copy works only once it's shown.
 function blurred(content: HTMLElement, copy: HTMLButtonElement, what: 'mnemonic' | 'privateKey') {
@@ -69,8 +83,8 @@ function blurred(content: HTMLElement, copy: HTMLButtonElement, what: 'mnemonic'
   content.setAttribute('aria-hidden', 'true')
   const cover = el('button', 'cover')
   cover.type = 'button'
-  cover.append(el('span', 'cover-title', what === 'mnemonic' ? 'Tap to view your recovery phrase' : 'Tap to view your private key'),
-    el('span', 'cover-sub', 'Make sure nobody can see your screen.'))
+  cover.setAttribute('aria-label', what === 'mnemonic' ? 'Tap to view your recovery phrase' : 'Tap to view your private key')
+  cover.append(eyeBadge(), el('span', 'cover-title', 'Tap to view'), el('span', 'cover-sub', 'Make sure nobody can see your screen'))
   copy.disabled = true
   cover.onclick = () => {
     box.classList.remove('hidden')

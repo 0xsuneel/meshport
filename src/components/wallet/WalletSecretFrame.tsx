@@ -15,6 +15,10 @@ import { revealUrl, walletOrigin, WalletFrameError } from '@/wallet'
 
 /** A reveal page from before the 'mp-reveal' message: shown this long after it loads. */
 const LEGACY_SHOW_MS = 900
+/** The phrase box's height for a phrase of `words` words (4 words a row). */
+export function phraseFrameHeight(words: number): number {
+  return words > 12 ? 370 : 220
+}
 /** Not on screen after this long: explain, and offer Try again. */
 const SLOW_MS = 15_000
 
@@ -39,7 +43,7 @@ export function WalletSecretFrame({ address, what, passcode, height, onError, on
   const frameRef = useRef<HTMLIFrameElement>(null)
   const onVerifiedRef = useRef(onVerified)
   onVerifiedRef.current = onVerified
-  const h = height ?? (what === 'mnemonic' ? 260 : what === 'verify' ? 480 : 150)
+  const h = height ?? (what === 'mnemonic' ? phraseFrameHeight(12) : what === 'verify' ? 480 : 175)
   const label = what === 'privateKey' ? 'private key' : what === 'verify' ? 'backup check' : 'recovery phrase'
 
   useEffect(() => {
