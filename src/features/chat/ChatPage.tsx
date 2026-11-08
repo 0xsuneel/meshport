@@ -3051,6 +3051,8 @@ export function ChatConversationPage() {
       if (document.visibilityState === 'visible') {
         pendingMarkRead = false
         markRead(conversationId!, user!.id)
+        // This chat is on screen: its notifications leave the phone's shade.
+        void import('@/lib/systemNotify').then(m => m.clearChatNotifications(conversationId)).catch(() => {})
       } else {
         pendingMarkRead = true
       }

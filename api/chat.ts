@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { sendPushToUser } from './_lib/push'
+import { waitUntil } from '@vercel/functions'
 
 /**
  * MERGED FUNCTIONS (to stay under Vercel's 12-function limit):
@@ -349,6 +350,40 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
     { last_message: PAYMENT_TYPES.has(type) ? content : null, last_message_at: new Date().toISOString(),
       last_message_sender: senderId, last_message_type: type }
   ).catch(() => {})
+
+  // ── 2b. A chat message: notify the recipient's phone (like WhatsApp) ──────
+  // Messages are end-to-end encrypted, so the server can't say what it says:
+  // the sender's name and "New message" (a bill / payment request card is
+  // plain text and shows its first line). One entry per chat (tag), counted
+  // up by the service worker; nothing is shown while the app is on screen
+  // (src/sw.ts). A message still waiting for the recipient's chat key
+  // (e2e:q2) isn't announced - they can't open it yet.
+  if (type === 'text' && member.conv && member.conv.participant_a !== member.conv.participant_b
+      && !String(content).startsWith('e2e:q2:')) {
+    const recipientId = member.conv.participant_a === senderId ? member.conv.participant_b : member.conv.participant_a
+    // In the background (waitUntil): the sender's message is answered at once,
+    // the push finishes after the response.
+    waitUntil((async () => { try {
+      const who = await supaFetch(`/users?id=eq.${senderId}&select=username,display_name`, 'GET')
+      const u = who.ok && Array.isArray(who.data) ? who.data[0] : null
+      const from = u?.display_name || (u?.username ? String(u.username).replace(/\.arc$/i, '') + '.arc' : 'MeshPort')
+      const sealed = /^e2e:(v1|v2):/.test(String(content))
+      const body = sealed ? 'New message' : String(content).split('\n')[0].slice(0, 120)
+      const push = await Promise.race([
+        sendPushToUser(recipientId, {
+          title: from,
+          body,
+          url: `/chat/${conversationId}`,
+          tag: `chat-${conversationId}`,
+          data: { kind: 'chat', conversationId },
+        }),
+        new Promise<{ sent: number; failed: number }>(r => setTimeout(() => r({ sent: -1, failed: -1 }), 8000)),
+      ])
+      console.log('[chat/send] message push', push.sent < 0 ? 'timed out' : `sent=${push.sent} failed=${push.failed}`)
+    } catch (e: any) {
+      console.warn('[chat/send] message push error:', e?.message)
+    } })())
+  }
 
   // ── 3. If payment_sent: insert payment_received for the recipient ──────────
   if (type === 'payment_sent' && paymentAmount) {
