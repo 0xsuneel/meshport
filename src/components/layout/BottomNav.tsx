@@ -27,12 +27,20 @@ export const RewardsIcon = navIcon('rewards')
 export const ActivityIcon = navIcon('activity')
 export const BusinessIcon = ({ active, filled }: NavIconProps) =>
   <Store size={filled === undefined ? 22 : 24} strokeWidth={active ? 2.3 : 1.8} color={colorOf(active, filled)} />
-const ScannerIcon = () => <NavIcon name="scan" size={28} color="#fff" />
+// Option A (8 Nov): a scan-frame mark (four corners and a line) - reads as
+// "scan" at a glance, lighter than the dense QR glyph it replaces.
+const ScannerIcon = () => (
+  <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 8V6a2 2 0 0 1 2-2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v2" />
+    <path d="M20 16v2a2 2 0 0 1-2 2h-2" /><path d="M8 20H6a2 2 0 0 1-2-2v-2" />
+    <path d="M7 12h10" />
+  </svg>
+)
 
 const tabs = [
   { id: 'home',     label: 'Home',     path: '/' },
   { id: 'chat',     label: 'Chats',    path: '/chat' },
-  { id: 'scanner',  label: '',         path: '/scanner' },
+  { id: 'scanner',  label: 'Scan',     path: '/scanner' },
   { id: 'rewards',  label: 'Rewards',  path: '/rewards' },
   { id: 'activity', label: 'Activity', path: '/activity' },
 ]
@@ -211,20 +219,31 @@ export function BottomNav() {
                 justifyContent: 'center', gap: 4, cursor: 'pointer', flex: 1,
               }}>
               {isScanner ? (
-                /* Brand-color circle floating above the pill */
-                <motion.div
-                  whileTap={{ scale: 0.92 }}
-                  style={{
-                    width: 58, height: 58, borderRadius: '50%',
-                    background: 'var(--brand)',
-                    border: '1px solid var(--border)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    marginTop: -28,
-                    boxShadow: 'var(--shadow-2)',
-                    flexShrink: 0,
+                /* Option A (8 Nov): a brand circle floating above the bar,
+                   ringed in the page colour so it reads as cut out of the
+                   bar (not outlined in grey), a soft brand shadow, and a
+                   "Scan" label like the other tabs. */
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, marginTop: -26 }}>
+                  <motion.div
+                    whileTap={{ scale: 0.92 }}
+                    aria-label="Scan"
+                    style={{
+                      width: 56, height: 56, borderRadius: '50%', boxSizing: 'border-box',
+                      background: 'var(--brand)',
+                      border: '4px solid var(--bg)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 6px 16px rgb(var(--brand-rgb) / 0.32)',
+                      flexShrink: 0,
+                    }}>
+                    <ScannerIcon />
+                  </motion.div>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, color: 'var(--brand-text)',
+                    lineHeight: 1, fontFamily: 'var(--font-sans)',
                   }}>
-                  <ScannerIcon />
-                </motion.div>
+                    {tab.label}
+                  </span>
+                </div>
               ) : (
                 <>
                   <div style={{
