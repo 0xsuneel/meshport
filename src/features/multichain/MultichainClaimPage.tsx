@@ -2507,9 +2507,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       </PushIf>
 
       <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
         @keyframes caretBlink {
           0%, 50% { opacity: 1; }
           50.01%, 100% { opacity: 0; }

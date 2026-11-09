@@ -862,6 +862,11 @@ button, [role="button"], [role="tab"] { -webkit-user-select: none; user-select: 
 
 /* A copy button's tick (data-tick on the Check in "copied ? Check : Copy"):
    it grows in, so the copy reads as confirmed. Reduced motion: instant. */
+/* Success check (Rewards claim, Business Claim All): the badge pops in, its
+   tick draws, the per-step ticks pop. One definition for both screens. */
+@keyframes mpOkIn { 0% { transform: scale(0.9); opacity: 0; } 70% { transform: scale(1.08); } 100% { transform: scale(1); } }
+@keyframes mpOkDraw { from { stroke-dashoffset: 60; } to { stroke-dashoffset: 0; } }
+@keyframes mpStepTick { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes mpTickIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: none; } }
 [data-tick] { animation: mpTickIn 150ms var(--ease-out); }
 
