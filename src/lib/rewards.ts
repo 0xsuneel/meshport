@@ -601,7 +601,7 @@ export async function fetchDailyClaimedPoints(userId: string): Promise<number> {
 // ─── Fetch claims history ─────────────────────────────────────────────────────
 /** The daily tasks that earn points (reason `tx_reward:<type>`), with their action icon. */
 export const REWARD_TASKS: { type: string; action: ActionIconName; label: string; done: string; path: string }[] = [
-  { type: 'pay_send', action: 'pay', label: 'Send a payment', done: 'Payment sent', path: '/pay-send' },
+  { type: 'pay_send', action: 'pay', label: 'Send a payment', done: 'Payment sent', path: '/pay' },
   { type: 'swap', action: 'swap', label: 'Make a swap', done: 'Swap made', path: '/swap' },
   { type: 'chatpay', action: 'chat', label: 'Pay in chat', done: 'Paid in chat', path: '/chat' },
   { type: 'multichain_transfer', action: 'hub', label: 'Multichain transfer', done: 'Multichain transfer', path: '/multichain' },

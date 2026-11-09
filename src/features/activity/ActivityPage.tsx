@@ -1112,7 +1112,6 @@ export function ActivityPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-bg">
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* Header and list share one scroll box: the header is sticky glass,
           so the list scrolls under it like Home. */}

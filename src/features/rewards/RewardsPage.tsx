@@ -109,14 +109,11 @@ const STEPS: { key: StepKey; label: string }[] = [
 ]
 const STEP_H = 40
 const CLAIM_PROGRESS_CSS = `
-@keyframes rwOkIn{0%{transform:scale(0.9);opacity:0}70%{transform:scale(1.08)}100%{transform:scale(1)}}
-@keyframes rwDraw{from{stroke-dashoffset:60}to{stroke-dashoffset:0}}
 @keyframes rwFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-@keyframes rwTickIn{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
-.rw-ok{animation:rwOkIn .45s var(--ease-out) both}
-.rw-ok path{stroke-dasharray:60;stroke-dashoffset:60;animation:rwDraw .45s .25s ease-out forwards}
+.rw-ok{animation:mpOkIn .45s var(--ease-out) both}
+.rw-ok path{stroke-dasharray:60;stroke-dashoffset:60;animation:mpOkDraw .45s .25s ease-out forwards}
 .rw-fade{animation:rwFade .35s .2s ease-out both}
-.rw-tick{animation:rwTickIn .25s ease-out both}
+.rw-tick{animation:mpStepTick .25s ease-out both}
 .rw-trav{transition:transform .55s var(--ease-out)}
 @media (prefers-reduced-motion: reduce){.rw-ok,.rw-ok path,.rw-fade,.rw-tick{animation:none;stroke-dashoffset:0}.rw-trav{transition:none}}
 `

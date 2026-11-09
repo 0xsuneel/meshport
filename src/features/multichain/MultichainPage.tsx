@@ -1460,7 +1460,6 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
 
         {hubTab === 'activity' && !isDesktop && renderActivity(false)}
       </div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* ── Receipt popup (ReceiptPopup animates out inside AnimatePresence) ── */}
       <AnimatePresence>

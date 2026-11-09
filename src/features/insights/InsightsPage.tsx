@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {ArrowLeft, Calendar, ChevronDown, Link2, Sparkles} from 'lucide-react'
 import { useAuthStore } from '@/store'
@@ -11,6 +11,7 @@ import {
   format, getDate, getDaysInMonth, getHours, startOfWeek, endOfWeek, startOfYear
 } from 'date-fns'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { PUSH_OPEN_MS } from '@/lib/motion'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const CHAINS: Record<string, { name: string; color: string; bg: string; logo?: string }> = {
@@ -225,6 +226,11 @@ export function InsightsPage() {
   // Until Activity has loaded, every figure would read $0 and then jump: show
   // the page's shape instead, and fade the real figures in once.
   const [loaded, setLoaded] = useState(false)
+  // Fade the figures in only when they arrive after the page has finished
+  // opening. Arriving while it still slides in (activity already cached), a
+  // fade on top of the slide was a second entrance: skeleton blink + fade.
+  const mountedAt = useRef(performance.now())
+  const [fadeIn, setFadeIn] = useState(false)
   const [, setBalance] = useState(0)
   const walletAddress = useAuthStore(s => s.walletAddress) ?? ''
 
@@ -237,7 +243,10 @@ export function InsightsPage() {
     fetchActivity(walletAddress, { limit: 200 }).then(records => {
       // Failed rows moved no money (lib/failure.ts) - history only, never totals.
       setTransactions(records.filter(r => r.status !== 'failed') as any)
-    }).catch(() => {}).finally(() => setLoaded(true))
+    })
+      // fadeIn is decided in the same update as `loaded` - never in an effect
+      // after it, which would paint the figures solid for a frame first.
+      .catch(() => {}).finally(() => { setFadeIn(performance.now() - mountedAt.current > PUSH_OPEN_MS); setLoaded(true) })
     import('@/store').then(({ useWalletStore }) => {
       setBalance(useWalletStore.getState().balance)
     })
@@ -512,7 +521,7 @@ export function InsightsPage() {
         </div>
       </div>
 
-      {!loaded ? <InsightsSkeleton /> : <div className="mp-fade-in">
+      {!loaded ? <InsightsSkeleton /> : <div className={fadeIn ? 'mp-fade-in' : undefined}>
 
       {/* ── HERO CARD ──────────────────────────────────────────────────── */}
       <div style={{ margin: '0 14px 12px' }}>
