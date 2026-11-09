@@ -25,7 +25,10 @@ function FooterCol({ title, links }: { title: string; links: { label: string; hr
               href={l.href}
               target={l.external ? '_blank' : undefined}
               rel={l.external ? 'noopener noreferrer' : undefined}
-              className="text-[15px] text-text-secondary transition-colors hover:text-text-primary"
+              // Padding cancelled by an equal negative margin: the layout is
+              // unchanged, but a short label ("X" was a 9×19px target) gets a
+              // finger-sized hit area.
+              className="inline-block min-w-[44px] py-2.5 -my-2.5 pr-2 -mr-2 text-[15px] text-text-secondary transition-colors hover:text-text-primary"
             >
               {l.label}
             </a>

@@ -5,6 +5,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline'
   size?: 'sm' | 'md' | 'lg'
   fullWidth?: boolean
+  /** Working: spinner, taps ignored, but the button keeps its full colour
+   *  (it is busy, not unavailable). */
   loading?: boolean
   children: ReactNode
 }
@@ -33,22 +35,30 @@ export function Button({
   disabled,
   ...props
 }: ButtonProps) {
+  const inactive = disabled || loading
   return (
     <button
       className={cn(
-        'font-semibold transition duration-150 flex items-center justify-center gap-2 active:scale-[0.98] hover:scale-[1.01]',
+        // Press: a quick shrink on touch-down, a softer release (the shared
+        // --ease-out curve) - the same feel as .mp-press elsewhere.
+        'font-semibold transition-[transform,filter,opacity,background-color,box-shadow] duration-150 ease-[cubic-bezier(0.32,0.72,0,1)] flex items-center justify-center gap-2 select-none',
+        'active:scale-[0.97] active:duration-75 hover:scale-[1.01]',
         variants[variant],
         sizes[size],
         fullWidth && 'w-full',
-        (disabled || loading) && 'opacity-40 cursor-not-allowed active:scale-100 hover:scale-100 shadow-none',
+        inactive && 'cursor-not-allowed active:scale-100 hover:scale-100',
+        // Disabled reads as unavailable; loading stays solid (it's working).
+        disabled && !loading && 'opacity-40 shadow-none',
+        loading && 'cursor-progress',
         className
       )}
-      disabled={disabled || loading}
+      disabled={inactive}
+      aria-busy={loading || undefined}
       type="button"
       {...props}
     >
       {loading && (
-        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+        <svg className="animate-spin h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>

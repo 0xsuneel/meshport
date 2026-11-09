@@ -261,7 +261,9 @@ export function PasscodeLockPage() {
     import('@/lib/restoreWallet').catch(() => {})
   }, [])
 
-  const displayName = user?.displayName || user?.username?.replace('.arc','') || 'Welcome back'
+  // No name yet (profile not loaded / never set): plain "Signed in" and
+  // "Continue" - the old fallback read "Continue as Welcome back".
+  const displayName = user?.displayName || user?.username?.replace('.arc','') || ''
   const greetName = user?.displayName || user?.username?.replace('.arc','') || ''
   // Set once per visit, so it doesn't change under them while unlocking.
   const [greetAt] = useState(() => greetingTime())
@@ -485,13 +487,13 @@ export function PasscodeLockPage() {
         </p>
         {greetName && <h2 className="-mt-1.5 text-[26px] leading-tight tracking-[-0.5px] font-bold text-text-primary">{greetName}</h2>}
         <p className="text-text-secondary text-[14px] leading-[1.5]">
-          {noPasscode ? `Signed in as ${displayName}` : mode === 'bio' ? 'MeshPort is locked' : 'Enter passcode to unlock'}
+          {noPasscode ? (displayName ? `Signed in as ${displayName}` : 'Signed in') : mode === 'bio' ? 'MeshPort is locked' : 'Enter passcode to unlock'}
         </p>
         {noPasscode ? (
           <div className="mt-8 w-full max-w-xs space-y-3">
             <button onClick={async () => { unlock(); navigate(returnTo, { replace: true }) }}
               className="w-full py-4 bg-brand rounded-2xl text-white font-bold shadow-elevation-2 active:scale-[.98] transition-transform border border-black/10">
-              Continue as {displayName}
+              {displayName ? `Continue as ${displayName}` : 'Continue'}
             </button>
             <button onClick={handleSignOut}
               className="w-full py-4 bg-surface border border-border rounded-2xl text-text-secondary font-semibold active:scale-[.98] transition-transform">

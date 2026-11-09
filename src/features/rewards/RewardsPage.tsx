@@ -13,6 +13,7 @@ import {
 } from '@/lib/rewards'
 import { timeAgo, formatAmount } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useSingleFlight } from '@/hooks/useSingleFlight'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { AmountField } from '@/components/ui/AmountField'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
@@ -354,7 +355,12 @@ export function RewardsPage() {
     setShowClaimSheet(true)
   }
 
-  const handleClaim = async () => {
+  // One claim at a time: it waits for the wallet (getReadySigner) before
+  // `claiming` is set, and both the Claim button and the keypad's Enter call
+  // it - a second tap / Enter in that gap used to start a second claim.
+  const claimOnce = useSingleFlight()
+  const handleClaim = () => { void claimOnce(runClaim) }
+  const runClaim = async () => {
     setClaimError(null)
     if (!walletAddress)        { setClaimError('Wallet not connected'); return }
     if (!userId)               { setClaimError('User not found - please log out and back in'); return }
