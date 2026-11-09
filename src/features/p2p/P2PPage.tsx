@@ -1538,7 +1538,11 @@ export function P2PTradePage() {
   ]
 
   return (
-    <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', display: 'flex', flexDirection: 'column', height: '100vh' }}>
+    // Phone: the page's own height (the app frame follows the VISIBLE area).
+    // 100vh there is the tallest viewport - taller than the screen while the
+    // browser bars show - so the pinned composer sat below the bottom edge.
+    // Desktop keeps the full-height column inside its shared scroller.
+    <div className="lg:max-w-[900px] h-full lg:h-screen" style={{ background: COLORS.bg, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Order details and chat scroll together; the composer stays put. */}
       <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
       {(() => {
