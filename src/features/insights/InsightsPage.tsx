@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
 import { fetchActivity } from '@/lib/ActivityService'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { FitText } from '@/components/ui/FitText'
 type ActivityRecord = any
 import {
   startOfMonth, endOfMonth, subMonths, isWithinInterval,
@@ -562,9 +563,9 @@ export function InsightsPage() {
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 3 }}>
               Total Volume
             </div>
-            <div style={{ fontSize: 40, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-1.5px', lineHeight: 1, marginBottom: 10 }}>
+            <FitText size={40} min={22} style={{ fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-1.5px', lineHeight: 1, marginBottom: 10 }}>
               ${formatAmount(stats.totalVol)}
-            </div>
+            </FitText>
 
             <HeroChart values={heroValues}/>
 
@@ -572,15 +573,15 @@ export function InsightsPage() {
             <div style={{ height: 1, background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', margin: '0 0 13px' }}/>
 
             {/* 3 cols: Net Flow | Most Active Contact | Most Used Multichain */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
               {/* Net Flow */}
-              <div style={{ paddingRight: 8 }}>
+              <div style={{ paddingRight: 8, minWidth: 0 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
                   Net Flow
                 </div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: stats.netFlow >= 0 ? 'var(--success-text)' : 'var(--danger-text)', letterSpacing: '-.4px', lineHeight: 1 }}>
+                <FitText size={20} min={11} style={{ fontWeight: 700, color: stats.netFlow >= 0 ? 'var(--success-text)' : 'var(--danger-text)', letterSpacing: '-.4px', lineHeight: 1 }}>
                   {stats.netFlow >= 0 ? '+' : '-'}${formatAmount(Math.abs(stats.netFlow))}
-                </div>
+                </FitText>
               </div>
 
               {/* Most Active Contact */}
@@ -611,9 +612,9 @@ export function InsightsPage() {
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
                   Swap Volume
                 </div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-text)', letterSpacing: '-.4px', lineHeight: 1, marginBottom: 2 }}>
+                <FitText size={20} min={11} style={{ fontWeight: 700, color: 'var(--brand-text)', letterSpacing: '-.4px', lineHeight: 1, marginBottom: 2 }}>
                   ${formatAmount(stats.swapVol)}
-                </div>
+                </FitText>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{stats.swapCount} swaps</div>
               </div>
             </div>
@@ -624,7 +625,9 @@ export function InsightsPage() {
 
       {/* ── STAT CARDS - label, value, change in words; no icon tiles or
           mini trend lines (the Activity chart below is the trend). */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, padding: '0 14px 12px' }}>
+      {/* Three across from 330px; stacked on a folded phone's cover screen,
+          where a full amount can't fit a third of the width at a readable size. */}
+      <div className="grid grid-cols-1 min-[330px]:grid-cols-[repeat(3,minmax(0,1fr))]" style={{ gap: 8, padding: '0 14px 12px' }}>
         {[
           { label: 'Paid', value: `$${formatAmount(stats.sentVol)}`, pct: stats.sentPct, pctPositive: false },
           { label: 'Received', value: `$${formatAmount(stats.recvVol)}`, pct: stats.recvPct, pctPositive: true },
@@ -638,7 +641,7 @@ export function InsightsPage() {
             }}
           >
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500, marginBottom: 5 }}>{c.label}</div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-.4px', marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>{c.value}</div>
+            <FitText size={17} min={10} style={{ fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-.4px', marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>{c.value}</FitText>
             <div style={{ fontSize: 12, fontWeight: c.pct === 0 ? 400 : 600,
               // No change is grey words - green/red only for a real move.
               color: c.pct === 0 ? 'var(--text-secondary)' : c.pctPositive
@@ -659,10 +662,12 @@ export function InsightsPage() {
         }}
       >
         {/* header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        {/* Wraps: on a small phone the period switch drops under the title
+            instead of squeezing it (it used to sit on top of it). */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 120px' }}>
             <div style={{
-              width: 32, height: 32, borderRadius: 10,
+              width: 32, height: 32, borderRadius: 10, flexShrink: 0,
               background: 'color-mix(in srgb, var(--brand) 15%, transparent)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
@@ -706,7 +711,9 @@ export function InsightsPage() {
       </div>
 
       {/* ── BOTTOM ROW ──────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '0 14px' }}>
+      {/* Side by side from 330px; stacked on the narrowest screens (a folded
+          phone's cover screen), where the two halves were wider than the page. */}
+      <div className="grid grid-cols-1 min-[330px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" style={{ gap: 8, padding: '0 14px' }}>
 
         {/* Multichain Usage */}
         <div

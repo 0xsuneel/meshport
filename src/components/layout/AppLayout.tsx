@@ -768,7 +768,7 @@ export function AppLayout() {
         </div>
         {navVisible && !navHidden && <BottomNav />}
         <Toast />
-        <PushPermissionBanner bottom={navVisible && !navHidden ? 'calc(77px + env(safe-area-inset-bottom, 0px))' : 'calc(12px + env(safe-area-inset-bottom, 0px))'} />
+        <PushPermissionBanner onScreen={location.pathname === '/'} bottom={navVisible && !navHidden ? 'calc(77px + env(safe-area-inset-bottom, 0px))' : 'calc(12px + env(safe-area-inset-bottom, 0px))'} />
         <DeviceKeyNotice />
         <LeaveGuardHost />
         <Suspense fallback={null}><PaymentReceivedWatcher /></Suspense>
