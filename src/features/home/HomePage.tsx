@@ -2292,11 +2292,15 @@ function BannerIcon({ kind }: { kind: typeof FEATURE_BANNERS[number]['icon'] }) 
   return <ActionIcon name={kind === 'globe' ? 'hub' : kind} size={24} />
 }
 
-// Auto-advance through the promos ONCE per Home visit, then stay put: an
-// endlessly moving strip under the balance kept pulling the eye. Stops for
-// good once the user swipes it themselves, and never runs with reduce motion.
-function useBannerIndex(n: number) {
+function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onOpen: (path: string) => void; docked?: boolean; inCard?: boolean }) {
+  const hub = useHubLabel()
   const [idx, setIdx] = useState(0)
+  const touchX = useRef<number | null>(null)
+  const n = FEATURE_BANNERS.length
+
+  // Auto-advance through the promos ONCE per Home visit, then stay put: an
+  // endlessly moving strip under the balance kept pulling the eye. Stops for
+  // good once the user swipes it themselves, and never runs with reduce motion.
   const autoSteps = useRef(0)
   const [userMoved, setUserMoved] = useState(false)
   useEffect(() => {
@@ -2305,14 +2309,6 @@ function useBannerIndex(n: number) {
     const t = setTimeout(() => { autoSteps.current++; setIdx(i => (i + 1) % n) }, 4500)
     return () => clearTimeout(t)
   }, [idx, n, userMoved])
-  return { idx, setIdx, setUserMoved }
-}
-
-function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onOpen: (path: string) => void; docked?: boolean; inCard?: boolean }) {
-  const hub = useHubLabel()
-  const touchX = useRef<number | null>(null)
-  const n = FEATURE_BANNERS.length
-  const { idx, setIdx, setUserMoved } = useBannerIndex(n)
 
   const b = FEATURE_BANNERS[idx]
   const dot = docked ? { w: 12, gap: 6, pill: 20 } : { w: 4, gap: 6, pill: 10 }
@@ -2333,10 +2329,10 @@ function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onO
         if (Math.abs(dx) > 40) { e.preventDefault(); setUserMoved(true); setIdx(i => (i + (dx < 0 ? 1 : n - 1)) % n) }
       }}
       style={docked ? {
-        // Its own card 14px under the hero card (the column's gap is 18).
+        // Its own card 12px under Recent + Updates (the column's gap is 18).
         position: 'relative', zIndex: 1, overflow: 'hidden', cursor: 'pointer',
         // At the foot of the Recent + Updates card it fills the card's bottom edge.
-        margin: inCard ? 0 : '-4px 0 0', padding: '14px 16px 10px', borderRadius: inCard ? 0 : 16,
+        margin: inCard ? 0 : '-6px 0 0', padding: '14px 16px 10px', borderRadius: inCard ? 0 : 20,
         // A deeper teal than the hero, so it reads as a separate card.
         background: 'color-mix(in srgb, var(--brand) 78%, #000)', display: 'flex', flexDirection: 'column', alignItems: 'stretch', boxSizing: 'border-box',
       } : {
@@ -2385,70 +2381,6 @@ function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onO
             position: 'absolute', top: 0, left: -(dot.pill - dot.w) / 2, width: dot.pill, height: 4, borderRadius: 2, background: '#fff',
             transform: `translateX(${idx * (dot.w + dot.gap)}px)`, transition: 'transform 200ms var(--ease-out)',
           }} />
-        </div>
-      </div>
-      <style>{`@keyframes mpBannerIn { from { opacity: 0.5; transform: translateX(14px) } to { opacity: 1; transform: none } }`}</style>
-    </div>
-  )
-}
-
-
-// Design 1 on the phone: the promo as its own card under Recent + Updates -
-// title, tagline, "Try now", the feature's icon in a ring of soft circles on
-// the right, and the page dots under the card.
-function PromoCard({ onOpen }: { onOpen: (path: string) => void }) {
-  const hub = useHubLabel()
-  const touchX = useRef<number | null>(null)
-  const n = FEATURE_BANNERS.length
-  const { idx, setIdx, setUserMoved } = useBannerIndex(n)
-  const b = FEATURE_BANNERS[idx]
-  const firstIdx = useRef(idx)
-  const moved = useRef(false)
-  if (idx !== firstIdx.current) moved.current = true
-  const go = (i: number) => { setUserMoved(true); setIdx(((i % n) + n) % n) }
-  return (
-    <div>
-      <section aria-roledescription="carousel" aria-label="MeshPort features"
-        onTouchStart={e => { touchX.current = e.touches[0].clientX }}
-        onTouchEnd={e => {
-          if (touchX.current === null) return
-          const dx = e.changedTouches[0].clientX - touchX.current
-          touchX.current = null
-          if (Math.abs(dx) > 40) { e.preventDefault(); go(idx + (dx < 0 ? 1 : -1)) }
-        }}
-        style={{ position: 'relative', overflow: 'hidden', borderRadius: 20, background: 'var(--brand)', color: '#fff', touchAction: 'pan-y' }}>
-        <button onClick={() => onOpen(b.path)} aria-label={`${hub(b.title)}: ${b.text}. Try now`} className="mp-press"
-          style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, width: '100%', minHeight: 112, padding: 'min(16px, 4vw)', boxSizing: 'border-box',
-            background: 'none', border: 'none', color: 'inherit', textAlign: 'left', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
-          <div key={idx} style={{ flex: 1, minWidth: 0, animation: moved.current ? 'mpBannerIn 220ms var(--ease-out)' : undefined }}>
-            <div style={{ fontSize: 'min(18px, 4.8vw)', fontWeight: 700, letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hub(b.title)}</div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.82)', marginTop: 2, overflowWrap: 'anywhere' }}>{b.text}</div>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 13, fontWeight: 700 }}>
-              Try now
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-            </span>
-          </div>
-          <div aria-hidden style={{ position: 'relative', width: 'min(96px, 24vw)', height: 80, flexShrink: 0 }}>
-            <span style={{ position: 'absolute', left: 0, top: 18, width: '48%', aspectRatio: '1', borderRadius: '50%', background: 'color-mix(in srgb, #E6C062 85%, transparent)', border: '3px solid var(--brand)' }} />
-            <span style={{ position: 'absolute', right: 0, top: 30, width: '48%', aspectRatio: '1', borderRadius: '50%', background: 'rgba(255,255,255,0.22)', border: '3px solid var(--brand)' }} />
-            <span key={idx} style={{ position: 'absolute', left: '22%', top: 0, width: '56%', aspectRatio: '1', borderRadius: '50%', background: 'color-mix(in srgb, var(--brand) 70%, #000)', border: '3px solid var(--brand)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', animation: moved.current ? 'mpBannerIn 220ms var(--ease-out)' : undefined }}>
-              <BannerIcon kind={b.icon} />
-            </span>
-          </div>
-        </button>
-      </section>
-      {/* Page dots under the card: one pill slides to the current promo (transform only). */}
-      {/* Decorative, as on the old banner: swipe the card to change it. */}
-      <div aria-hidden style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-        <div style={{ position: 'relative', display: 'flex' }}>
-          {FEATURE_BANNERS.map(f => (
-            <span key={f.path} style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ width: 6, height: 6, borderRadius: 3, background: 'color-mix(in srgb, var(--brand) 22%, transparent)' }} />
-            </span>
-          ))}
-          <span aria-hidden style={{ position: 'absolute', top: 5, left: 0, width: 18, height: 6, borderRadius: 3, background: 'var(--brand)', pointerEvents: 'none',
-            transform: `translateX(${idx * 16 - 1}px)`, transition: 'transform 200ms var(--ease-out)' }} />
         </div>
       </div>
       <style>{`@keyframes mpBannerIn { from { opacity: 0.5; transform: translateX(14px) } to { opacity: 1; transform: none } }`}</style>
@@ -4464,18 +4396,18 @@ export function HomePage() {
         {/* Same width/radius as the old Multichain Hub row, 10% taller. */}
         {/* Business not approved yet: no promos, recents, news or QR - the
             balance, assets and activity stay. */}
-        {/* ── RECENT + UPDATES - side by side. On the phone two cards with the
-             promo card under them. ─────────────────────────────────────────── */}
+        {/* ── RECENT + UPDATES - two cards side by side. On the phone the promo
+             banner is its own card under them. ─────────────────────────────── */}
         {!accountLock.locked && (isDesktop ? (
           <>
             <FeatureBanner height={64} onOpen={path => navigate(path)} />
             <RecentNewsRow navigate={navigate} />
           </>
         ) : (
-          // Design 1: Recent and Updates as two cards, the promo as its own card under them.
+          // Design 8: Recent and Updates as two cards, the promo banner as its own card under them.
           <>
-            <RecentNewsRow navigate={navigate} refined />
-            <PromoCard onOpen={path => navigate(path)} />
+            <RecentNewsRow navigate={navigate} />
+            <FeatureBanner height={75} docked onOpen={path => navigate(path)} />
           </>
         ))}
 
