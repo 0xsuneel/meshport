@@ -2329,10 +2329,10 @@ function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onO
         if (Math.abs(dx) > 40) { e.preventDefault(); setUserMoved(true); setIdx(i => (i + (dx < 0 ? 1 : n - 1)) % n) }
       }}
       style={docked ? {
-        // Its own card 12px under Recent + Updates (the column's gap is 18).
+        // Its own card 14px under the hero card (the column's gap is 18).
         position: 'relative', zIndex: 1, overflow: 'hidden', cursor: 'pointer',
         // At the foot of the Recent + Updates card it fills the card's bottom edge.
-        margin: inCard ? 0 : '-6px 0 0', padding: '14px 16px 10px', borderRadius: inCard ? 0 : 20,
+        margin: inCard ? 0 : '-4px 0 0', padding: '14px 16px 10px', borderRadius: inCard ? 0 : 16,
         // A deeper teal than the hero, so it reads as a separate card.
         background: 'color-mix(in srgb, var(--brand) 78%, #000)', display: 'flex', flexDirection: 'column', alignItems: 'stretch', boxSizing: 'border-box',
       } : {
@@ -4396,19 +4396,15 @@ export function HomePage() {
         {/* Same width/radius as the old Multichain Hub row, 10% taller. */}
         {/* Business not approved yet: no promos, recents, news or QR - the
             balance, assets and activity stay. */}
-        {/* ── RECENT + UPDATES - two cards side by side. On the phone the promo
-             banner is its own card under them. ─────────────────────────────── */}
+        {/* ── RECENT + UPDATES - side by side. On the phone they share one card
+             with the promo banner, which sits at its foot. ─────────────────── */}
         {!accountLock.locked && (isDesktop ? (
           <>
             <FeatureBanner height={64} onOpen={path => navigate(path)} />
             <RecentNewsRow navigate={navigate} />
           </>
         ) : (
-          // Design 8: Recent and Updates as two cards, the promo banner as its own card under them.
-          <>
-            <RecentNewsRow navigate={navigate} />
-            <FeatureBanner height={75} docked onOpen={path => navigate(path)} />
-          </>
+          <RecentNewsRow navigate={navigate} footer={<FeatureBanner height={75} docked inCard onOpen={path => navigate(path)} />} />
         ))}
 
         {/* ── ASSETS - all 3 tokens ────────────────────────────────────────── */}

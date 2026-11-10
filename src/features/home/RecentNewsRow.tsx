@@ -10,7 +10,7 @@ import { useReconnectCount } from '@/lib/connectivity'
 import { fetchHomeNews, readCachedHomeNews, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT, type NewsItem } from '@/lib/news'
 
 // ── Home: Recent + News, side by side ───────────────────────────────────────
-// (Two cards; on the phone the promo banner is its own card under them.)
+// (On the phone they share one card with the promo banner along its foot.)
 // Two equal boxes under the feature banner (Home, desktop and mobile), each with a 64px
 // content row.
 //
@@ -36,9 +36,7 @@ function Box({ title, onViewAll, flat, children }: { title: string; onViewAll?: 
   // Desktop: the same drop shadow as Home's other desktop cards.
   const isDesktop = useMediaQuery('(min-width: 980px)')
   return (
-    // Phone: its own card (design 8) - a real border, as the light theme's glass
-    // edge is transparent and a white card on the warm page lost its sides.
-    <div style={flat ? { padding: 12, minWidth: 0 } : { background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: isDesktop ? 16 : 20, padding: isDesktop ? 10 : 'min(12px, 3vw)', minWidth: 0, boxShadow: isDesktop ? 'var(--shadow-1)' : 'var(--glass-card)' }}>
+    <div style={flat ? { padding: 12, minWidth: 0 } : { background: 'var(--glass-fill)', border: isDesktop ? '1px solid var(--border)' : '1px solid var(--glass-edge)', borderRadius: 16, padding: 10, minWidth: 0, boxShadow: isDesktop ? 'var(--shadow-1)' : 'var(--glass-card)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4, marginBottom: 4 }}>
         <span style={{ fontSize: 'min(15px, 4.2vw)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}>{title}</span>
         {onViewAll && (
@@ -78,24 +76,19 @@ const FRONT_SHADOW = '0 6px 16px -6px color-mix(in srgb, var(--brand) 60%, trans
 // used to vanish). Deeper slots sit at the last visible spot, invisible, and
 // fade in as the queue rotates them forward, so the label always has room.
 const QUEUE_VISIBLE = 3
-// On a narrow card (a small phone) fewer faces wait in view, so the name
-// beside them keeps at least ~56px.
-function queueVisibleFor(width: number) {
-  return width >= 139 ? QUEUE_VISIBLE : width >= 129 ? 2 : 1
-}
-function slotPose(slot: number, right: number, visible = QUEUE_VISIBLE) {
+function slotPose(slot: number, right: number) {
   if (slot === 0) return { x: right, scale: 1, opacity: 1 }
-  const depth = Math.max(1, Math.min(slot, visible - 1))
+  const depth = Math.min(slot, QUEUE_VISIBLE - 1)
   return {
     x: right - 24 - (depth - 1) * 12,
     scale: 0.76 - (depth - 1) * 0.07,
-    opacity: slot < visible ? 0.95 - (slot - 1) * 0.18 : 0,
+    opacity: slot < QUEUE_VISIBLE ? 0.95 - (slot - 1) * 0.18 : 0,
   }
 }
 
 /** Left edge of the queue as drawn (avatars shrink around their centre). */
-function queueLeftEdge(n: number, right: number, visible = QUEUE_VISIBLE) {
-  const back = slotPose(Math.min(n - 1, visible - 1), right, visible)
+function queueLeftEdge(n: number, right: number) {
+  const back = slotPose(Math.min(n - 1, QUEUE_VISIBLE - 1), right)
   return back.x + (AVATAR * (1 - back.scale)) / 2
 }
 
@@ -187,8 +180,7 @@ function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: bool
     )
   } else {
     const right = Math.max(0, width - 50)
-    const visible = queueVisibleFor(width)
-    const leftmost = queueLeftEdge(n, right, visible)
+    const leftmost = queueLeftEdge(n, right)
     content = (
       <div ref={areaRef} role="button" tabIndex={0} aria-label={front ? `Pay ${recentShortName(front)}` : 'Pay'}
         onClick={() => pay(front)}
@@ -203,12 +195,12 @@ function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: bool
             style={{ position: 'absolute', left: 0, top: 0, bottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center',
               maxWidth: Math.max(0, leftmost - 4), minWidth: 0 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{recentShortName(front)}</span>
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--brand-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Tap to pay</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--brand-text)', whiteSpace: 'nowrap' }}>Tap to pay</span>
           </motion.div>
         )}
         {width > 0 && people.map((c, i) => {
           const slot = Math.max(0, order.indexOf(i))
-          const pose = slotPose(slot, right, visible)
+          const pose = slotPose(slot, right)
           const justLeftFront = rotating && step > 0 && slot === n - 1
           return (
             <motion.div key={c.wallet_address}
@@ -390,7 +382,7 @@ export function RecentNewsRow({ navigate, footer }: { navigate: NavigateFunction
     )
   }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'min(12px, 3vw)' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
       {ring}
       <RecentBox navigate={navigate} />
       <NewsBox navigate={navigate} />
