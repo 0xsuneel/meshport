@@ -751,7 +751,11 @@ export async function fetchConversations(myId: string): Promise<DbConversation[]
     .or(`participant_a.eq.${myId},participant_b.eq.${myId}`)
     .order('last_message_at', { ascending: false })
 
-  if (error || !data || data.length === 0) return []
+  // A failed read throws (every caller falls back to an empty list, as
+  // before) - so the Chats screen can tell "no chats" from "couldn't load"
+  // and keep the list it has instead of showing an empty one.
+  if (error) throw error
+  if (!data || data.length === 0) return []
 
   // ── Batched enrichment ──────────────────────────────────────────────────
   // Previously this ran 3 separate queries PER conversation (other-user

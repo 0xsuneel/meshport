@@ -218,12 +218,12 @@ export const useAuthStore = create<AuthStore>()(
           } catch { /* storage blocked */ }
         }
         import('@/lib/chatCrypto').then(({ clearChatSessionSeeds }) => clearChatSessionSeeds()).catch(() => {})
-        // The activity cache goes too. Done here, synchronously: a lazy
+        // The activity, rewards and chat-list caches go too. Done here, synchronously: a lazy
         // import could still be loading when the page navigates away.
         try {
           for (let i = localStorage.length - 1; i >= 0; i--) {
             const k = localStorage.key(i)
-            if (k?.startsWith('meshport_activity_cache_')) localStorage.removeItem(k)
+            if (k?.startsWith('meshport_activity_cache_') || k?.startsWith('meshport_rewards_cache_') || k?.startsWith('meshport_chat_list_')) localStorage.removeItem(k)
           }
         } catch { /* storage blocked */ }
         import('@/hooks/useActivity').then(({ clearActivityCache }) => clearActivityCache()).catch(() => {})
