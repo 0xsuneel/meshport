@@ -74,9 +74,12 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
           leaves (leaveUnder) is read here, at the moment it closes. */}
       <AnimatePresence custom={leaveUnder}>
         {open && [
-          <motion.div key={sid + '-dim'} {...SHEET_BACKDROP} variants={{ leave: leaveVariant(() => ({ ...SHEET_BACKDROP.exit, transition: sheetExit(sid, SHEET_PANEL.exit).transition })) }} exit="leave"
+          // data-push-keep: if the step under an open sheet changes (Bring's
+          // passcode → processing), the sheet stays in the old step's
+          // picture and slides away with it (ScreenPush) - never vanishes.
+          <motion.div key={sid + '-dim'} data-push-keep="" {...SHEET_BACKDROP} variants={{ leave: leaveVariant(() => ({ ...SHEET_BACKDROP.exit, transition: sheetExit(sid, SHEET_PANEL.exit).transition })) }} exit="leave"
             className={`${pos} inset-0`} style={{ background: SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40, willChange: 'opacity' }} onClick={onClose} />,
-          <motion.div key={sid} {...sheetDrag(sid, onClose)} {...SHEET_PANEL} variants={{ leave: leaveVariant(() => sheetExit(sid, SHEET_PANEL.exit)) }} exit="leave"
+          <motion.div key={sid} data-push-keep="" {...sheetDrag(sid, onClose)} {...SHEET_PANEL} variants={{ leave: leaveVariant(() => sheetExit(sid, SHEET_PANEL.exit)) }} exit="leave"
             role="dialog" aria-modal="true"
             className={`${pos} bottom-0 left-0 right-0 bg-surface border-t border-border rounded-t-3xl flex flex-col${fixed ? ' mx-auto max-w-md' : ''}${height === 'full' ? ' h-[calc(var(--frame-h,100dvh)*0.92)]' : ''}`}
             style={{ maxHeight: 'calc(100% - 40px)', zIndex: z, boxShadow: '0 80px 0 var(--surface)' }}>

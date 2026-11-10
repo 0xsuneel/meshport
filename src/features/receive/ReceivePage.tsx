@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { springs } from '@/features/business/ui/types'
+import { PUSH_OPEN_MS } from '@/lib/motion'
 import { Share2, ArrowLeft, Download, ListChecks } from 'lucide-react'
 import { StorePicker, type PickerStore } from '@/features/merchant/StorePicker'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -35,6 +36,11 @@ export function ReceivePage() {
   const { showToastMessage } = useUIStore()
   const canvasRef             = useRef<HTMLCanvasElement>(null)
   const [qrReady, setQrReady] = useState(false)
+  // Fade the QR in only when it's drawn after the page has finished opening.
+  // Drawn while the page still slides in (or back), a fade on top of the
+  // slide was a second animation - show it at once there.
+  const mountedAt = useRef(performance.now())
+  const [qrFade, setQrFade] = useState(false)
   const [qrError, setQrError] = useState(false)
 
   // One QR for everyone (merchants too - no separate MeshPort / Merchant QR tabs).
@@ -100,7 +106,8 @@ export function ReceivePage() {
     setQrError(false)
 
     drawMeshportQr(canvasRef.current, qrData, 232)
-      .then(() => setQrReady(true))
+      // Same update as qrReady, so the canvas never paints solid first.
+      .then(() => { setQrFade(performance.now() - mountedAt.current > PUSH_OPEN_MS); setQrReady(true) })
       .catch(() => setQrError(true))
     // Redraw when My QR comes back into view (after Request payment) - the
     // canvas is a fresh, empty element then.
@@ -223,7 +230,7 @@ export function ReceivePage() {
         </div>
       ) : (
         <QrCard title={card.title} subtitle={card.subtitle} tag={card.tag} caption={card.caption} top={cardTop}>
-          <canvas ref={canvasRef} width={236} height={236} style={{ display: 'block', opacity: qrReady ? 1 : 0, transition: 'opacity 0.2s ease-out' }} />
+          <canvas ref={canvasRef} width={236} height={236} style={{ display: 'block', opacity: qrReady ? 1 : 0, transition: qrFade ? 'opacity 0.2s ease-out' : 'none' }} />
         </QrCard>
       )}
 
