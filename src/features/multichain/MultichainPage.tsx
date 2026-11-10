@@ -303,7 +303,8 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
         <span style={label}>Available To Transfer</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 22 }}>
           <img decoding="async" src="/logos/chains/arc.svg" alt="Arc" style={logo(false)} />
-          <button onClick={onToggleHidden} aria-label={balanceHidden ? 'Show balances' : 'Hide balances'}
+          {/* mp-hit: a finger-sized touch area around the 22px eye, same look. */}
+          <button onClick={onToggleHidden} aria-label={balanceHidden ? 'Show balances' : 'Hide balances'} className="mp-hit"
             style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', border: 'none', padding: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             {balanceHidden ? (

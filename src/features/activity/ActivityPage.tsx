@@ -521,9 +521,14 @@ export function ActivityRow({ record, onSelect, flash, inPanel }: {
           </div>
         </div>
       ) : (
-        <div style={{ textAlign: 'right', flexShrink: 0, maxWidth: '42%' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: amountColor, textDecoration: isFailed && !isRecovery ? 'line-through' : undefined, ...oneLine }}>
-            {amountPrefix}{formatAmt(isSwap ? (metadata.amountIn ?? amount) : amount, isSwap ? (metadata.tokenIn || tokenSymbol) : tokenSymbol)} {(isSwap ? metadata.tokenIn : null) || tokenSymbol || 'USDC'}
+        // The amount is never cut short ("+1234567.89 U…" used to happen on a
+        // small phone): it keeps its full width and the name beside it
+        // shortens instead. Only if even that can't fit, the token moves under
+        // the number - the number itself never breaks.
+        <div style={{ textAlign: 'right', flex: '0 1 auto', minWidth: 'min-content' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: amountColor, textDecoration: isFailed && !isRecovery ? 'line-through' : undefined }}>
+            <span style={{ whiteSpace: 'nowrap' }}>{amountPrefix}{formatAmt(isSwap ? (metadata.amountIn ?? amount) : amount, isSwap ? (metadata.tokenIn || tokenSymbol) : tokenSymbol)}</span>{' '}
+            <span style={{ whiteSpace: 'nowrap' }}>{(isSwap ? metadata.tokenIn : null) || tokenSymbol || 'USDC'}</span>
           </div>
         </div>
       )}

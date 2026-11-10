@@ -21,7 +21,11 @@ const DENIED_SHOW_MS = 8000
 // popup, sheet or Hub page is open it steps aside: it sits above them
 // (z-index 60), right where their buttons are - it hid Transfer's Review
 // button on desktop.
-export function PushPermissionBanner({ bottom = 12, desktop = false }: { bottom?: number | string; desktop?: boolean }) {
+/** onScreen: false keeps it (and its state) but draws nothing - on phones it
+ *  shows on Home only, where it sits over a scrolling page. Elsewhere it
+ *  covered a screen's own controls (Swap's button, Chats' New chat, Security's
+ *  options) - on a small phone a fifth of the screen. */
+export function PushPermissionBanner({ bottom = 12, desktop = false, onScreen = true }: { bottom?: number | string; desktop?: boolean; onScreen?: boolean }) {
   const userId = useAuthStore(s => s.user?.id)
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -53,15 +57,16 @@ export function PushPermissionBanner({ bottom = 12, desktop = false }: { bottom?
 
   // Blocked: goes away by itself (and counts as seen).
   useEffect(() => {
-    if (!show || !denied) return
+    // The few seconds a "blocked" notice stays count only while it's on screen.
+    if (!show || !denied || !onScreen) return
     const t = setTimeout(() => {
       try { localStorage.setItem(SNOOZE_KEY, String(Date.now())) } catch { /* ignore */ }
       setShow(false)
     }, DENIED_SHOW_MS)
     return () => clearTimeout(t)
-  }, [show, denied])
+  }, [show, denied, onScreen])
 
-  if (!show || popupOpen) return null
+  if (!show || popupOpen || !onScreen) return null
 
   const enable = async () => {
     if (!userId) return
