@@ -10,7 +10,7 @@ import { useReconnectCount } from '@/lib/connectivity'
 import { fetchHomeNews, readCachedHomeNews, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT, type NewsItem } from '@/lib/news'
 
 // ── Home: Recent + News, side by side ───────────────────────────────────────
-// (On the phone they share one card with the promo banner along its foot.)
+// (Two cards; on the phone the promo banner is its own card under them.)
 // Two equal boxes under the feature banner (Home, desktop and mobile), each with a 64px
 // content row.
 //
@@ -36,7 +36,9 @@ function Box({ title, onViewAll, flat, children }: { title: string; onViewAll?: 
   // Desktop: the same drop shadow as Home's other desktop cards.
   const isDesktop = useMediaQuery('(min-width: 980px)')
   return (
-    <div style={flat ? { padding: 12, minWidth: 0 } : { background: 'var(--glass-fill)', border: isDesktop ? '1px solid var(--border)' : '1px solid var(--glass-edge)', borderRadius: 16, padding: 10, minWidth: 0, boxShadow: isDesktop ? 'var(--shadow-1)' : 'var(--glass-card)' }}>
+    // Phone: its own card (design 8) - a real border, as the light theme's glass
+    // edge is transparent and a white card on the warm page lost its sides.
+    <div style={flat ? { padding: 12, minWidth: 0 } : { background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: isDesktop ? 16 : 20, padding: isDesktop ? 10 : 'min(12px, 3vw)', minWidth: 0, boxShadow: isDesktop ? 'var(--shadow-1)' : 'var(--glass-card)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4, marginBottom: 4 }}>
         <span style={{ fontSize: 'min(15px, 4.2vw)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}>{title}</span>
         {onViewAll && (
@@ -50,27 +52,6 @@ function Box({ title, onViewAll, flat, children }: { title: string; onViewAll?: 
       </div>
       {children}
     </div>
-  )
-}
-
-// Design 1 ("refined split"), phone: Recent and Updates as two separate cards,
-// a chevron for "View all" in each header.
-function RefinedCard({ title, viewAllLabel, onViewAll, children }: { title: string; viewAllLabel: string; onViewAll?: () => void; children: ReactNode }) {
-  return (
-    <section aria-label={title} style={{ background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: 20, padding: 'min(14px, 3.4vw)',
-      boxShadow: 'var(--glass-card)', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4, minHeight: 24 }}>
-        <h2 style={{ margin: 0, fontSize: 'min(15px, 4.2vw)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{title}</h2>
-        {onViewAll && (
-          <button onClick={onViewAll} aria-label={viewAllLabel} className="mp-hit"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, margin: '-2px -6px -2px 0', padding: 0,
-              background: 'none', border: 'none', cursor: 'pointer', color: 'var(--brand-text)', flexShrink: 0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m9 18 6-6-6-6"/></svg>
-          </button>
-        )}
-      </div>
-      {children}
-    </section>
   )
 }
 
@@ -97,19 +78,24 @@ const FRONT_SHADOW = '0 6px 16px -6px color-mix(in srgb, var(--brand) 60%, trans
 // used to vanish). Deeper slots sit at the last visible spot, invisible, and
 // fade in as the queue rotates them forward, so the label always has room.
 const QUEUE_VISIBLE = 3
-function slotPose(slot: number, right: number) {
+// On a narrow card (a small phone) fewer faces wait in view, so the name
+// beside them keeps at least ~56px.
+function queueVisibleFor(width: number) {
+  return width >= 139 ? QUEUE_VISIBLE : width >= 129 ? 2 : 1
+}
+function slotPose(slot: number, right: number, visible = QUEUE_VISIBLE) {
   if (slot === 0) return { x: right, scale: 1, opacity: 1 }
-  const depth = Math.min(slot, QUEUE_VISIBLE - 1)
+  const depth = Math.max(1, Math.min(slot, visible - 1))
   return {
     x: right - 24 - (depth - 1) * 12,
     scale: 0.76 - (depth - 1) * 0.07,
-    opacity: slot < QUEUE_VISIBLE ? 0.95 - (slot - 1) * 0.18 : 0,
+    opacity: slot < visible ? 0.95 - (slot - 1) * 0.18 : 0,
   }
 }
 
 /** Left edge of the queue as drawn (avatars shrink around their centre). */
-function queueLeftEdge(n: number, right: number) {
-  const back = slotPose(Math.min(n - 1, QUEUE_VISIBLE - 1), right)
+function queueLeftEdge(n: number, right: number, visible = QUEUE_VISIBLE) {
+  const back = slotPose(Math.min(n - 1, visible - 1), right, visible)
   return back.x + (AVATAR * (1 - back.scale)) / 2
 }
 
@@ -201,7 +187,8 @@ function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: bool
     )
   } else {
     const right = Math.max(0, width - 50)
-    const leftmost = queueLeftEdge(n, right)
+    const visible = queueVisibleFor(width)
+    const leftmost = queueLeftEdge(n, right, visible)
     content = (
       <div ref={areaRef} role="button" tabIndex={0} aria-label={front ? `Pay ${recentShortName(front)}` : 'Pay'}
         onClick={() => pay(front)}
@@ -216,12 +203,12 @@ function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: bool
             style={{ position: 'absolute', left: 0, top: 0, bottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center',
               maxWidth: Math.max(0, leftmost - 4), minWidth: 0 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{recentShortName(front)}</span>
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--brand-text)', whiteSpace: 'nowrap' }}>Tap to pay</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--brand-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Tap to pay</span>
           </motion.div>
         )}
         {width > 0 && people.map((c, i) => {
           const slot = Math.max(0, order.indexOf(i))
-          const pose = slotPose(slot, right)
+          const pose = slotPose(slot, right, visible)
           const justLeftFront = rotating && step > 0 && slot === n - 1
           return (
             <motion.div key={c.wallet_address}
@@ -259,104 +246,7 @@ function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: bool
   return <Box title="Recent" flat={flat} onViewAll={n > 0 ? () => navigate('/recent-paid', { state: { from: '/' } }) : undefined}>{content}</Box>
 }
 
-const REFINED_FACES = 3
-const REFINED_AVATAR = 42
-
-function RefinedRecentBox({ navigate }: { navigate: NavigateFunction }) {
-  const walletAddress = useAuthStore(s => s.walletAddress)
-  // Same cache and fetch as RecentBox, so the list is there instantly.
-  const cacheKey = walletAddress ? `meshport_recents_${walletAddress.toLowerCase()}_5` : ''
-  const [people, setPeople] = useState<RecentContact[]>(() => {
-    try { const c = cacheKey ? JSON.parse(localStorage.getItem(cacheKey) || 'null') : null; return Array.isArray(c) ? c : [] } catch { return [] }
-  })
-  const [loaded, setLoaded] = useState(() => { try { return !!cacheKey && localStorage.getItem(cacheKey) != null } catch { return false } })
-  const reconnects = useReconnectCount()
-
-  useEffect(() => {
-    if (!walletAddress) return
-    let cancelled = false
-    fetchRecentContacts(walletAddress, { activityLimit: 20, maxAddresses: 10, resultLimit: 5 })
-      .then(list => {
-        if (cancelled) return
-        setPeople(list)
-        try { if (cacheKey) localStorage.setItem(cacheKey, JSON.stringify(list)) } catch { /* storage full */ }
-      })
-      .catch(e => console.error('RecentBox load error:', e))
-      .finally(() => { if (!cancelled) setLoaded(true) })
-    return () => { cancelled = true }
-  }, [walletAddress, cacheKey, reconnects])
-
-  const shown = people.slice(0, REFINED_FACES)
-  const pay = (c: RecentContact) => navigate(`/pay?to=${encodeURIComponent(recentSendTarget(c))}`, { state: { returnTo: '/' } })
-  const faceBox = { width: '100%', maxWidth: REFINED_AVATAR, aspectRatio: '1', borderRadius: '50%' } as const
-
-  let faces: ReactNode
-  if (!loaded && people.length === 0) {
-    faces = Array.from({ length: REFINED_FACES }, (_, i) => (
-      <div key={i} aria-hidden style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        <Skeleton className="rounded-full" style={faceBox} />
-        <Skeleton className="h-2 w-4/5 rounded-full" />
-      </div>
-    ))
-  } else if (people.length === 0) {
-    faces = (
-      <span style={{ gridColumn: '1 / -1', alignSelf: 'center', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.3 }}>
-        People you pay show here
-      </span>
-    )
-  } else {
-    faces = shown.map((c, i) => (
-      <button key={c.wallet_address} onClick={() => pay(c)} aria-label={`Pay ${recentShortName(c)}`} className="mp-press"
-        style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0, padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}>
-        <span style={{ ...faceBox, display: 'block', position: 'relative', overflow: 'hidden' }}>
-          <RefinedFace c={c} i={i} />
-        </span>
-        <span style={{ maxWidth: '100%', fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {recentShortName(c)}
-        </span>
-      </button>
-    ))
-  }
-
-  return (
-    <RefinedCard title="Recent" viewAllLabel="View all recent" onViewAll={people.length > 0 ? () => navigate('/recent-paid', { state: { from: '/' } }) : undefined}>
-      <div aria-busy={!loaded && people.length === 0 ? true : undefined}
-        style={{ display: 'grid', gridTemplateColumns: `repeat(${REFINED_FACES}, minmax(0, 1fr))`, gap: 4, marginTop: 12, minHeight: REFINED_AVATAR + 20, alignItems: 'start' }}>
-        {faces}
-      </div>
-      <button onClick={() => navigate('/pay')} className="mp-press"
-        style={{ marginTop: 'auto', width: '100%', minHeight: 34, borderRadius: 17, border: '1px solid color-mix(in srgb, var(--brand) 18%, transparent)',
-          background: 'color-mix(in srgb, var(--brand) 7%, transparent)', color: 'var(--brand-text)', fontSize: 'min(13px, 3.5vw)', fontWeight: 600,
-          cursor: 'pointer', lineHeight: 1.2, padding: '4px 8px' }}>
-        Pay someone new
-      </button>
-    </RefinedCard>
-  )
-}
-
-// A face that fills its (square) box, photo or initial.
-function RefinedFace({ c, i }: { c: RecentContact; i: number }) {
-  const [ok, setOk] = useState(true)
-  if (c.avatar_url && ok) {
-    return <img decoding="async" src={c.avatar_url} alt="" draggable={false} onError={() => setOk(false)}
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-  }
-  return (
-    <span style={{ position: 'absolute', inset: 0, background: RECENT_AVATAR_COLORS[i % RECENT_AVATAR_COLORS.length], display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 15, fontWeight: 700, color: '#fff' }}>
-      {recentInitial(c)}
-    </span>
-  )
-}
-
-// Refined Updates: a taller cover, a two-line headline and the source under it.
-const R_PIC_H = 62
-const R_TITLE_H = 34 // two lines of 17px
-const R_CONTENT_H = R_PIC_H + 8 + R_TITLE_H + 4 + 14
-
-function NewsBox({ navigate, flat, refined }: { navigate: NavigateFunction; flat?: boolean; refined?: boolean }) {
-  const picH = refined ? R_PIC_H : NEWS_PIC_H
-  const boxH = refined ? R_CONTENT_H : CONTENT_H
+function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolean }) {
   const reduce = useReducedMotion()
   const [items, setItems] = useState<NewsItem[]>(() => readCachedHomeNews())
   const [loaded, setLoaded] = useState(() => items.length > 0)
@@ -392,10 +282,10 @@ function NewsBox({ navigate, flat, refined }: { navigate: NavigateFunction; flat
 
   let content: ReactNode
   if (!n && !loaded) {
-    content = <Skeleton className="rounded-[10px]" style={{ height: boxH, marginTop: refined ? 12 : 0 }} />
+    content = <Skeleton className="rounded-[10px]" style={{ height: CONTENT_H }} />
   } else if (!n) {
     content = (
-      <div style={{ height: boxH, marginTop: refined ? 12 : 0, borderRadius: 10, display: 'flex', alignItems: 'center', padding: '0 8px',
+      <div style={{ height: CONTENT_H, borderRadius: 10, display: 'flex', alignItems: 'center', padding: '0 8px',
         background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }}>
         <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.3 }}>Arc, Circle and MeshPort updates show here</span>
       </div>
@@ -413,7 +303,7 @@ function NewsBox({ navigate, flat, refined }: { navigate: NavigateFunction; flat
         onPointerLeave={() => { x0.current = null; setPaused(false) }}
         onPointerCancel={() => { x0.current = null; setPaused(false) }}
         onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && item) { e.preventDefault(); navigate(`/news/${item.id}`) } }}
-        style={{ position: 'relative', height: boxH, marginTop: refined ? 12 : 0, cursor: 'pointer',
+        style={{ position: 'relative', height: CONTENT_H, cursor: 'pointer',
           touchAction: 'pan-y', userSelect: 'none', WebkitTapHighlightColor: 'transparent' }}>
         {items.map((it, k) => {
           const on = k === cur
@@ -422,7 +312,7 @@ function NewsBox({ navigate, flat, refined }: { navigate: NavigateFunction; flat
               style={{ position: 'absolute', inset: 0, opacity: on ? 1 : 0, transition: reduce ? 'none' : 'opacity .7s ease' }}>
               {/* The cover is shown as is: Arc's covers carry their own title text
                   and Circle's are white, so nothing is drawn over it but the label. */}
-              <div style={{ position: 'relative', height: picH, borderRadius: refined ? 12 : 10, overflow: 'hidden', background: NEWS_SOURCE_TINT[it.source] }}>
+              <div style={{ position: 'relative', height: NEWS_PIC_H, borderRadius: 10, overflow: 'hidden', background: NEWS_SOURCE_TINT[it.source] }}>
                 {it.image_url && !broken[it.id] ? (
                   <>
                     {/* All four covers load up front (not lazily), so the next one is
@@ -449,34 +339,22 @@ function NewsBox({ navigate, flat, refined }: { navigate: NavigateFunction; flat
                   <NewsArt item={it} variant="row" />
                 )}
               </div>
-              {refined ? (
-                <>
-                  <div style={{ marginTop: 8, height: R_TITLE_H, fontSize: 13, fontWeight: 600, lineHeight: '17px', color: 'var(--text-primary)',
-                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>
-                    {coverReady(it) ? it.title : <Skeleton className="rounded-full" style={{ height: 9, width: '80%', marginTop: 4 }} />}
-                  </div>
-                  <div style={{ marginTop: 4, fontSize: 11, lineHeight: '14px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {NEWS_SOURCE_LABEL[it.source] ? `${NEWS_SOURCE_LABEL[it.source]} · News` : 'News'}
-                  </div>
-                </>
-              ) : (
               <div style={{ marginTop: 4, fontSize: 12, fontWeight: 650, lineHeight: '14px', color: 'var(--text-primary)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {coverReady(it) ? it.title : <Skeleton className="rounded-full" style={{ height: 9, width: '70%', marginTop: 2 }} />}
               </div>
-              )}
             </div>
           )
         })}
         {n > 1 && curReady && (
           // A soft dark band along the cover's foot, so the dots read on a
           // cover with its own text printed on it (Arc's).
-          <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, top: picH - 20, height: 20, borderRadius: refined ? '0 0 12px 12px' : '0 0 10px 10px', pointerEvents: 'none',
+          <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, top: NEWS_PIC_H - 20, height: 20, borderRadius: '0 0 10px 10px', pointerEvents: 'none',
             background: 'linear-gradient(transparent, rgba(0,0,0,0.5))' }} />
         )}
         {n > 1 && curReady && (
           // Bottom-right of the cover, clear of the source label and of a drawn cover's text.
-          <div aria-hidden style={{ position: 'absolute', top: picH - 11, right: 6, display: 'flex', gap: 3 }}>
+          <div aria-hidden style={{ position: 'absolute', top: NEWS_PIC_H - 11, right: 6, display: 'flex', gap: 3 }}>
             {items.map((it, k) => (
               <i key={it.id} style={{ display: 'block', height: 4, width: k === cur ? 10 : 4, borderRadius: 2,
                 background: k === cur ? '#fff' : 'rgba(255,255,255,0.5)', transition: 'width .35s ease, background .35s' }} />
@@ -487,7 +365,6 @@ function NewsBox({ navigate, flat, refined }: { navigate: NavigateFunction; flat
     )
   }
 
-  if (refined) return <RefinedCard title="Updates" viewAllLabel="View all updates" onViewAll={() => navigate('/news')}>{content}</RefinedCard>
   return <Box title="Updates" flat={flat} onViewAll={() => navigate('/news')}>{content}</Box>
 }
 
@@ -495,17 +372,8 @@ function NewsBox({ navigate, flat, refined }: { navigate: NavigateFunction; flat
  * `footer`: the two share one card, split by a thin line, with the footer
  * (Home's promo banner, on the phone) along its bottom edge.
  */
-export function RecentNewsRow({ navigate, footer, refined }: { navigate: NavigateFunction; footer?: ReactNode; refined?: boolean }) {
+export function RecentNewsRow({ navigate, footer }: { navigate: NavigateFunction; footer?: ReactNode }) {
   const ring = <style>{'@keyframes mpRingFill { to { stroke-dashoffset: 0 } }'}</style>
-  if (refined) {
-    // Design 1 on the phone: two cards side by side (the promo banner is its own card under them).
-    return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'min(12px, 3vw)' }}>
-        <RefinedRecentBox navigate={navigate} />
-        <NewsBox navigate={navigate} refined />
-      </div>
-    )
-  }
   if (footer) {
     return (
       // A real border (the light theme's glass edge is transparent): a white
@@ -522,7 +390,7 @@ export function RecentNewsRow({ navigate, footer, refined }: { navigate: Navigat
     )
   }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'min(12px, 3vw)' }}>
       {ring}
       <RecentBox navigate={navigate} />
       <NewsBox navigate={navigate} />
