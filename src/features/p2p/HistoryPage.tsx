@@ -20,6 +20,7 @@ import {
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { SkeletonCards } from '@/components/ui/Skeleton'
+import { ErrorState } from '@/components/ui/ErrorState'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { AnimatePresence } from 'framer-motion'
@@ -150,13 +151,21 @@ export function P2PHistoryPage() {
   const [receiptTrade, setReceiptTrade] = useState<P2PTrade | null>(null)
   const receiptFlash = useReturnFlash()
 
+  // The history couldn't load (network down): a retry instead of loading cards for good.
+  const [loadFailed, setLoadFailed] = useState(false)
   const load = useCallback(async () => {
     if (!user?.id) { setLoading(false); return }
     setLoading(true)
-    const rows = await fetchMyTrades(user.id)
-    setTrades(rows)
-    setCounterparties(await fetchCounterpartyProfiles(rows, user.id))
-    setLoading(false)
+    setLoadFailed(false)
+    try {
+      const rows = await fetchMyTrades(user.id)
+      setTrades(rows)
+      setCounterparties(await fetchCounterpartyProfiles(rows, user.id))
+    } catch {
+      setLoadFailed(true)
+    } finally {
+      setLoading(false)
+    }
   }, [user?.id])
 
   useEffect(() => { load() }, [load])
@@ -245,6 +254,8 @@ export function P2PHistoryPage() {
       <div style={{ padding: '4px 16px' }}>
         {loading ? (
           <SkeletonCards count={4} className="pt-2" />
+        ) : loadFailed && trades.length === 0 ? (
+          <ErrorState title="Couldn't load your orders" description="Check your connection and try again." onRetry={() => { void load() }} />
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '50px 20px', background: COLORS.surface, borderRadius: 18, border: `1px dashed ${COLORS.border}` }}>
             <p style={{ color: COLORS.muted, fontSize: 13, margin: 0 }}>No transactions match these filters.</p>

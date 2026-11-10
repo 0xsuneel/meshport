@@ -44,6 +44,7 @@ import {
 } from '@/lib/p2pService'
 import { MerchantLine, MethodTag, PaymentMethodPicker, PaymentMethodSheet, PAYMENT_METHOD_TYPES } from './p2pUi'
 import { SkeletonCards } from '@/components/ui/Skeleton'
+import { ErrorState } from '@/components/ui/ErrorState'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -150,6 +151,8 @@ export function P2PHubPage() {
   const [offers, setOffers] = useState<P2POffer[]>(() => hubCache.get(lastHubKey)?.offers ?? [])
   const [remaining, setRemaining] = useState<Map<string, number>>(() => hubCache.get(lastHubKey)?.remaining ?? new Map())
   const [loading, setLoading] = useState(() => !hubCache.has(lastHubKey))
+  // The list couldn't load and there's nothing cached to show for it.
+  const [loadFailed, setLoadFailed] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [currency, setCurrency] = useState('')
   const [country, setCountry] = useState('')
@@ -226,6 +229,8 @@ export function P2PHubPage() {
     const cached = hubCache.get(key)
     if (cached) { setOffers(cached.offers); setRemaining(cached.remaining); setLoading(false) }
     else { setOffers([]); setLoading(true) }
+    setLoadFailed(false)
+    try {
     // Browsing "Buy USDC" shows offers from SELLERS (people offering to
     // sell), and vice versa - the tab is what the viewer wants to do, the
     // fetched offer type is the counterparty's side.
@@ -248,6 +253,14 @@ export function P2PHubPage() {
     // Card extras - never hold up the list itself.
     fetchMerchantStats(rows.map(o => o.userId)).then(setStats).catch(() => {})
     if (rows.some(o => o.priceType === 'floating')) fetchFxRates(rows.map(o => o.currency)).then(setRates).catch(() => {})
+    } catch {
+      // Network down / bad answer: the load threw and the list stayed on its
+      // loading cards for good. Keep a list already on screen; with nothing to
+      // show, say so and offer a retry.
+      if (lastHubKey !== key) return
+      setLoading(false)
+      if (!cached) setLoadFailed(true)
+    }
   }, [tab, currency, country, user?.id, merchantFilter])
 
   useEffect(() => { load() }, [load])
@@ -374,6 +387,8 @@ export function P2PHubPage() {
       <div style={{ borderTop: `1px solid ${COLORS.border}` }}>
         {loading ? (
           <SkeletonCards count={5} className="px-4 pt-3" />
+        ) : loadFailed ? (
+          <ErrorState title="Couldn't load ads" description="Check your connection and try again." onRetry={() => { void load() }} />
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '56px 24px' }}>
             <p style={{ color: COLORS.text, fontSize: 14, fontWeight: 600, margin: 0 }}>No ads to {buying ? 'buy' : 'sell'} USDC right now</p>
@@ -1933,6 +1948,8 @@ export function P2PMyOffersPage() {
   const [offers, setOffers] = useState<P2POffer[]>(() => myOffersCache.get(user?.id ?? '')?.offers ?? [])
   const [remaining, setRemaining] = useState<Map<string, number>>(() => myOffersCache.get(user?.id ?? '')?.remaining ?? new Map())
   const [loading, setLoading] = useState(() => !myOffersCache.has(user?.id ?? ''))
+  // My ads couldn't load and none are cached: a retry instead of loading cards for good.
+  const [loadFailed, setLoadFailed] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [offerToCancel, setOfferToCancel] = useState<P2POffer | null>(null)
   // The offer the cancel sheet shows - kept while it slides away. (Reading
@@ -1972,6 +1989,8 @@ export function P2PMyOffersPage() {
   const load = useCallback(async () => {
     if (!user?.id) { setLoading(false); return }
     if (!myOffersCache.has(user.id)) setLoading(true)
+    setLoadFailed(false)
+    try {
     // Sweep this seller's own expired trades BEFORE fetching offers, so a
     // trade whose buyer never paid is already unlocked and its escrow
     // already reclaimed by the time this list renders - the seller sees
@@ -1985,7 +2004,13 @@ export function P2PMyOffersPage() {
     myOffersCache.set(user.id, { offers: rows, remaining: rem })
     setOffers(rows)
     setRemaining(rem)
-    setLoading(false)
+    } catch {
+      // Network down: the load threw and the list stayed on loading cards for
+      // good. Ads already on screen stay; with none, a retry (below).
+      if (!myOffersCache.has(user.id)) setLoadFailed(true)
+    } finally {
+      setLoading(false)
+    }
   }, [user?.id])
 
   useEffect(() => { load() }, [load])
@@ -2196,6 +2221,7 @@ export function P2PMyOffersPage() {
       } />
       <div style={{ padding: '8px 16px' }}>
         {loading ? <SkeletonCards count={4} className="pt-2" /> :
+         loadFailed && offers.length === 0 ? <ErrorState title="Couldn't load your ads" description="Check your connection and try again." onRetry={() => { void load() }} /> :
          offers.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '50px 20px', background: COLORS.surface, borderRadius: 18, border: `1px dashed ${COLORS.border}` }}>
             <p style={{ color: COLORS.muted, fontSize: 13 }}>No ads yet.</p>

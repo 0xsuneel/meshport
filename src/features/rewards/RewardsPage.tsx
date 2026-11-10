@@ -14,6 +14,7 @@ import {
 import { timeAgo, formatAmount } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useSingleFlight } from '@/hooks/useSingleFlight'
+import { readRewardsCache, writeRewardsCache } from '@/lib/rewardsCache'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { AmountField } from '@/components/ui/AmountField'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
@@ -266,17 +267,25 @@ export function RewardsPage() {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const navigate = useNavigate()
 
-  const [totalPoints, setTotalPoints]       = useState(0)
-  const [lifetimePoints, setLifetimePoints] = useState(0)
-  const [claimsHistory, setClaimsHistory]   = useState<ClaimRecord[]>([])
+  const userId = rewardsUserId(user?.id, walletAddress)
+  // The last Rewards data that loaded (lib/rewardsCache): the page opens on
+  // it at once and refreshes in the background, instead of sitting on
+  // loading placeholders until every read answers.
+  const [cached] = useState(() => (userId ? readRewardsCache(userId) : null))
+  const [totalPoints, setTotalPoints]       = useState(cached?.totalPoints ?? 0)
+  const [lifetimePoints, setLifetimePoints] = useState(cached?.lifetimePoints ?? 0)
+  const [claimsHistory, setClaimsHistory]   = useState<ClaimRecord[]>((cached?.claims as ClaimRecord[]) ?? [])
   // Tapping a claimed reward opens its receipt.
   const [claimReceipt, setClaimReceipt] = useState<ClaimRecord | null>(null)
   const claimFlash = useReturnFlash()
-  const [pointHistory, setPointHistory]     = useState<PointRecord[]>([])
-  const [dailyClaimedPoints, setDailyClaimedPoints] = useState(0)
+  const [pointHistory, setPointHistory]     = useState<PointRecord[]>((cached?.history as PointRecord[]) ?? [])
+  const [dailyClaimedPoints, setDailyClaimedPoints] = useState(cached?.dailyClaimed ?? 0)
   const [showEarnInfo, setShowEarnInfo] = useState(false)
   const howBtnRef = useRef<HTMLButtonElement>(null)
-  const [loading, setLoading]               = useState(true)
+  // loading: nothing to show yet (placeholders). fresh: this visit's numbers
+  // have loaded - a claim never starts from cached ones.
+  const [loading, setLoading]               = useState(!cached)
+  const [fresh, setFresh]                   = useState(false)
   const [claiming, setClaiming]             = useState(false)
   const [claimError, setClaimError]         = useState<string | null>(null)
   // How many points the user wants to claim - defaults to all
@@ -288,7 +297,6 @@ export function RewardsPage() {
   useLeaveGuard(progress?.phase === 'running', 'Reward claim')
   const [historyTab, setHistoryTab]         = useState<'earned' | 'claimed'>('earned')
 
-  const userId = rewardsUserId(user?.id, walletAddress)
   // Which card this person had last time (first-claim progress or the Claim
   // card), so the page opens on the right one. Before, it always opened on
   // the Claim card while loading and then switched to the first-claim card.
@@ -299,14 +307,25 @@ export function RewardsPage() {
 
   const load = useCallback(async () => {
     if (!userId) { setLoading(false); return }
-    setLoading(true)
-    const [pts, claims, history, dailyClaimedOffChain, dailyClaimedChain] = await Promise.all([
-      fetchUserPoints(userId),
-      fetchClaimsHistory(userId),
-      fetchPointHistory(userId),
-      fetchDailyClaimedPoints(userId),
-      walletAddress ? getDailyClaimedOnChain(walletAddress) : Promise.resolve(0),
-    ])
+    // A refresh (back in the app, a task just earned points) keeps showing
+    // what's on screen - placeholders only when there's nothing yet.
+    let results
+    try {
+      results = await Promise.all([
+        fetchUserPoints(userId),
+        fetchClaimsHistory(userId),
+        fetchPointHistory(userId),
+        fetchDailyClaimedPoints(userId),
+        walletAddress ? getDailyClaimedOnChain(walletAddress) : Promise.resolve(0),
+      ])
+    } catch {
+      // Couldn't load (weak network): keep the last numbers shown, and leave
+      // Claim off until a load succeeds (the next return to the app, a task
+      // earned, or a reopen retries).
+      setLoading(false)
+      return
+    }
+    const [pts, claims, history, dailyClaimedOffChain, dailyClaimedChain] = results
     // The contract's own daily counter is the real source of truth for the
     // 1000/day cap - it's independent of Supabase's reward_claims bookkeeping,
     // which only counts claims THIS app saw succeed end-to-end. A claim that
@@ -325,6 +344,8 @@ export function RewardsPage() {
     const dailyRemaining = Math.max(0, MAX_DAILY_POINTS - dailyClaimed)
     const maxClaimable = Math.min(pts.totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
     setClaimPoints(maxClaimable >= MIN_CLAIM_POINTS ? maxClaimable : MIN_CLAIM_POINTS)
+    writeRewardsCache(userId, { totalPoints: pts.totalPoints, lifetimePoints: pts.lifetimePoints, claims, history, dailyClaimed })
+    setFresh(true)
     setLoading(false)
   }, [userId, walletAddress])
 
@@ -342,7 +363,7 @@ export function RewardsPage() {
   const dailyRemaining = Math.max(0, MAX_DAILY_POINTS - dailyClaimedPoints)
   const maxClaimable = Math.min(totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
   const dailyCapHit = totalPoints >= MIN_CLAIM_POINTS && dailyRemaining < MIN_CLAIM_POINTS && dailyClaimedPoints > 0
-  const canOpenClaim = !!userId && !!walletAddress && maxClaimable >= MIN_CLAIM_POINTS && !loading
+  const canOpenClaim = !!userId && !!walletAddress && maxClaimable >= MIN_CLAIM_POINTS && !loading && fresh
   const typedPoints = parseInt(claimInput || '0', 10) || 0
   const claimOk = typedPoints >= MIN_CLAIM_POINTS && typedPoints <= maxClaimable
 

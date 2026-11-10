@@ -238,11 +238,14 @@ export async function fetchUserPoints(userId: string): Promise<{
   lifetimePoints: number
   claimableUSDC: number
 }> {
-  const { data } = await supabase
+  // A failed read throws: returning 0 / [] showed the person 0 pts and an
+  // empty history on a bad connection (and would overwrite good cached data).
+  const { data, error } = await supabase
     .from('user_points')
     .select('total_points, lifetime_points')
     .eq('user_id', userId)
     .maybeSingle()
+  if (error) throw error
   const totalPoints = data?.total_points || 0
   return {
     totalPoints,
@@ -588,13 +591,16 @@ export async function claimPointsAsUSDC(params: {
 // ─── Fetch points already claimed today (for daily cap enforcement) ───────────
 export async function fetchDailyClaimedPoints(userId: string): Promise<number> {
   const today = new Date().toISOString().split('T')[0]
-  const { data } = await supabase
+  // A failed read throws: returning 0 / [] showed the person 0 pts and an
+  // empty history on a bad connection (and would overwrite good cached data).
+  const { data, error } = await supabase
     .from('reward_claims')
     .select('points_claimed')
     .eq('user_id', userId)
     .eq('status', 'completed')
     .gte('claimed_at', `${today}T00:00:00Z`)
     .lt('claimed_at', `${today}T23:59:59Z`)
+  if (error) throw error
   return (data || []).reduce((sum: number, r: any) => sum + (r.points_claimed || 0), 0)
 }
 
@@ -616,22 +622,28 @@ export function rewardsUserId(profileId: string | null | undefined, walletAddres
 }
 
 export async function fetchClaimsHistory(userId: string) {
-  const { data } = await supabase
+  // A failed read throws: returning 0 / [] showed the person 0 pts and an
+  // empty history on a bad connection (and would overwrite good cached data).
+  const { data, error } = await supabase
     .from('reward_claims')
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(20)
+  if (error) throw error
   return data || []
 }
 
 // ─── Fetch point transactions history ─────────────────────────────────────────
 export async function fetchPointHistory(userId: string, limit = 50) {
-  const { data } = await supabase
+  // A failed read throws: returning 0 / [] showed the person 0 pts and an
+  // empty history on a bad connection (and would overwrite good cached data).
+  const { data, error } = await supabase
     .from('point_transactions')
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit)
+  if (error) throw error
   return data || []
 }

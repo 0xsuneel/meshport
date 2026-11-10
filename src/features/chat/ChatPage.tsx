@@ -73,6 +73,8 @@ import { CHAT_CARD_W, cardInnerWidth } from './chatCard'
 import { parsePersonalPayLink, PAY_LINK_EVENT, type PersonalPayLink } from '@/lib/payLinks'
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { SkeletonRows, SkeletonChat } from '@/components/ui/Skeleton'
+import { ErrorState } from '@/components/ui/ErrorState'
+import { readChatListCache, writeChatListCache } from '@/lib/chatListCache'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 
@@ -582,8 +584,12 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   }, [user?.id])
   const [archivedConvs, setArchivedConvs] = useState<DbConversation[]>([])
   const isDesktopList = useMediaQuery('(min-width: 980px)')
-  const [conversations, setConversations] = useState<DbConversation[]>(_cachedConversations)
-  const [loading, setLoading] = useState(_cachedConversations.length === 0)
+  // This session's list, else the one stored from the last app open (lib/chatListCache).
+  const [conversations, setConversations] = useState<DbConversation[]>(() =>
+    _cachedConversations.length > 0 || _cacheLoadedForUser === user?.id ? _cachedConversations : readChatListCache(user?.id) ?? [])
+  const [loading, setLoading] = useState(() => _cachedConversations.length === 0 && _cacheLoadedForUser !== user?.id && readChatListCache(user?.id) === null)
+  // The list couldn't load and there's nothing to show: a retry, not "No conversations yet".
+  const [listLoadFailed, setListLoadFailed] = useState(false)
   const [newChatSearch, setNewChatSearch] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
   // Last-known contacts show instantly (see peopleCache); the loader below refreshes them.
@@ -692,8 +698,19 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   const loadConversations = useCallback(async () => {
     if (!user?.id) return
     // Only show spinner if this user has no cached conversations yet
-    if (_cacheLoadedForUser !== user.id) setLoading(true)
-    const convs = applyReadOverrides(await fetchConversations(user.id))
+    if (_cacheLoadedForUser !== user.id && readChatListCache(user.id) === null) setLoading(true)
+    let fetched: DbConversation[]
+    try {
+      fetched = await fetchConversations(user.id)
+    } catch {
+      // Couldn't load (weak network): keep whatever list is on screen - it
+      // used to be replaced by an empty one ("No conversations yet").
+      setLoading(false)
+      if (_cacheLoadedForUser !== user.id && readChatListCache(user.id) === null) setListLoadFailed(true)
+      return
+    }
+    setListLoadFailed(false)
+    const convs = applyReadOverrides(fetched)
     const hiddenMap = getHiddenChatsMap(chatWalletAddr)
     // An archived chat stays archived - new messages just add to its unread
     // count. A payment either way (they pay me or I pay them, after it was
@@ -725,6 +742,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     // Save to module-level cache so next mount is instant
     _cachedConversations = filtered
     _cacheLoadedForUser  = user.id
+    writeChatListCache(user.id, filtered)
     setConversations(filtered)
     setLoading(false)
 
@@ -1206,6 +1224,8 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
 
       {loading ? (
         <SkeletonRows count={8} />
+      ) : listLoadFailed && conversations.length === 0 && !searchQ ? (
+        <ErrorState title="Couldn't load your chats" description="Check your connection and try again." onRetry={() => { invalidateConversationsCache(); void loadConversations() }} />
       ) : filtered.length === 0 && peopleMatches.length === 0 && (listTab !== 'all' || searchQ || archivedConvs.length > 0 || requestConvs.length > 0 || conversations.length > 0) ? (
         <div className="text-center py-16 px-5">
           <p className="text-text-secondary font-medium">
