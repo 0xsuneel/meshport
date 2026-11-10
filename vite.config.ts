@@ -80,6 +80,13 @@ export default defineConfig({
           if (/node_modules\/(buffer|base64-js|ieee754|process|vite-plugin-node-polyfills)\//.test(id)) return 'polyfills'
           if (/node_modules\/viem\//.test(id)) return 'viem'
           if (/node_modules\/ethers\//.test(id)) return 'ethers'
+          // The small crypto primitives (x25519 for chat keys, hashes) are shared
+          // with the app itself. Left unassigned, Rollup put them inside the
+          // circle-sdk chunk (Circle's SDK uses them too), so setting up chat
+          // keys at app start downloaded, parsed and ran the whole 1.4 MB
+          // Circle + Solana + Anchor bundle (~290 ms of main-thread work on a
+          // mid-range phone, while Home was drawing). Their own small chunk.
+          if (/node_modules\/@noble\//.test(id)) return 'noble'
           if (/node_modules\/@circle-fin\/(app-kit|adapter-ethers-v6)\//.test(id)) return 'circle-sdk'
           if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) return 'react-vendor'
           if (/node_modules\/framer-motion\//.test(id)) return 'motion'

@@ -799,6 +799,9 @@ async function hideBlockedSenders(records: ActivityRecord[], blockedLookup: Prom
   })
 }
 
+/** How long a history load waits for the blocked-senders list (it normally answers in well under this). */
+export const BLOCKED_LOOKUP_WAIT_MS = 1500
+
 export async function fetchActivity(
   walletAddress: string,
   opts: FetchOptions = {},
@@ -807,7 +810,13 @@ export async function fetchActivity(
   // after it - it was a third round trip in a row before history showed.
   const uid = useAuthStore.getState().user?.id
   const blockedLookup = uid ? blockedWalletMap(uid).catch(() => null) : Promise.resolve(null)
-  return hideBlockedSenders(await fetchActivityRaw(walletAddress, opts), blockedLookup)
+  // History never waits long on this optional lookup: on a weak network the
+  // database client retries a failed read (1 s, 2 s, 4 s), which kept the whole
+  // Activity list on loading cards for ~8 s. After BLOCKED_LOOKUP_WAIT_MS it
+  // shows as it does when the lookup fails; the lookup carries on and is
+  // cached (a minute), so the next load applies it.
+  const bounded = Promise.race([blockedLookup, new Promise<null>(r => setTimeout(() => r(null), BLOCKED_LOOKUP_WAIT_MS))])
+  return hideBlockedSenders(await fetchActivityRaw(walletAddress, opts), bounded)
 }
 
 // Counterparty wallet → MeshPort user (null = not a MeshPort user), kept for

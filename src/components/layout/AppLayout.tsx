@@ -161,6 +161,11 @@ export function AppLayout() {
       () => import('@/features/business/BusinessPage'),
       () => import('@/features/profile/ProfilePage'),
       () => import('@/features/activity/TransactionDetail'),
+      // Circle's SDK (Swap, Multichain) - the heaviest code in the app, last
+      // and on its own. It used to be loaded at app start by accident (shared
+      // crypto code sat in its chunk - vite.config.ts); without this, the
+      // first Swap open would run all of it while the page slides in.
+      () => import('@/lib/swapService').then(m => m.warmSwapSdkReady()),
     ]
     const ric = (window as any).requestIdleCallback as ((cb: () => void, o?: { timeout: number }) => number) | undefined
     let cancelled = false, handle: number | undefined

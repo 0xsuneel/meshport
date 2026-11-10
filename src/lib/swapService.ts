@@ -687,3 +687,8 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
 export function warmSwapSdk(): void {
   getSdkModules().catch(() => {})
 }
+
+/** warmSwapSdk, settling once the SDK is loaded (the idle preload queue waits on it). */
+export async function warmSwapSdkReady(): Promise<void> {
+  await getSdkModules().catch(() => {})
+}
