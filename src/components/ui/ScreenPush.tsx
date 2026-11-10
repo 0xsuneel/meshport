@@ -24,10 +24,11 @@ const EASE = PUSH_EASE_CSS
 const PARALLAX = PUSH_PARALLAX
 
 /** A frozen, non-interactive copy of what's on screen right now - without
- *  fixed-position overlays (sheets, dims) that happen to be inside it. The
- *  amount keypad is the exception: it's returned separately (`floats`) so it
- *  stays in the picture and slides away with the old screen, instead of
- *  vanishing the instant its Review/Done button is tapped. */
+ *  fixed-position overlays (dims, popups) that happen to be inside it. The
+ *  amount keypad and bottom sheets (`data-push-keep`: the passcode sheet and
+ *  its dim) are the exception: they're returned separately (`floats`) so they
+ *  stay in the picture and slide away with the old screen, instead of
+ *  vanishing the instant the step changes under them. */
 function pictureOf(el: HTMLElement): { node: HTMLElement; floats: HTMLElement[] } {
   const node = el.cloneNode(true) as HTMLElement
   // Wallet frames (recovery phrase, private key, passkey) must not load again in the copy.
@@ -40,7 +41,9 @@ function pictureOf(el: HTMLElement): { node: HTMLElement; floats: HTMLElement[] 
   for (let i = 0; i < orig.length && i < copy.length; i++) {
     const o = orig[i], c = copy[i]
     if (o.scrollTop) c.dataset.mpScrollTop = String(o.scrollTop)
-    if (getComputedStyle(o).position === 'fixed') (o.hasAttribute('data-amount-keypad-sheet') ? floats : drop).push(c)
+    // A picture still sliding from the step before (a quick second change) is not part of this one.
+    if (o.classList.contains('mp-page-snapshot') || o.hasAttribute('data-push-veil')) drop.push(c)
+    else if (getComputedStyle(o).position === 'fixed') (o.hasAttribute('data-amount-keypad-sheet') || o.hasAttribute('data-push-keep') ? floats : drop).push(c)
     if ((o instanceof HTMLInputElement || o instanceof HTMLTextAreaElement) && (c instanceof HTMLInputElement || c instanceof HTMLTextAreaElement)) c.value = o.value
     // A copied <img> (token / chain logo, avatar) is blank for the picture's
     // first frame while it decodes again; draw the already-decoded original
@@ -74,6 +77,12 @@ function pictureOf(el: HTMLElement): { node: HTMLElement; floats: HTMLElement[] 
     }
     if (c.id) c.removeAttribute('id')
     if (c.hasAttribute('data-amount-keypad-sheet')) c.removeAttribute('data-amount-keypad-sheet')
+    if (c.hasAttribute('data-push-keep')) c.removeAttribute('data-push-keep')
+  }
+  // The copy is not a live page: lookups for the open Hub page / guarded
+  // flow (LeaveGuardHost takes the LAST match) must not find it.
+  for (const el of [node, ...node.querySelectorAll<HTMLElement>('[data-hub-page], [data-leave-guard], [data-leave-ask]')]) {
+    el.removeAttribute('data-hub-page'); el.removeAttribute('data-leave-guard'); el.removeAttribute('data-leave-ask')
   }
   swaps.forEach(([img, cv]) => img.replaceWith(cv))
   drop.forEach(c => c.remove())
@@ -82,11 +91,16 @@ function pictureOf(el: HTMLElement): { node: HTMLElement; floats: HTMLElement[] 
   return { node, floats }
 }
 
-export function ScreenPush({ screenKey, back = false, style, children }: {
+export function ScreenPush({ screenKey, back = false, style, pictureRoot, children }: {
   screenKey: string
   /** This change goes back (the screen being left slides off to the right). */
   back?: boolean
   style?: CSSProperties
+  /** Selector of an ancestor (a fixed page such as a Hub page) to picture
+   *  instead of only these steps: the old step then slides away together
+   *  with that page's header and any open sheet - one piece, like a page
+   *  push - even when the next step drops the header (Bring's processing). */
+  pictureRoot?: string
   children: ReactNode
 }) {
   const reduce = useReducedMotion()
@@ -95,13 +109,14 @@ export function ScreenPush({ screenKey, back = false, style, children }: {
   const hostRef = useRef<HTMLDivElement>(null)
   const liveRef = useRef<HTMLDivElement>(null)
   const shown = useRef(screenKey)
-  const snap = useRef<{ key: string; node: HTMLElement; floats: HTMLElement[] } | null>(null)
+  const snap = useRef<{ key: string; node: HTMLElement; floats: HTMLElement[]; root: HTMLElement | null } | null>(null)
   const cleanup = useRef<(() => void) | null>(null)
 
   // About to change screens: picture the old one while it's still on screen
   // (render runs before React touches the DOM).
   if (!reduce && !isDesktop && shown.current !== screenKey && snap.current?.key !== screenKey && liveRef.current) {
-    try { snap.current = { key: screenKey, ...pictureOf(liveRef.current) } } catch { snap.current = null }
+    const root = pictureRoot ? liveRef.current.closest<HTMLElement>(pictureRoot) : null
+    try { snap.current = { key: screenKey, ...pictureOf(root ?? liveRef.current), root } } catch { snap.current = null }
   }
 
   useLayoutEffect(() => {
@@ -122,17 +137,23 @@ export function ScreenPush({ screenKey, back = false, style, children }: {
     layer.setAttribute('aria-hidden', 'true')
     layer.className = 'mp-page-snapshot' // no replayed CSS animations in the picture
     Object.assign(layer.style, { position: 'absolute', inset: '0', pointerEvents: 'none', overflow: 'hidden', background: 'var(--bg)' })
-    Object.assign(s.node.style, { position: 'absolute', left: '0', right: '0', top: '0', minHeight: '100%' })
+    // The picture of a whole page (pictureRoot) is laid over that page, which
+    // stays where it is however its header / steps re-lay out under it.
+    const stage = s.root?.isConnected ? s.root : host
+    Object.assign(s.node.style, s.root
+      ? { position: 'absolute', inset: '0', margin: '0', maxWidth: 'none', transform: 'none', zIndex: 'auto', boxShadow: 'none', willChange: 'auto' }
+      : { position: 'absolute', left: '0', right: '0', top: '0', minHeight: '100%' })
     layer.appendChild(s.node)
     s.floats.forEach(f => layer.appendChild(f)) // pinned to the bottom of the picture
     const look = pushLook()
     const veil = document.createElement('div')
+    veil.setAttribute('data-push-veil', '')
     Object.assign(veil.style, { position: 'absolute', inset: '0', background: '#000', opacity: '0', pointerEvents: 'none' })
     // Front: the screen arriving (forward) or the one leaving (back).
     layer.style.zIndex = back ? '3' : '1'
     veil.style.zIndex = '2'
-    host.appendChild(layer)
-    host.appendChild(veil)
+    stage.appendChild(layer)
+    stage.appendChild(veil)
     s.node.querySelectorAll<HTMLElement>('[data-mp-scroll-top]').forEach(el => { el.scrollTop = Number(el.dataset.mpScrollTop) })
     const prev = { position: live.style.position, zIndex: live.style.zIndex, background: live.style.background, boxShadow: live.style.boxShadow }
     Object.assign(live.style, { position: 'relative', zIndex: back ? '1' : '3', background: 'var(--bg)' })

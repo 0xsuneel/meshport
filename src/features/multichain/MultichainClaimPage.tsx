@@ -309,7 +309,10 @@ type ConfirmPhase = 'processing' | 'submitted' | 'tracking' | 'done'
 // their own (that would be a second animation inside the push).
 const INSTANT_STEP = { initial: false } as const
 function PushIf({ on, screenKey, back, children }: { on: boolean; screenKey: string; back: boolean; children: ReactNode }) {
-  return on ? <HubPush screenKey={screenKey} back={back}>{children}</HubPush> : <>{children}</>
+  // The picture of the whole Hub page (header + step + an open passcode
+  // sheet) slides away: the processing step drops the page header, and the
+  // passcode sheet lives inside the step being left.
+  return on ? <HubPush screenKey={screenKey} back={back} pictureRoot="[data-hub-page]">{children}</HubPush> : <>{children}</>
 }
 /** Swaps the steps: at once inside a push (see PushIf); otherwise a quick
  *  cross-fade, the old one popped out of the layout as the new one fades in. */
