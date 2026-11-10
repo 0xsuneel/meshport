@@ -989,3 +989,48 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
   content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
   z-index: -1; pointer-events: none; background: var(--frost-tint, var(--bg));
 }
+
+/* ── Home's My QR reveal, run with the scroll ───────────────────────────────
+   The card grows from 40% as it comes into view while a line scans the code
+   (see qrRevealPose in lib/qrReveal.ts - these stops are that curve). Where
+   scroll-driven animations exist the browser moves it together with the
+   scroll, off the main thread, so it never lags the finger. Elsewhere a JS
+   fallback writes the same transforms. Without motion: the rest state (full
+   size, code printed). */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .mp-qr-reveal { view-timeline: --mp-qr block; }
+    .mp-qr-card, .mp-qr-cover, .mp-qr-ghost, .mp-qr-scan {
+      animation-duration: auto;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: --mp-qr;
+      animation-range: entry 0% entry 100%;
+    }
+    .mp-qr-card { animation-name: mpQrGrow; }
+    .mp-qr-cover { animation-name: mpQrCover; }
+    .mp-qr-ghost { animation-name: mpQrGhost; }
+    .mp-qr-scan { animation-name: mpQrScan; }
+  }
+}
+@keyframes mpQrGrow {
+  0% { transform: scale(0.4); opacity: 0; }
+  16.667% { opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes mpQrCover {
+  0%, 13.649% { transform: translateY(0); }
+  94.351%, 100% { transform: translateY(100%); }
+}
+@keyframes mpQrGhost {
+  0%, 13.649% { transform: translateY(0); }
+  94.351%, 100% { transform: translateY(-100%); }
+}
+@keyframes mpQrScan {
+  0% { transform: translateY(-7%); opacity: 0; }
+  0.1% { opacity: 1; }
+  8% { transform: translateY(-7%); }
+  91.123% { opacity: 1; }
+  99.193% { opacity: 0; }
+  100% { transform: translateY(107%); opacity: 0; }
+}
