@@ -57,6 +57,7 @@ import { biometricLabel } from '@/lib/biometric'
 import { ServiceIcon } from '@/components/ui/ServiceIcon'
 import { pressable } from '@/lib/pressable'
 import { StuckPaymentsBanner } from '@/components/StuckPaymentsBanner'
+import { qrRevealPose } from '@/lib/qrReveal'
 import { QuickIcon } from '@/components/ui/QuickIcon'
 
 function copyText(text: string) { try { void navigator.clipboard.writeText(text).then(() => { try { navigator.vibrate?.(8) } catch { /* no vibration */ } }) } catch {} }
@@ -124,12 +125,14 @@ function aggregateBuckets(records: ActivityRecord[], spanDays: number, granulari
 // it as "send to this address" rather than opening a browser link.
 const APP_URL = 'https://meshport.xyz'
 
-function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }: { walletAddress: string | null; username: string | null; scrollContainerRef: RefObject<HTMLDivElement>; assetsCardRef: RefObject<HTMLDivElement> }) {
+function MyQrCard({ walletAddress, username, scrollContainerRef }: { walletAddress: string | null; username: string | null; scrollContainerRef: RefObject<HTMLDivElement> }) {
   const displayName = useAuthStore(s => s.user?.displayName)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ghostRef = useRef<HTMLCanvasElement>(null)
-  const scanLineRef = useRef<HTMLDivElement>(null)
+  const scanRef = useRef<HTMLDivElement>(null)
+  const coverRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
+  const revealRef = useRef<HTMLDivElement>(null)
   const [qrReady, setQrReady] = useState(false)
   const [qrError, setQrError] = useState(false)
   const { showToastMessage } = useUIStore()
@@ -204,52 +207,50 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
   }, [activeAmount])
 
   // Reveal, scrubbed by the scroll: the card grows from 40% to full size from
-  // its top edge as the space under Assets opens up (how much of its natural
-  // height fits there), and shrinks back as you scroll up. Meanwhile a teal
-  // line scans down the code: above it the code is printed, below it a faint
-  // teal copy waits. Positions are measured once (and again when anything
-  // resizes), so a scroll only does arithmetic and a few style writes, once
-  // per frame - no layout reads while scrolling.
+  // its top edge as it comes up into view, and shrinks back as you scroll up.
+  // Meanwhile a teal line scans down the code: above it the code is printed,
+  // below it a white cover holds a faint teal copy.
+  //
+  // Only transform and opacity move, so nothing is laid out or repainted per
+  // frame. Where the browser has scroll-driven animations (Chrome / Android,
+  // the TWA) the CSS in index.css (.mp-qr-*) runs it with the scroll itself,
+  // so the card stays glued to the finger like a native view. Elsewhere this
+  // fallback writes the same transforms once per frame.
   useEffect(() => {
-    const container = scrollContainerRef.current, assets = assetsCardRef.current, card = cardRef.current
-    if (!container || !assets || !card) return
-    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    let assetsBottom = 0, cardH = 1, viewH = 0, frame = 0, lastP = -1
+    const container = scrollContainerRef.current, card = cardRef.current, outer = revealRef.current
+    if (!container || !card || !outer) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    if (typeof CSS !== 'undefined' && CSS.supports?.('animation-timeline: view()')) return
+    let top = 0, cardH = 1, viewH = 0, frame = 0, lastP = -1
     const measure = () => {
       const c = container.getBoundingClientRect()
-      assetsBottom = assets.getBoundingClientRect().bottom - c.top + container.scrollTop
-      cardH = card.offsetHeight || 1
+      top = outer.getBoundingClientRect().top - c.top + container.scrollTop
+      cardH = outer.offsetHeight || 1
       viewH = c.height
       lastP = -1
     }
     const apply = () => {
       frame = 0
-      const p = still ? 1 : Math.min(1, Math.max(0, (container.scrollTop + viewH - assetsBottom) / cardH))
+      const p = Math.min(1, Math.max(0, (container.scrollTop + viewH - top) / cardH))
       // Most of the scroll is above the card (p = 0) or past it (p = 1):
       // nothing changes there, so nothing is written.
       if (p === lastP) return
       lastP = p
-      card.style.transform = `scale(${(0.4 + 0.6 * p).toFixed(4)})`
-      card.style.opacity = Math.min(1, p * 6).toFixed(3)
-      // The scan runs from just above the code (-7%) to just below it (107%).
-      const f = Math.min(1, Math.max(0, (p - 0.08) / 0.92)) * 1.14 - 0.07
-      const at = Math.min(1, Math.max(0, f))
-      if (canvasRef.current) canvasRef.current.style.clipPath = `inset(0 0 ${((1 - at) * 100).toFixed(2)}% 0)`
-      if (ghostRef.current) ghostRef.current.style.clipPath = `inset(${(at * 100).toFixed(2)}% 0 0 0)`
-      const line = scanLineRef.current
-      if (line) {
-        line.style.top = `${(f * 100).toFixed(2)}%`
-        line.style.opacity = (p <= 0 || f >= 1.06 ? 0 : Math.min(1, (1.06 - f) / 0.1)).toFixed(3)
-      }
+      const r = qrRevealPose(p)
+      card.style.transform = `scale(${r.scale.toFixed(4)})`
+      card.style.opacity = r.opacity.toFixed(3)
+      if (coverRef.current) coverRef.current.style.transform = `translateY(${(r.printed * 100).toFixed(2)}%)`
+      if (ghostRef.current) ghostRef.current.style.transform = `translateY(${(-r.printed * 100).toFixed(2)}%)`
+      if (scanRef.current) { scanRef.current.style.transform = `translateY(${(r.line * 100).toFixed(2)}%)`; scanRef.current.style.opacity = r.lineOpacity.toFixed(3) }
     }
     const onScroll = () => { if (!frame) frame = requestAnimationFrame(apply) }
     const ro = new ResizeObserver(() => { measure(); apply() })
-    ro.observe(container); ro.observe(assets); ro.observe(card)
+    ro.observe(container); ro.observe(outer)
     if (container.firstElementChild) ro.observe(container.firstElementChild)
     measure(); apply()
     container.addEventListener('scroll', onScroll, { passive: true })
     return () => { container.removeEventListener('scroll', onScroll); ro.disconnect(); if (frame) cancelAnimationFrame(frame) }
-  }, [scrollContainerRef, assetsCardRef, qrReady])
+  }, [scrollContainerRef, qrReady])
 
   useEffect(() => {
     if (!qrData || !canvasRef.current) return
@@ -364,8 +365,11 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
   if (!walletAddress) return null
 
   return (
+    // The outer box never moves: the scroll-driven reveal is measured on it.
+    <div ref={revealRef} className="mp-qr-reveal">
     <div
       ref={cardRef}
+      className="mp-qr-card"
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
         width: '95%', margin: '0 auto', boxSizing: 'border-box', transformOrigin: 'top center',
@@ -398,11 +402,21 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
           </div>}>
           <div style={{ position: 'relative', lineHeight: 0, opacity: qrReady ? 1 : 0, transition: 'opacity 0.2s ease-out' }}>
             <canvas ref={canvasRef} style={{ display: 'block' }} />
-            <canvas ref={ghostRef} aria-hidden style={{ position: 'absolute', left: 0, top: 0, display: 'block', pointerEvents: 'none' }} />
+            {/* Not printed yet: a white cover (the code's own background) with
+                the faint teal copy, sliding down off the code as the line
+                passes. The copy slides back up by the same amount, so it
+                stays put. Rest state: slid away. */}
+            <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+              <div ref={coverRef} className="mp-qr-cover" style={{ position: 'absolute', inset: 0, background: '#ffffff', transform: 'translateY(100%)', willChange: 'transform' }}>
+                <canvas ref={ghostRef} className="mp-qr-ghost" style={{ position: 'absolute', left: 0, top: 0, display: 'block', transform: 'translateY(-100%)', willChange: 'transform' }} />
+              </div>
+            </div>
             {/* The scan line: a soft teal trail above a bright edge. */}
-            <div ref={scanLineRef} aria-hidden style={{ position: 'absolute', left: '-6%', right: '-6%', height: 22, transform: 'translateY(-100%)', pointerEvents: 'none', opacity: 0,
-              background: 'linear-gradient(to bottom, rgb(var(--brand-text-rgb) / 0), rgb(var(--brand-text-rgb) / 0.35))' }}>
-              <div style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 2.2, borderRadius: 2, background: 'var(--brand-text)', boxShadow: '0 0 10px 1px rgb(var(--brand-text-rgb) / 0.9)' }} />
+            <div ref={scanRef} aria-hidden className="mp-qr-scan" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0, willChange: 'transform, opacity' }}>
+              <div style={{ position: 'absolute', left: '-6%', right: '-6%', top: 0, height: 22, transform: 'translateY(-100%)',
+                background: 'linear-gradient(to bottom, rgb(var(--brand-text-rgb) / 0), rgb(var(--brand-text-rgb) / 0.35))' }}>
+                <div style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 2.2, borderRadius: 2, background: 'var(--brand-text)', boxShadow: '0 0 10px 1px rgb(var(--brand-text-rgb) / 0.9)' }} />
+              </div>
             </div>
           </div>
         </QrCard>
@@ -430,6 +444,7 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
           </button>
         ))}
       </div>
+    </div>
     </div>
   )
 }
@@ -2930,8 +2945,6 @@ export function HomePage() {
   // Home's real scroll container (below) is its own overflowY:'auto' div,
   // not the window - MyQrCard's scroll-linked reveal measures against it.
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  // The Assets card: the QR grows into the space that opens up under it.
-  const assetsCardRef = useRef<HTMLDivElement>(null)
   const stickyHeaderRef = useRef<HTMLDivElement>(null)
   // The header frosts only once something has scrolled under it: its blur
   // reaches past its bottom edge (index.css, "Frosted bars"), so at the top
@@ -4408,7 +4421,7 @@ export function HomePage() {
         ))}
 
         {/* ── ASSETS - all 3 tokens ────────────────────────────────────────── */}
-        <div ref={assetsCardRef}>
+        <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isDesktop ? 6 : 12 }}>
             {/* Same heading size as Quick Actions on the phone. */}
             <span style={{ fontSize: isDesktop ? 16 : 19, fontWeight: 700, letterSpacing: isDesktop ? undefined : '-0.3px' }}>Assets</span>
@@ -4474,7 +4487,7 @@ export function HomePage() {
         {isDesktop && <BiometricFooterRow isDesktop />}
 
         {/* ── MY QR - below Assets card. Mobile only. ─────────────────────── */}
-        {!isDesktop && !accountLock.locked && <MyQrCard walletAddress={walletAddress} username={username} scrollContainerRef={scrollContainerRef} assetsCardRef={assetsCardRef} />}
+        {!isDesktop && !accountLock.locked && <MyQrCard walletAddress={walletAddress} username={username} scrollContainerRef={scrollContainerRef} />}
         {/* ── Biometric row - mobile: right below the QR card. ─────────────── */}
         {!isDesktop && <BiometricFooterRow isDesktop={false} />}
         </div>
