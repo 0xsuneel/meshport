@@ -56,6 +56,7 @@ import './store/themeStore'
 import { useAuthStore } from './store'
 import { startWalletReadiness } from './lib/walletReadiness'
 import { awayPastAutoLock } from './lib/autoLock'
+import { initSecretClipboard } from './lib/secretClipboard'
 import { installGlassHeaders } from './lib/glassHeaders'
 import { installViewportDebug } from './lib/viewportDebug'
 
@@ -92,6 +93,9 @@ clearLegacyData()
   // Wallet readiness (lib/walletReadiness): tracking starts before the first
   // render, so the first Arc answer and the first open are both seen.
   startWalletReadiness()
+  // A copied recovery phrase / key still waiting to be cleared from the
+  // clipboard (copied before a reload or restart): clear it on first focus.
+  initSecretClipboard()
   // The wallet frame: loaded now, so it is ready (or reloading if its first
   // load failed - wallet/frameClient.ts) by the time the lock screen or the
   // first payment needs it.

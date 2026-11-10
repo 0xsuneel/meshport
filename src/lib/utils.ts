@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import {format, isYesterday, differenceInCalendarDays} from 'date-fns'
+import { noteOtherClipboardWrite } from './secretClipboard'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -117,6 +118,8 @@ function copyTick() { try { navigator.vibrate?.(8) } catch { /* not supported */
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text)
+    // A newer copy replaced a copied recovery phrase: don't wipe it later.
+    noteOtherClipboardWrite()
     copyTick()
     return true
   } catch {
