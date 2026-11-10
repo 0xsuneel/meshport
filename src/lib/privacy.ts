@@ -141,18 +141,33 @@ export async function fetchBlocked(userId: string): Promise<BlockedPerson[]> {
 // them after that moment as a bare address, without their username (it can
 // only have come from outside MeshPort - see ActivityService.fetchActivity).
 let _blockedWallets: { uid: string; at: number; map: Map<string, number> } | null = null
-export function clearBlockedCache() { _blockedWallets = null }
+// One lookup at a time per user: every history load asks, and several at once
+// (Activity + Home + the reload after a filter change) used to send their own
+// copies - ten requests on one Activity open, each retried on a weak network.
+let _blockedInFlight: { uid: string; p: Promise<Map<string, number>> } | null = null
+export function clearBlockedCache() { _blockedWallets = null; _blockedInFlight = null }
 export async function blockedWalletMap(userId: string): Promise<Map<string, number>> {
   if (_blockedWallets && _blockedWallets.uid === userId && Date.now() - _blockedWallets.at < 60_000) return _blockedWallets.map
-  const map = new Map<string, number>()
-  const { data } = await supabase.from('chat_blocks').select('blocked_id, created_at').eq('owner_id', userId)
-  if (data?.length) {
-    const when = new Map(data.map((r: any) => [r.blocked_id, new Date(r.created_at).getTime()]))
-    const { data: users } = await supabase.from('users').select('id, wallet_address').in('id', [...when.keys()])
-    for (const u of users ?? []) if (u.wallet_address) map.set(String(u.wallet_address).toLowerCase(), when.get(u.id) ?? 0)
-  }
-  _blockedWallets = { uid: userId, at: Date.now(), map }
-  return map
+  if (_blockedInFlight?.uid === userId) return _blockedInFlight.p
+  const p = (async () => {
+    const map = new Map<string, number>()
+    // A failed read throws (the caller shows history as if nobody is blocked,
+    // for that load only) instead of being remembered for a minute as "nobody
+    // is blocked" - which showed blocked senders' names until it expired.
+    const { data, error } = await supabase.from('chat_blocks').select('blocked_id, created_at').eq('owner_id', userId)
+    if (error) throw error
+    if (data?.length) {
+      const when = new Map(data.map((r: any) => [r.blocked_id, new Date(r.created_at).getTime()]))
+      const { data: users, error: usersError } = await supabase.from('users').select('id, wallet_address').in('id', [...when.keys()])
+      if (usersError) throw usersError
+      for (const u of users ?? []) if (u.wallet_address) map.set(String(u.wallet_address).toLowerCase(), when.get(u.id) ?? 0)
+    }
+    if (_blockedInFlight?.p === p) _blockedWallets = { uid: userId, at: Date.now(), map }
+    return map
+  })()
+  _blockedInFlight = { uid: userId, p }
+  p.finally(() => { if (_blockedInFlight?.p === p) _blockedInFlight = null }).catch(() => {})
+  return p
 }
 
 /** Fired when which chats count as unread changes - I blocked, unblocked or

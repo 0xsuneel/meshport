@@ -70,20 +70,26 @@ function copyText(text: string) { try { void navigator.clipboard.writeText(text)
 type InsightsGranularity = 'daily' | 'weekly' | 'monthly'
 interface ActivityBucket { key: string; label: string; start: number; end: number; count: number; volume: number }
 
+// One formatter each, made once: toLocaleDateString(locale, options) builds a
+// new Intl formatter on EVERY call (the slow part - this ran once per bucket on
+// every Home render). Same locale + options, so the labels are identical.
+const DAY_LABEL = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
+const MONTH_LABEL = new Intl.DateTimeFormat('en-US', { month: 'short' })
+
 function makeBuckets(spanDays: number, granularity: InsightsGranularity, endDate: Date): Omit<ActivityBucket, 'count' | 'volume'>[] {
   const buckets: Omit<ActivityBucket, 'count' | 'volume'>[] = []
   if (granularity === 'daily') {
     for (let i = spanDays - 1; i >= 0; i--) {
       const d = new Date(endDate); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0)
       const start = d.getTime()
-      buckets.push({ key: d.toDateString(), label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), start, end: start + 86400000 })
+      buckets.push({ key: d.toDateString(), label: DAY_LABEL.format(d), start, end: start + 86400000 })
     }
   } else if (granularity === 'weekly') {
     const weeks = Math.max(1, Math.ceil(spanDays / 7))
     for (let i = weeks - 1; i >= 0; i--) {
       const end = new Date(endDate); end.setDate(end.getDate() - i * 7); end.setHours(23, 59, 59, 999)
       const start = end.getTime() - 6 * 86400000
-      buckets.push({ key: `w${i}`, label: new Date(start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), start, end: end.getTime() })
+      buckets.push({ key: `w${i}`, label: DAY_LABEL.format(new Date(start)), start, end: end.getTime() })
     }
   } else {
     const months = Math.max(1, Math.ceil(spanDays / 30))
@@ -91,7 +97,7 @@ function makeBuckets(spanDays: number, granularity: InsightsGranularity, endDate
       const d = new Date(endDate); d.setDate(1); d.setMonth(d.getMonth() - i)
       const start = new Date(d.getFullYear(), d.getMonth(), 1).getTime()
       const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime()
-      buckets.push({ key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleDateString('en-US', { month: 'short' }), start, end })
+      buckets.push({ key: `${d.getFullYear()}-${d.getMonth()}`, label: MONTH_LABEL.format(d), start, end })
     }
   }
   return buckets
@@ -99,9 +105,16 @@ function makeBuckets(spanDays: number, granularity: InsightsGranularity, endDate
 
 function aggregateBuckets(records: ActivityRecord[], spanDays: number, granularity: InsightsGranularity, endDate: Date): ActivityBucket[] {
   const shells = makeBuckets(spanDays, granularity, endDate)
+  // Each record's time parsed once - not once per bucket (records × buckets
+  // date parses). Same inclusion rule and the same summing order as before.
+  const times = records.map(r => new Date(r.createdAt).getTime())
   return shells.map(b => {
-    const inBucket = records.filter(r => { const t = new Date(r.createdAt).getTime(); return t >= b.start && t < b.end })
-    return { ...b, count: inBucket.length, volume: inBucket.reduce((s, r) => s + r.amount, 0) }
+    let count = 0, volume = 0
+    for (let i = 0; i < records.length; i++) {
+      const t = times[i]
+      if (t >= b.start && t < b.end) { count++; volume += records[i].amount }
+    }
+    return { ...b, count, volume }
   })
 }
 

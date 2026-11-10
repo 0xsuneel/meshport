@@ -1,4 +1,5 @@
 import { backLayerPop } from '@/lib/backLayers'
+import { formatLocale } from '@/lib/localeFormat'
 import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
 import { SendIcon } from '@/components/ui/SendIcon'
@@ -1260,11 +1261,11 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
             const isToday    = d.toDateString() === now.toDateString()
             const isYesterday = d.toDateString() === new Date(now.getTime()-86400000).toDateString()
             const timeLabel  = isToday
-              ? d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})
+              ? formatLocale(d, [], {hour:'numeric',minute:'2-digit'})
               : isYesterday ? 'Yesterday'
               : d.getFullYear() === now.getFullYear()
-                ? d.toLocaleDateString([], {month:'short',day:'numeric'})
-                : d.toLocaleDateString([], {month:'short',day:'numeric',year:'2-digit'})
+                ? formatLocale(d, [], {month:'short',day:'numeric'})
+                : formatLocale(d, [], {month:'short',day:'numeric',year:'2-digit'})
             return (
               // Plain <button>, not motion.button with a mount fade-in -
               // ChatDesktopSplit already keeps this whole list mounted as a
@@ -1516,8 +1517,8 @@ function DateSeparator({ iso }: { iso: string }) {
         const label = msgDay.getTime() === today.getTime() ? 'Today'
           : msgDay.getTime() === yest.getTime() ? 'Yesterday'
           : msgDay.getFullYear() === now.getFullYear()
-            ? d.toLocaleDateString([], {weekday:'long', month:'short', day:'numeric'})
-            : d.toLocaleDateString([], {weekday:'long', month:'short', day:'numeric', year:'numeric'})
+            ? formatLocale(d, [], {weekday:'long', month:'short', day:'numeric'})
+            : formatLocale(d, [], {weekday:'long', month:'short', day:'numeric', year:'numeric'})
         return (
           <div className="flex items-center gap-2 my-3 px-4">
             <div className="flex-1 h-px bg-[rgb(var(--text-primary-rgb)/0.06)]"/>
@@ -1758,7 +1759,7 @@ const MessageBubble = memo(function MessageBubble({
                 <CheckCircle className="w-3.5 h-3.5" style={{ color: 'var(--success-text)' }} strokeWidth={2.5} />
                 {msg.payment_tx_hash ? 'Confirmed on Arc' : 'Completed'}
               </span>
-              <span style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{new Date(msg.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+              <span style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{formatLocale(new Date(msg.created_at), [], { hour: 'numeric', minute: '2-digit' })}</span>
             </div>
           </div>
         </div>
@@ -1801,7 +1802,7 @@ const MessageBubble = memo(function MessageBubble({
                       {linkifyText(caption, isMine)}
                       <div className="flex items-center justify-end gap-1 mt-0.5">
                         {notEncrypted && <NotEncryptedTag light={isMine} />}{waitingForThem && <WaitingTag light={isMine} />}
-                        <p className={`text-[11px] ${isMine ? 'text-white/60' : 'text-text-secondary'}`}>{new Date(msg.created_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</p>
+                        <p className={`text-[11px] ${isMine ? 'text-white/60' : 'text-text-secondary'}`}>{formatLocale(new Date(msg.created_at), [], {hour:'numeric',minute:'2-digit'})}</p>
                         {isMine && <MessageTicks msg={msg} />}
                       </div>
                     </div>
@@ -1815,7 +1816,7 @@ const MessageBubble = memo(function MessageBubble({
                   }}>
                     {notEncrypted && <NotEncryptedTag light />}{waitingForThem && <WaitingTag light />}
                     <span style={{ fontSize: 11, color: '#fff' }}>
-                      {new Date(msg.created_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}
+                      {formatLocale(new Date(msg.created_at), [], {hour:'numeric',minute:'2-digit'})}
                     </span>
                     {isMine && <MessageTicks msg={msg} onMedia />}
                   </div>
@@ -1857,7 +1858,7 @@ const MessageBubble = memo(function MessageBubble({
             {(isDeleted || !isImageMsg) && (
               <div className="relative flex items-center justify-end gap-1 mt-0.5" style={isCardMsg ? { padding: '0 6px 1px' } : undefined}>
                 {notEncrypted && <NotEncryptedTag light={isMine} />}{waitingForThem && <WaitingTag light={isMine} />}
-                <p className={`text-[11px] ${isMine ? 'text-white/60' : 'text-text-secondary'}`}>{new Date(msg.created_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</p>
+                <p className={`text-[11px] ${isMine ? 'text-white/60' : 'text-text-secondary'}`}>{formatLocale(new Date(msg.created_at), [], {hour:'numeric',minute:'2-digit'})}</p>
                 {isMine && !isDeleted && <MessageTicks msg={msg} />}
               </div>
             )}
@@ -1955,7 +1956,7 @@ function GroupCaption({ msgs, isMine }: { msgs: any[]; isMine: boolean }) {
     <div style={{ padding: captions.length ? '6px 8px 3px' : '0 8px 3px', wordBreak: 'break-word' }}>
       {captions.map((c, i) => <div key={i} className={`text-[15px] leading-snug ${isMine ? 'text-white' : 'text-text-primary'}`} style={{ marginTop: i ? 4 : 0 }}>{linkifyText(c, isMine)}</div>)}
       <div className="flex items-center justify-end gap-1 mt-0.5">
-        <p className={`text-[11px] ${isMine ? 'text-white/60' : 'text-text-secondary'}`}>{new Date(last.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>
+        <p className={`text-[11px] ${isMine ? 'text-white/60' : 'text-text-secondary'}`}>{formatLocale(new Date(last.created_at), [], { hour: 'numeric', minute: '2-digit' })}</p>
         {isMine && <MessageTicks msg={groupTickMsg(msgs)} />}
       </div>
     </div>
@@ -2009,7 +2010,7 @@ const AlbumBubble = memo(function AlbumBubble({ msgs, isMine, convKey, onOpen, o
         </div>
         {hasCaption ? <GroupCaption msgs={msgs} isMine={isMine} /> : (
           <div style={{ position: 'absolute', bottom: 8, right: 10, display: 'flex', alignItems: 'center', gap: 3, background: 'rgba(0,0,0,0.45)', borderRadius: 10, padding: '2px 6px', pointerEvents: 'none' }}>
-            <span style={{ fontSize: 11, color: '#fff' }}>{new Date(last.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+            <span style={{ fontSize: 11, color: '#fff' }}>{formatLocale(new Date(last.created_at), [], { hour: 'numeric', minute: '2-digit' })}</span>
             {isMine && <MessageTicks msg={groupTickMsg(msgs)} onMedia />}
           </div>
         )}

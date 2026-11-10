@@ -22,7 +22,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, ArrowUpDown, Settings, RefreshCw, ChevronDown, Clock, } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
+import { MOBILE_TAB_FADE_TRANSITION, PUSH_OPEN_MS } from '@/lib/motion'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isCoinEnabled } from '@/lib/featureFilters'
@@ -555,10 +555,15 @@ export function SwapPage() {
   // sheet) so the RPC proxy cold-start is off the critical path by the time
   // the user taps Swap → enters their passcode.
   useEffect(() => {
-    import('@/lib/swapService').then(({ warmSwapSdk }) => warmSwapSdk())
+    // After the page has slid in: loading Circle's SDK is the heaviest work in
+    // the app, and run during the slide it stalled the opening animation. It's
+    // usually loaded already (AppLayout's idle preload); a quote asked for
+    // before this fires loads it itself (estimateSwapLocal), as before.
+    const sdk = window.setTimeout(() => { import('@/lib/swapService').then(({ warmSwapSdk }) => warmSwapSdk()).catch(() => {}) }, PUSH_OPEN_MS + 50)
     prepareSigner()
     import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
     import('@/lib/swapIntentService').then(m => { void m.warmSwapIntent() }).catch(() => {})
+    return () => window.clearTimeout(sdk)
   }, [])
 
   // ─── Success screen - same full-screen flash → hero-card takeover
