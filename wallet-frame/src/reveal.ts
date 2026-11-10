@@ -52,9 +52,17 @@ function copyButton(secret: string, label: string) {
     try {
       await navigator.clipboard.writeText(secret)
       b.textContent = 'Copied'
-      // Clear the clipboard after a minute if it still holds the secret.
+      // Clear the clipboard after a minute. This page usually can't: as a
+      // cross-origin iframe it may not read the clipboard (to check the secret
+      // is still there), and may only write while it has focus - gone once
+      // the person switches away to paste. So the app clears it (it's told
+      // only THAT a secret was copied - lib/secretClipboard.ts), and this page
+      // still tries itself in case it has focus then.
+      tellApp({ type: 'mp-secret-copied' })
       setTimeout(async () => {
-        try { if ((await navigator.clipboard.readText()) === secret) await navigator.clipboard.writeText('') } catch { /* */ }
+        let still = true
+        try { still = (await navigator.clipboard.readText()) === secret } catch { /* can't read: clear anyway */ }
+        if (still) { try { await navigator.clipboard.writeText('') } catch { /* no focus: the app clears it */ } }
       }, 60_000)
     } catch { b.textContent = 'Copy blocked - write it down' }
     setTimeout(() => { b.textContent = label }, 2000)

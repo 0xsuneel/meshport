@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { revealUrl, walletOrigin, WalletFrameError } from '@/wallet'
+import { scheduleSecretClipboardClear } from '@/lib/secretClipboard'
 
 /** A reveal page from before the 'mp-reveal' message: shown this long after it loads. */
 const LEGACY_SHOW_MS = 900
@@ -72,6 +73,9 @@ export function WalletSecretFrame({ address, what, passcode, height, onError, on
       const d = e.data as { type?: string; ok?: boolean } | null
       if (d?.type === 'mp-reveal') setDrawn(true)
       if (d?.type === 'mp-verify' && d.ok === true) onVerifiedRef.current?.()
+      // The phrase / key was copied: the app clears the clipboard a minute later
+      // (the frame can't do it once it loses focus - lib/secretClipboard.ts).
+      if (d?.type === 'mp-secret-copied') scheduleSecretClipboardClear()
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
