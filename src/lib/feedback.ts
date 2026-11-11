@@ -20,7 +20,8 @@ function audio(): AudioContext | null {
       if (!AC) return null
       ctx = new AC()
     }
-    if (ctx.state === 'suspended') void ctx.resume()
+    // 'interrupted': iOS paused it (a call, another app's audio).
+    if (ctx.state !== 'running') void ctx.resume().catch(() => {})
     return ctx
   } catch { return null }
 }
@@ -93,10 +94,13 @@ if (typeof window !== 'undefined') {
   // Called on window itself: Safari throws when it's called detached.
   const w = window as unknown as { requestIdleCallback?: (cb: () => void) => number }
   if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(warm); else setTimeout(warm, 3000)
+  // Kept for the whole session: the phone suspends the engine again when the
+  // app goes to the background (or iOS interrupts it for a call), and a
+  // resume outside a touch can be refused - after one unlock the success
+  // ding then stayed silent until the app was restarted.
   const unlock = () => {
     if (!ctx) return // not made yet: the idle callback makes it, the next touch resumes it
-    if (ctx.state === 'suspended') void ctx.resume().catch(() => {})
-    window.removeEventListener('pointerdown', unlock, true)
+    if (ctx.state !== 'running') void ctx.resume().catch(() => {})
   }
   window.addEventListener('pointerdown', unlock, true)
 }
