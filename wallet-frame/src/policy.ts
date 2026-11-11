@@ -49,6 +49,21 @@ export const CIRCLE_CONTRACTS = new Map<string, string>([
   ['0x2222222d7164433c4c09b0b0d809a9b52c04c205', 'Circle Gateway'],
 ])
 const PERMIT2 = '0x000000000022d473030f116ddee9f6b43ac78ba3'
+/**
+ * Circle Gateway's wallet contract (testnet, mainnet). Money deposited there
+ * is still the person's - their Unified Balance - and only leaves when a
+ * burn intent spends it, which is counted. So a deposit to their own
+ * balance, and the approval it needs, don't count against a spend limit
+ * (a Unified Balance transfer used to count the same money twice and ask
+ * for the passcode again). A deposit credited to someone else does count,
+ * and any other Gateway wallet call (adding a delegate who could spend the
+ * balance, withdrawing) is confirmed on its own.
+ */
+const GATEWAY_WALLETS = new Set(['0x0077777d7eba4688bdef3e311b846f25870a19b9', '0x77777777dcc4d5a8b6e418fd04d8997ef11000ee'])
+const GATEWAY_ABI = [
+  { type: 'function', name: 'deposit', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'token', type: 'address' }, { name: 'value', type: 'uint256' }] },
+  { type: 'function', name: 'depositFor', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'token', type: 'address' }, { name: 'depositor', type: 'address' }, { name: 'value', type: 'uint256' }] },
+] as const
 /** Most a single transaction may spend on fees inside a spend limit (native units). */
 const MAX_FEE_ARC = 100_000_000_000_000_000n // 0.1 USDC
 const MAX_FEE_OTHER = 10_000_000_000_000_000n // 0.01 of that chain's coin
@@ -101,12 +116,29 @@ function classifyTransaction(self: string, tx: Record<string, unknown>): Classif
       const d = decodeFunctionData({ abi: TOKEN_ABI, data: data as Hex })
       const a = d.args as readonly unknown[]
       let amount = 0n
-      if (d.functionName === 'transfer' || d.functionName === 'approve' || d.functionName === 'increaseAllowance') amount = big(a[1])
+      if (d.functionName === 'approve' || d.functionName === 'increaseAllowance') {
+        // Letting Gateway take a set amount for a deposit to this wallet's own
+        // Unified Balance (the deposit and its spend are read below / counted
+        // as burn intents). An unlimited one still counts in full.
+        amount = GATEWAY_WALLETS.has(lower(a[0])) && big(a[1]) < 2n ** 255n ? 0n : big(a[1])
+      } else if (d.functionName === 'transfer') amount = big(a[1])
       else if (d.functionName === 'transferFrom') amount = lower(a[0]) === self ? big(a[2]) : 0n
       else amount = lower(a[0]) === self ? big(a[2]) : 0n // permit / *WithAuthorization: the owner's value
       add(spends, token.asset, to18(amount, token.decimals))
       return { ok: true, spends, calls: [] }
     } catch { return refuse(`an unrecognised call to the ${token.asset} contract`) }
+  }
+  if (GATEWAY_WALLETS.has(to)) {
+    try {
+      const d = decodeFunctionData({ abi: GATEWAY_ABI, data: data as Hex })
+      const a = d.args as readonly unknown[]
+      const t = TOKENS.get(lower(a[0]))
+      if (!t) return refuse('a Gateway deposit of a token this wallet doesn\'t know')
+      // Into this wallet's own Unified Balance: still its money.
+      if (d.functionName === 'deposit' || lower(a[1]) === self) return { ok: true, spends, calls: [] }
+      add(spends, t.asset, to18(big(a[2]), t.decimals)) // credited to someone else
+      return { ok: true, spends, calls: [] }
+    } catch { return refuse('a Gateway call other than a deposit') }
   }
   if (MOVING.has(selector)) return refuse('a token transfer or approval this wallet can\'t read')
   if (to === PERMIT2) return refuse('a Permit2 call')

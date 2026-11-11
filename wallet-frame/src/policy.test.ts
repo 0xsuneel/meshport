@@ -1,6 +1,6 @@
 // What a spend limit counts, read by the wallet itself (policy.ts).
 import { describe, it, expect } from 'vitest'
-import { encodeFunctionData, erc20Abi, maxUint256, pad } from 'viem'
+import { encodeFunctionData, erc20Abi, maxUint256, pad, parseAbi } from 'viem'
 import { classify, describeRequest, fits, parseScope, canonical } from './policy'
 
 const me = '0x1111111111111111111111111111111111111111'
@@ -16,11 +16,35 @@ describe('spend limit policy', () => {
     expect(spends(classify(me, 'sign:transaction', { transaction: tx({ value: 10n ** 18n }) }))).toEqual({ USDC: 10n ** 18n })
     const transfer = encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [them, 2_000_000n] })
     expect(spends(classify(me, 'sign:transaction', { transaction: tx({ to: ARC_USDC, data: transfer }) }))).toEqual({ USDC: 2n * 10n ** 18n })
-    const approve = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [GATEWAY, 5_000_000n] })
+    const approve = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [them, 5_000_000n] })
     expect(spends(classify(me, 'sign:transaction', { transaction: tx({ chainId: 11155111, to: SEPOLIA_USDC, data: approve }) }))).toEqual({ USDC: 5n * 10n ** 18n })
     // Someone else's tokens moved by transferFrom cost this wallet nothing.
     const pull = encodeFunctionData({ abi: erc20Abi, functionName: 'transferFrom', args: [them, me, 9n] })
     expect(spends(classify(me, 'sign:transaction', { transaction: tx({ to: ARC_USDC, data: pull }) }))).toEqual({ USDC: 0n })
+  })
+
+  // A Unified Balance transfer / Bring: approve Gateway, deposit to your own
+  // balance, then a burn intent spends it. Only the burn intent leaves.
+  it('a deposit to your own Gateway balance is not counted - the burn intent that spends it is', () => {
+    const gw = parseAbi(['function deposit(address token, uint256 value)', 'function depositFor(address token, address depositor, uint256 value)', 'function addDelegate(address token, address delegate)'])
+    const on = (data: `0x${string}`, to = GATEWAY) => classify(me, 'sign:transaction', { transaction: tx({ chainId: 11155111, to, data }) })
+    const approve = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [GATEWAY, 1_000_000n] })
+    expect(spends(classify(me, 'sign:transaction', { transaction: tx({ chainId: 11155111, to: SEPOLIA_USDC, data: approve }) }))).toEqual({ USDC: 0n })
+    expect(spends(on(encodeFunctionData({ abi: gw, functionName: 'deposit', args: [SEPOLIA_USDC, 1_000_000n] })))).toEqual({})
+    expect(spends(on(encodeFunctionData({ abi: gw, functionName: 'depositFor', args: [SEPOLIA_USDC, me, 1_000_000n] })))).toEqual({})
+    // Credited to someone else: it leaves.
+    expect(spends(on(encodeFunctionData({ abi: gw, functionName: 'depositFor', args: [SEPOLIA_USDC, them, 1_000_000n] })))).toEqual({ USDC: 10n ** 18n })
+    // Anyone else allowed to spend the balance: confirmed on its own.
+    expect(on(encodeFunctionData({ abi: gw, functionName: 'addDelegate', args: [SEPOLIA_USDC, them] })).ok).toBe(false)
+    // So a 1 USDC limit covers the whole route: approve + deposit + the burn intent.
+    const scope = parseScope({ limits: [{ asset: 'USDC', amount: '1.5' }] })
+    let left = { ...scope.limits }
+    for (const c of [classify(me, 'sign:transaction', { transaction: tx({ chainId: 11155111, to: SEPOLIA_USDC, data: approve }) }), on(encodeFunctionData({ abi: gw, functionName: 'deposit', args: [SEPOLIA_USDC, 1_000_000n] }))]) {
+      const next = c.ok ? fits(scope, left, c) : null
+      expect(next).not.toBeNull(); left = next!
+    }
+    const burn = classify(me, 'sign:typed-data', { typedData: { primaryType: 'BurnIntent', domain: { name: 'GatewayWallet' }, message: { maxBlockHeight: '1', maxFee: '50000', spec: { sourceToken: pad(SEPOLIA_USDC.toLowerCase() as `0x${string}`), value: '1000000' } } } })
+    expect(burn.ok && fits(scope, left, burn)).not.toBeNull()
   })
 
   it('an unlimited approval never fits a limit, and the exact view warns about it', () => {

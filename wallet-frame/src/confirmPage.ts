@@ -118,9 +118,14 @@ function compare(view: IntentView, summary: ConfirmSummary | null) {
   const appN = num(summary?.amount), walletN = num(amount)
   const single = !!unit || !/\+/.test(view.amount)
   const sameUnit = !summary?.unit || !unit || summary.unit === unit
+  // A spend limit may sit above the amount by the route's fees: up to 10% plus
+  // 1 more (a cross-chain send's fee and margin). Larger than that, the card
+  // shows the wallet's own figure.
   const same = single && sameUnit && Number.isFinite(appN) && Number.isFinite(walletN)
-    && (scope ? walletN >= appN && walletN <= appN * 1.1 + 1e-9 : Math.abs(walletN - appN) < 1e-9)
-  return { scope, amount, unit, same }
+    && (scope ? walletN >= appN && walletN <= appN * 1.1 + 1 + 1e-9 : Math.abs(walletN - appN) < 1e-9)
+  // The limit itself, when it is more than the amount: rounded UP to cents, never shown less than it is.
+  const limit = scope && same && walletN > appN + 1e-9 ? `${(Math.ceil(walletN * 100 - 1e-6) / 100).toString()} ${unit}` : null
+  return { scope, amount, unit, same, limit }
 }
 /** A passcode typed before the wallet's reading arrived may go ahead: it is what the card showed. */
 function agrees(view: IntentView | null, appSummary: ConfirmSummary | null): boolean {
@@ -130,13 +135,13 @@ function agrees(view: IntentView | null, appSummary: ConfirmSummary | null): boo
 function card(view: IntentView | null, summary: ConfirmSummary | null): HTMLElement {
   const wrap = el('div')
   if (view) {
-    const { scope, amount, unit, same } = compare(view, summary)
+    const { scope, amount, unit, same, limit } = compare(view, summary)
     const label = summary?.label || (view.action === 'Send' ? 'Paying' : view.action)
     const name = summary?.name || view.action
     // Who the wallet will actually pay is always on the card (the name is the
     // app's word for it).
     const detail = scope
-      ? (same ? summary?.detail : `Up to ${view.amount} for 2 minutes`)
+      ? (limit ? `Up to ${limit} with fees` : same ? summary?.detail : `Up to ${view.amount} for 2 minutes`)
       : [summary?.detail, view.to ? shortAddress(view.to) : ''].filter(Boolean).join(' · ') || undefined
     // The app's figure, exactly as the app's sheet showed it ("$5"), only
     // when it is what the wallet read - otherwise the wallet's own figure,
@@ -145,8 +150,10 @@ function card(view: IntentView | null, summary: ConfirmSummary | null): HTMLElem
       ? { label, name, detail, amount: summary!.amount, unit: summary!.unit ?? unit }
       : { label, name, detail, amount: scope ? view.amount : amount, unit: scope ? '' : unit }))
     // What else the wallet read (an order, a contract, a message) - not the
-    // fee or the time limit.
-    const rows = view.rows.filter(r => r.label !== 'Network fee' && r.label !== 'For')
+    // fee, the time limit, or the extra contracts a limit names (MeshPort's
+    // routers: they can't move tokens by themselves, and a raw address on
+    // the passcode sheet only confused).
+    const rows = view.rows.filter(r => r.label !== 'Network fee' && r.label !== 'For' && r.label !== 'May also call')
     if (rows.length) { const box = el('div', 'rows'); for (const r of rows) box.append(row(r.label, r.value)); wrap.append(box) }
     for (const w of view.warnings) wrap.append(el('p', 'warn', w))
   } else if (summary) {
