@@ -29,6 +29,7 @@
 import { useAuthStore, useUIStore } from '@/store'
 import type { WalletAccount } from '@/wallet'
 import { walletGeneration, noteRestoring, startWalletReadiness } from './walletReadiness'
+import { isWalletConfirmToken } from './walletConfirmToken'
 
 // ── Single-flight guard ─────────────────────────────────────────────────────
 // There are 13+ call sites of restorePrivateKey() across the app, several
@@ -58,6 +59,9 @@ export function walletUnavailableMessage(): string {
 }
 
 export async function restorePrivateKey(rawPasscode?: string, opts?: { silent?: boolean }): Promise<boolean> {
+  // Approved in the wallet's own page (lib/walletConfirm): the frame opened
+  // the key itself - there is no passcode here to open it with.
+  if (isWalletConfirmToken(rawPasscode)) rawPasscode = undefined
   startWalletReadiness()
   const running = inFlightRestore
   // An attempt for an account that has since logged out / switched is not

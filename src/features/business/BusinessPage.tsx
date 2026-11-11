@@ -690,7 +690,7 @@ function OwnerBusinessPage() {
         onRetryFailed={() => { if (failedIds.length) beginSettle(failedIds) }}
         onTrack={id => { const c = settle.run.find(r => r.id === id)?.claimId; if (c) { setProgressOpen(false); setHistoryId(c) } }} />
 
-      <PinSheet open={!!pin} title={pinShown?.kind === 'refund' ? 'Confirm refund' : 'Confirm settle'}
+      <PinSheet walletConfirm open={!!pin} title={pinShown?.kind === 'refund' ? 'Confirm refund' : 'Confirm settle'}
         subtitle={pinShown?.kind === 'refund' ? `Send ${money(Number(refundAmount) || 0)} back to ${refundShown ? who(refundShown) : 'the customer'}`
           : pinShown?.kind === 'one' ? `Move ${money((chains ?? []).find(c => c.id === pinShown.chainId)?.balance ?? 0)} from ${chainLabel(pinShown.chainId)} to Arc`
           : `Move ${money(pinShown?.kind === 'settle' && pinShown.retry ? settle.run.filter(r => pinShown.retry!.includes(r.id)).reduce((s, r) => s + r.balance, 0) : settle.total)} to your Arc balance`}

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { verifyMessage, bytesToHex, hexToBytes } from 'viem'
-import { WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION } from '@/wallet/protocol'
+import { WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION, CONFIRM_CHANNEL } from '@/wallet/protocol'
 
 // The frame's message boundary: who it answers, what it answers with.
 // window is stubbed: `parent` is the embedding app; in tests (DEV) the
@@ -213,6 +213,9 @@ describe('approval: value-moving signatures need the passcode, checked by the fr
     expect((await ask('sign:transaction', { address, transaction: tx(address, 1n) }))!.msg.error.code).toBe('approval-required')
     expect((await ask('sign:transaction', { address, transaction: tx(address, 0n, '0xa9059cbb') }))!.msg.error.code).toBe('approval-required')
     expect((await ask('sign:transaction', { address, transaction: { ...tx(address, 0n), maxFeePerGas: 10n ** 18n } }))!.msg.error.code).toBe('approval-required')
+    // Only on Arc: elsewhere the fee is paid in that chain's own coin (ETH…).
+    expect((await ask('sign:transaction', { address, transaction: { ...tx(address, 0n), chainId: 1 } }))!.msg.error.code).toBe('approval-required')
+    expect((await ask('sign:transaction', { address, transaction: { ...tx(address, 0n), chainId: undefined } }))!.msg.error.code).toBe('approval-required')
   })
 
   it('the approval lasts 2 minutes, and lock ends it', async () => {
@@ -300,5 +303,83 @@ describe('confirm-word check', () => {
     expect((await ask('mnemonic:check', { address, answers: right, passcode: '123456' }))!.msg.result.ok).toBe(true)
     expect((await ask('mnemonic:check', { address, answers: { ...right, 11: 'zoo' }, passcode: '123456' }))!.msg.result.ok).toBe(false)
     expect((await ask('mnemonic:check', { address, answers: right, passcode: '999999' }))!.msg.error.code).toBe('bad-passcode')
+  })
+})
+
+// ── Confirm in the wallet (confirm.html) ────────────────────────────────────
+// The page side of the BroadcastChannel is played by the test.
+describe('confirmations', () => {
+  const ARC = 5042002
+  const page = new BroadcastChannel(CONFIRM_CHANNEL)
+  const next = (type: string, ticket: string) => new Promise<any>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`no ${type}`)), 3000)
+    const on = (e: MessageEvent) => { if (e.data?.type === type && e.data.ticket === ticket) { clearTimeout(t); page.removeEventListener('message', on as any); resolve(e.data) } }
+    page.addEventListener('message', on as any)
+  })
+  const claim = (ticket: string) => { const r = next('request', ticket); page.postMessage({ type: 'claim', ticket }); return r }
+  const enter = (ticket: string, passcode: string) => { const r = next('checked', ticket); page.postMessage({ type: 'passcode', ticket, passcode }); return r }
+
+  async function wallet() {
+    const pk = generatePrivateKey()
+    const { address } = privateKeyToAccount(pk)
+    await ask('import', { kind: 'import-privkey', secret: pk, passcode: '123456' })
+    return { pk, address }
+  }
+  const recipient = privateKeyToAccount(generatePrivateKey()).address
+  const intent = { chainId: ARC, to: recipient, value: '2500000000000000000', data: '0x', maxFee: '50000000000000000' }
+  const tx = (over: Record<string, unknown> = {}) => ({ type: 'eip1559', chainId: ARC, nonce: 7, to: recipient, value: 2_500_000_000_000_000_000n, gas: 25_200n, maxFeePerGas: 60_000_000_000n, maxPriorityFeePerGas: 1_000_000_000n, ...over })
+
+  it('shows the payment read from the transaction, and signs exactly that one once', async () => {
+    const { pk, address } = await wallet()
+    const { ticket } = (await ask('confirm:begin', { address, intent, summary: { label: 'Paying', name: 'ravi.arc' } }))!.msg.result
+    const req = await claim(ticket)
+    expect(req.view).toMatchObject({ action: 'Send', amount: '2.5', token: 'USDC', to: recipient })
+    expect(req.summary.name).toBe('ravi.arc')
+    expect((await ask('confirm:result', { ticket }))!.msg.result.status).toBe('pending')
+
+    expect(await enter(ticket, '000000')).toMatchObject({ ok: false, code: 'bad-passcode' })
+    expect(await enter(ticket, '123456')).toMatchObject({ ok: true })
+    expect((await ask('confirm:result', { ticket }))!.msg.result).toEqual({ status: 'approved', viaBiometric: false })
+
+    // No approval window: the plain path still asks.
+    expect((await ask('sign:transaction', { address, transaction: tx() }))!.msg.error.code).toBe('approval-required')
+    // A different recipient, amount or fee is not what was confirmed.
+    expect((await ask('sign:transaction', { address, transaction: tx({ to: address }), confirmation: ticket }))!.msg.error.code).toBe('mismatch')
+    expect((await ask('sign:transaction', { address, transaction: tx({ value: 3n }), confirmation: ticket }))!.msg.error.code).toBe('mismatch')
+    expect((await ask('sign:transaction', { address, transaction: tx({ gas: 10_000_000n }), confirmation: ticket }))!.msg.error.code).toBe('mismatch')
+    // The confirmed one: signed, once.
+    const r = await ask('sign:transaction', { address, transaction: tx(), confirmation: ticket })
+    expect(r!.msg.result.serialized).toBe(await privateKeyToAccount(pk).signTransaction(tx() as any))
+    expect((await ask('sign:transaction', { address, transaction: tx(), confirmation: ticket }))!.msg.error.code).toBe('mismatch')
+  })
+
+  it('a ticket is shown by one page only, and cancelled ones never approve', async () => {
+    const { address } = await wallet()
+    const { ticket } = (await ask('confirm:begin', { address, intent }))!.msg.result
+    await claim(ticket)
+    expect((await claim(ticket)).error).toBe('expired')
+    await ask('confirm:cancel', { ticket })
+    expect((await ask('confirm:result', { ticket }))!.msg.result.status).toBe('error')
+  })
+
+  it('a summary (no intent) opens the usual approval window on the right passcode', async () => {
+    const { address } = await wallet()
+    expect((await ask('sign:transaction', { address, transaction: tx() }))!.msg.error.code).toBe('approval-required')
+    const { ticket } = (await ask('confirm:begin', { address, summary: { label: 'Swapping', name: 'USDC → EURC', amount: '10' } }))!.msg.result
+    const req = await claim(ticket)
+    expect(req.view).toBeNull()
+    expect(await enter(ticket, '123456')).toMatchObject({ ok: true })
+    expect((await ask('confirm:result', { ticket }))!.msg.result.status).toBe('approved')
+    expect((await ask('sign:transaction', { address, transaction: tx() }))!.msg.result.serialized).toMatch(/^0x/)
+  })
+
+  it('refuses what it cannot confirm', async () => {
+    const { address } = await wallet()
+    expect((await ask('confirm:begin', { address }))!.msg.error.code).toBe('invalid')
+    expect((await ask('confirm:begin', { address, intent: { ...intent, chainId: 1 } }))!.msg.error.code).toBe('invalid')
+    expect((await ask('confirm:begin', { address, intent: { ...intent, maxFee: '1000000000000000000' } }))!.msg.error.code).toBe('invalid')
+    // No passcode on this device: the app's own sheet sets one first.
+    const fresh = (await ask('create', {}))!.msg.result.address
+    expect((await ask('confirm:begin', { address: fresh, intent }))!.msg.error.code).toBe('not-found')
   })
 })

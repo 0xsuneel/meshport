@@ -6,11 +6,11 @@
 
 import { callWallet, WalletFrameError, walletOrigin } from './frameClient'
 import { walletAccount, type WalletAccount } from './account'
-import type { PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
+import type { ConfirmBiometric, ConfirmIntent, ConfirmOutcome, ConfirmSummary, PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
 
 export { walletAccount, quoteAccount, isWalletAccount, toEthersSigner, createWalletAdapter, type WalletAccount } from './account'
 export { WalletFrameError, walletOrigin, walletReady } from './frameClient'
-export type { PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
+export type { ConfirmBiometric, ConfirmIntent, ConfirmOutcome, ConfirmSummary, PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
 
 /** Wallets whose key is in the wallet frame: every created / imported wallet. */
 export function keyInWalletFrame(walletSource: string | null | undefined): boolean {
@@ -116,6 +116,25 @@ export async function awaitPasskey(ticket: string, opts: { signal?: AbortSignal;
     if (outcome.status !== 'pending') return outcome
     await new Promise(r => setTimeout(r, opts.intervalMs ?? 500))
   }
+}
+
+// ── Confirm inside the wallet (confirm.html) ────────────────────────────────
+/**
+ * Start a confirmation: the person reads what they approve and types the
+ * passcode in wallet-frame/confirm.html (components/wallet/WalletConfirmFrame).
+ * Returns the URL for that visible iframe and the ticket to wait on.
+ */
+export async function beginConfirm(address: string, request: { intent?: ConfirmIntent; summary?: ConfirmSummary; biometric?: ConfirmBiometric | null }, theme: 'dark' | 'light' = 'dark'): Promise<{ ticket: string; url: string }> {
+  const { ticket } = await callWallet('confirm:begin', { address, intent: request.intent, summary: request.summary, biometric: request.biometric ?? undefined })
+  return { ticket, url: `${walletOrigin()}/confirm.html#t=${ticket}&theme=${theme}` }
+}
+
+export function confirmResult(ticket: string): Promise<ConfirmOutcome> {
+  return callWallet('confirm:result', { ticket })
+}
+
+export function cancelConfirm(ticket: string): Promise<void> {
+  return callWallet('confirm:cancel', { ticket }).then(() => undefined, () => undefined)
 }
 
 // ── Moving keys the app used to hold ────────────────────────────────────────

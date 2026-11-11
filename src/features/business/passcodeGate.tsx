@@ -15,7 +15,7 @@ export function usePasscodeGate() {
   const ask = (title: string, subtitle: string, run: (code?: string) => void) => { if (!hash) { run(); return } setError(undefined); setValue(''); setPending({ title, subtitle, run }) }
   const shownPending = useLatched(pending)
   const sheet = (
-    <PinSheet open={!!pending} title={shownPending?.title ?? ''} subtitle={shownPending?.subtitle ?? ''} error={error}
+    <PinSheet walletConfirm open={!!pending} title={shownPending?.title ?? ''} subtitle={shownPending?.subtitle ?? ''} error={error}
       value={value} onChange={v => { setValue(v); if (v) setError(undefined) }}
       onClose={() => setPending(null)}
       onComplete={async code => {

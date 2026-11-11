@@ -6,8 +6,11 @@
 // The error shows in one place on both: under the title, in red, and the
 // dots shake. With no passcode set, a plain confirm button stands in for the
 // keypad, so it's still an explicit "are you sure" step.
-import { type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence } from 'framer-motion'
+import { WalletConfirmFrame, type WalletConfirmRequest } from '@/components/wallet/WalletConfirmFrame'
+import { walletConfirmAddress } from '@/lib/walletConfirm'
+import type { ConfirmIntent, ConfirmSummary } from '@/wallet/protocol'
 import { ActionSheet } from './ActionSheet'
 import { DesktopTransactionAuthDialog } from './DesktopTransactionAuthDialog'
 import { PinKeypad } from './PinKeypad'
@@ -62,12 +65,58 @@ export interface PinSheetProps {
    *  is right → processing): it leaves underneath that page - no slide down
    *  or fade on top of it. */
   leaveUnder?: boolean
+  /**
+   * Money moves: the passcode is typed in the wallet's own page instead of
+   * this keypad (lib/walletConfirm), for wallets kept in the wallet frame.
+   * `intent`: the exact transaction (Pay) - the wallet shows what it reads
+   * from it and signs only that. Once approved, onChange / onComplete get a
+   * token in place of the passcode, which the passcode checks accept.
+   */
+  walletConfirm?: { intent?: () => Promise<ConfirmIntent | null>; summary?: ConfirmSummary } | true
 }
 
 export function PinSheet(p: PinSheetProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const close = p.locked ? () => {} : p.onClose
-  const pad = p.fallbackConfirm ? (
+
+  // ── In the wallet (walletConfirm) ──
+  // A fresh confirmation each time the sheet opens, and again when the screen
+  // clears the token (its send failed and it asks again).
+  const [attempt, setAttempt] = useState(0)
+  const [keypadOnly, setKeypadOnly] = useState(false)
+  const pending = useRef<{ token: string; via: boolean } | null>(null)
+  const lastValue = useRef(p.value)
+  useEffect(() => { if (p.open) { setAttempt(a => a + 1); setKeypadOnly(false) } }, [p.open])
+  useEffect(() => {
+    const was = lastValue.current
+    lastValue.current = p.value
+    if (p.open && was.startsWith('wallet-confirmed:') && !p.value) setAttempt(a => a + 1)
+    // onComplete from the render that has the token in the screen's state
+    // (its handler reads its own passcode state, not the argument).
+    if (pending.current && p.value === pending.current.token) {
+      const { token, via } = pending.current
+      pending.current = null
+      p.onComplete(token, via)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.value, p.open])
+  const inWallet = !!p.walletConfirm && !p.fallbackConfirm && !keypadOnly && !!walletConfirmAddress()
+  const subtitleText = typeof p.subtitle === 'string' ? p.subtitle : undefined
+  const request: WalletConfirmRequest | null = inWallet ? {
+    intent: p.walletConfirm === true ? undefined : p.walletConfirm!.intent,
+    summary: p.walletConfirm !== true && p.walletConfirm?.summary ? p.walletConfirm.summary
+      : p.card
+      ? { label: p.card.label, name: p.card.name, detail: p.card.detail, amount: p.card.amount, unit: p.card.unit }
+      : { label: p.title, name: subtitleText || p.title, amount: p.amountLabel },
+  } : null
+  // Only while open: a closed sheet starts no confirmation.
+  const walletPad = request && (p.open
+    ? <WalletConfirmFrame key={attempt} request={request}
+        onUnavailable={() => setKeypadOnly(true)}
+        onApproved={(token, via) => { pending.current = { token, via }; p.onChange(token) }} />
+    : <div className="h-[480px]" aria-hidden />)
+
+  const pad = walletPad ? walletPad : p.fallbackConfirm ? (
     <button type="button" onClick={p.fallbackConfirm.onConfirm}
       className="w-full rounded-2xl py-4 text-[15px] font-bold text-white bg-brand active:scale-[0.98] transition-transform">
       {p.fallbackConfirm.label}
@@ -100,8 +149,8 @@ export function PinSheet(p: PinSheetProps) {
         {p.header}
         <div className="text-center mb-7">
           <h2 className="text-lg font-bold text-text-primary">{p.title}</h2>
-          {(!p.card || p.error) && <p className="text-[13px] mt-1.5 text-text-secondary">{said}</p>}
-          {p.card && <SummaryCard {...p.card} />}
+          {(!p.card || p.error) && (!walletPad || p.error) && <p className="text-[13px] mt-1.5 text-text-secondary">{said}</p>}
+          {p.card && !walletPad && <SummaryCard {...p.card} />}
         </div>
         {pad}
         {p.footer}

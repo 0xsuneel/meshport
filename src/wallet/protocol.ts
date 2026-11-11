@@ -76,7 +76,25 @@ export interface WalletRpc {
   approve: [{ address: string; passcode: string }, { approved: true; required: boolean; validForMs: number }]
   'sign:message': [{ address: string; message: string | { raw: Hex } }, { signature: Hex }]
   'sign:typed-data': [{ address: string; typedData: Record<string, unknown> }, { signature: Hex }]
-  'sign:transaction': [{ address: string; transaction: FrameTransaction }, { serialized: Hex }]
+  /**
+   * `confirmation`: a ticket the person approved in confirm.html for exactly
+   * this transaction (ConfirmIntent) - signed once, with no approval window.
+   */
+  'sign:transaction': [{ address: string; transaction: FrameTransaction; confirmation?: string }, { serialized: Hex }]
+  /**
+   * Start a confirmation: the app then shows confirm.html#t=<ticket> in a
+   * visible iframe, where the person reads what they approve and types the
+   * passcode (or uses the fingerprint) - inside the wallet's origin, so the
+   * app never sees it. With `intent`, the frame decodes the transaction
+   * itself and the approval signs only that one; without it (`summary` only:
+   * the app's own description) a correct passcode opens the usual approval
+   * window. 3 minutes to approve.
+   */
+  'confirm:begin': [{ address: string; intent?: ConfirmIntent; summary?: ConfirmSummary; biometric?: ConfirmBiometric }, { ticket: string }]
+  /** Poll a confirmation. */
+  'confirm:result': [{ ticket: string }, ConfirmOutcome]
+  /** The person closed the sheet: the ticket is dropped. */
+  'confirm:cancel': [{ ticket: string }, { ok: true }]
   /** This wallet's chat public key (X25519, 32 bytes). The private half never leaves the frame (audit M15). */
   'chat:pub': [{ address: string }, { pub: Hex }]
   /** Seal a message's own 32-byte key from this wallet's chat identity to `rpk` (lib/chatWrap). */
@@ -115,6 +133,34 @@ export type PasskeyOutcome =
 
 /** passkey.html ↔ frame, over a same-origin BroadcastChannel (never the app). */
 export const PASSKEY_CHANNEL = 'meshport-wallet-passkey'
+
+/**
+ * One transaction a confirmation allows. The frame shows what it does from
+ * these fields alone and signs a transaction only when chain, recipient,
+ * value and data match exactly and gas × max fee per gas ≤ maxFee. Nonce and
+ * gas are left to the sender (they are read after the passcode).
+ * value / maxFee: decimal strings of the native unit's smallest unit.
+ */
+export interface ConfirmIntent { chainId: number; to: string; value: string; data: Hex; maxFee: string }
+
+/** The app's own description of an action (shown as such, never as verified). */
+export interface ConfirmSummary { label: string; name: string; detail?: string; amount?: string; unit?: string }
+
+/**
+ * The fingerprint copy of the passcode (lib/biometric.ts, sealed under the
+ * passkey's PRF output): confirm.html runs the same passkey and opens it
+ * there. Opaque to the frame until the person's fingerprint opens it.
+ */
+export interface ConfirmBiometric { rpId: string; credentialId: string; salt: string; iv: string; ciphertext: string; label?: string }
+
+export type ConfirmOutcome =
+  | { status: 'pending' }
+  | { status: 'approved'; viaBiometric: boolean }
+  | { status: 'cancelled' }
+  | { status: 'error'; message: string }
+
+/** confirm.html ↔ frame, over a same-origin BroadcastChannel (never the app). */
+export const CONFIRM_CHANNEL = 'meshport-wallet-confirm'
 
 export type WalletMethod = keyof WalletRpc
 export type WalletParams<M extends WalletMethod> = WalletRpc[M][0]

@@ -450,7 +450,7 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
 
       {/* The app's passcode step: the bottom sheet on phones, the authorize
           dialog on desktop. */}
-      <PinSheet open={pinOpen} onClose={() => setPinOpen(false)} id="claim-all-pin"
+      <PinSheet walletConfirm open={pinOpen} onClose={() => setPinOpen(false)} id="claim-all-pin"
         title={isDesktop ? (retryIds ? 'Confirm retry' : 'Confirm Claim All') : (retryIds ? 'Confirm retry' : 'Confirm claim')}
         subtitle={isDesktop ? 'To your Arc balance' : `Confirm ${retryIds ? 'retry' : 'Claim All'} of $${formatAmount(pinAmount)} USDC`}
         amountLabel={`$${formatAmount(pinAmount)} USDC`}

@@ -26,7 +26,7 @@ export function WalletApprovalPrompt() {
   }
 
   return (
-    <PinSheet
+    <PinSheet walletConfirm
       open={open}
       id="wallet-approve"
       zIndex={400}

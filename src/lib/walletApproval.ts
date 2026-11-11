@@ -14,6 +14,7 @@
 import { create } from 'zustand'
 import { useAuthStore } from '@/store'
 import { FRAME_PASSCODE, WALLET_UNAVAILABLE, onPasscodeVerified, setFramePasscodeCheck } from './security'
+import { isWalletConfirmToken, walletConfirmTokenValid } from './walletConfirmToken'
 
 const FRAME_SOURCES = new Set(['create', 'import-seed', 'import-privkey'])
 // A little under the frame's own 2 minutes, so a job that starts never runs out.
@@ -34,6 +35,8 @@ function frameWallet(): string | null {
 export async function approveWallet(passcode: string): Promise<{ ok: boolean; required?: boolean; error?: string; lockedForMs?: number }> {
   const address = frameWallet()
   if (!address || !passcode) return { ok: true }
+  // Confirmed in the wallet's own page (lib/walletConfirm): already checked there.
+  if (isWalletConfirmToken(passcode)) return walletConfirmTokenValid(passcode) ? { ok: true, required: true } : { ok: false, error: 'bad-passcode' }
   try {
     const { approveFrameWallet } = await import('@/wallet')
     const { required } = await approveFrameWallet(address, passcode)
@@ -70,6 +73,11 @@ onPasscodeVerified(async passcode => {
     void import('./errorReport').then(m => m.reportClientError('rejection', new Error('[wallet approval] the wallet frame refused a passcode the app accepted'))).catch(() => {})
   }
 })
+
+/** The wallet's own confirm page opened the approval window (lib/walletConfirm). */
+export function noteWalletApproved(address: string): void {
+  approvedAt.set(address.toLowerCase(), Date.now())
+}
 
 /** An approval from the last ~2 minutes is in place (background work may sign). */
 export function approvalFresh(): boolean {

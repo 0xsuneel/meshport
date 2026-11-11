@@ -12,6 +12,8 @@
  * Format: "v2:<base64-salt>:<base64-hash>"
  */
 
+import { isWalletConfirmToken, walletConfirmTokenValid } from './walletConfirmToken'
+
 const PBKDF2_ITERATIONS = 100000          // legacy "v2"/"v2enc" records (still readable)
 // Current records ("v3"/"v3enc"): 600,000 iterations - the OWASP figure for
 // PBKDF2-SHA256. Six times the work per guess for anyone who copied this
@@ -184,6 +186,9 @@ async function passcodeVerified(passcode: string): Promise<void> {
 
 // ─── Verify passcode against stored hash ─────────────────────────────────────
 export async function verifyPasscode(passcode: string, storedHash: string): Promise<boolean> {
+  // Checked by the wallet frame on its own page (lib/walletConfirm), with its
+  // own lockout: nothing to check here, and nothing to hand on.
+  if (isWalletConfirmToken(passcode)) return walletConfirmTokenValid(passcode)
   const lockout = readLockoutState()
   if (lockout.lockedUntil > Date.now()) return false
 

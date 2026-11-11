@@ -14,12 +14,14 @@
 import { generateMnemonic, english, privateKeyToAccount } from 'viem/accounts'
 import { bytesToHex } from 'viem'
 import {
-  WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION, REVEAL_CHANNEL, PASSKEY_CHANNEL,
+  WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION, REVEAL_CHANNEL, PASSKEY_CHANNEL, CONFIRM_CHANNEL,
   isWalletMessage, parseOrigins,
   type Hex, type WalletMethod, type WalletParams, type WalletResult, type WalletResponse, type WalletErrorCode,
   type PasskeyRequest, type PasskeyOutcome,
+  type ConfirmIntent, type ConfirmSummary, type ConfirmBiometric, type ConfirmOutcome,
 } from '@/wallet/protocol'
 import * as keys from './keys'
+import { parseIntent, describeIntent, matchesIntent, type IntentView } from './intent'
 import { deriveChatSeed } from '@/lib/chatIdentity'
 import { chatPublicKey, wrapMessageKey, unwrapMessageKey, openV1 } from '@/lib/chatWrap'
 import { solanaPublicKey, solanaSign, solanaHexToBytes } from '@/lib/solanaKey'
@@ -99,6 +101,10 @@ const SELF_CANCEL_MAX_FEE = 50_000_000_000_000_000n // 0.05 of the native token
 const big = (v: unknown): bigint => (v == null ? 0n : BigInt(v as bigint | string | number))
 function isSelfCancel(address: string, tx: Record<string, unknown>): boolean {
   try {
+    // Arc only: the fee cap is in Arc's native coin (USDC). On another chain
+    // 0.05 ETH is real money - a script could burn it, nonce after nonce,
+    // with no passcode. MeshPort only cancels stuck payments on Arc.
+    if (Number(tx.chainId) !== ARC_CHAIN_ID) return false
     if (typeof tx.to !== 'string' || tx.to.toLowerCase() !== address.toLowerCase()) return false
     if (big(tx.value) !== 0n || (tx.data && tx.data !== '0x')) return false
     if (tx.authorizationList != null || tx.type === 'eip7702' || tx.blobs != null) return false
@@ -200,12 +206,102 @@ try {
   }
 } catch { /* no BroadcastChannel: passkeys are unavailable here */ }
 
+// ── Confirmations (confirm.html) ────────────────────────────────────────────
+// The person reads what they approve and types the passcode (or uses the
+// fingerprint) on confirm.html - this origin, shown inside the app as a
+// visible iframe - so the app never sees the passcode. confirm.html gets the
+// request from here and sends the passcode back over a BroadcastChannel,
+// which only this origin's pages can join.
+//   intent:  the frame decoded the transaction (intent.ts); a correct
+//            passcode allows signing that one transaction, once, within
+//            APPROVAL_MS - no approval window opens.
+//   summary: the app's own words (shown as such); a correct passcode opens
+//            the usual approval window, like `approve`.
+const CONFIRM_TTL_MS = 3 * 60_000
+const MAX_CONFIRMS = 8
+// MeshPortCheckout, when deployed (same address as the app's VITE_MESHPORT_CHECKOUT).
+const CHECKOUT = String((import.meta.env.VITE_WALLET_CHECKOUT as string | undefined) ?? '').trim() || null
+interface Confirmation {
+  address: string
+  intent: ConfirmIntent | null
+  view: IntentView | null
+  summary: ConfirmSummary | null
+  biometric: ConfirmBiometric | null
+  expires: number
+  claimed: boolean
+  checking: boolean
+  outcome: ConfirmOutcome
+  /** intent only: sign by then. */
+  signUntil: number
+}
+const confirms = new Map<string, Confirmation>()
+/** Drop this wallet's confirmations (every wallet's with no address, only stale ones with null). */
+function dropConfirms(address?: string | null) {
+  for (const [t, c] of confirms) {
+    const stale = c.outcome.status === 'approved' ? c.signUntil < Date.now() : c.expires < Date.now()
+    if (stale || address === undefined || (address && c.address === address.toLowerCase())) confirms.delete(t)
+  }
+}
+const short = (v: unknown, max: number): string | undefined => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined)
+function summaryParam(s: unknown): ConfirmSummary | null {
+  if (!s || typeof s !== 'object') return null
+  const r = s as Record<string, unknown>
+  const label = short(r.label, 40), name = short(r.name, 80)
+  if (!label || !name) return null
+  return { label, name, detail: short(r.detail, 80), amount: short(r.amount, 32), unit: short(r.unit, 16) }
+}
+function biometricParam(b: unknown): ConfirmBiometric | null {
+  if (!b || typeof b !== 'object') return null
+  const r = b as Record<string, unknown>
+  const rpId = short(r.rpId, 253), credentialId = short(r.credentialId, 1024), salt = short(r.salt, 128), iv = short(r.iv, 64), ciphertext = short(r.ciphertext, 512)
+  if (!rpId || !credentialId || !salt || !iv || !ciphertext) return null
+  return { rpId, credentialId, salt, iv, ciphertext, label: short(r.label, 24) }
+}
+let confirmAvailable = false
+try {
+  const channel = new BroadcastChannel(CONFIRM_CHANNEL)
+  confirmAvailable = true
+  channel.onmessage = async (e) => {
+    const d = (e.data ?? {}) as { type?: string; ticket?: string; passcode?: unknown; via?: unknown }
+    if (typeof d.ticket !== 'string') return
+    const c = confirms.get(d.ticket)
+    if (!c) return // another tab's frame holds it
+    const open = c.outcome.status === 'pending' && c.expires >= Date.now()
+    if (d.type === 'claim') {
+      // One page per ticket: the first confirm.html to claim it shows it.
+      if (c.claimed || !open) { channel.postMessage({ type: 'request', ticket: d.ticket, error: 'expired' }); return }
+      c.claimed = true
+      channel.postMessage({ type: 'request', ticket: d.ticket, view: c.view, summary: c.summary, biometric: c.biometric })
+    } else if (d.type === 'passcode') {
+      if (!c.claimed || !open) { channel.postMessage({ type: 'checked', ticket: d.ticket, ok: false, code: 'expired', message: 'This request has expired - close it and try again' }); return }
+      if (c.checking) return
+      c.checking = true
+      try {
+        const passcode = String(d.passcode ?? '')
+        // The passcode itself, every time (unlock alone says yes to an open key).
+        await vault.checkPasscode(c.address, passcode)
+        await vault.unlock(c.address, passcode)
+        if (c.intent) c.signUntil = Date.now() + APPROVAL_MS
+        else approvedUntil.set(c.address, Date.now() + APPROVAL_MS)
+        c.outcome = { status: 'approved', viaBiometric: d.via === 'biometric' }
+        channel.postMessage({ type: 'checked', ticket: d.ticket, ok: true })
+      } catch (err) {
+        const r = errorReply(err)
+        channel.postMessage({ type: 'checked', ticket: d.ticket, ok: false, code: r.code, message: r.message, lockedForMs: r.lockedForMs })
+      } finally { c.checking = false }
+    } else if (d.type === 'cancel' && open) {
+      c.outcome = { status: 'cancelled' }
+    }
+  }
+} catch { /* no BroadcastChannel: confirm:begin is refused and the app uses its own passcode sheet */ }
+
 // ── Lock / forget reach every tab's frame ───────────────────────────────────
 const LOCK_CHANNEL = 'meshport-wallet-lock'
 let lockChannel: BroadcastChannel | null = null
 function closeHere(address: string | undefined, everything: boolean, forgetting: boolean) {
   if (address) approvedUntil.delete(address.toLowerCase()); else approvedUntil.clear()
   dropTickets(address)
+  dropConfirms(address)
   if (address) checkTries.delete(address.toLowerCase()); else checkTries.clear()
   if (forgetting) vault.forget(address, everything); else vault.lock(address)
 }
@@ -352,11 +448,60 @@ const handlers: Handlers = {
     return { signature: await signer(a).signTypedData(typedData as any) }
   },
 
-  async 'sign:transaction'({ address, transaction }) {
+  async 'sign:transaction'({ address, transaction, confirmation }) {
     const a = addr(address)
     if (!transaction || typeof transaction !== 'object') throw new RpcError('invalid', 'Nothing to sign')
-    if (!isSelfCancel(a, transaction)) requireApproval(a)
+    if (confirmation != null) {
+      // Exactly the transaction the person confirmed, once - never an
+      // approval window, never another transaction.
+      const c = typeof confirmation === 'string' ? confirms.get(confirmation) : undefined
+      if (!c || !c.intent || c.address !== a.toLowerCase() || c.outcome.status !== 'approved' || c.signUntil < Date.now()) {
+        throw new RpcError('mismatch', 'This payment was not confirmed - try again')
+      }
+      if (!matchesIntent(c.intent, transaction)) throw new RpcError('mismatch', 'This is not the payment you confirmed')
+      confirms.delete(confirmation as string)
+    } else if (!isSelfCancel(a, transaction)) requireApproval(a)
     return { serialized: await signer(a).signTransaction(transaction as any) }
+  },
+
+  async 'confirm:begin'({ address, intent, summary, biometric }) {
+    const a = addr(address)
+    if (!confirmAvailable) throw new RpcError('unsupported', 'Confirming here is not available in this browser')
+    // No passcode on this device yet: the app's own sheet sets one (`approve`).
+    if (!vault.hasPasscode(a)) throw new RpcError('not-found', 'This wallet has no passcode on this device')
+    let parsed: ConfirmIntent | null = null
+    if (intent != null) {
+      try { parsed = parseIntent(intent) } catch (e) { throw new RpcError('invalid', (e as Error).message) }
+    }
+    const s = summaryParam(summary)
+    if (!parsed && !s) throw new RpcError('invalid', 'Nothing to confirm')
+    dropConfirms(null) // stale ones only
+    while (confirms.size >= MAX_CONFIRMS) confirms.delete(confirms.keys().next().value!)
+    const ticket = bytesToHex(crypto.getRandomValues(new Uint8Array(16)))
+    confirms.set(ticket, {
+      address: a.toLowerCase(), intent: parsed, view: parsed ? describeIntent(parsed, { checkout: CHECKOUT }) : null,
+      summary: s, biometric: biometricParam(biometric), expires: Date.now() + CONFIRM_TTL_MS,
+      claimed: false, checking: false, outcome: { status: 'pending' }, signUntil: 0,
+    })
+    return { ticket }
+  },
+
+  async 'confirm:result'({ ticket }) {
+    const c = typeof ticket === 'string' ? confirms.get(ticket) : undefined
+    if (!c) return { status: 'error' as const, message: 'This request has expired - try again' }
+    if (c.outcome.status === 'pending' && c.expires < Date.now()) {
+      confirms.delete(ticket)
+      return { status: 'error' as const, message: 'Timed out - try again' }
+    }
+    // An approved summary has done its job (the window is open); an approved
+    // intent stays until it signs or expires.
+    if (c.outcome.status === 'cancelled' || (c.outcome.status === 'approved' && !c.intent)) confirms.delete(ticket)
+    return c.outcome
+  },
+
+  async 'confirm:cancel'({ ticket }) {
+    if (typeof ticket === 'string') confirms.delete(ticket)
+    return { ok: true as const }
   },
 
   // Chat (audit M15): the chat identity is derived from the wallet key here

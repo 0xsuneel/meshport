@@ -2063,7 +2063,7 @@ export function SwapPage() {
 
       {/* Passcode step - opens on Swap tap, same page, no navigation. With no
           passcode set, a plain "Confirm Swap" button stands in for the keypad. */}
-      <PinSheet
+      <PinSheet walletConfirm
         open={showPasscodeSheet}
         onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
         id="sw-pass"
