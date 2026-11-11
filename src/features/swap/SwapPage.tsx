@@ -1122,6 +1122,12 @@ export function SwapPage() {
     let attemptId: string | null = null
 
     try {
+      // While the server records the intent (seconds on a slow connection -
+      // field 11 Nov: 7.6 s before the wallet was even asked), the wallet opens
+      // and Circle's swap kit loads alongside it; the swap itself still starts
+      // only once the intent exists.
+      void getReadySigner().catch(() => null)
+      void import('@/lib/swapService').then(m => m.warmSwapSdkReady()).catch(() => {})
       const intentResult = await import('@/lib/swapIntentService').then(({ createSwapIntent }) =>
         createSwapIntent({
           walletAddress: walletAddress ?? '',
@@ -1144,6 +1150,7 @@ export function SwapPage() {
         throw Object.assign(new Error("Couldn't prepare the swap - nothing was sent. Try again."), { isUncertain: false, cause: intentResult.error })
       }
       attemptId = intentResult.attemptId
+      moveTimerRef.current?.mark('intent')
       const result = await callProxy('swap', {
         tokenIn: tokenIn.id, tokenOut: tokenOut.id, amountIn: parseFloat(amountIn).toFixed(6),
         onProgress: onSwapProgress, attemptId: intentResult.attemptId, intentId: intentResult.intentId,

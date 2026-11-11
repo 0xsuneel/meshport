@@ -26,13 +26,15 @@ export interface WalletConfirmRequest {
 // still (out of sight) before showing it, so its keys work on the first tap.
 const SETTLE_MS = 560
 
-export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsable }: {
+export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsable, waiting }: {
   request: WalletConfirmRequest
   onApproved: (token: string, viaBiometric: boolean) => void
   onUnavailable: () => void
   /** The page is drawn and has sat still long enough to take touches (or it
    *  failed and shows that): the sheet can be shown now. */
   onUsable?: () => void
+  /** The page isn't usable yet: if the sheet is shown meanwhile, say so (faded keys, "Opening your wallet…"). */
+  waiting?: boolean
 }) {
   const [src, setSrc] = useState<string | null>(null)
   // About the page's height (card + dots + keypad) until it reports its own,
@@ -72,7 +74,11 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [attempt, failed, src])
+  // `live` too: the page turning visible (it is hidden until drawn) counts as
+  // a change for Chrome just like a move - shown right after it, the first
+  // one or two taps were dropped (measured: 4-5 of 6 reached the page on a
+  // slow phone). The settle time restarts from that moment.
+  }, [attempt, failed, src, live])
 
   useEffect(() => {
     let done = false
@@ -185,7 +191,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
           draws, so the sheet never opens blank. It takes no input - the
           passcode is only ever typed in the wallet's page, which loads on top
           of it, pixel for pixel, and replaces it. */}
-      {!live && <ConfirmStandIn summary={request.summary} short={short} />}
+      {!live && <ConfirmStandIn summary={request.summary} short={short} waiting={waiting} />}
       {src && (
         <iframe
           // A new address is a new page: the slot and ticket addresses differ
@@ -209,7 +215,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
 // Same sizes as the wallet's page (PinSheet's card, PinKeypad's keys), so the
 // swap to the real page doesn't move anything.
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del']
-export function ConfirmStandIn({ summary, short }: { summary: ConfirmSummary; short: boolean }) {
+export function ConfirmStandIn({ summary, short, waiting }: { summary: ConfirmSummary; short: boolean; waiting?: boolean }) {
   const keyH = short ? 48 : 56
   const muted = { fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 } as const
   const clip = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const
@@ -237,8 +243,10 @@ export function ConfirmStandIn({ summary, short }: { summary: ConfirmSummary; sh
         <div style={{ display: 'flex', gap: 12, height: 14 }}>
           {Array.from({ length: 6 }, (_, i) => <span key={i} style={{ width: 14, height: 14, borderRadius: '50%', border: '1.5px solid var(--border)', boxSizing: 'border-box' }} />)}
         </div>
-        <div style={{ minHeight: 18, margin: short ? '1px 0' : '7px 0' }} />
-        <div style={{ width: '100%', maxWidth: 320, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: short ? 8 : 10 }}>
+        {/* Only seen when the sheet had to open before the wallet's page was
+            ready (a very slow connection): keys faded, and why. */}
+        <div style={{ minHeight: 18, margin: short ? '1px 0' : '7px 0', fontSize: 13, lineHeight: 1.4, color: 'var(--text-secondary)', textAlign: 'center' }}>{waiting ? 'Opening your wallet…' : ''}</div>
+        <div style={{ width: '100%', maxWidth: 320, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: short ? 8 : 10, opacity: waiting ? 0.4 : 1 }}>
           {KEYS.map((k, i) => k === '' ? <span key={i} /> : (
             <span key={i} style={{ height: keyH, borderRadius: 14, border: '1px solid var(--border)', background: 'var(--surface)', boxSizing: 'border-box',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 600, lineHeight: 1,

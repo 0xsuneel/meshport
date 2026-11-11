@@ -294,6 +294,7 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
       if (!busy && everVisible) hiddenTimer = setTimeout(() => { if (!visible && !busy) sayIt(HIDDEN_SAY, false, true) }, 600)
     } else {
       everVisible = true
+      if (earlyTimer) { clearTimeout(earlyTimer); earlyTimer = null }
       if (say.textContent === HIDDEN_SAY) sayIt('')
       trySubmit()
     }
@@ -323,9 +324,17 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
     paint()
   })
 
+  // Taps that land the instant the sheet appears, before the browser has
+  // said this page is in view (~0.1 s): kept, not lost - but only before the
+  // page was ever visible, and only if it is confirmed visible within 0.6 s of
+  // the first one (else dropped). Nothing is submitted until it is.
+  let earlyTimer: ReturnType<typeof setTimeout> | null = null
   const press = (digit: string) => {
     if (busy || lockedUntil > Date.now() || digits.length >= LENGTH) return
-    if (visKnown && !visible) return
+    if (visKnown && !visible) {
+      if (everVisible) return
+      if (!earlyTimer) earlyTimer = setTimeout(() => { earlyTimer = null; if (!visible && !busy) { digits = ''; paint() } }, 600)
+    }
     digits += digit
     if (say.className.startsWith('say error')) sayIt('')
     paint()
