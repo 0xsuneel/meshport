@@ -43,16 +43,25 @@ export function SuccessFlash({ title, checkRef, viaBiometric, circleReady = true
   const box: CSSProperties = portal
     ? { position: 'fixed', ...(rect ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height, borderRadius: radius } : { inset: 0 }) }
     : { position: 'absolute', inset: 0, borderRadius: 'inherit' }
+  // The colour grows out from the centre as a circle scaled up from nothing -
+  // transform only, so it runs on the GPU. It used to animate the flash's
+  // clip-path, which repaints the whole screen every frame on the main thread
+  // (always on iPhone), right when the finished payment keeps that thread
+  // busiest: the success screen stuttered as it opened. The circle just
+  // covers the box's corners (the old circle(75%) reached the same size).
+  const fillD = Math.ceil(Math.hypot(rect?.width ?? window.innerWidth, rect?.height ?? window.innerHeight) * 1.06)
 
   const body = (
     <motion.div
       role="status"
       aria-live="polite"
-      initial={{ clipPath: 'circle(0% at 50% 50%)' }}
-      animate={{ clipPath: 'circle(75% at 50% 50%)' }}
-      transition={{ duration: 0.45, ease: EASE_OUT }}
-      style={{ ...box, zIndex: 999, background: 'var(--brand)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
+      style={{ ...box, zIndex: 999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
     >
+      {/* z-index -1 inside the flash's own stacking context: under the tick and title. */}
+      <motion.div aria-hidden
+        initial={{ scale: 0 }} animate={{ scale: 1 }}
+        transition={{ duration: 0.45, ease: EASE_OUT }}
+        style={{ position: 'absolute', left: '50%', top: '50%', width: fillD, height: fillD, marginLeft: -fillD / 2, marginTop: -fillD / 2, borderRadius: '50%', background: 'var(--brand)', zIndex: -1, pointerEvents: 'none' }} />
       <div style={{ position: 'relative', width: SUCCESS_CIRCLE, height: SUCCESS_CIRCLE, marginBottom: 20 }}>
         {/* One soft ring pulsing out from the circle */}
         <motion.span aria-hidden
