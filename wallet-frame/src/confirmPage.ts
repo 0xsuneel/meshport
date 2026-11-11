@@ -239,7 +239,9 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
     const blocked = busy || lockedUntil > Date.now()
     for (const k of keys) k.disabled = blocked
   }
-  const sayIt = (text: string, bad = false) => { say.textContent = text; say.className = bad ? 'say error' : 'say' }
+  // `oneLine`: never wraps (cut with … if it must) - for the covered-screen
+  // warning, which shows while the page must not change height.
+  const sayIt = (text: string, bad = false, oneLine = false) => { say.textContent = text; say.className = (bad ? 'say error' : 'say') + (oneLine ? ' one' : '') }
 
   const send = (passcode: string, via: 'passcode' | 'biometric') => {
     channel.postMessage({ type: 'passcode', ticket: req!.ticket, passcode, via })
@@ -265,7 +267,7 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
     if (!visible) {
       // Typed while something may have covered the page: not used.
       if (!busy && digits) { digits = '' }
-      if (!busy && everVisible) hiddenTimer = setTimeout(() => { if (!visible && !busy) sayIt(HIDDEN_SAY) }, 600)
+      if (!busy && everVisible) hiddenTimer = setTimeout(() => { if (!visible && !busy) sayIt(HIDDEN_SAY, false, true) }, 600)
     } else {
       everVisible = true
       if (say.textContent === HIDDEN_SAY) sayIt('')
@@ -301,7 +303,7 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
     if (busy || lockedUntil > Date.now() || digits.length >= LENGTH) return
     if (visKnown && !visible) return
     digits += digit
-    if (say.className === 'say error') sayIt('')
+    if (say.className.startsWith('say error')) sayIt('')
     paint()
     if (digits.length === LENGTH) setTimeout(trySubmit, 80)
   }
