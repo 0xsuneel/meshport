@@ -22,6 +22,7 @@ import {
 } from '@/wallet/protocol'
 import * as keys from './keys'
 import { parseIntent, describeIntent, matchesIntent, type IntentView } from './intent'
+import { classify, fits, canonical, describeRequest, describeScope, parseScope, CONFIRMABLE, type Scope, type Spends } from './policy'
 import { deriveChatSeed } from '@/lib/chatIdentity'
 import { chatPublicKey, wrapMessageKey, unwrapMessageKey, openV1 } from '@/lib/chatWrap'
 import { solanaPublicKey, solanaSign, solanaHexToBytes } from '@/lib/solanaKey'
@@ -79,21 +80,43 @@ const signer = (address: string) => privateKeyToAccount(vault.keyFor(address) as
 // The app's own passcode sheet is not enough on its own: anything running in
 // the app's page could post a signing request. So the frame signs
 // transactions, typed data (permits, transfer authorizations), Solana
-// transactions, passkey signatures and raw hashes only within APPROVAL_MS of
-// the person's passcode - entered and checked on this origin's own page
-// (confirm.html, 'confirm:begin'), never one typed in the app. Like a hosted
-// wallet's MFA window: one entry covers a multi-step action (approve + swap,
-// a bridge). A payment confirmed with its exact transaction opens no window.
+// transactions, passkey signatures and raw hashes only with a confirmation
+// the person gave on this origin's own page (confirm.html, 'confirm:begin'),
+// never with a passcode typed in the app - and only what that confirmation
+// covers, read by the frame itself:
+//   an exact payment (intent) or an exact request: that one signature, once;
+//   a spend limit (scope) - a swap, a bridge, a claim, whose transactions
+//   Circle's SDK builds after the passcode: for APPROVAL_MS each signature
+//   is decoded (policy.ts) and what it moves is counted against the limit.
+//   One that would go over it, or that the frame can't read, is refused, and
+//   the app asks for that exact request on confirm.html.
 // Left free: MeshPort's own text messages (sign-in binding, chat key, profile
 // update - they move nothing), MeshPort name registration on Arc, and a
 // 0-value, low-fee transfer to the wallet itself (cancelling a stuck payment).
 // A wallet with no passcode on this device signs nothing that needs approval
 // until 'passcode:check' gives it one and confirm.html approves.
 const APPROVAL_MS = 2 * 60_000
-const approvedUntil = new Map<string, number>()
-function requireApproval(address: string) {
-  if (vault.hasPasscode(address) && (approvedUntil.get(address.toLowerCase()) ?? 0) > Date.now()) return
-  throw new RpcError('approval-required', 'Enter your passcode to approve this')
+interface SpendWindow { scope: Scope; remaining: Spends; until: number }
+const spendWindows = new Map<string, SpendWindow>()
+function requireApproval(address: string, method: string, params: Record<string, unknown>) {
+  const a = address.toLowerCase()
+  const confirmation = params.confirmation
+  if (confirmation != null) {
+    const c = typeof confirmation === 'string' ? confirms.get(confirmation) : undefined
+    if (!c || !c.request || c.address !== a || c.outcome.status !== 'approved' || c.signUntil < Date.now()) {
+      throw new RpcError('mismatch', 'This was not confirmed - try again')
+    }
+    if (c.request.key !== canonical(method, params)) throw new RpcError('mismatch', 'This is not what you confirmed')
+    confirms.delete(confirmation as string)
+    return
+  }
+  const w = spendWindows.get(a)
+  if (w && w.until > Date.now() && vault.hasPasscode(address)) {
+    const c = classify(a, method, params)
+    const next = c.ok ? fits(w.scope, w.remaining, c) : null
+    if (next) { w.remaining = next; return }
+  }
+  throw new RpcError('approval-required', 'Confirm this in your wallet')
 }
 
 const ARC_CHAIN_ID = 5042002
@@ -215,9 +238,12 @@ try {
 // which only this origin's pages can join.
 //   intent:  the frame decoded the transaction (intent.ts); a correct
 //            passcode allows signing that one transaction, once, within
-//            APPROVAL_MS - no approval window opens.
-//   summary: the app's own words (shown as such); a correct passcode opens
-//            the usual approval window, like `approve`.
+//            APPROVAL_MS.
+//   request: one exact signature request (policy.ts describes it); signed
+//            once, within APPROVAL_MS.
+//   scope:   a spend limit (policy.ts); a correct passcode starts its window.
+//   summary: the app's own words, shown as such beside one of those - never
+//            on its own.
 const CONFIRM_TTL_MS = 3 * 60_000
 const MAX_CONFIRMS = 8
 // MeshPortCheckout, when deployed (same address as the app's VITE_MESHPORT_CHECKOUT).
@@ -225,6 +251,8 @@ const CHECKOUT = String((import.meta.env.VITE_WALLET_CHECKOUT as string | undefi
 interface Confirmation {
   address: string
   intent: ConfirmIntent | null
+  request: { method: string; key: string } | null
+  scope: Scope | null
   view: IntentView | null
   summary: ConfirmSummary | null
   biometric: ConfirmBiometric | null
@@ -232,7 +260,7 @@ interface Confirmation {
   claimed: boolean
   checking: boolean
   outcome: ConfirmOutcome
-  /** intent only: sign by then. */
+  /** Once approved: sign (intent, request) by then. */
   signUntil: number
 }
 const confirms = new Map<string, Confirmation>()
@@ -282,8 +310,8 @@ try {
         // The passcode itself, every time (unlock alone says yes to an open key).
         await vault.checkPasscode(c.address, passcode)
         await vault.unlock(c.address, passcode)
-        if (c.intent) c.signUntil = Date.now() + APPROVAL_MS
-        else approvedUntil.set(c.address, Date.now() + APPROVAL_MS)
+        c.signUntil = Date.now() + APPROVAL_MS
+        if (c.scope) spendWindows.set(c.address, { scope: c.scope, remaining: { ...c.scope.limits }, until: c.signUntil })
         c.outcome = { status: 'approved', viaBiometric: d.via === 'biometric' }
         channel.postMessage({ type: 'checked', ticket: d.ticket, ok: true })
       } catch (err) {
@@ -300,7 +328,7 @@ try {
 const LOCK_CHANNEL = 'meshport-wallet-lock'
 let lockChannel: BroadcastChannel | null = null
 function closeHere(address: string | undefined, everything: boolean, forgetting: boolean) {
-  if (address) approvedUntil.delete(address.toLowerCase()); else approvedUntil.clear()
+  if (address) spendWindows.delete(address.toLowerCase()); else spendWindows.clear()
   dropTickets(address)
   dropConfirms(address)
   if (address) checkTries.delete(address.toLowerCase()); else checkTries.clear()
@@ -373,7 +401,7 @@ const handlers: Handlers = {
     // yet (just created / imported on this device) takes its first one.
     if (vault.hasPasscode(a)) await vault.checkPasscode(a, String(oldPasscode ?? ''))
     await vault.setPasscode(a, pc, typeof oldPasscode === 'string' ? oldPasscode : undefined)
-    approvedUntil.delete(a.toLowerCase())
+    spendWindows.delete(a.toLowerCase())
     return { ok: true as const }
   },
 
@@ -434,54 +462,75 @@ const handlers: Handlers = {
     return { ok: true as const, set: false }
   },
 
-  async 'sign:message'({ address, message }) {
+  async 'sign:message'(params) {
+    const { address, message } = params
     const a = addr(address)
-    if (!isFreeMessage(message)) requireApproval(a)
+    if (!isFreeMessage(message)) requireApproval(a, 'sign:message', params)
     if (typeof message !== 'string' && !(message && typeof message === 'object' && typeof (message as { raw?: unknown }).raw === 'string')) {
       throw new RpcError('invalid', 'Nothing to sign')
     }
     return { signature: await signer(a).signMessage({ message }) }
   },
 
-  async 'sign:typed-data'({ address, typedData }) {
+  async 'sign:typed-data'(params) {
+    const { address, typedData } = params
     const a = addr(address)
     if (!typedData || typeof typedData !== 'object') throw new RpcError('invalid', 'Nothing to sign')
-    if (!isNameRegistration(a, typedData)) requireApproval(a)
+    if (!isNameRegistration(a, typedData)) requireApproval(a, 'sign:typed-data', params)
     return { signature: await signer(a).signTypedData(typedData as any) }
   },
 
-  async 'sign:transaction'({ address, transaction, confirmation }) {
+  async 'sign:transaction'(params) {
+    const { address, transaction, confirmation } = params
     const a = addr(address)
     if (!transaction || typeof transaction !== 'object') throw new RpcError('invalid', 'Nothing to sign')
-    if (confirmation != null) {
-      // Exactly the transaction the person confirmed, once - never an
-      // approval window, never another transaction.
-      const c = typeof confirmation === 'string' ? confirms.get(confirmation) : undefined
-      if (!c || !c.intent || c.address !== a.toLowerCase() || c.outcome.status !== 'approved' || c.signUntil < Date.now()) {
+    const c = typeof confirmation === 'string' ? confirms.get(confirmation) : undefined
+    if (c?.intent) {
+      // Exactly the payment the person confirmed, once - never another transaction.
+      if (c.address !== a.toLowerCase() || c.outcome.status !== 'approved' || c.signUntil < Date.now()) {
         throw new RpcError('mismatch', 'This payment was not confirmed - try again')
       }
       if (!matchesIntent(c.intent, transaction)) throw new RpcError('mismatch', 'This is not the payment you confirmed')
       confirms.delete(confirmation as string)
-    } else if (!isSelfCancel(a, transaction)) requireApproval(a)
+    } else if (confirmation != null || !isSelfCancel(a, transaction)) requireApproval(a, 'sign:transaction', params)
     return { serialized: await signer(a).signTransaction(transaction as any) }
   },
 
-  async 'confirm:begin'({ address, intent, summary, biometric }) {
+  async 'confirm:begin'({ address, intent, scope, request, summary, biometric }) {
     const a = addr(address)
     if (!confirmAvailable) throw new RpcError('unsupported', 'Confirming here is not available in this browser')
-    // No passcode on this device yet: the app's own sheet sets one (`approve`).
+    // No passcode on this device yet: the app's own sheet sets one ('passcode:check').
     if (!vault.hasPasscode(a)) throw new RpcError('not-found', 'This wallet has no passcode on this device')
     let parsed: ConfirmIntent | null = null
     if (intent != null) {
       try { parsed = parseIntent(intent) } catch (e) { throw new RpcError('invalid', (e as Error).message) }
     }
+    let limit: Scope | null = null
+    if (scope != null) {
+      try { limit = parseScope(scope) } catch (e) { throw new RpcError('invalid', (e as Error).message) }
+    }
+    let req: { method: string; key: string } | null = null
+    let reqView: IntentView | null = null
+    if (request != null) {
+      const r = request as { method?: unknown; params?: unknown }
+      if (typeof r.method !== 'string' || !CONFIRMABLE.has(r.method) || !r.params || typeof r.params !== 'object') throw new RpcError('invalid', 'Unknown request')
+      const p = r.params as Record<string, unknown>
+      if (typeof p.address !== 'string' || p.address.toLowerCase() !== a.toLowerCase()) throw new RpcError('invalid', 'This request is for another wallet')
+      let key: string
+      try { key = canonical(r.method, p) } catch { throw new RpcError('invalid', 'Unreadable request') }
+      if (key.length > 256_000) throw new RpcError('invalid', 'Request is too large')
+      req = { method: r.method, key }
+      reqView = describeRequest(r.method, p)
+    }
+    // Exactly one thing to approve; the summary only describes it.
+    if ([parsed, limit, req].filter(Boolean).length !== 1) throw new RpcError('invalid', 'Nothing to confirm')
     const s = summaryParam(summary)
-    if (!parsed && !s) throw new RpcError('invalid', 'Nothing to confirm')
     dropConfirms(null) // stale ones only
     while (confirms.size >= MAX_CONFIRMS) confirms.delete(confirms.keys().next().value!)
     const ticket = bytesToHex(crypto.getRandomValues(new Uint8Array(16)))
     confirms.set(ticket, {
-      address: a.toLowerCase(), intent: parsed, view: parsed ? describeIntent(parsed, { checkout: CHECKOUT }) : null,
+      address: a.toLowerCase(), intent: parsed, request: req, scope: limit,
+      view: parsed ? describeIntent(parsed, { checkout: CHECKOUT }) : limit ? describeScope(limit) : reqView,
       summary: s, biometric: biometricParam(biometric), expires: Date.now() + CONFIRM_TTL_MS,
       claimed: false, checking: false, outcome: { status: 'pending' }, signUntil: 0,
     })
@@ -495,9 +544,9 @@ const handlers: Handlers = {
       confirms.delete(ticket)
       return { status: 'error' as const, message: 'Timed out - try again' }
     }
-    // An approved summary has done its job (the window is open); an approved
-    // intent stays until it signs or expires.
-    if (c.outcome.status === 'cancelled' || (c.outcome.status === 'approved' && !c.intent)) confirms.delete(ticket)
+    // An approved limit has done its job (its window is open); an approved
+    // intent or request stays until it signs or expires.
+    if (c.outcome.status === 'cancelled' || (c.outcome.status === 'approved' && c.scope)) confirms.delete(ticket)
     return c.outcome
   },
 
@@ -540,9 +589,10 @@ const handlers: Handlers = {
     return { publicKey: bytesToHex(solanaPublicKey(vault.keyFor(addr(address)))) }
   },
 
-  async 'solana:sign'({ address, message }) {
+  async 'solana:sign'(params) {
+    const { address, message } = params
     const a = addr(address)
-    requireApproval(a)
+    requireApproval(a, 'solana:sign', params)
     let bytes: Uint8Array
     try { bytes = solanaHexToBytes(String(message)) } catch { throw new RpcError('invalid', 'Solana message must be hex') }
     // A Solana transaction message fits in one packet (1232 bytes).
@@ -580,7 +630,9 @@ const handlers: Handlers = {
       if (request.label != null && !short(request.label, 120)) throw new RpcError('invalid', 'Label is too long')
       // A passkey signature can move a Safe's funds: same approval as any signature.
       if (!(request as { address?: unknown }).address) throw new RpcError('invalid', 'Which wallet is signing?')
-      requireApproval(addr((request as { address?: unknown }).address))
+      requireApproval(addr((request as { address?: unknown }).address), 'passkey:begin', request as unknown as Record<string, unknown>)
+      const { confirmation: _confirmation, ...rest } = request
+      request = rest
     } else throw new RpcError('invalid', 'Unknown passkey request')
     for (const [t, c] of ceremonies) if (c.expires < Date.now()) ceremonies.delete(t)
     if (ceremonies.size >= MAX_CEREMONIES) throw new RpcError('rate-limited', 'Too many passkey requests open - finish or wait for one')

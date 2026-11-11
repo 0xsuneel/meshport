@@ -75,23 +75,29 @@ export interface WalletRpc {
    * with no passcode on this device takes this one (`set`).
    */
   'passcode:check': [{ address: string; passcode: string }, { ok: true; set: boolean }]
-  'sign:message': [{ address: string; message: string | { raw: Hex } }, { signature: Hex }]
-  'sign:typed-data': [{ address: string; typedData: Record<string, unknown> }, { signature: Hex }]
   /**
-   * `confirmation`: a ticket the person approved in confirm.html for exactly
-   * this transaction (ConfirmIntent) - signed once, with no approval window.
+   * Signatures that can move value need a confirmation from confirm.html: a
+   * spend limit in force that covers this one (ConfirmScope), or
+   * `confirmation` - a ticket approved for exactly this request
+   * (ConfirmRequest) or, for a transaction, this exact payment
+   * (ConfirmIntent). Each is used once. Otherwise 'approval-required'.
    */
+  'sign:message': [{ address: string; message: string | { raw: Hex }; confirmation?: string }, { signature: Hex }]
+  'sign:typed-data': [{ address: string; typedData: Record<string, unknown>; confirmation?: string }, { signature: Hex }]
   'sign:transaction': [{ address: string; transaction: FrameTransaction; confirmation?: string }, { serialized: Hex }]
   /**
    * Start a confirmation: the app then shows confirm.html#t=<ticket> in a
    * visible iframe, where the person reads what they approve and types the
    * passcode (or uses the fingerprint) - inside the wallet's origin, so the
-   * app never sees it. With `intent`, the frame decodes the transaction
-   * itself and the approval signs only that one; without it (`summary` only:
-   * the app's own description) a correct passcode opens the usual approval
-   * window. 3 minutes to approve.
+   * app never sees it. What it approves, read by the frame itself:
+   *   intent   one exact transaction (a payment), signed once;
+   *   scope    a spend limit for the next 2 minutes - every signature in
+   *            that time is decoded and counted against it, and one it can't
+   *            count is refused (and then asked for as a request);
+   *   request  one exact signature request, once.
+   * `summary` is the app's own description, shown as such. 3 minutes to approve.
    */
-  'confirm:begin': [{ address: string; intent?: ConfirmIntent; summary?: ConfirmSummary; biometric?: ConfirmBiometric }, { ticket: string }]
+  'confirm:begin': [{ address: string; intent?: ConfirmIntent; scope?: ConfirmScope; request?: ConfirmRequest; summary?: ConfirmSummary; biometric?: ConfirmBiometric }, { ticket: string }]
   /** Poll a confirmation. */
   'confirm:result': [{ ticket: string }, ConfirmOutcome]
   /** The person closed the sheet: the ticket is dropped. */
@@ -107,7 +113,7 @@ export interface WalletRpc {
   /** This wallet's Solana public key (32 bytes; derived, domain-separated - lib/solanaKey.ts). */
   'solana:key': [{ address: string }, { publicKey: Hex }]
   /** ed25519-sign a Solana transaction's message bytes with this wallet's Solana key. */
-  'solana:sign': [{ address: string; message: Hex }, { signature: Hex }]
+  'solana:sign': [{ address: string; message: Hex; confirmation?: string }, { signature: Hex }]
   /** Close the open key(s) in memory and this tab's session copy. */
   lock: [{ address?: string }, { ok: true }]
   /** Logout: close the key here and in other tabs. `everything` also wipes this wallet's passcode copy and phrase (needs its passcode). */
@@ -124,7 +130,7 @@ export interface WalletRpc {
 
 export type PasskeyRequest =
   | { mode: 'create'; userId: string; userName: string }
-  | { mode: 'sign'; address: string; credentialId: string; challenge: Hex; label?: string }
+  | { mode: 'sign'; address: string; credentialId: string; challenge: Hex; label?: string; confirmation?: string }
 
 export type PasskeyOutcome =
   | { status: 'pending' }
@@ -143,6 +149,20 @@ export const PASSKEY_CHANNEL = 'meshport-wallet-passkey'
  * value / maxFee: decimal strings of the native unit's smallest unit.
  */
 export interface ConfirmIntent { chainId: number; to: string; value: string; data: Hex; maxFee: string }
+
+/**
+ * A spend limit: at most `amount` of each asset (decimal strings) may leave
+ * the wallet in the next 2 minutes. Calls to contracts the frame doesn't
+ * know are allowed only to `contracts` (shown as named by MeshPort), and
+ * only when they can't move tokens by themselves.
+ */
+export interface ConfirmScope {
+  limits: Array<{ asset: 'USDC' | 'EURC' | 'cirBTC'; amount: string }>
+  contracts?: Array<{ address: string; label?: string }>
+}
+
+/** One exact signature request (the params it will be sent with, minus `confirmation`). */
+export interface ConfirmRequest { method: 'sign:transaction' | 'sign:typed-data' | 'sign:message' | 'solana:sign' | 'passkey:begin'; params: Record<string, unknown> }
 
 /** The app's own description of an action (shown as such, never as verified). */
 export interface ConfirmSummary { label: string; name: string; detail?: string; amount?: string; unit?: string }

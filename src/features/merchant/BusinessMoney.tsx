@@ -22,6 +22,7 @@ import { AnimatePresence } from 'framer-motion'
 import { HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { PinSheet } from '@/components/ui/PinSheet'
+import { bridgeScope } from '@/lib/walletConfirm'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ClaimAllScreen, type ClaimAllChain } from './ClaimAllScreen'
 import { lastClaimAllAt, CLAIM_ALL_COOLDOWN_MS, CLAIM_ALL_MIN_CHAIN, type ClaimAllStep } from '@/lib/ubClaim'
@@ -450,7 +451,7 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
 
       {/* The app's passcode step: the bottom sheet on phones, the authorize
           dialog on desktop. */}
-      <PinSheet walletConfirm open={pinOpen} onClose={() => setPinOpen(false)} id="claim-all-pin"
+      <PinSheet walletConfirm={{ scope: bridgeScope('USDC', pinAmount, 1) }} open={pinOpen} onClose={() => setPinOpen(false)} id="claim-all-pin"
         title={isDesktop ? (retryIds ? 'Confirm retry' : 'Confirm Claim All') : (retryIds ? 'Confirm retry' : 'Confirm claim')}
         subtitle={isDesktop ? 'To your Arc balance' : `Confirm ${retryIds ? 'retry' : 'Claim All'} of $${formatAmount(pinAmount)} USDC`}
         amountLabel={`$${formatAmount(pinAmount)} USDC`}

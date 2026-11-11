@@ -6,16 +6,18 @@ import { useLatched } from '@/hooks/useLatched'
 import { useState } from 'react'
 import { useAuthStore } from '@/store'
 import { PinSheet } from '@/components/ui/PinSheet'
+import type { ConfirmScope } from '@/wallet/protocol'
 
 export function usePasscodeGate() {
   const hash = useAuthStore(s => s.passcode)
-  const [pending, setPending] = useState<{ title: string; subtitle: string; run: (code?: string) => void } | null>(null)
+  const [pending, setPending] = useState<{ title: string; subtitle: string; run: (code?: string) => void; scope?: ConfirmScope | null } | null>(null)
   const [error, setError] = useState<string>()
   const [value, setValue] = useState('')
-  const ask = (title: string, subtitle: string, run: (code?: string) => void) => { if (!hash) { run(); return } setError(undefined); setValue(''); setPending({ title, subtitle, run }) }
+  /** `scope`: what the action may spend (lib/walletConfirm spendScope), for the wallet to hold it to. */
+  const ask = (title: string, subtitle: string, run: (code?: string) => void, scope?: ConfirmScope | null) => { if (!hash) { run(); return } setError(undefined); setValue(''); setPending({ title, subtitle, run, scope }) }
   const shownPending = useLatched(pending)
   const sheet = (
-    <PinSheet walletConfirm open={!!pending} title={shownPending?.title ?? ''} subtitle={shownPending?.subtitle ?? ''} error={error}
+    <PinSheet walletConfirm={{ scope: shownPending?.scope }} open={!!pending} title={shownPending?.title ?? ''} subtitle={shownPending?.subtitle ?? ''} error={error}
       value={value} onChange={v => { setValue(v); if (v) setError(undefined) }}
       onClose={() => setPending(null)}
       onComplete={async code => {

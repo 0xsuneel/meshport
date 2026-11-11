@@ -23,6 +23,7 @@ import {
 } from './ui'
 import { unlockSigner } from './settlement'
 import { usePasscodeGate } from './passcodeGate'
+import { p2pScope } from '@/lib/walletConfirm'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const short = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
@@ -117,7 +118,7 @@ export function CashOutScreen({ open, onBack }: { open: boolean; onBack: () => v
         setAmount(''); setPicked(undefined); setTradeId(t.id); load()
       } catch (e) { toast(e instanceof Error ? e.message : 'Could not start the cash out', 'error') }
       setBusy(false)
-    })
+    }, p2pScope(value))
   }
 
   const monthTotal = useMemo(() => {
@@ -295,7 +296,7 @@ function CashOutTradeScreen({ tradeId, accounts, buyerNames, onBack, gate }: {
   const footer = !trade ? undefined
     : stage === 'payment_sent' ? (
       <div className="flex flex-col gap-2">
-        <PrimaryBtn disabled={!!busy} onClick={() => gate.ask('Release dollars', `Only if ${inr(trade.amountFiat)} is in your bank`, () => act('release', () => releaseTrade(trade)))}>
+        <PrimaryBtn disabled={!!busy} onClick={() => gate.ask('Release dollars', `Only if ${inr(trade.amountFiat)} is in your bank`, () => act('release', () => releaseTrade(trade)), p2pScope(0))}>
           {busy === 'release' ? 'Releasing…' : `I got ${inr(trade.amountFiat)} · Release`}
         </PrimaryBtn>
         <GhostBtn disabled={!!busy} onClick={() => user?.id && act('dispute', () => openDispute(trade, user.id, 'Buyer marked paid but the money did not arrive'))}>Not received? Get help</GhostBtn>

@@ -72,3 +72,15 @@ describe('the wallet-confirmed token', () => {
     expect(seen.some(s => s.method === 'approve')).toBe(false)
   })
 })
+
+describe('spendScope', () => {
+  it('adds 5% and the fee, rounds up to the token, and keeps only real contract addresses', async () => {
+    const { spendScope, p2pScope } = await import('./walletConfirm')
+    expect(spendScope([{ asset: 'USDC', amount: 10, extra: 0.5 }])).toEqual({ limits: [{ asset: 'USDC', amount: '11' }] })
+    expect(spendScope([{ asset: 'cirBTC', amount: 0.001 }])).toEqual({ limits: [{ asset: 'cirBTC', amount: '0.00105' }] })
+    expect(spendScope([{ asset: 'USDC', amount: NaN }])).toBeNull()
+    expect(spendScope([{ asset: 'EURC', amount: 1 }], [{ address: '', label: 'x' }, { address: '0x4444444444444444444444444444444444444444', label: 'Escrow' }]))
+      .toEqual({ limits: [{ asset: 'EURC', amount: '1.05' }], contracts: [{ address: '0x4444444444444444444444444444444444444444', label: 'Escrow' }] })
+    expect(p2pScope(0)?.limits).toEqual([{ asset: 'USDC', amount: '0' }])
+  })
+})

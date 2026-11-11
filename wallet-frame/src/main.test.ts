@@ -42,12 +42,12 @@ function fromPage(type: string, ticket: string) {
     confirmPage.addEventListener('message', on as any)
   })
 }
-/** The person approves on the wallet's own page (a summary): opens the approval window. */
-async function approveInWallet(address: string, passcode: string) {
-  const { ticket } = (await ask('confirm:begin', { address, summary: { label: 'Approve', name: 'this' } }))!.msg.result
+/** The person approves on the wallet's own page - by default a 100 USDC spend limit. */
+async function approveInWallet(address: string, passcode: string, what: Record<string, unknown> = { scope: { limits: [{ asset: 'USDC', amount: '100' }] } }) {
+  const { ticket } = (await ask('confirm:begin', { address, ...what, summary: { label: 'Approve', name: 'this' } }))!.msg.result
   const req = fromPage('request', ticket); confirmPage.postMessage({ type: 'claim', ticket }); await req
   const checked = fromPage('checked', ticket); confirmPage.postMessage({ type: 'passcode', ticket, passcode })
-  return checked
+  return { ...(await checked), ticket: ticket as string }
 }
 
 describe('wallet frame transport', () => {
@@ -176,8 +176,12 @@ describe('passkey ceremonies (passkey.html ↔ frame)', () => {
     const pk = generatePrivateKey()
     const { address } = privateKeyToAccount(pk)
     await ask('import', { kind: 'import-privkey', secret: pk, passcode: '123456' })
+    // A spend limit can't cover a passkey signature: it's confirmed on its own.
     await approveInWallet(address, '123456')
-    const { ticket } = (await ask('passkey:begin', { mode: 'sign', address, credentialId: 'abc', challenge, label: 'Pay 5 USDC' }))!.msg.result
+    const request = { mode: 'sign', address, credentialId: 'abc', challenge, label: 'Pay 5 USDC' }
+    expect((await ask('passkey:begin', request))!.msg.error.code).toBe('approval-required')
+    const confirmed = await approveInWallet(address, '123456', { request: { method: 'passkey:begin', params: request } })
+    const { ticket } = (await ask('passkey:begin', { ...request, confirmation: confirmed.ticket }))!.msg.result
     expect(ticket).toMatch(/^0x[0-9a-f]{32}$/)
     expect((await ask('passkey:result', { ticket }))!.msg.result).toEqual({ status: 'pending' })
 
@@ -381,15 +385,67 @@ describe('confirmations', () => {
     expect((await ask('confirm:result', { ticket }))!.msg.result.status).toBe('error')
   })
 
-  it('a summary (no intent) opens the usual approval window on the right passcode', async () => {
+  it("a summary alone approves nothing - the app's words are never the limit", async () => {
     const { address } = await wallet()
-    expect((await ask('sign:transaction', { address, transaction: tx() }))!.msg.error.code).toBe('approval-required')
-    const { ticket } = (await ask('confirm:begin', { address, summary: { label: 'Swapping', name: 'USDC → EURC', amount: '10' } }))!.msg.result
+    expect((await ask('confirm:begin', { address, summary: { label: 'Swapping', name: 'USDC → EURC', amount: '10' } }))!.msg.error.code).toBe('invalid')
+    // One thing at a time.
+    expect((await ask('confirm:begin', { address, intent, scope: { limits: [{ asset: 'USDC', amount: '5' }] } }))!.msg.error.code).toBe('invalid')
+  })
+
+  it('a spend limit: the wallet shows it, then counts every signature against it for 2 minutes', async () => {
+    const { address } = await wallet()
+    const { ticket } = (await ask('confirm:begin', { address, scope: { limits: [{ asset: 'USDC', amount: '4' }] }, summary: { label: 'Swapping', name: 'USDC → EURC' } }))!.msg.result
     const req = await claim(ticket)
-    expect(req.view).toBeNull()
+    expect(req.view).toMatchObject({ action: 'Up to', amount: '4 USDC', to: 'may leave your wallet' })
     expect(await enter(ticket, '123456')).toMatchObject({ ok: true })
     expect((await ask('confirm:result', { ticket }))!.msg.result.status).toBe('approved')
+    // 2.5 USDC fits; another 2.5 would go over 4.
     expect((await ask('sign:transaction', { address, transaction: tx() }))!.msg.result.serialized).toMatch(/^0x/)
+    expect((await ask('sign:transaction', { address, transaction: tx({ nonce: 8 }) }))!.msg.error.code).toBe('approval-required')
+    // An ERC-20 USDC approval of 1 counts too (6 decimals on its contract): 1.5 left → fits.
+    const approve = '0x095ea7b3' + '000000000000000000000000' + recipient.slice(2).toLowerCase() + (1_000_000n).toString(16).padStart(64, '0')
+    expect((await ask('sign:transaction', { address, transaction: tx({ nonce: 8, to: '0x3600000000000000000000000000000000000000', value: 0n, data: approve }) }))!.msg.result.serialized).toMatch(/^0x/)
+    // EURC isn't in the limit at all.
+    const eurc = '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a'
+    expect((await ask('sign:transaction', { address, transaction: tx({ nonce: 9, to: eurc, value: 0n, data: approve }) }))!.msg.error.code).toBe('approval-required')
+  })
+
+  it("a spend limit refuses what it can't read: unknown contracts, approvals for all, Permit2, Solana, other chains' coin", async () => {
+    const { address } = await wallet()
+    const escrow = '0x4444444444444444444444444444444444444444'
+    await approveInWallet(address, '123456', { scope: { limits: [{ asset: 'USDC', amount: '50' }], contracts: [{ address: escrow, label: 'MeshPort P2P escrow' }] } })
+    const call = (to: string, data: string, over: Record<string, unknown> = {}) => ask('sign:transaction', { address, transaction: tx({ to, value: 0n, data, ...over }) })
+    // A contract the limit names, with a call that moves nothing by itself: allowed.
+    expect((await call(escrow, '0x12345678'))!.msg.result.serialized).toMatch(/^0x/)
+    // Any other contract: refused (confirmed on its own instead).
+    expect((await call('0x5555555555555555555555555555555555555555', '0x12345678'))!.msg.error.code).toBe('approval-required')
+    // Even the named contract can't be handed control of tokens.
+    expect((await call(escrow, '0xa22cb465' + '00'.repeat(64)))!.msg.error.code).toBe('approval-required')
+    expect((await call('0x000000000022D473030F116dDEE9F6B43aC78BA3', '0x12345678'))!.msg.error.code).toBe('approval-required')
+    expect((await ask('solana:sign', { address, message: '0x010203' }))!.msg.error.code).toBe('approval-required')
+    expect((await ask('sign:transaction', { address, transaction: tx({ chainId: 1, value: 1n }) }))!.msg.error.code).toBe('approval-required')
+    expect((await ask('sign:message', { address, message: { raw: '0x' + 'ab'.repeat(32) } }))!.msg.error.code).toBe('approval-required')
+    // A limit can't name a token or Permit2 as "its" contract.
+    expect((await ask('confirm:begin', { address, scope: { limits: [{ asset: 'USDC', amount: '1' }], contracts: [{ address: '0x3600000000000000000000000000000000000000' }] } }))!.msg.error.code).toBe('invalid')
+    expect((await ask('confirm:begin', { address, scope: { limits: [{ asset: 'DAI', amount: '1' }] } }))!.msg.error.code).toBe('invalid')
+  })
+
+  it('an exact request signs that request, once - nothing else', async () => {
+    const { address } = await wallet()
+    const params = { address, message: { raw: '0x' + 'cd'.repeat(32) } }
+    expect((await ask('sign:message', params))!.msg.error.code).toBe('approval-required')
+    const { ticket } = (await ask('confirm:begin', { address, request: { method: 'sign:message', params } }))!.msg.result
+    const req = await claim(ticket)
+    expect(req.view.action).toBe('Sign raw data')
+    expect(req.view.warnings.length).toBeGreaterThan(0)
+    expect(await enter(ticket, '123456')).toMatchObject({ ok: true })
+    // Another request with this ticket: refused, and the ticket stays for the real one.
+    expect((await ask('sign:message', { address, message: { raw: '0x' + 'ce'.repeat(32) }, confirmation: ticket }))!.msg.error.code).toBe('mismatch')
+    expect((await ask('sign:message', { ...params, confirmation: ticket }))!.msg.result.signature).toMatch(/^0x/)
+    expect((await ask('sign:message', { ...params, confirmation: ticket }))!.msg.error.code).toBe('mismatch')
+    // A request can only be for this wallet.
+    expect((await ask('confirm:begin', { address, request: { method: 'sign:message', params: { ...params, address: recipient } } }))!.msg.error.code).toBe('invalid')
+    expect((await ask('confirm:begin', { address, request: { method: 'reveal:grant', params } }))!.msg.error.code).toBe('invalid')
   })
 
   it('refuses what it cannot confirm', async () => {

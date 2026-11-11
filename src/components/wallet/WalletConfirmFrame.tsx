@@ -8,11 +8,15 @@
 // `onUnavailable` hands the step back to the app's own keypad.
 
 import { useEffect, useRef, useState } from 'react'
-import type { ConfirmIntent, ConfirmSummary } from '@/wallet/protocol'
+import type { ConfirmIntent, ConfirmRequest, ConfirmScope, ConfirmSummary } from '@/wallet/protocol'
 
 export interface WalletConfirmRequest {
   /** The exact transaction (Pay) - the wallet decodes and binds it. */
   intent?: () => Promise<ConfirmIntent | null>
+  /** A spend limit (lib/walletConfirm spendScope) - the wallet counts every signature against it. */
+  scope?: ConfirmScope | null
+  /** One exact signature request (WalletApprovalPrompt). */
+  request?: ConfirmRequest | null
   summary: ConfirmSummary
 }
 
@@ -38,6 +42,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
     setSrc(null); setFailed(null); setShown(false)
     const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
 
+    const scope = request.scope ?? null
     const poll = async (address: string, intent: ConfirmIntent | null) => {
       if (done || !ticket) return
       try {
@@ -48,7 +53,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
           done = true
           approved = true // the screen signs with it next: closing the sheet must not drop it
           const { finishWalletConfirm } = await import('@/lib/walletConfirm')
-          latest.current.onApproved(await finishWalletConfirm(address, ticket, intent), outcome.viaBiometric)
+          latest.current.onApproved(await finishWalletConfirm(address, ticket, { intent, scope }), outcome.viaBiometric)
           return
         }
         if (outcome.status === 'error') { setFailed(outcome.message); return }
@@ -61,8 +66,11 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
       const { startWalletConfirm, noteConfirmUnsupported } = await import('@/lib/walletConfirm')
       const intent = request.intent ? await request.intent() : null
       if (done) return
+      // Nothing the wallet can bind (a payment it couldn't build, no amount
+      // known): the app's keypad, and each signature is confirmed on its own.
+      if (!intent && !scope && !request.request) { latest.current.onUnavailable(); return }
       try {
-        const started = await startWalletConfirm({ intent, summary: request.summary }, theme)
+        const started = await startWalletConfirm({ intent, scope, request: request.request, summary: request.summary }, theme)
         ticket = started.ticket
         if (done) { void import('@/wallet').then(m => m.cancelConfirm(started.ticket)); return }
         setSrc(started.url)

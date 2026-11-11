@@ -1,16 +1,17 @@
-// The shared approval sheet for an action the wallet frame refused for want
-// of a recent approval (lib/walletApproval). The approval is given on the
-// wallet's own page inside this sheet (PinSheet walletConfirm): a passcode
-// typed into the app's keypad never approves anything.
+// The shared sheet for a signature the wallet frame refused for want of a
+// confirmation (lib/walletApproval): no spend limit in force covers it. The
+// wallet's own page inside this sheet (PinSheet walletConfirm) shows that
+// exact request, read by the wallet, and the passcode typed there signs only
+// it, once. A passcode typed into the app's keypad never approves anything.
 
 import { useState } from 'react'
 import { PinSheet } from '@/components/ui/PinSheet'
 import { useApprovalPrompt, checkWalletPasscode } from '@/lib/walletApproval'
-import { isWalletConfirmToken, walletConfirmTokenValid } from '@/lib/walletConfirmToken'
+import { isWalletConfirmToken, walletConfirmTicket } from '@/lib/walletConfirmToken'
 import { walletConfirmAddress } from '@/lib/walletConfirm'
 
 export function WalletApprovalPrompt() {
-  const { open, resolve } = useApprovalPrompt()
+  const { open, request, resolve } = useApprovalPrompt()
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [checking, setChecking] = useState(false)
@@ -18,14 +19,18 @@ export function WalletApprovalPrompt() {
   const [round, setRound] = useState(0)
   if (!open && !pin && !error) return null
 
-  const close = (ok: boolean) => { setPin(''); setError(''); setChecking(false); resolve?.(ok) }
+  const close = (ticket: string | null) => { setPin(''); setError(''); setChecking(false); resolve?.(ticket) }
   const submit = async (value: string) => {
     if (checking) return
-    // Approved on the wallet's own page.
-    if (isWalletConfirmToken(value)) { if (walletConfirmTokenValid(value)) close(true); else { setPin(''); setError('Try again') } return }
+    // Confirmed on the wallet's own page.
+    if (isWalletConfirmToken(value)) {
+      const ticket = walletConfirmTicket(value)
+      if (ticket) close(ticket); else { setPin(''); setError('Try again') }
+      return
+    }
     // The keypad only shows when the wallet's page couldn't (no passcode on
     // this device yet, or an older wallet): check it - which sets the
-    // device's passcode - then approve on the wallet's page.
+    // device's passcode - then confirm on the wallet's page.
     setChecking(true)
     const r = await checkWalletPasscode(value)
     setChecking(false)
@@ -41,19 +46,20 @@ export function WalletApprovalPrompt() {
   }
 
   return (
-    <PinSheet walletConfirm key={round}
+    <PinSheet key={round}
+      walletConfirm={request ? { request, summary: { label: 'Confirm', name: 'This step needs your approval' } } : undefined}
       open={open}
       id="wallet-approve"
       zIndex={400}
-      title="Approve with passcode"
-      subtitle="Enter your passcode to approve this"
+      title="Confirm in your wallet"
+      subtitle="Check what you're signing, then enter your passcode"
       bioVerb="Confirm"
       value={pin}
       onChange={v => { setPin(v); setError('') }}
       error={error || undefined}
       footer={checking ? 'Checking…' : undefined}
       locked={checking}
-      onClose={() => close(false)}
+      onClose={() => close(null)}
       onComplete={value => { void submit(value) }}
     />
   )

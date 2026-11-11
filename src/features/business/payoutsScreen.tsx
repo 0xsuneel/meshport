@@ -26,6 +26,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY } from '@/lib/motion'
 import { BusinessScreen, ScreenLevel, useScreenLevel, PrimaryBtn, GhostBtn, Skeleton, Field, TextInput, ChipSelect } from './ui'
 import { usePasscodeGate } from './passcodeGate'
+import { spendScope } from '@/lib/walletConfirm'
 import { unlockSigner } from './settlement'
 import { SearchField } from '@/components/ui/SearchField'
 
@@ -295,7 +296,7 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
       if (outcome.state === 'failed') { setPhase({ kind: 'failed', error: outcome.error }); return }
       if (initial.payoutId) void markPayoutPaid(initial.payoutId).catch(() => {})
       setPhase({ kind: 'done', paid: chosen, total })
-    })
+    }, spendScope([{ asset: 'USDC', amount: total + fee }]))
   }
 
   const setRow = (key: string, patch: Partial<RunRow>) => setRows(rs => rs.map(r => r.key === key ? { ...r, ...patch } : r))

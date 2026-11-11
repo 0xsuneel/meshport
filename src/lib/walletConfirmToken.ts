@@ -16,6 +16,11 @@ export function walletConfirmTokenValid(value: string): boolean {
   return at != null && Date.now() - at < TOKEN_MS
 }
 
+/** The wallet's ticket inside a valid token (an exact-request confirmation). */
+export function walletConfirmTicket(value: string): string | null {
+  return isWalletConfirmToken(value) && walletConfirmTokenValid(value) ? value.slice(TOKEN.length) : null
+}
+
 export function issueWalletConfirmToken(ticket: string): string {
   const now = Date.now()
   for (const [t, at] of issued) if (now - at >= TOKEN_MS) issued.delete(t)

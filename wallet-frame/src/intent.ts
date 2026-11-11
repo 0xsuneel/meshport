@@ -62,6 +62,8 @@ export interface IntentView {
   /** Who receives the money (the merchant for an order). */
   to: string
   rows: { label: string; value: string }[]
+  /** Where the card's figures come from, when not "read from the transaction". */
+  source?: string
   /** Shown in red above the passcode: something here isn't a plain payment. */
   warnings: string[]
 }
