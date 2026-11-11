@@ -6,7 +6,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { fetchRecentContacts, recentInitial, recentShortName, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
 import { NewsArt } from '@/features/news/NewsArt'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { useReconnectCount } from '@/lib/connectivity'
+import { useReconnectCount, useSlowNetwork } from '@/lib/connectivity'
 import { fetchHomeNews, readCachedHomeNews, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT, type NewsItem } from '@/lib/news'
 
 // ── Home: Recent + News, side by side ───────────────────────────────────────
@@ -277,6 +277,7 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
   const item = items[cur] ?? items[0]
   // A story has nothing left to wait for when it has no picture (a drawn cover
   // is used), its picture failed, or the picture has fully loaded.
+  const slowNet = useSlowNetwork()
   const coverReady = (it: NewsItem | undefined) => !it || !it.image_url || !!broken[it.id] || !!imgLoaded[it.image_url]
   const curReady = coverReady(item)
 
@@ -316,15 +317,18 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
                 {it.image_url && !broken[it.id] ? (
                   <>
                     {/* All four covers load up front (not lazily), so the next one is
-                        usually in before its turn. Hidden until fully downloaded. */}
-                    <img decoding="async" src={it.image_url} alt="" draggable={false} loading="eager"
+                        usually in before its turn. Hidden until fully downloaded.
+                        On a slow connection only the story on screen loads its
+                        picture (the others wait for their turn), so pictures
+                        don't take the bandwidth the balance and payments need. */}
+                    {(!slowNet || on || imgLoaded[it.image_url]) && <img decoding="async" src={it.image_url} alt="" draggable={false} loading="eager"
                       ref={el => { if (el && el.complete && el.naturalWidth > 0) markLoaded(it.image_url!) }}
                       onLoad={() => markLoaded(it.image_url!)}
                       onError={() => setBroken(b => ({ ...b, [it.id]: true }))}
                       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
                         opacity: imgLoaded[it.image_url] ? 1 : 0,
                         transform: on || reduce ? 'scale(1)' : 'scale(1.08)',
-                        transition: reduce ? 'none' : 'transform 5.5s cubic-bezier(.2,.6,.3,1), opacity .3s ease' }} />
+                        transition: reduce ? 'none' : 'transform 5.5s cubic-bezier(.2,.6,.3,1), opacity .3s ease' }} />}
                     {!imgLoaded[it.image_url] && (
                       // Stays until the picture has fully loaded.
                       <Skeleton className="rounded-none" style={{ position: 'absolute', inset: 0 }} />

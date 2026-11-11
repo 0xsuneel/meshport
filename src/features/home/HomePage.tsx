@@ -36,6 +36,7 @@ import { LockBadge } from '@/components/LockedFeature'
 import { RecentNewsRow } from './RecentNewsRow'
 import { BALANCES_STALE_EVENT, msSinceLastTx, pendingTxBalance, isLaggingRead } from '@/lib/balanceRefresh'
 import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
+import { markBalanceRead, useStaleBalanceLabel } from '@/lib/balanceFreshness'
 import { useSettingsStore } from '@/store/settingsStore'
 import { activitySign, type ActivityRecord } from '@/lib/ActivityService'
 import { projectMomentum } from '@/lib/gesture'
@@ -1881,6 +1882,7 @@ function AvailableBalanceCard({
   // change. The pager dots sit at the bottom right.
   const change = trend?.change ?? 0
   const flat = !trend || Math.abs(change) < 0.005
+  const staleLabel = useStaleBalanceLabel(walletAddress)
   const eyeStroke = 'rgba(255,255,255,.8)'
   const fade = useFirstShowFade()
   return (
@@ -1931,9 +1933,11 @@ function AvailableBalanceCard({
         }}
       </AnimatedBalanceText>
 
-      {/* The 7-day change; room on the right for the pager dots. */}
-      <div className={trend ? fade : undefined} style={{ marginTop: 5, paddingRight: 48, minHeight: 16, fontSize: 11.7, color: 'rgba(255,255,255,0.75)', fontVariantNumeric: 'tabular-nums' }}>
-        {!trend ? null : balanceHidden ? '••••' : flat ? 'No change in the last 7 days' : <>
+      {/* The 7-day change; room on the right for the pager dots. While the
+          balance shown is the last known one and no live read has landed for
+          over 2 min (offline / 2G), it says how old it is instead. */}
+      <div className={trend || staleLabel ? fade : undefined} style={{ marginTop: 5, paddingRight: 48, minHeight: 16, fontSize: 11.7, color: 'rgba(255,255,255,0.75)', fontVariantNumeric: 'tabular-nums' }}>
+        {staleLabel && !balanceHidden ? staleLabel : !trend ? null : balanceHidden ? '••••' : flat ? 'No change in the last 7 days' : <>
           <span style={{ fontWeight: 600, color: change > 0 ? '#8FE9CB' : '#FFB4A9' }}>{change > 0 ? '+' : '−'}${fmt(Math.abs(change)).replace(/^\$/, '')}</span> in the last 7 days
         </>}
       </div>
@@ -3585,6 +3589,7 @@ export function HomePage() {
         // on screen instead of being replaced - and saved - as $0.
         const bal = await readArcBalanceOrThrow(address, 'USDC')
         noteRequestTime(Date.now() - started)
+        markBalanceRead(address)
         if (!cancelled) {
           // A genuine increase means new funds landed since the last
           // check - dispatching the same event useActivity.ts's on-chain

@@ -1531,7 +1531,7 @@ const MARK_PAID_ABI = [{
 
 export async function markTradePaidOnChain(signer: WalletAccount, tradeId: string): Promise<string> {
   if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
-  const { keccak256, encodeAbiParameters, toBytes, encodeFunctionData } = await import('viem')
+  const { keccak256, encodeAbiParameters, toBytes, encodeFunctionData } = await import('@/lib/viemLazy')
   const key = tradeKeyFor(tradeId)
   // Must match P2PMeshportEscrowV3.markPaidDigest().
   const digest = keccak256(encodeAbiParameters(
@@ -1636,7 +1636,7 @@ export async function registerTradeViaOperator(offerId: string, sellerAddress: s
 /** Buyer cancels an unpaid order gas-free: signs cancelDigest(tradeKey), the relayer submits it. */
 export async function cancelTradeAsBuyerOnChain(signer: WalletAccount, tradeId: string): Promise<string> {
   if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
-  const { keccak256, encodeAbiParameters, toBytes } = await import('viem')
+  const { keccak256, encodeAbiParameters, toBytes } = await import('@/lib/viemLazy')
   const key = tradeKeyFor(tradeId)
   // Must match P2PMeshportEscrowV3.cancelDigest().
   const digest = keccak256(encodeAbiParameters(

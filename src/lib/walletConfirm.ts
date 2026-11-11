@@ -123,7 +123,7 @@ const PAY_MAX_FEE = 50_000_000_000_000_000n // 0.05 USDC
 /** The exact transaction a Pay send will sign (arcService payTx), for the wallet to confirm. */
 export async function payConfirmIntent(token: 'USDC' | 'EURC' | 'cirBTC', to: string, amount: number, memo?: { code: string; label: string } | null): Promise<ConfirmIntent | null> {
   try {
-    const [{ payTx, isValidAddress, ARC_CHAIN_INLINE }, { getAddress }] = await Promise.all([import('./arcService'), import('viem')])
+    const [{ payTx, isValidAddress, ARC_CHAIN_INLINE }, { getAddress }] = await Promise.all([import('./arcService'), import('@/lib/viemLazy')])
     if (!isValidAddress(to) || !(amount > 0)) return null
     const tx = payTx(token, getAddress(to), amount, token === 'USDC' ? memo ?? null : null)
     return { chainId: ARC_CHAIN_INLINE.id, to: tx.to, value: String(tx.value ?? 0n), data: (tx.data ?? '0x') as `0x${string}`, maxFee: String(PAY_MAX_FEE) }

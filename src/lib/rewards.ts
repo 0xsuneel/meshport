@@ -258,7 +258,7 @@ export async function fetchUserPoints(userId: string): Promise<{
 export async function getTreasuryBalance(): Promise<number> {
   if (!REWARDS_CONTRACT) return 0
   try {
-    const { encodeFunctionData } = await import('viem')
+    const { encodeFunctionData } = await import('@/lib/viemLazy')
     const TREASURY_ABI = [{
       name: 'treasuryBalance',
       type: 'function' as const,
@@ -283,7 +283,7 @@ export async function getTreasuryBalance(): Promise<number> {
 export async function getDailyClaimedOnChain(walletAddress: string): Promise<number> {
   if (!REWARDS_CONTRACT || !walletAddress) return 0
   try {
-    const { encodeFunctionData } = await import('viem')
+    const { encodeFunctionData } = await import('@/lib/viemLazy')
     const ABI = [{
       name: 'dailyPointsClaimed',
       type: 'function' as const,
@@ -428,7 +428,7 @@ export async function claimPointsAsUSDC(params: {
       try { localStorage.setItem(pendingKey, JSON.stringify({ claimId: claimIdBytes32, points })) } catch { /* private mode */ }
 
       try {
-        const { encodeFunctionData, parseGwei } = await import('viem')
+        const { encodeFunctionData, parseGwei } = await import('@/lib/viemLazy')
         const callData = encodeFunctionData({ abi: REWARDS_ABI, functionName: 'claimRewards', args: [BigInt(points), claimIdBytes32, claimSignature] })
 
         // Validate with simulateContract FIRST - this uses eth_call under the
@@ -480,7 +480,7 @@ export async function claimPointsAsUSDC(params: {
         // UI / reward_claims / activity can never disagree with the chain again.
         let paidUsdc = usdcAmount
         try {
-          const { parseEventLogs } = await import('viem')
+          const { parseEventLogs } = await import('@/lib/viemLazy')
           const logs = parseEventLogs({ abi: REWARDS_EVENTS_ABI, logs: receipt.logs, eventName: 'RewardClaimed' })
           const ev = logs.find(l => l.address.toLowerCase() === REWARDS_CONTRACT.toLowerCase())
           if (ev) paidUsdc = Number((ev.args as { usdcAmount: bigint }).usdcAmount) / 1e6
@@ -533,7 +533,7 @@ export async function claimPointsAsUSDC(params: {
             const rawData: `0x${string}` | undefined =
               err?.cause?.cause?.data ?? err?.cause?.data ?? err?.data
             if (rawData && rawData.startsWith('0x') && rawData.length > 2) {
-              const { decodeErrorResult } = await import('viem')
+              const { decodeErrorResult } = await import('@/lib/viemLazy')
               errorName = decodeErrorResult({ abi: REWARDS_ABI, data: rawData }).errorName
             }
           } catch { /* raw data missing or not one of our known errors - fall through */ }

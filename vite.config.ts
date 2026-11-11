@@ -16,6 +16,43 @@ const mpVersionFile = {
   },
 }
 
+// ── The service worker's core: what the first screen needs ────────────────
+// Like m.uber / Twitter Lite: on install the service worker stores only the
+// files the first screen needs (the app's start files, Home, the landing and
+// sign-in pages, styles, fonts, icons). Every other screen is stored the
+// first time it opens (CacheFirst in sw.ts). Storing all ~290 files (6.5 MB)
+// took ~3.6 min on 2G and was all-or-nothing: closing the app before it
+// finished saved nothing, and the download shared the 2G link with payments.
+const CORE_CHUNKS = new Set(['HomePage', 'LandingPage', 'AuthPages', 'PasscodeSetup', 'swUpdate'])
+const CORE_MAX_STATIC_BYTES = 40 * 1024 // big pictures (share image, badge) are stored when shown
+const coreFiles = new Set<string>()
+const mpCoreFiles = {
+  name: 'mp-core-files',
+  writeBundle(_: unknown, bundle: Record<string, { type: string; fileName: string; name?: string; isEntry?: boolean; imports?: string[] }>) {
+    if (!bundle['index.html']) return // only the app's own build (not the service worker's)
+    coreFiles.clear()
+    const add = (file: string) => {
+      if (coreFiles.has(file)) return
+      coreFiles.add(file)
+      for (const i of bundle[file]?.imports ?? []) add(i)
+    }
+    for (const c of Object.values(bundle)) {
+      if (c.type === 'chunk' && (c.isEntry || (c.name && CORE_CHUNKS.has(c.name)))) add(c.fileName)
+    }
+  },
+}
+/** injectManifest transform: keep the core scripts and every small non-script file. */
+function coreOnly(entries: { url: string; size: number; revision: string | null }[]) {
+  const manifest = entries.filter(e => {
+    const url = e.url.replace(/^\//, '')
+    if (url.endsWith('.js')) return coreFiles.size === 0 || coreFiles.has(url) || !url.startsWith('assets/') // boot.js, registerSW.js
+    // Fonts for other alphabets load only when such text shows (unicode-range).
+    if (url.endsWith('.woff2')) return !/geist-(cyrillic|vietnamese|latin-ext)/.test(url)
+    return url.endsWith('.css') || url.endsWith('.html') || e.size <= CORE_MAX_STATIC_BYTES
+  })
+  return { manifest, warnings: coreFiles.size === 0 ? ['mp-core-files: no bundle graph - storing every script'] : [] }
+}
+
 // build: 20250615
 export default defineConfig({
   server: {
@@ -97,6 +134,7 @@ export default defineConfig({
   },
   plugins: [
     mpVersionFile,
+    mpCoreFiles,
     react(),
     // Circle SDK (and some of its transitive deps) reference `Buffer` as an
     // ambient Node global at module top-level — the manual `window.Buffer =
@@ -122,6 +160,7 @@ export default defineConfig({
       filename: 'sw.ts',
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        manifestTransforms: [coreOnly],
       },
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-any-192x192.png', 'pwa-any-512x512.png', 'notification-icon.png'],
       manifest: {

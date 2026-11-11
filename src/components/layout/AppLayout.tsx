@@ -139,9 +139,14 @@ export function AppLayout() {
   // since a sign-out/in elsewhere or an expired session gives a new session id.
   // Load the scanner's code while the app is idle so tapping Scan opens it
   // at once (no wait on a network fetch).
+  // On a slow connection (2G, Data Saver) it waits until the network is
+  // better: its ~55 KB would share the link with the balance. Tapping Scan
+  // still loads it straight away.
   useEffect(() => {
     // Idle: requestIdleCallback, or on iPhone (no such API) a quiet moment.
-    return whenIdle(preloadScanner, { timeout: 4000 })
+    let cancelIdle: (() => void) | undefined
+    const cancelWait = whenNetworkOk(() => { cancelIdle = whenIdle(preloadScanner, { timeout: 4000 }) })
+    return () => { cancelWait(); cancelIdle?.() }
   }, [])
 
   // The first tap on each feature used to wait for that page's code to load
