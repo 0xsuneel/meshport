@@ -109,8 +109,21 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
     setSrc(`${walletOrigin()}/confirm.html#slot=${slot}${view}&s=${encodeURIComponent(JSON.stringify(request.summary))}`)
 
     const scope = request.scope ?? null
+    // The wallet's page says "approved" the moment the passcode is checked:
+    // ask the wallet for the result then, not on the next 400 ms look. The
+    // result itself still only comes from the wallet (confirmResult).
+    let lookNow: (() => void) | null = null
+    let looking = false
+    let again = false // "approved" came while a look was on its way: look again at once
     const poll = async (address: string, intent: ConfirmIntent | null) => {
       if (done || !ticket) return
+      lookNow = () => {
+        if (done) return
+        if (looking) { again = true; return }
+        if (timer) { clearTimeout(timer); timer = null }
+        void poll(address, intent)
+      }
+      looking = true
       try {
         const { confirmResult } = await import('@/wallet')
         const outcome = await confirmResult(ticket)
@@ -125,7 +138,11 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
         if (outcome.status === 'error') { setFailed(outcome.message); return }
         if (outcome.status === 'cancelled') return
       } catch { /* the frame is busy or reloading: ask again */ }
-      timer = setTimeout(() => void poll(address, intent), 400)
+      finally { looking = false }
+      if (done) return
+      const soon = again
+      again = false
+      timer = setTimeout(() => void poll(address, intent), soon ? 0 : 400)
     }
 
     ;(async () => {
@@ -158,6 +175,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
       if (!d || d.type !== 'mp-confirm') return
       if (d.state === 'size' && typeof d.height === 'number') setHeight(Math.min(Math.max(d.height, 120), 900))
       if (d.state === 'ready') { ready = true; setShown(true) }
+      if (d.state === 'approved') lookNow?.()
     }
     window.addEventListener('message', onMessage)
     return () => {

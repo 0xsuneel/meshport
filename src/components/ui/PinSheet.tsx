@@ -80,6 +80,10 @@ export interface PinSheetProps {
   walletConfirm?: { intent?: () => Promise<ConfirmIntent | null>; scope?: ConfirmScope | null; request?: ConfirmRequest | null; summary?: ConfirmSummary }
 }
 
+/** How long the wallet page's "Approved" tick shows before the sheet leaves
+ *  (from the approval; the tick draws in ~0.3 s). */
+const APPROVED_SHOW_MS = 450
+
 export function PinSheet(p: PinSheetProps) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const close = p.locked ? () => {} : p.onClose
@@ -107,6 +111,25 @@ export function PinSheet(p: PinSheetProps) {
   const usable = usableFor === opening
   const setUsable = (v: boolean) => setUsableFor(v ? opening : -1)
   const pending = useRef<{ token: string; via: boolean } | null>(null)
+  // Approved in the wallet's page: its tick stays in view for a moment after
+  // the screen closes the sheet (the screen has already moved on - the
+  // payment isn't held), then the sheet slides away over the next page.
+  const approvedAt = useRef(0)
+  const [linger, setLinger] = useState(false)
+  const wasOpenForLinger = useRef(p.open)
+  useEffect(() => {
+    const was = wasOpenForLinger.current
+    wasOpenForLinger.current = p.open
+    if (p.open) { setLinger(false); return }
+    if (!was) return
+    const since = performance.now() - approvedAt.current
+    approvedAt.current = 0
+    if (since > APPROVED_SHOW_MS) return
+    setLinger(true)
+    const t = setTimeout(() => setLinger(false), APPROVED_SHOW_MS - since)
+    return () => clearTimeout(t)
+  }, [p.open])
+  const shownOpen = p.open || linger
   const lastValue = useRef(p.value)
   useEffect(() => { if (p.open) { setAttempt(a => a + 1); setKeypadOnly(false) } }, [p.open])
   useEffect(() => {
@@ -133,12 +156,12 @@ export function PinSheet(p: PinSheetProps) {
       : { label: p.title, name: subtitleText || p.title, amount: p.amountLabel },
   } : null
   // Only while open: a closed sheet starts no confirmation.
-  const walletPad = request && (p.open
+  const walletPad = request && (shownOpen
     ? <WalletConfirmFrame key={attempt} request={request}
         onUnavailable={() => setKeypadOnly(true)}
         onUsable={() => { pageUsable.current = true; setUsable(true) }}
         waiting={!pageUsable.current}
-        onApproved={(token, via) => { pending.current = { token, via }; p.onChange(token) }} />
+        onApproved={(token, via) => { approvedAt.current = performance.now(); pending.current = { token, via }; p.onChange(token) }} />
     : <div className="h-[480px]" aria-hidden />)
 
   // Phone: the sheet with the wallet's page appears in place once the page
@@ -176,7 +199,7 @@ export function PinSheet(p: PinSheetProps) {
   if (desktop) {
     return (
       <AnimatePresence custom={!!p.leaveUnder}>
-        {p.open && (
+        {shownOpen && (
           <DesktopTransactionAuthDialog key={p.id ?? 'pin'} onClose={close} title={p.title} amountLabel={p.amountLabel} subLabel={said}
             placement={p.placement} panelWidth={p.panelWidth} anchor={p.anchor} instantExit={p.instantExit} backClose={p.backClose ?? true} zIndex={p.zIndex}>
             {p.header}
@@ -188,7 +211,7 @@ export function PinSheet(p: PinSheetProps) {
     )
   }
   return (
-    <ActionSheet open={p.open} onClose={close} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={p.backClose ?? true} zIndex={p.zIndex} leaveUnder={p.leaveUnder}
+    <ActionSheet open={shownOpen} onClose={close} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={p.backClose ?? true} zIndex={p.zIndex} leaveUnder={p.leaveUnder}
       inPlace={inPlace} held={held}>
       <div className="flex flex-col px-6 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] overflow-y-auto">
         {p.header}

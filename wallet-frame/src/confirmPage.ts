@@ -192,6 +192,17 @@ function fingerprintIcon(): SVGElement {
 }
 
 /** PinKeypad's delete key. */
+/** The approved tick (drawn in by CSS, .approved). */
+function tickIcon(): SVGElement {
+  const NS = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(NS, 'svg')
+  for (const [k, v] of [['viewBox', '0 0 24 24'], ['fill', 'none'], ['stroke', 'currentColor'], ['stroke-width', '3'],
+    ['stroke-linecap', 'round'], ['stroke-linejoin', 'round'], ['aria-hidden', 'true']]) svg.setAttribute(k, v)
+  const path = document.createElementNS(NS, 'path'); path.setAttribute('d', 'M5 12.5l4.5 4.5L19 7.5'); path.setAttribute('pathLength', '1')
+  svg.append(path)
+  return svg
+}
+
 function deleteIcon(): SVGElement {
   const NS = 'http://www.w3.org/2000/svg'
   const svg = document.createElementNS(NS, 'svg')
@@ -304,12 +315,25 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
   channel.addEventListener('message', (e) => {
     const d = (e.data ?? {}) as { type?: string; ticket?: string; ok?: boolean; code?: string; message?: string; lockedForMs?: number }
     if (d.type !== 'checked' || !req || d.ticket !== req.ticket) return
-    busy = false
     if (d.ok) {
-      show(el('div', 'done', 'Approved'))
+      // The app first: it reads the result now instead of on its next look
+      // (it still reads it from the wallet - this message only says "look").
       tellApp({ state: 'approved' })
+      // A small tick over the keypad, in place: the page keeps its height,
+      // so the sheet doesn't jump, and it leaves with the sheet. Nothing can
+      // be typed any more.
+      busy = true
+      sayIt('')
+      const ok = el('div', 'approved')
+      ok.setAttribute('role', 'status')
+      const tick = el('div', 'tick'); tick.append(tickIcon())
+      ok.append(tick, el('p', undefined, 'Approved'))
+      entry.classList.add('ok')
+      entry.append(ok)
+      paint()
       return
     }
+    busy = false
     digits = ''
     dots.classList.remove('shake'); void dots.offsetWidth; dots.classList.add('shake', 'bad')
     setTimeout(() => { dots.classList.remove('bad'); paint() }, 500)

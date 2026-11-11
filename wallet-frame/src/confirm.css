@@ -71,4 +71,17 @@ main { padding: 0; }
 .key:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .key svg { width: 22px; height: 22px; }
 .key.bio svg { width: 24px; height: 24px; }
-.done { padding: 28px 8px; text-align: center; color: var(--brand-text); font-weight: 800; font-size: 16px; }
+/* Approved: a small tick over the keypad, in place (same height). */
+.entry { position: relative; }
+.entry > .dots, .entry > .say, .entry > .pad { transition: opacity .14s ease-out; }
+.entry.ok > .dots, .entry.ok > .say, .entry.ok > .pad { opacity: 0; pointer-events: none; }
+.approved { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+.approved p { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
+.tick { width: 56px; height: 56px; border-radius: 50%; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; }
+.tick svg { width: 28px; height: 28px; }
+@media (prefers-reduced-motion: no-preference) {
+  .approved { animation: approved-in .22s cubic-bezier(0.32, 0.72, 0, 1) both; }
+  .tick path { stroke-dasharray: 1; stroke-dashoffset: 1; animation: tick-draw .26s .06s ease-out forwards; }
+  @keyframes approved-in { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: none; } }
+  @keyframes tick-draw { to { stroke-dashoffset: 0; } }
+}
