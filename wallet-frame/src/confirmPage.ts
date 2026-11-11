@@ -253,14 +253,18 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
   }
 
   let hiddenTimer: ReturnType<typeof setTimeout> | null = null
+  // The app keeps the sheet out of sight while this page gets ready, so being
+  // hidden before it was ever shown is expected - said only after that.
+  let everVisible = false
   const refreshVisibility = () => {
     visKnown = true
     if (hiddenTimer) { clearTimeout(hiddenTimer); hiddenTimer = null }
     if (!visible) {
       // Typed while something may have covered the page: not used.
       if (!busy && digits) { digits = '' }
-      if (!busy) hiddenTimer = setTimeout(() => { if (!visible && !busy) sayIt(HIDDEN_SAY) }, 600)
+      if (!busy && everVisible) hiddenTimer = setTimeout(() => { if (!visible && !busy) sayIt(HIDDEN_SAY) }, 600)
     } else {
+      everVisible = true
       if (say.textContent === HIDDEN_SAY) sayIt('')
       trySubmit()
     }

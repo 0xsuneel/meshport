@@ -85,8 +85,11 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
           // data-push-keep: if the step under an open sheet changes (Bring's
           // passcode → processing), the sheet stays in the old step's
           // picture and slides away with it (ScreenPush) - never vanishes.
-          <motion.div key={sid + '-dim'} data-push-keep="" {...SHEET_BACKDROP} {...(inPlace ? { animate: { opacity: held ? 0 : 1 }, transition: { duration: 0.14 } } : null)} variants={{ leave: leaveVariant(() => ({ ...SHEET_BACKDROP.exit, transition: sheetExit(sid, SHEET_PANEL.exit).transition })) }} exit="leave"
-            className={`${pos} inset-0`} style={{ background: SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40, willChange: 'opacity', pointerEvents: held ? 'none' : undefined }} onClick={onClose} />,
+          <motion.div key={sid + '-dim'} data-push-keep="" {...SHEET_BACKDROP} {...(inPlace ? { initial: false, animate: undefined } : null)} variants={{ leave: leaveVariant(() => ({ ...SHEET_BACKDROP.exit, transition: sheetExit(sid, SHEET_PANEL.exit).transition })) }} exit="leave"
+            className={`${pos} inset-0`} style={{ background: SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40, willChange: 'opacity', pointerEvents: held ? 'none' : undefined,
+              // In place: a plain CSS fade (the animation library's short fade
+              // blinked to 0 for a frame at its end). Closing still uses `exit`.
+              ...(inPlace ? { opacity: held ? 0 : 1, transition: 'opacity 160ms ease-out' } : null) }} onClick={onClose} />,
           <motion.div key={sid} data-push-keep="" {...sheetDrag(sid, onClose)} {...SHEET_PANEL}
             // No fade on the panel: the wallet's page takes touches only once it is
             // fully opaque (plus ~0.1 s for the browser to confirm it) - shown at
