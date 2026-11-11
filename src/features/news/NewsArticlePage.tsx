@@ -70,7 +70,7 @@ export function NewsArticlePage() {
         <button onClick={back} aria-label="Back"
           style={{ position: 'absolute', top: isDesktop ? 14 : 'calc(env(safe-area-inset-top, 0px) + 14px)', left: 14, width: 38, height: 38, borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-            background: 'rgba(0,0,0,0.42)', border: 'none', backdropFilter: 'blur(8px)' }}>
+            background: 'rgba(0,0,0,0.42)', border: 'none', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
           {/* Same arrow as every back button; the dark circle keeps it readable over the photo. */}
           <ArrowLeft className="w-5 h-5" style={{ color: '#fff' }} />
         </button>

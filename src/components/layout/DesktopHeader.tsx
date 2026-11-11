@@ -218,7 +218,7 @@ export function DesktopHeader() {
       display: 'flex', alignItems: 'center', gap: 16,
       padding: '0 28px', borderBottom: '1px solid var(--border)',
       background: 'color-mix(in srgb, var(--bg) 95%, transparent)',
-      backdropFilter: 'blur(12px)',
+      backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
       boxShadow: 'var(--shadow-1)',
       position: 'relative', zIndex: 5,
     }}>

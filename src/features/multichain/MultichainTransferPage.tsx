@@ -54,6 +54,7 @@ import { moveSteps, indexFromStepStates } from '@/lib/moveSteps'
 import { MoveProgress } from '@/components/multichain/MoveProgress'
 import { TrackedMove, type TrackedMoveInfo } from '@/components/multichain/TrackedMove'
 import { refreshScope, notifyExternalBalanceChanged } from '@/blockchain/BlockchainManager'
+import { whenIdle } from '@/lib/idle'
 
 // Derive Arc chain key from env so a mainnet build targets Arc mainnet.
 // All 'Arc_Testnet' literals in this file are replaced with this constant -
@@ -814,9 +815,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // the phone is idle), so Review doesn't parse it on its way in.
   useEffect(() => {
     if (formSheet !== 1) return
-    const ric = (window as any).requestIdleCallback as ((cb: () => void, o?: { timeout: number }) => number) | undefined
-    const id = ric ? ric(() => { void loadSdkModules() }, { timeout: 3000 }) : window.setTimeout(() => { void loadSdkModules() }, 1200)
-    return () => { const cic = (window as any).cancelIdleCallback; if (ric && cic) cic(id); else clearTimeout(id) }
+    // Idle: on iPhone (no requestIdleCallback) after a moment with no touch.
+    return whenIdle(() => { void loadSdkModules() }, { timeout: 3000 })
   }, [formSheet])
   const [selectedChain, setSelectedChain] = useState<ChainId>('eth')
   // What is sent: USDC (CCTP / Unified Balance, as before) or EURC / cirBTC

@@ -25,6 +25,7 @@ import { startExternalLiveWatch } from '@/blockchain/externalLiveWatch'
 import { useSettingsStore } from '@/store/settingsStore'
 import { arcDepositWatcher } from '@/lib/arcDepositWatcher'
 import { startP2PNotifications } from '@/lib/p2pNotifications'
+import { whenIdle } from '@/lib/idle'
 
 const noNavRoutes = [
   '/pay-send', '/receive', '/bulk-payout', '/profile', '/notifications',
@@ -139,9 +140,8 @@ export function AppLayout() {
   // Load the scanner's code while the app is idle so tapping Scan opens it
   // at once (no wait on a network fetch).
   useEffect(() => {
-    const ric = (window as any).requestIdleCallback as ((cb: () => void, o?: { timeout: number }) => number) | undefined
-    const id = ric ? ric(preloadScanner, { timeout: 4000 }) : window.setTimeout(preloadScanner, 2500)
-    return () => { (ric ? (window as any).cancelIdleCallback : window.clearTimeout)(id) }
+    // Idle: requestIdleCallback, or on iPhone (no such API) a quiet moment.
+    return whenIdle(preloadScanner, { timeout: 4000 })
   }, [])
 
   // The first tap on each feature used to wait for that page's code to load
@@ -167,12 +167,14 @@ export function AppLayout() {
       // first Swap open would run all of it while the page slides in.
       () => import('@/lib/swapService').then(m => m.warmSwapSdkReady()),
     ]
-    const ric = (window as any).requestIdleCallback as ((cb: () => void, o?: { timeout: number }) => number) | undefined
-    let cancelled = false, handle: number | undefined
+    // One page at a time, each when the app is idle - on iPhone (no
+    // requestIdleCallback) only after a moment with no touch or scroll, so
+    // loading a page's code never lands in the middle of a scroll or a slide.
+    let cancelled = false
+    let cancelIdle: (() => void) | undefined
     const next = (i: number) => {
       if (cancelled || i >= pages.length) return
-      handle = ric ? ric(() => { pages[i]().catch(() => {}).finally(() => next(i + 1)) }, { timeout: 3000 })
-                   : window.setTimeout(() => { pages[i]().catch(() => {}).finally(() => next(i + 1)) }, 300)
+      cancelIdle = whenIdle(() => { pages[i]().catch(() => {}).finally(() => next(i + 1)) }, { timeout: 3000 })
     }
     const start = window.setTimeout(() => {
       import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
@@ -182,7 +184,7 @@ export function AppLayout() {
     return () => {
       cancelled = true
       window.clearTimeout(start)
-      if (handle !== undefined) (ric ? (window as any).cancelIdleCallback : window.clearTimeout)(handle)
+      cancelIdle?.()
     }
   }, [walletAddress])
 

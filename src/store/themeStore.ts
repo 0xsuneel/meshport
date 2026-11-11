@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { syncMedianStatusBar } from '@/lib/median'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
@@ -23,6 +24,9 @@ function applyTheme(mode: ThemeMode) {
   // Status bar (and the app's card in Recent apps) in the page's own colour,
   // like a native app - not a teal band above a light/dark page.
   document.getElementById('mp-theme-color')?.setAttribute('content', resolved === 'dark' ? '#000000' : '#F5F4F0')
+  // Inside the Median iOS / Android apps the native status bar ignores
+  // theme-color: set it through Median's bridge instead (lib/median.ts).
+  syncMedianStatusBar(resolved)
 }
 
 interface ThemeStore {

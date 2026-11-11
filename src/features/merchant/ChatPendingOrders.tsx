@@ -111,7 +111,7 @@ export function ChatPendingOrders({ otherUserId, refreshKey }: { otherUserId: st
   return (
     <div className="px-3 pt-2 relative z-10">
       <div style={{ borderRadius: 14, border: '1px solid color-mix(in srgb, var(--warning) 35%, var(--border))',
-        background: 'color-mix(in srgb, var(--surface) 92%, var(--warning) 8%)', backdropFilter: 'blur(8px)', overflow: 'hidden' }}>
+        background: 'color-mix(in srgb, var(--surface) 92%, var(--warning) 8%)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', overflow: 'hidden' }}>
         <button onClick={() => setOpen(v => !v)} className="w-full flex items-center gap-2 text-left"
           style={{ padding: '9px 12px', background: 'transparent', border: 'none', cursor: 'pointer' }}>
           <Receipt size={16} color="var(--warning)" style={{ flexShrink: 0 }} />
