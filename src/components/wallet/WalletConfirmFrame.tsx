@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { ConfirmIntent, ConfirmRequest, ConfirmScope, ConfirmSummary } from '@/wallet/protocol'
+import { walletOrigin } from '@/wallet/frameClient'
 
 export interface WalletConfirmRequest {
   /** The exact transaction (Pay) - the wallet decodes and binds it. */
@@ -44,8 +45,17 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
     let approved = false
     let ticket: string | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
-    setSrc(null); setFailed(null); setShown(false); setHeight(null)
+    let fallback: ReturnType<typeof setTimeout> | null = null
+    let ready = false
+    setFailed(null); setShown(false); setHeight(null)
     const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
+    // The wallet's page opens now, by a slot name, before the request exists:
+    // it shows the app's summary and takes the passcode while the wallet
+    // builds the request (it never comes through the app). A short phone
+    // gets the app keypad's shorter keys, so the whole step fits.
+    const slot = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('')
+    const view = `&theme=${theme}${short ? '&short=1' : ''}`
+    setSrc(`${walletOrigin()}/confirm.html#slot=${slot}${view}&s=${encodeURIComponent(JSON.stringify(request.summary))}`)
 
     const scope = request.scope ?? null
     const poll = async (address: string, intent: ConfirmIntent | null) => {
@@ -75,13 +85,12 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
       // known): the app's keypad, and each signature is confirmed on its own.
       if (!intent && !scope && !request.request) { latest.current.onUnavailable(); return }
       try {
-        const started = await startWalletConfirm({ intent, scope, request: request.request, summary: request.summary }, theme)
+        const started = await startWalletConfirm({ intent, scope, request: request.request, summary: request.summary }, theme, slot)
         ticket = started.ticket
         if (done) { void import('@/wallet').then(m => m.cancelConfirm(started.ticket)); return }
-        // A short phone: the page uses the app keypad's shorter keys, so the
-        // whole step fits in the sheet (it accepts the passcode only while
-        // fully in view).
-        setSrc(started.url + (short ? '&short=1' : ''))
+        // A wallet page from before slots (the two sites deploying a moment
+        // apart) can't open by slot: if it hasn't come up, open it by ticket.
+        if (!ready) fallback = setTimeout(() => { if (!done && !ready) setSrc(started.url + (short ? '&short=1' : '')) }, 2500)
         void poll(started.address, intent)
       } catch (e) {
         if (done) return
@@ -96,12 +105,13 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
       const d = e.data as { type?: string; state?: string; height?: number } | null
       if (!d || d.type !== 'mp-confirm') return
       if (d.state === 'size' && typeof d.height === 'number') setHeight(Math.min(Math.max(d.height, 120), 900))
-      if (d.state === 'ready') setShown(true)
+      if (d.state === 'ready') { ready = true; setShown(true) }
     }
     window.addEventListener('message', onMessage)
     return () => {
       done = true
       if (timer) clearTimeout(timer)
+      if (fallback) clearTimeout(fallback)
       window.removeEventListener('message', onMessage)
       if (ticket && !approved) void import('@/wallet').then(m => m.cancelConfirm(ticket!)).catch(() => {})
     }

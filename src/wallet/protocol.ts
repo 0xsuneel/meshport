@@ -97,7 +97,13 @@ export interface WalletRpc {
    *   request  one exact signature request, once.
    * `summary` is the app's own description, shown as such. 3 minutes to approve.
    */
-  'confirm:begin': [{ address: string; intent?: ConfirmIntent; scope?: ConfirmScope; request?: ConfirmRequest; summary?: ConfirmSummary; biometric?: ConfirmBiometric }, { ticket: string }]
+  /**
+   * `slot`: a random name the app gave the confirm page it already opened
+   * (confirm.html#slot=…), so the page can be on screen - and take the
+   * passcode - while this request is still being made. The page claims the
+   * confirmation by it.
+   */
+  'confirm:begin': [{ address: string; intent?: ConfirmIntent; scope?: ConfirmScope; request?: ConfirmRequest; summary?: ConfirmSummary; biometric?: ConfirmBiometric; slot?: string }, { ticket: string }]
   /** Poll a confirmation. */
   'confirm:result': [{ ticket: string }, ConfirmOutcome]
   /** The person closed the sheet: the ticket is dropped. */

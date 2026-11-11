@@ -262,6 +262,8 @@ interface Confirmation {
   outcome: ConfirmOutcome
   /** Once approved: sign (intent, request) by then. */
   signUntil: number
+  /** The app's name for the confirm page it opened before asking (confirm.html#slot=). */
+  slot: string | null
 }
 const confirms = new Map<string, Confirmation>()
 /** Drop this wallet's confirmations (every wallet's with no address, only stale ones with null). */
@@ -291,7 +293,20 @@ try {
   const channel = new BroadcastChannel(CONFIRM_CHANNEL)
   confirmAvailable = true
   channel.onmessage = async (e) => {
-    const d = (e.data ?? {}) as { type?: string; ticket?: string; passcode?: unknown; via?: unknown }
+    const d = (e.data ?? {}) as { type?: string; ticket?: string; slot?: string; passcode?: unknown; via?: unknown }
+    // A page opened before its request existed claims it by slot (it asks
+    // again until this frame has it).
+    if (d.type === 'claim' && typeof d.slot === 'string' && typeof d.ticket !== 'string') {
+      for (const [t, c] of confirms) {
+        if (c.slot !== d.slot) continue
+        const live = c.outcome.status === 'pending' && c.expires >= Date.now()
+        if (c.claimed || !live) { channel.postMessage({ type: 'request', slot: d.slot, error: 'expired' }); return }
+        c.claimed = true
+        channel.postMessage({ type: 'request', slot: d.slot, ticket: t, view: c.view, summary: c.summary, biometric: c.biometric })
+        return
+      }
+      return // not begun yet (or another tab's frame)
+    }
     if (typeof d.ticket !== 'string') return
     const c = confirms.get(d.ticket)
     if (!c) return // another tab's frame holds it
@@ -496,7 +511,7 @@ const handlers: Handlers = {
     return { serialized: await signer(a).signTransaction(transaction as any) }
   },
 
-  async 'confirm:begin'({ address, intent, scope, request, summary, biometric }) {
+  async 'confirm:begin'({ address, intent, scope, request, summary, biometric, slot }) {
     const a = addr(address)
     if (!confirmAvailable) throw new RpcError('unsupported', 'Confirming here is not available in this browser')
     // No passcode on this device yet: the app's own sheet sets one ('passcode:check').
@@ -533,6 +548,7 @@ const handlers: Handlers = {
       view: parsed ? describeIntent(parsed, { checkout: CHECKOUT }) : limit ? describeScope(limit) : reqView,
       summary: s, biometric: biometricParam(biometric), expires: Date.now() + CONFIRM_TTL_MS,
       claimed: false, checking: false, outcome: { status: 'pending' }, signUntil: 0,
+      slot: typeof slot === 'string' && /^[0-9a-f]{32}$/.test(slot) ? slot : null,
     })
     return { ticket }
   },
