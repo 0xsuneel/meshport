@@ -92,7 +92,8 @@ export function PinSheet(p: PinSheetProps) {
   // A fresh confirmation each time the sheet opens, and again when the screen
   // clears the token (its send failed and it asks again).
   const [attempt, setAttempt] = useState(0)
-  const [keypadOnly, setKeypadOnly] = useState(false)
+  // The app's own keypad instead (the wallet can't confirm here) - for this opening.
+  const [keypadOnlyFor, setKeypadOnlyFor] = useState(-1)
   // The wallet's page is ready and has settled (WalletConfirmFrame): until
   // then the sheet is laid out but not shown, and the pressed button waits.
   // Per opening: "usable" from the last time the sheet was open never counts
@@ -109,6 +110,7 @@ export function PinSheet(p: PinSheetProps) {
   const pageUsable = useRef(false)
   if (p.open && openings.current !== lastOpening.current) { lastOpening.current = openings.current; pageUsable.current = false }
   const usable = usableFor === opening
+  const keypadOnly = keypadOnlyFor === opening
   const setUsable = (v: boolean) => setUsableFor(v ? opening : -1)
   const pending = useRef<{ token: string; via: boolean } | null>(null)
   // Approved in the wallet's page: its tick stays in view for a moment after
@@ -131,7 +133,6 @@ export function PinSheet(p: PinSheetProps) {
   }, [p.open])
   const shownOpen = p.open || linger
   const lastValue = useRef(p.value)
-  useEffect(() => { if (p.open) { setAttempt(a => a + 1); setKeypadOnly(false) } }, [p.open])
   useEffect(() => {
     const was = lastValue.current
     lastValue.current = p.value
@@ -157,8 +158,11 @@ export function PinSheet(p: PinSheetProps) {
   } : null
   // Only while open: a closed sheet starts no confirmation.
   const walletPad = request && (shownOpen
-    ? <WalletConfirmFrame key={attempt} request={request}
-        onUnavailable={() => setKeypadOnly(true)}
+    // A new page for each opening (and each retry) - from the opening's first
+    // frame: bumping a counter after it opened loaded the page twice, the
+    // first copy thrown away at once.
+    ? <WalletConfirmFrame key={`${opening}:${attempt}`} request={request}
+        onUnavailable={() => setKeypadOnlyFor(opening)}
         onUsable={() => { pageUsable.current = true; setUsable(true) }}
         waiting={!pageUsable.current}
         onApproved={(token, via) => { approvedAt.current = performance.now(); pending.current = { token, via }; p.onChange(token) }} />

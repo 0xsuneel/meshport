@@ -10,13 +10,14 @@
 //                open           opening the wallet (unlock / restore): ms, ok, error
 //                resume         back from the background → signing again
 //                sign           one signature: detail = signTypedData / signTransaction / signMessage
+//                confirm_open   the passcode sheet's wallet page: ms to load / ready / size / live / usable, moves
 //
 // Never blocks or fails anything: fire-and-forget, dropped when offline or
 // signed out. Only timings and outcomes - never keys, signatures, messages,
 // amounts or passcodes.
 
 export type WalletEvent =
-  | 'startup' | 'open' | 'resume' | 'sign'
+  | 'startup' | 'open' | 'resume' | 'sign' | 'confirm_open'
 
 export interface WalletEventInput {
   event: WalletEvent
