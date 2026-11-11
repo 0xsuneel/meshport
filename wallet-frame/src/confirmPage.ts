@@ -83,7 +83,17 @@ function watchVisibility(onChange: () => void): boolean {
 function row(label: string, value: string) {
   const r = el('div', 'row'); r.append(el('span', undefined, label), el('span', undefined, value)); return r
 }
-const shortAddress = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a) ? `${a.slice(0, 6)}…${a.slice(-4)}` : a
+/** An address short ("0xAb12…Cd34"); a contract the wallet names, by its name only. */
+const shortAddress = (a: string) => {
+  if (/^0x[0-9a-fA-F]{40}$/.test(a)) return `${a.slice(0, 6)}…${a.slice(-4)}`
+  const named = /^(.+) \((0x[0-9a-fA-F]{40})\)$/.exec(a)
+  return named ? named[1] : a
+}
+// Lines the passcode sheet leaves out: technical details (which network,
+// the data's size, the contract's address, how many transfers) and what the
+// card already says (the fee cap, the time limit, the order).
+const HIDDEN_ROWS = new Set(['Network fee', 'For', 'May also call', 'Network', 'Signing for', 'Data', 'Transfers', 'Size', 'Contract', 'Paid through', 'Order'])
+const MAX_ROWS = 2
 /** "2.1 EURC" → ["2.1", "EURC"]; anything else (several tokens) stays whole. */
 function splitAmount(amount: string, token: string): [string, string] {
   if (token) return [amount, token]
@@ -136,13 +146,18 @@ function card(view: IntentView | null, summary: ConfirmSummary | null): HTMLElem
   const wrap = el('div')
   if (view) {
     const { scope, amount, unit, same, limit } = compare(view, summary)
+    // An order's reference goes on the card's detail line, not a row of its own.
+    const order = view.rows.find(r => r.label === 'Order')?.value
     const label = summary?.label || (view.action === 'Send' ? 'Paying' : view.action)
-    const name = summary?.name || view.action
+    // One exact request the app only knows as "this step" (no amount of its
+    // own): name it by what the wallet read - "Gateway transfer", "Allow
+    // spending", "Sign message" - not the app's generic words.
+    const name = (!scope && !summary?.amount && view.action) || summary?.name || view.action
     // Who the wallet will actually pay is always on the card (the name is the
     // app's word for it).
     const detail = scope
       ? (limit ? `Up to ${limit} with fees` : same ? summary?.detail : `Up to ${view.amount} for 2 minutes`)
-      : [summary?.detail, view.to ? shortAddress(view.to) : ''].filter(Boolean).join(' · ') || undefined
+      : [order ? `Order ${order}` : summary?.detail, view.to ? shortAddress(view.to) : ''].filter(Boolean).join(' · ') || undefined
     // The app's figure, exactly as the app's sheet showed it ("$5"), only
     // when it is what the wallet read - otherwise the wallet's own figure,
     // since that is what gets signed.
@@ -153,7 +168,9 @@ function card(view: IntentView | null, summary: ConfirmSummary | null): HTMLElem
     // fee, the time limit, or the extra contracts a limit names (MeshPort's
     // routers: they can't move tokens by themselves, and a raw address on
     // the passcode sheet only confused).
-    const rows = view.rows.filter(r => r.label !== 'Network fee' && r.label !== 'For' && r.label !== 'May also call')
+    // What's left: a message to sign, or a few fields of a signature the
+    // wallet can't read (with its red warning) - at most MAX_ROWS.
+    const rows = view.rows.filter(r => !HIDDEN_ROWS.has(r.label)).slice(0, MAX_ROWS)
     if (rows.length) { const box = el('div', 'rows'); for (const r of rows) box.append(row(r.label, r.value)); wrap.append(box) }
     for (const w of view.warnings) wrap.append(el('p', 'warn', w))
   } else if (summary) {
