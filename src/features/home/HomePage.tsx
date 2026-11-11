@@ -4365,7 +4365,7 @@ export function HomePage() {
             <button key={a.label} type="button" onClick={() => navigate(a.path, a.path.endsWith('tab=recovery') ? { state: { tab: 'recovery' } } : undefined)} className="mp-press"
               style={{
                 position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: HERO_PILLS_H, borderRadius: 18,
-                border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12.6, fontWeight: 650, whiteSpace: 'nowrap',
+                border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 'min(13.23px, 3.6vw)', fontWeight: 650, whiteSpace: 'nowrap',
                 background: a.accent ? 'var(--mustard)' : 'rgba(255,255,255,0.12)',
                 color: a.accent ? 'var(--mustard-ink)' : '#fff',
                 boxShadow: a.accent ? 'none' : 'inset 0 0 0 1px rgba(255,255,255,0.16)',
