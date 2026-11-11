@@ -455,7 +455,7 @@ export async function estimateSwapLocal(params: {
   const sdkMods = await getSdkModules()
   const kit = getKit(sdkMods.AppKit)
   const adapter = await getAdapter(params.signer)
-  const slip = Math.max(Number(params.slippageBps || 500), 300)
+  const slip = effectiveSlippageBps(params.slippageBps)
 
   const baseParams = {
     from:     { adapter, chain: ARC_CHAIN_KEY as any },
@@ -578,6 +578,20 @@ async function executeSwapOnce(params: ExecuteSwapParams): Promise<SwapOutcome> 
 }
 
 /**
+ * The slippage a quote / swap uses: the person's own choice. It used to be
+ * floored at 3%, so the 1% button did nothing - every swap quietly accepted
+ * a 3% worse price, and "At least" was worked out at 3%. A swap that a
+ * tight tolerance can't fill fails with "Price moved too much… try
+ * increasing slippage" (extractError) and nothing is swapped. No choice →
+ * 5%, the screen's default. Kept between 0.1% and 50%. Pure.
+ */
+export function effectiveSlippageBps(bps: unknown): number {
+  const n = Number(bps)
+  if (!Number.isFinite(n) || n <= 0) return 500
+  return Math.min(Math.max(Math.round(n), 10), 5000)
+}
+
+/**
  * kit.swap's config: slippage, plus the confirmed minimum as stopLimit (it
  * wins over slippage) when it is a positive decimal amount of tokenOut. App
  * Kit converts it to base units with tokenOut's decimals. Pure.
@@ -598,7 +612,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
   // cirBTC amounts too small for toFixed(2) to represent without rounding
   // to zero.
   const amountFormatted = parsedAmt.toFixed(8).replace(/\.?0+$/, '')
-  const slip = Math.max(Number(params.slippageBps || 500), 300)
+  const slip = effectiveSlippageBps(params.slippageBps)
 
   const baseParams = {
     from:     { adapter, chain: ARC_CHAIN_KEY as any },

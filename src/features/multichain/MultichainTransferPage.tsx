@@ -4258,7 +4258,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           right-hand panel. A small summary card (where and how much); the fee
           breakdown is on the Review page underneath. Phone Back closes the
           sheet (back to Review) like any sheet. ── */}
-      <PinSheet open={step === 'confirm'} id="mt-pass"
+      <PinSheet walletConfirm open={step === 'confirm'} id="mt-pass"
         onClose={() => { setStep('review'); setPassEntry(''); setPassError('') }}
         title={desktopInput ? 'Authorize Transfer' : 'Confirm transfer'}
         subtitle={desktopInput ? `To ${chain.name}` : `Authorise ${tokenChar}${fmtTok(numAmount)} ${tokenSym} to ${chain.name}`}

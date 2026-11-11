@@ -1068,7 +1068,7 @@ export function BulkPayoutPage() {
 
       {/* ── Review step: the passcode step - opens only when Pay is tapped.
           Can't be closed while the payout is sending. ── */}
-      <PinSheet
+      <PinSheet walletConfirm
         open={showReviewPinSheet}
         onClose={() => { setShowReviewPinSheet(false); setPassEntry(''); setPassError('') }}
         locked={processing}

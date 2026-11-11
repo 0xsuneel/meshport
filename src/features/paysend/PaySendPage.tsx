@@ -1893,6 +1893,9 @@ export function PaySendPage() {
           amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))}`, unit: token,
         } : undefined}
         bioVerb="Pay"
+        walletConfirm={{ intent: () => recipient
+          ? import('@/lib/walletConfirm').then(m => m.payConfirmIntent(token === 'EURC' || token === 'cirBTC' ? token : 'USDC', recipient.walletAddress, numAmount, orderMemo(token)))
+          : Promise.resolve(null) }}
         anchor={desktopColumnRef.current}
         value={pin}
         onChange={setPin}

@@ -5443,6 +5443,14 @@ export function ChatConversationPage() {
         bioVerb="Pay"
         title="Authorize Payment"
         subtitle={isDesktop ? `To ${recipientClean}.arc` : 'Enter passcode to confirm'}
+        walletConfirm={{
+          summary: { label: 'Paying', name: `${recipientClean}.arc`, amount: payAmount, unit: payToken },
+          intent: () => {
+            const to = otherUser?.wallet_address
+            const amount = parseFloat(payAmount)
+            return to ? import('@/lib/walletConfirm').then(m => m.payConfirmIntent(payToken === 'EURC' || payToken === 'cirBTC' ? payToken : 'USDC', to, amount, payToken === 'EURC' || payToken === 'cirBTC' ? null : chatOrderMemo())) : Promise.resolve(null)
+          },
+        }}
         value={payPassEntry}
         onChange={v => setPayPassEntry(v)}
         error={payError || undefined}

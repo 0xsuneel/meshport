@@ -832,7 +832,7 @@ export function P2PCreateOfferPage() {
           onSaved={m => { setMyMethods(ms => [...ms, m]); setMethodIds(ids => ids.length >= 5 ? ids : [...ids, m.id]) }} />
       )}
 
-      <PinSheet open={showPasscodeSheet} id="p2p-pass"
+      <PinSheet walletConfirm open={showPasscodeSheet} id="p2p-pass"
         title="Post ad" bioVerb="Post"
         subtitle={offerType === 'sell'
           ? <>Lock {totalAmount || '0'} USDC in escrow and post your ad</>
@@ -1183,7 +1183,7 @@ export function P2POfferDetailPage() {
         doneLabel="Done"
         onDone={() => setShowAmountPad(false)} />
 
-      <PinSheet open={showPasscodeSheet} id="p2p-pass"
+      <PinSheet walletConfirm open={showPasscodeSheet} id="p2p-pass"
         title="Confirm order" bioVerb={offer.offerType === 'buy' ? 'Sell' : 'Buy'}
         subtitle={offer.offerType === 'buy'
           ? <>Lock {trimTrailingZeros(amt.toFixed(6))} USDC in escrow and sell</>
@@ -1917,7 +1917,7 @@ export function P2PTradePage() {
         })()}
       </AnimatePresence>
 
-      <PinSheet open={!!pendingAction} id="p2p-pass"
+      <PinSheet walletConfirm open={!!pendingAction} id="p2p-pass"
         title={actionShown === 'release' ? 'Confirm release' : actionShown === 'confirm' ? 'Confirm trade' : 'Confirm cancel'}
         bioVerb={actionShown === 'release' ? 'Release' : 'Confirm'}
         subtitle={actionShown === 'release'
@@ -2376,7 +2376,7 @@ export function P2PMyOffersPage() {
       )}
       </AnimatePresence>
 
-      <PinSheet open={showEditPasscode} id="p2p-pass"
+      <PinSheet walletConfirm open={showEditPasscode} id="p2p-pass"
         title="Save changes" bioVerb="Save"
         subtitle={<>Confirm changes to your offer's price and payment methods</>}
         value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }}
@@ -2413,7 +2413,7 @@ export function P2PMyOffersPage() {
       )}
       </AnimatePresence>
 
-      <PinSheet open={showTopUpPasscode} id="p2p-pass"
+      <PinSheet walletConfirm open={showTopUpPasscode} id="p2p-pass"
         title="Top up escrow" bioVerb="Top up"
         subtitle={<>Deposit {topUpAmount || '0'} USDC to this offer's escrow</>}
         value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }}
@@ -2423,7 +2423,7 @@ export function P2PMyOffersPage() {
         onClose={() => { setShowTopUpPasscode(false); setPassEntry(''); setPassError('') }}
       />
 
-      <PinSheet open={!!offerToCancel} id="p2p-pass"
+      <PinSheet walletConfirm open={!!offerToCancel} id="p2p-pass"
         title="Cancel ad"
         subtitle={cancelShown?.offerType === 'sell'
           ? <>Cancel offer and return escrowed USDC to your wallet</>

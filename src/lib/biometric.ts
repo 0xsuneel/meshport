@@ -226,6 +226,20 @@ function fromB64Url(str: string): Uint8Array<ArrayBuffer> { return fromB64(str.r
 
 function sleep(ms: number) { return new Promise(resolve => setTimeout(resolve, ms)) }
 
+/**
+ * The sealed passcode for the wallet's own confirm page (wallet-frame/
+ * confirm.html), which runs this same passkey and opens it inside the wallet
+ * origin. Null when fingerprint / face isn't set up here. rpId: this host,
+ * which the wallet's subdomain may claim (meshport.xyz); elsewhere (previews)
+ * the page's passkey call fails and it asks for the passcode.
+ */
+export function biometricSealFor(walletAddress: string): { rpId: string; credentialId: string; salt: string; iv: string; ciphertext: string; label: string } | null {
+  if (!walletAddress || typeof location === 'undefined') return null
+  const stored = readRecord(walletAddress)
+  if (!stored) return null
+  return { rpId: location.hostname, credentialId: stored.credId, salt: stored.rec.salt, iv: stored.rec.iv, ciphertext: stored.rec.ciphertext, label: biometricLabel() }
+}
+
 /** One assertion for one known credential, evaluating PRF with `salt`. */
 async function getAssertion(credId: string, salt: Uint8Array<ArrayBuffer>, signal?: AbortSignal): Promise<PublicKeyCredential | null> {
   return await navigator.credentials.get({

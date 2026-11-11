@@ -14,7 +14,7 @@
 import { toAccount } from 'viem/accounts'
 import { bytesToHex, type LocalAccount, type SignableMessage, type TransactionSerializable, type TypedDataDefinition } from 'viem'
 import { callWallet, WalletFrameError } from './frameClient'
-import type { FrameTransaction, Hex } from './protocol'
+import type { ConfirmIntent, FrameTransaction, Hex } from './protocol'
 
 export type WalletAccount = LocalAccount<'custom'> & { readonly meshportWallet: true }
 
@@ -70,6 +70,18 @@ async function timedFrame<T>(what: string, sign: () => Promise<T>): Promise<T> {
   }
 }
 
+// Payments the person confirmed in the wallet itself (confirm.html) for one
+// exact transaction: its ticket goes with that transaction's signature
+// request, and the frame signs it without an approval window.
+const confirmed = new Map<string, string>()
+const txKey = (address: string, chainId: unknown, to: unknown, value: unknown, data: unknown) =>
+  `${address.toLowerCase()}|${Number(chainId)}|${String(to ?? '').toLowerCase()}|${BigInt((value as bigint | string | number | undefined) ?? 0)}|${String(data ?? '0x').toLowerCase()}`
+
+/** The next signature for this exact transaction carries `ticket` (lib/walletConfirm). */
+export function bindConfirmation(address: string, intent: ConfirmIntent, ticket: string): void {
+  confirmed.set(txKey(address, intent.chainId, intent.to, intent.value, intent.data), ticket)
+}
+
 /** The wallet at `address`, signing through the frame. */
 export function walletAccount(address: string): WalletAccount {
   const key = address.toLowerCase()
@@ -81,7 +93,14 @@ export function walletAccount(address: string): WalletAccount {
       return (await timedFrame('signMessage', () => withApproval(() => callWallet('sign:message', { address, message: plainMessage(message) })))).signature
     },
     async signTransaction(transaction) {
-      return (await timedFrame('signTransaction', () => withApproval(() => callWallet('sign:transaction', { address, transaction: plainTransaction(transaction) })))).serialized
+      const plain = plainTransaction(transaction)
+      const key = txKey(address, plain.chainId, plain.to, plain.value, plain.data)
+      const confirmation = confirmed.get(key)
+      if (confirmation) {
+        confirmed.delete(key)
+        return (await timedFrame('signTransaction', () => callWallet('sign:transaction', { address, transaction: plain, confirmation }))).serialized
+      }
+      return (await timedFrame('signTransaction', () => withApproval(() => callWallet('sign:transaction', { address, transaction: plain })))).serialized
     },
     async signTypedData(typedData) {
       const { domain, types, primaryType, message } = typedData as TypedDataDefinition
