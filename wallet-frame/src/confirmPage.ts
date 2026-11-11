@@ -197,12 +197,19 @@ function run(channel: BroadcastChannel, view: IntentView | null, summary: Confir
 
   const paint = () => {
     dots.replaceChildren(...Array.from({ length: LENGTH }, (_, i) => el('span', i < digits.length ? 'dot on' : 'dot')))
-    const blocked = busy || lockedUntil > Date.now() || !visible
+    // Greyed only while checking or locked out. While the browser is still
+    // confirming the page is in view (a moment after it appears) the keys keep
+    // their look - press() ignores them until it is - so they don't flicker.
+    const blocked = busy || lockedUntil > Date.now()
     for (const k of keys) k.disabled = blocked
   }
   const sayIt = (text: string, bad = false) => { say.textContent = text; say.className = bad ? 'say error' : 'say' }
+  // Said only when the page stays covered or cut off - not in the moment
+  // before the browser's first answer.
+  let hiddenTimer: ReturnType<typeof setTimeout> | null = null
   const refreshVisibility = () => {
-    if (!visible && !busy) sayIt('Bring this fully into view to continue')
+    if (hiddenTimer) { clearTimeout(hiddenTimer); hiddenTimer = null }
+    if (!visible && !busy) hiddenTimer = setTimeout(() => { if (!visible && !busy) sayIt('Bring this fully into view to continue') }, 600)
     else if (say.textContent === 'Bring this fully into view to continue') sayIt('')
     paint()
   }

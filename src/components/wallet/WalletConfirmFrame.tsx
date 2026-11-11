@@ -28,7 +28,10 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
   const [src, setSrc] = useState<string | null>(null)
   // About the page's height (card + dots + keypad) until it reports its own,
   // so the sheet doesn't jump when it does.
-  const [height, setHeight] = useState(() => (typeof window !== 'undefined' && window.matchMedia?.('(max-height: 700px)').matches ? 356 : 400))
+  const short = typeof window !== 'undefined' && !!window.matchMedia?.('(max-height: 700px)').matches
+  // The page's own height once it reports it; until then the stand-in below
+  // sets the height (it is the same layout).
+  const [height, setHeight] = useState<number | null>(null)
   const [shown, setShown] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -41,7 +44,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
     let approved = false
     let ticket: string | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
-    setSrc(null); setFailed(null); setShown(false)
+    setSrc(null); setFailed(null); setShown(false); setHeight(null)
     const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
 
     const scope = request.scope ?? null
@@ -78,7 +81,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
         // A short phone: the page uses the app keypad's shorter keys, so the
         // whole step fits in the sheet (it accepts the passcode only while
         // fully in view).
-        setSrc(started.url + (window.matchMedia?.('(max-height: 700px)').matches ? '&short=1' : ''))
+        setSrc(started.url + (short ? '&short=1' : ''))
         void poll(started.address, intent)
       } catch (e) {
         if (done) return
@@ -92,7 +95,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
       if (e.source !== frameRef.current?.contentWindow) return
       const d = e.data as { type?: string; state?: string; height?: number } | null
       if (!d || d.type !== 'mp-confirm') return
-      if (d.state === 'size' && typeof d.height === 'number') setHeight(Math.min(Math.max(d.height, 200), 900))
+      if (d.state === 'size' && typeof d.height === 'number') setHeight(Math.min(Math.max(d.height, 120), 900))
       if (d.state === 'ready') setShown(true)
     }
     window.addEventListener('message', onMessage)
@@ -116,11 +119,18 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
       </div>
     )
   }
+  // Switch to the page once it is drawn AND has said how tall it is ('ready'
+  // comes a frame before its size): never a frame with neither.
+  const live = shown && height !== null
   return (
     // Never squeezed by the sheet's column: a frame shorter than its page
     // scrolled inside, so the page was never fully in view and stayed locked.
-    <div className="relative w-full" style={{ height, flexShrink: 0 }}>
-      {!shown && <div className="absolute inset-0 rounded-2xl bg-surface mp-pulse" aria-hidden />}
+    <div className="relative w-full" style={{ height: live ? height! : undefined, flexShrink: 0 }}>
+      {/* On the first frame: the same card, dots and keys the wallet's page
+          draws, so the sheet never opens blank. It takes no input - the
+          passcode is only ever typed in the wallet's page, which loads on top
+          of it, pixel for pixel, and replaces it. */}
+      {!live && <ConfirmStandIn summary={request.summary} short={short} />}
       {src && (
         <iframe
           ref={frameRef}
@@ -129,9 +139,58 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
           allow="publickey-credentials-get"
           referrerPolicy="no-referrer"
           className="block w-full border-0"
-          style={{ height, colorScheme: 'normal', visibility: shown ? 'visible' : 'hidden' }}
+          style={{ position: 'absolute', left: 0, top: 0, height: height ?? '100%', colorScheme: 'normal', visibility: live ? 'visible' : 'hidden' }}
         />
       )}
+    </div>
+  )
+}
+
+// ── The stand-in: wallet-frame/src/confirm.css, drawn by the app ────────────
+// Same sizes as the wallet's page (PinSheet's card, PinKeypad's keys), so the
+// swap to the real page doesn't move anything.
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del']
+export function ConfirmStandIn({ summary, short }: { summary: ConfirmSummary; short: boolean }) {
+  const keyH = short ? 48 : 56
+  const muted = { fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 } as const
+  const clip = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const
+  return (
+    <div aria-hidden style={{ pointerEvents: 'none', userSelect: 'none', lineHeight: 1.4, fontSize: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, borderRadius: 18, background: 'var(--bg)', padding: '14px 16px', textAlign: 'left' }}>
+        <div style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 18, fontWeight: 800, color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 16%, transparent)' }}>
+          {summary.name.trim().charAt(0).toUpperCase() || '?'}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ ...muted, ...clip }}>{summary.label}</p>
+          <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4, ...clip }}>{summary.name}</p>
+          {summary.detail && <p style={{ ...muted, ...clip }}>{summary.detail}</p>}
+        </div>
+        {summary.amount && (
+          <div style={{ textAlign: 'right', flexShrink: 0, maxWidth: '55%' }}>
+            <p style={{ margin: 0, fontSize: summary.amount.length > 9 ? 16 : 22, fontWeight: 800, letterSpacing: summary.amount.length > 9 ? 0 : '-0.5px',
+              lineHeight: 1.25, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>{summary.amount}</p>
+            {summary.unit && <p style={muted}>{summary.unit}</p>}
+          </div>
+        )}
+      </div>
+      <div style={{ marginTop: short ? 20 : 28, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 12, height: 14 }}>
+          {Array.from({ length: 6 }, (_, i) => <span key={i} style={{ width: 14, height: 14, borderRadius: '50%', border: '1.5px solid var(--border)', boxSizing: 'border-box' }} />)}
+        </div>
+        <div style={{ minHeight: 18, margin: short ? '1px 0' : '7px 0' }} />
+        <div style={{ width: '100%', maxWidth: 320, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: short ? 8 : 10 }}>
+          {KEYS.map((k, i) => k === '' ? <span key={i} /> : (
+            <span key={i} style={{ height: keyH, borderRadius: 14, border: '1px solid var(--border)', background: 'var(--surface)', boxSizing: 'border-box',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 600, lineHeight: 1,
+              color: k === 'del' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
+              {k === 'del'
+                ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z" /><line x1="18" y1="9" x2="12" y2="15" /><line x1="12" y1="9" x2="18" y2="15" /></svg>
+                : k}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
