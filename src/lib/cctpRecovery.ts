@@ -93,7 +93,7 @@ export async function relayMint(kind: 'claim' | 'transfer', id: string): Promise
   if ((d.destinationCaller ?? OPEN_CALLER).toLowerCase() !== OPEN_CALLER) {
     throw new Error('This mint is locked to the wallet itself - finish it with "Mint with my wallet".')
   }
-  const { encodeFunctionData } = await import('viem')
+  const { encodeFunctionData } = await import('@/lib/viemLazy')
   const { authApiHeaders } = await import('./supabase')
   const r = await fetch('/api/bridge-relay', {
     method: 'POST', headers: await authApiHeaders(),
@@ -142,7 +142,7 @@ export async function finishCctpMintViaRelayer(p: {
     noteForwarderMintFailed(p.destinationChain)
   }
 
-  const { encodeFunctionData } = await import('viem')
+  const { encodeFunctionData } = await import('@/lib/viemLazy')
   const sb = await import('./supabase')
   const requestStartedAt = performance.now()
   const headers = await sb.authApiHeaders()

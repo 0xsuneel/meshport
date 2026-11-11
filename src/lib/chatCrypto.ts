@@ -248,7 +248,7 @@ export function chatKeyStatement(walletAddress: string, publicKeyB64: string): s
 export async function verifyChatKey(walletAddress: string | null | undefined, publicKeyB64: string | null | undefined, sig: string | null | undefined): Promise<boolean> {
   if (!walletAddress || !publicKeyB64 || !sig || !parsePublicKey(publicKeyB64)) return false
   try {
-    const { recoverMessageAddress } = await import('viem')
+    const { recoverMessageAddress } = await import('@/lib/viemLazy')
     const signer = await recoverMessageAddress({ message: chatKeyStatement(walletAddress, publicKeyB64), signature: sig as `0x${string}` })
     return signer.toLowerCase() === walletAddress.toLowerCase()
   } catch { return false }

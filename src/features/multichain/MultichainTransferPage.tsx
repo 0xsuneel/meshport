@@ -2265,7 +2265,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // stored, discarded with the screen.
         const mintAdapter = gatewaySelfMintsTo(chain.sdk)
           ? await (async () => {
-              const { privateKeyToAccount, generatePrivateKey } = await import('viem/accounts')
+              const { privateKeyToAccount, generatePrivateKey } = await import('@/lib/viemLazy')
               const throwaway = Object.assign(privateKeyToAccount(generatePrivateKey()), { meshportWallet: true as const })
               return createWalletAdapter({ account: throwaway as any, getProvider: ({ chain: sdkChain }: any) => relayedProviderFor(sdkChain) })
             })()

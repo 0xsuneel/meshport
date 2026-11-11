@@ -298,6 +298,15 @@ export function PaySendPage() {
   const numAmount = parseFloat(amount) || 0
   const activeBalance = token === 'EURC' ? eurcBalance : token === 'cirBTC' ? (cirbtcBalance ?? 0) : balance
   const isProcessing = processStage !== 'idle' && processStage !== 'failed' && processStage !== 'delivered'
+  // A payment still going after 8 s (2G, weak signal): say so, so it doesn't
+  // look stuck. The send itself keeps going - nothing is sent twice (the same
+  // signed transaction is re-sent; see lib/arcService relaySend).
+  const [slowSend, setSlowSend] = useState(false)
+  useEffect(() => {
+    if (!isProcessing) { setSlowSend(false); return }
+    const t = window.setTimeout(() => setSlowSend(true), 8000)
+    return () => window.clearTimeout(t)
+  }, [isProcessing])
   // Hold Back / sidebar from the passcode until the payment lands or fails.
   useLeaveGuard(isProcessing, 'Payment')
   const isDone = processStage === 'delivered'
@@ -1747,7 +1756,7 @@ export function PaySendPage() {
                   <motion.div key="processing" initial={false}
                     className="flex flex-col items-center justify-center flex-1 space-y-6 py-10">
                     <ProcessingRing size={80} />
-                    <p className="text-text-primary" style={{ fontSize: 15, fontWeight: 700 }}>Processing payment…</p>
+                    <p className="text-text-primary" style={{ fontSize: 15, fontWeight: 700 }}>{slowSend && isProcessing ? 'Still sending…' : 'Processing payment…'}</p>
                     <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>Do not close this screen</p>
                   </motion.div>
                 )}

@@ -85,6 +85,30 @@ registerRoute(new NavigationRoute(async (options) => {
 // Stored files (scripts, styles, icons) - after the page route, see above.
 addRoute()
 
+// Every other screen's files: stored the first time they're fetched (like
+// m.uber), then opened from the device. On install only the core is stored
+// (vite.config.ts, coreOnly), so the install finishes on the first visit even
+// on 2G instead of downloading all ~290 files. File names carry a content
+// hash, so a stored file never goes stale; old versions age out by count.
+registerRoute(({ url, request }) => url.origin === self.location.origin && url.pathname.startsWith('/assets/') && request.method === 'GET',
+  new CacheFirst({
+    cacheName: 'mp-assets',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [200] }),
+      new ExpirationPlugin({ maxEntries: 400, maxAgeSeconds: 90 * 24 * 3600, purgeOnQuotaError: true }),
+    ],
+  }))
+// The app's own bigger pictures (left out of the core): shown from the
+// device once seen, refreshed in the background.
+registerRoute(({ url, request }) => url.origin === self.location.origin && request.destination === 'image',
+  new StaleWhileRevalidate({
+    cacheName: 'mp-own-images',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [200] }),
+      new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 30 * 24 * 3600, purgeOnQuotaError: true }),
+    ],
+  }))
+
 // Inter font: the stylesheet refreshes in the background, font files are
 // kept (they never change at a given URL).
 registerRoute(({ url }) => url.origin === 'https://fonts.googleapis.com',

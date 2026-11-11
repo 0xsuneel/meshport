@@ -317,7 +317,7 @@ async function transferOnChain(p: { chain: string; account: WalletAccount; to: H
   const { EXTERNAL_CHAINS } = await import('@/blockchain/chains')
   const cfg = EXTERNAL_CHAINS[p.chain]
   if (!cfg || typeof cfg.chainId !== 'number') throw new Error('Refunds on this chain are not available')
-  const { http, parseSignature, toHex } = await import('viem')
+  const { http, parseSignature, toHex } = await import('@/lib/viemLazy')
   const usdc = cfg.usdc as Hex
   const value = BigInt(Math.round(p.amount * 1e6))
   // Name/version for the EIP-712 domain and the balance, from the chain itself.
