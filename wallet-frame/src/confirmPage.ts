@@ -11,6 +11,8 @@
 // visible (IntersectionObserver v2, where supported), so a page that lays
 // other content over it can't make the person approve what they don't see.
 
+// The app's typeface, served from the wallet's own origin (font-src 'self').
+import '@fontsource-variable/geist'
 import { CONFIRM_CHANNEL, parseOrigins, type ConfirmBiometric, type ConfirmSummary } from '@/wallet/protocol'
 import type { IntentView } from './intent'
 
@@ -24,6 +26,9 @@ const params = new URLSearchParams(location.hash.slice(1))
 const ticket = params.get('t') ?? ''
 history.replaceState(null, '', location.pathname)
 document.documentElement.dataset.theme = params.get('theme') === 'light' ? 'light' : 'dark'
+// A short phone (the app's PinKeypad uses shorter keys there too), so the
+// whole step fits in the sheet without scrolling.
+if (params.get('short') === '1') document.documentElement.dataset.short = ''
 const root = document.getElementById('root')!
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string) {
@@ -40,7 +45,9 @@ function tellApp(msg: Record<string, unknown>) {
   if (parent === window) return
   for (const origin of PARENTS) { try { parent.postMessage({ type: 'mp-confirm', ...msg }, origin) } catch { /* */ } }
 }
-function tellSize() { requestAnimationFrame(() => tellApp({ state: 'size', height: Math.ceil(document.documentElement.scrollHeight) })) }
+// The content's own height: the document's scrollHeight is never less than the
+// frame's, so the sheet could grow the frame but never shrink it to fit.
+function tellSize() { requestAnimationFrame(() => tellApp({ state: 'size', height: Math.ceil(document.body.getBoundingClientRect().height) })) }
 try { new ResizeObserver(tellSize).observe(document.body) } catch { /* sized once per draw */ }
 
 // ── Visibility ──────────────────────────────────────────────────────────────
@@ -62,37 +69,71 @@ function watchVisibility(onChange: () => void) {
 }
 
 // ── The card ────────────────────────────────────────────────────────────────
+// Drawn like the app's passcode sheet (PinSheet's SummaryCard): a letter
+// badge, what it is and who / what for, the amount on the right. The amount,
+// token and address come from the wallet's own reading of the request
+// (`view`); the name and label are the app's words.
 function row(label: string, value: string) {
   const r = el('div', 'row'); r.append(el('span', undefined, label), el('span', undefined, value)); return r
 }
-function amountNode(amount: string, unit?: string) {
-  const a = el('div', 'card-amount', amount)
-  if (unit) a.append(el('span', 'unit', unit))
-  return a
+const shortAddress = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a) ? `${a.slice(0, 6)}…${a.slice(-4)}` : a
+/** "2.1 EURC" → ["2.1", "EURC"]; anything else (several tokens) stays whole. */
+function splitAmount(amount: string, token: string): [string, string] {
+  if (token) return [amount, token]
+  const m = /^([0-9][0-9.,]*) ([A-Za-z]+)$/.exec(amount.trim())
+  return m ? [m[1], m[2]] : [amount, '']
 }
-function card(view: IntentView | null, summary: ConfirmSummary | null): HTMLElement {
+function summaryCard(o: { label: string; name: string; detail?: string; amount?: string; unit?: string }): HTMLElement {
   const c = el('section', 'card')
-  if (view) {
-    const head = el('div', 'card-head')
-    head.append(el('span', 'card-label', view.action === 'Send' ? 'Paying' : view.action), amountNode(view.amount, view.token))
-    c.append(head)
-    if (summary?.name) c.append(el('div', 'to-name', summary.name))
-    c.append(el('div', 'to-address', view.to))
-    for (const r of view.rows) c.append(row(r.label, r.value))
-    for (const w of view.warnings) c.append(el('p', 'warn', w))
-    c.append(el('p', 'source', view.source
-      ? (summary?.name ? `${view.source} The name is from MeshPort.` : view.source)
-      : summary?.name
-        ? 'Amount and address read from the transaction by your wallet. The name is from MeshPort.'
-        : 'Read from the transaction by your wallet.'))
-  } else if (summary) {
-    const head = el('div', 'card-head')
-    head.append(el('span', 'card-label', summary.label), amountNode(summary.amount ?? '', summary.unit))
-    c.append(head, el('div', 'to-name', summary.name))
-    if (summary.detail) c.append(el('div', 'muted', summary.detail))
-    c.append(el('p', 'source', 'Details from the MeshPort app.'))
+  c.append(el('div', 'badge', o.name.trim().charAt(0).toUpperCase() || '?'))
+  const mid = el('div', 'card-mid')
+  mid.append(el('p', 'label', o.label), el('p', 'name', o.name))
+  if (o.detail) mid.append(el('p', 'detail', o.detail))
+  c.append(mid)
+  if (o.amount) {
+    const end = el('div', 'card-end')
+    end.append(el('p', o.amount.length > 9 ? 'amount long' : 'amount', o.amount))
+    if (o.unit) end.append(el('p', 'unit', o.unit))
+    c.append(end)
   }
   return c
+}
+const num = (s: string | undefined) => { const n = parseFloat(String(s ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? n : NaN }
+function card(view: IntentView | null, summary: ConfirmSummary | null): HTMLElement {
+  const wrap = el('div')
+  if (view) {
+    const scope = view.to === 'may leave your wallet'
+    const [amount, unit] = splitAmount(view.amount, view.token)
+    // The app's figure, exactly as the app's sheet showed it ("$5"), but only
+    // when it is the same amount and token the wallet read - otherwise the
+    // wallet's own figure, since that is what gets signed. A spend limit
+    // counts as the same when it covers the amount with up to 10% to spare
+    // for fees.
+    const appN = num(summary?.amount), walletN = num(amount)
+    const sameUnit = !summary?.unit || !unit || summary.unit === unit
+    // Several tokens at once ("2 USDC + 1 EURC") never count as the app's one figure.
+    const single = !!unit || !/\+/.test(view.amount)
+    const same = single && sameUnit && Number.isFinite(appN) && Number.isFinite(walletN)
+      && (scope ? walletN >= appN && walletN <= appN * 1.1 + 1e-9 : Math.abs(walletN - appN) < 1e-9)
+    const label = summary?.label || (view.action === 'Send' ? 'Paying' : view.action)
+    const name = summary?.name || view.action
+    // Who the wallet will actually pay is always on the card (the name is the
+    // app's word for it).
+    const detail = scope
+      ? (same ? summary?.detail : `Up to ${view.amount} for 2 minutes`)
+      : [summary?.detail, view.to ? shortAddress(view.to) : ''].filter(Boolean).join(' · ') || undefined
+    wrap.append(summaryCard(same
+      ? { label, name, detail, amount: summary!.amount, unit: summary!.unit ?? unit }
+      : { label, name, detail, amount: scope ? view.amount : amount, unit: scope ? '' : unit }))
+    // What else the wallet read (an order, a contract, a message) - not the
+    // fee or the time limit.
+    const rows = view.rows.filter(r => r.label !== 'Network fee' && r.label !== 'For')
+    if (rows.length) { const box = el('div', 'rows'); for (const r of rows) box.append(row(r.label, r.value)); wrap.append(box) }
+    for (const w of view.warnings) wrap.append(el('p', 'warn', w))
+  } else if (summary) {
+    wrap.append(summaryCard(summary))
+  }
+  return wrap
 }
 
 function fingerprintIcon(): SVGElement {
@@ -103,6 +144,20 @@ function fingerprintIcon(): SVGElement {
   for (const d of ['M12 11c0 3.5-1 6.5-3 9', 'M8.5 6.7A6 6 0 0 1 18 11c0 2.5-.3 4.8-1 7', 'M6 9.5A6 6 0 0 0 6 11c0 2-.5 3.8-1.5 5.5',
     'M12 7.5A3.5 3.5 0 0 1 15.5 11c0 3-.6 5.6-1.8 8', 'M8.5 11a3.5 3.5 0 0 1 1-2.4']) {
     const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); svg.append(p)
+  }
+  return svg
+}
+
+/** PinKeypad's delete key. */
+function deleteIcon(): SVGElement {
+  const NS = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(NS, 'svg')
+  for (const [k, v] of [['viewBox', '0 0 24 24'], ['fill', 'none'], ['stroke', 'currentColor'], ['stroke-width', '1.8'],
+    ['stroke-linecap', 'round'], ['stroke-linejoin', 'round'], ['aria-hidden', 'true']]) svg.setAttribute(k, v)
+  const path = document.createElementNS(NS, 'path'); path.setAttribute('d', 'M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z')
+  svg.append(path)
+  for (const [x1, y1, x2, y2] of [['18', '9', '12', '15'], ['12', '9', '18', '15']]) {
+    const l = document.createElementNS(NS, 'line'); l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2); svg.append(l)
   }
   return svg
 }
@@ -135,7 +190,8 @@ function run(channel: BroadcastChannel, view: IntentView | null, summary: Confir
   let busy = false
   let lockedUntil = 0
   const dots = el('div', 'dots'); dots.setAttribute('aria-hidden', 'true')
-  const say = el('p', 'say', 'Enter your passcode')
+  // Status / errors only, like the app's keypad (nothing under the dots normally).
+  const say = el('p', 'say', '')
   say.setAttribute('role', 'status')
   const keys: HTMLButtonElement[] = []
 
@@ -147,7 +203,7 @@ function run(channel: BroadcastChannel, view: IntentView | null, summary: Confir
   const sayIt = (text: string, bad = false) => { say.textContent = text; say.className = bad ? 'say error' : 'say' }
   const refreshVisibility = () => {
     if (!visible && !busy) sayIt('Bring this fully into view to continue')
-    else if (say.textContent === 'Bring this fully into view to continue') sayIt('Enter your passcode')
+    else if (say.textContent === 'Bring this fully into view to continue') sayIt('')
     paint()
   }
 
@@ -170,7 +226,7 @@ function run(channel: BroadcastChannel, view: IntentView | null, summary: Confir
     if (d.code === 'rate-limited') {
       lockedUntil = Date.now() + (d.lockedForMs ?? 30_000)
       sayIt(`Too many tries - wait ${Math.ceil((d.lockedForMs ?? 30_000) / 1000)} s`, true)
-      setTimeout(() => { sayIt('Enter your passcode'); paint() }, (d.lockedForMs ?? 30_000) + 50)
+      setTimeout(() => { sayIt(''); paint() }, (d.lockedForMs ?? 30_000) + 50)
     } else if (d.code === 'bad-passcode') sayIt('Incorrect passcode. Try again.', true)
     else if (d.code === 'expired') { sayIt(d.message ?? 'This request has expired', true); busy = true }
     else sayIt(d.message || "Couldn't check the passcode - try again", true)
@@ -181,7 +237,7 @@ function run(channel: BroadcastChannel, view: IntentView | null, summary: Confir
   const press = (digit: string) => {
     if (busy || lockedUntil > Date.now() || !visible || digits.length >= LENGTH) return
     digits += digit
-    if (say.className === 'say error') sayIt('Enter your passcode')
+    if (say.className === 'say error') sayIt('')
     paint()
     if (digits.length === LENGTH) { const p = digits; setTimeout(() => submit(p, 'passcode'), 80) }
   }
@@ -213,9 +269,9 @@ function run(channel: BroadcastChannel, view: IntentView | null, summary: Confir
         busy = false
         if (passcode) submit(passcode, 'biometric')
         else { sayIt(`${biometric!.label || 'Fingerprint'} didn't work - enter your passcode`, true); paint() }
-      }, 'key plain', `Use ${biometric!.label || 'fingerprint'}`, true)
+      }, 'key bio', `Use ${biometric!.label || 'fingerprint'}`, true)
     : Object.assign(el('span'), { ariaHidden: 'true' }))
-  pad.append(key('0', () => press('0')), key('⌫', back, 'key plain', 'Delete'))
+  pad.append(key('0', () => press('0')), key(deleteIcon(), back, 'key del', 'Delete'))
 
   document.addEventListener('keydown', (e) => {
     if (/^[0-9]$/.test(e.key)) { press(e.key); e.preventDefault() }
@@ -224,7 +280,7 @@ function run(channel: BroadcastChannel, view: IntentView | null, summary: Confir
 
   const entry = el('div', 'entry')
   entry.append(dots, say, pad)
-  show(card(view, summary), entry, el('p', 'note', 'Checked inside your wallet - MeshPort never sees your passcode.'))
+  show(card(view, summary), entry)
   watchVisibility(refreshVisibility)
   paint()
   tellApp({ state: 'ready' })

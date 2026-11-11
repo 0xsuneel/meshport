@@ -152,7 +152,9 @@ export function PinSheet(p: PinSheetProps) {
     <ActionSheet open={p.open} onClose={close} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={p.backClose ?? true} zIndex={p.zIndex} leaveUnder={p.leaveUnder}>
       <div className="flex flex-col px-6 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] overflow-y-auto">
         {p.header}
-        <div className="text-center mb-7">
+        {/* With the wallet's page, its card sits 16px under the title (as the
+            card did here) and the page keeps its own space above the dots. */}
+        <div className={`text-center ${walletPad && !p.error ? 'mb-4' : 'mb-7'}`}>
           <h2 className="text-lg font-bold text-text-primary">{p.title}</h2>
           {(!p.card || p.error) && (!walletPad || p.error) && <p className="text-[13px] mt-1.5 text-text-secondary">{said}</p>}
           {p.card && !walletPad && <SummaryCard {...p.card} />}
