@@ -69,11 +69,12 @@ export interface WalletRpc {
    */
   'reveal:grant': [{ address: string; what: 'mnemonic' | 'privateKey' | 'verify'; passcode?: string }, { ticket: string }]
   /**
-   * The person just entered the passcode (or a fingerprint released it): the
-   * frame checks it itself and then signs value-moving requests for
-   * APPROVAL_MS. A wallet with no passcode on this device takes this one.
+   * Check a passcode typed in the app (the lock screen, a keypad fallback),
+   * with the frame's lockout. It approves nothing: value-moving signatures
+   * need a confirmation entered in confirm.html ('confirm:begin'). A wallet
+   * with no passcode on this device takes this one (`set`).
    */
-  approve: [{ address: string; passcode: string }, { approved: true; required: boolean; validForMs: number }]
+  'passcode:check': [{ address: string; passcode: string }, { ok: true; set: boolean }]
   'sign:message': [{ address: string; message: string | { raw: Hex } }, { signature: Hex }]
   'sign:typed-data': [{ address: string; typedData: Record<string, unknown> }, { signature: Hex }]
   /**

@@ -42,10 +42,14 @@ export async function unlockWallet(address: string, passcode?: string): Promise<
   return unlocked ? walletAccount(address) : null
 }
 
-/** The person's passcode, for the frame to check before value-moving signatures (lib/walletApproval). */
-export async function approveFrameWallet(address: string, passcode: string): Promise<{ required: boolean }> {
-  const { required } = await callWallet('approve', { address, passcode })
-  return { required }
+/**
+ * A passcode typed in the app, checked by the frame with its own lockout
+ * (lib/walletApproval). Approves nothing - signing needs confirm.html.
+ * `set`: the wallet had no passcode on this device and took this one.
+ */
+export async function checkFramePasscode(address: string, passcode: string): Promise<{ set: boolean }> {
+  const { set } = await callWallet('passcode:check', { address, passcode })
+  return { set }
 }
 
 export async function setWalletPasscode(address: string, passcode: string, oldPasscode?: string): Promise<void> {

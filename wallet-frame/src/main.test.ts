@@ -33,6 +33,23 @@ async function ask(method: string, params: unknown, opts: { origin?: string; sou
   return call ? { msg: call[0], targetOrigin: call[1] } : null
 }
 
+// confirm.html, played by the test over its BroadcastChannel.
+const confirmPage = new BroadcastChannel(CONFIRM_CHANNEL)
+function fromPage(type: string, ticket: string) {
+  return new Promise<any>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`no ${type}`)), 3000)
+    const on = (e: MessageEvent) => { if (e.data?.type === type && e.data.ticket === ticket) { clearTimeout(t); confirmPage.removeEventListener('message', on as any); resolve(e.data) } }
+    confirmPage.addEventListener('message', on as any)
+  })
+}
+/** The person approves on the wallet's own page (a summary): opens the approval window. */
+async function approveInWallet(address: string, passcode: string) {
+  const { ticket } = (await ask('confirm:begin', { address, summary: { label: 'Approve', name: 'this' } }))!.msg.result
+  const req = fromPage('request', ticket); confirmPage.postMessage({ type: 'claim', ticket }); await req
+  const checked = fromPage('checked', ticket); confirmPage.postMessage({ type: 'passcode', ticket, passcode })
+  return checked
+}
+
 describe('wallet frame transport', () => {
   beforeEach(() => parent.postMessage.mockClear())
 
@@ -69,7 +86,7 @@ describe('wallet frame transport', () => {
     const { address } = privateKeyToAccount(pk)
     const imported = await ask('import', { kind: 'import-privkey', secret: pk, passcode: '123456' })
     expect(imported!.msg.result).toEqual({ address })
-    await ask('approve', { address, passcode: '123456' })
+    await approveInWallet(address, '123456')
     const tx = { type: 'eip1559', chainId: 5042002, nonce: 0, to: address, value: 1n, gas: 21000n, maxFeePerGas: 2n, maxPriorityFeePerGas: 1n }
     const r = await ask('sign:transaction', { address, transaction: tx })
     expect(r!.msg.result.serialized).toBe(await privateKeyToAccount(pk).signTransaction(tx as any))
@@ -159,7 +176,7 @@ describe('passkey ceremonies (passkey.html ↔ frame)', () => {
     const pk = generatePrivateKey()
     const { address } = privateKeyToAccount(pk)
     await ask('import', { kind: 'import-privkey', secret: pk, passcode: '123456' })
-    await ask('approve', { address, passcode: '123456' })
+    await approveInWallet(address, '123456')
     const { ticket } = (await ask('passkey:begin', { mode: 'sign', address, credentialId: 'abc', challenge, label: 'Pay 5 USDC' }))!.msg.result
     expect(ticket).toMatch(/^0x[0-9a-f]{32}$/)
     expect((await ask('passkey:result', { ticket }))!.msg.result).toEqual({ status: 'pending' })
@@ -186,8 +203,12 @@ describe('approval: value-moving signatures need the passcode, checked by the fr
   it('a payment needs the passcode, checked here - from the very first signature', async () => {
     const address = await walletWithPasscode()
     expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.error.code).toBe('approval-required')
-    expect((await ask('approve', { address, passcode: '000000' }))!.msg.error.code).toBe('bad-passcode')
-    expect((await ask('approve', { address, passcode: '123456' }))!.msg.result).toEqual({ approved: true, required: true, validForMs: 120_000 })
+    expect(await approveInWallet(address, '000000')).toMatchObject({ ok: false, code: 'bad-passcode' })
+    // A passcode typed in the app is only checked: it approves nothing.
+    expect((await ask('passcode:check', { address, passcode: '123456' }))!.msg.result).toEqual({ ok: true, set: false })
+    expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.error.code).toBe('approval-required')
+    expect((await ask('approve', { address, passcode: '123456' } as any))!.msg.error.code).toBe('unsupported')
+    expect(await approveInWallet(address, '123456')).toMatchObject({ ok: true })
     expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.result.serialized).toMatch(/^0x/)
   })
 
@@ -220,13 +241,13 @@ describe('approval: value-moving signatures need the passcode, checked by the fr
 
   it('the approval lasts 2 minutes, and lock ends it', async () => {
     const address = await walletWithPasscode()
-    await ask('approve', { address, passcode: '123456' })
+    await approveInWallet(address, '123456')
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
       vi.setSystemTime(Date.now() + 121_000)
       expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.error.code).toBe('approval-required')
     } finally { vi.useRealTimers() }
-    await ask('approve', { address, passcode: '123456' })
+    await approveInWallet(address, '123456')
     await ask('lock', { address })
     await ask('unlock', { address, passcode: '123456' })
     expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.error.code).toBe('approval-required')
@@ -239,12 +260,16 @@ describe('approval: value-moving signatures need the passcode, checked by the fr
     expect((await ask('set-passcode', { address, passcode: '12' }))!.msg.error.code).toBe('invalid')
   })
 
-  it('a wallet with no passcode here signs nothing until an approval gives it one', async () => {
+  it('a wallet with no passcode here signs nothing until it has one and the wallet page approves', async () => {
     const created = await ask('create', {})
     const address = created!.msg.result.address
     expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.error.code).toBe('approval-required')
-    expect((await ask('approve', { address, passcode: 'x' }))!.msg.error.code).toBe('invalid')
-    expect((await ask('approve', { address, passcode: '246810' }))!.msg.result.required).toBe(true)
+    // No passcode here: the wallet page can't confirm yet; the app's check sets one (approving nothing).
+    expect((await ask('confirm:begin', { address, summary: { label: 'Approve', name: 'this' } }))!.msg.error.code).toBe('not-found')
+    expect((await ask('passcode:check', { address, passcode: 'x' }))!.msg.error.code).toBe('invalid')
+    expect((await ask('passcode:check', { address, passcode: '246810' }))!.msg.result).toEqual({ ok: true, set: true })
+    expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.error.code).toBe('approval-required')
+    expect(await approveInWallet(address, '246810')).toMatchObject({ ok: true })
     expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.result.serialized).toMatch(/^0x/)
     expect((await ask('status', { address }))!.msg.result.passcode).toBe(true)
   })
@@ -254,7 +279,7 @@ describe('approval: value-moving signatures need the passcode, checked by the fr
     expect((await ask('reveal:grant', { address, what: 'privateKey' }))!.msg.error.code).toBe('bad-passcode')
     expect((await ask('reveal:grant', { address, what: 'privateKey', passcode: '123456' }))!.msg.result.ticket).toMatch(/^0x/)
     // An approval (which fingerprint / face can give) doesn't open the backup.
-    await ask('approve', { address, passcode: '123456' })
+    await approveInWallet(address, '123456')
     expect((await ask('reveal:grant', { address, what: 'privateKey' }))!.msg.error.code).toBe('bad-passcode')
   })
 
@@ -310,14 +335,8 @@ describe('confirm-word check', () => {
 // The page side of the BroadcastChannel is played by the test.
 describe('confirmations', () => {
   const ARC = 5042002
-  const page = new BroadcastChannel(CONFIRM_CHANNEL)
-  const next = (type: string, ticket: string) => new Promise<any>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`no ${type}`)), 3000)
-    const on = (e: MessageEvent) => { if (e.data?.type === type && e.data.ticket === ticket) { clearTimeout(t); page.removeEventListener('message', on as any); resolve(e.data) } }
-    page.addEventListener('message', on as any)
-  })
-  const claim = (ticket: string) => { const r = next('request', ticket); page.postMessage({ type: 'claim', ticket }); return r }
-  const enter = (ticket: string, passcode: string) => { const r = next('checked', ticket); page.postMessage({ type: 'passcode', ticket, passcode }); return r }
+  const claim = (ticket: string) => { const r = fromPage('request', ticket); confirmPage.postMessage({ type: 'claim', ticket }); return r }
+  const enter = (ticket: string, passcode: string) => { const r = fromPage('checked', ticket); confirmPage.postMessage({ type: 'passcode', ticket, passcode }); return r }
 
   async function wallet() {
     const pk = generatePrivateKey()
