@@ -95,11 +95,15 @@ export function PinSheet(p: PinSheetProps) {
   // for the next one - not even for its first frame (it used to flash the
   // whole sheet, then hide it, on a reopen).
   const openings = useRef(0)
+  const lastOpening = useRef(0)
   const wasOpen = useRef(false)
   if (p.open && !wasOpen.current) openings.current++
   wasOpen.current = p.open
   const opening = openings.current
   const [usableFor, setUsableFor] = useState(-1)
+  // The wallet's page itself said it's usable (not just the 8 s fallback).
+  const pageUsable = useRef(false)
+  if (p.open && openings.current !== lastOpening.current) { lastOpening.current = openings.current; pageUsable.current = false }
   const usable = usableFor === opening
   const setUsable = (v: boolean) => setUsableFor(v ? opening : -1)
   const pending = useRef<{ token: string; via: boolean } | null>(null)
@@ -132,7 +136,8 @@ export function PinSheet(p: PinSheetProps) {
   const walletPad = request && (p.open
     ? <WalletConfirmFrame key={attempt} request={request}
         onUnavailable={() => setKeypadOnly(true)}
-        onUsable={() => setUsable(true)}
+        onUsable={() => { pageUsable.current = true; setUsable(true) }}
+        waiting={!pageUsable.current}
         onApproved={(token, via) => { pending.current = { token, via }; p.onChange(token) }} />
     : <div className="h-[480px]" aria-hidden />)
 
@@ -148,7 +153,9 @@ export function PinSheet(p: PinSheetProps) {
   useEffect(() => {
     if (!held) return
     const end = waitOnPressedButton()
-    const t = setTimeout(() => setUsable(true), 4000)
+    // A very slow connection: the sheet opens anyway after 8 s, showing that
+    // the wallet is still opening (WalletConfirmFrame `waiting`).
+    const t = setTimeout(() => setUsable(true), 8000)
     return () => { end(); clearTimeout(t) }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- setUsable is for this opening, read when the effect starts
   }, [held])

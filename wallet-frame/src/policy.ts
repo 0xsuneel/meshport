@@ -63,6 +63,12 @@ const GATEWAY_WALLETS = new Set(['0x0077777d7eba4688bdef3e311b846f25870a19b9', '
 const GATEWAY_ABI = [
   { type: 'function', name: 'deposit', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'token', type: 'address' }, { name: 'value', type: 'uint256' }] },
   { type: 'function', name: 'depositFor', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'token', type: 'address' }, { name: 'depositor', type: 'address' }, { name: 'value', type: 'uint256' }] },
+  // With a permit / transfer authorization the person signed (Circle's kit
+  // uses these on Arc): credited to `owner` / `from`.
+  { type: 'function', name: 'depositWithPermit', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'token', type: 'address' }, { name: 'owner', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'deadline', type: 'uint256' }, { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] },
+  { type: 'function', name: 'depositWithPermit', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'token', type: 'address' }, { name: 'owner', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'deadline', type: 'uint256' }, { name: 'signature', type: 'bytes' }] },
+  { type: 'function', name: 'depositWithAuthorization', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'token', type: 'address' }, { name: 'from', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' }, { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] },
+  { type: 'function', name: 'depositWithAuthorization', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'token', type: 'address' }, { name: 'from', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' }, { name: 'signature', type: 'bytes' }] },
 ] as const
 /** Most a single transaction may spend on fees inside a spend limit (native units). */
 const MAX_FEE_ARC = 100_000_000_000_000_000n // 0.1 USDC
@@ -134,7 +140,8 @@ function classifyTransaction(self: string, tx: Record<string, unknown>): Classif
       const a = d.args as readonly unknown[]
       const t = TOKENS.get(lower(a[0]))
       if (!t) return refuse('a Gateway deposit of a token this wallet doesn\'t know')
-      // Into this wallet's own Unified Balance: still its money.
+      // Into this wallet's own Unified Balance: still its money. (deposit takes
+      // from and credits the sender; the others credit their 2nd argument.)
       if (d.functionName === 'deposit' || lower(a[1]) === self) return { ok: true, spends, calls: [] }
       add(spends, t.asset, to18(big(a[2]), t.decimals)) // credited to someone else
       return { ok: true, spends, calls: [] }
@@ -161,6 +168,11 @@ function classifyTypedData(self: string, td: Record<string, unknown>): Classifie
     if (!token) return refuse(`a ${type} for a token this wallet doesn't know`)
     const owner = lower(type === 'Permit' ? message.owner : message.from)
     if (owner !== self) return refuse(`a ${type} for another account`)
+    // For a deposit into this wallet's own Unified Balance (Gateway credits the
+    // owner): still its money - the burn intent that spends it is counted.
+    // An unlimited one still counts in full.
+    const toGateway = GATEWAY_WALLETS.has(lower(type === 'Permit' ? message.spender : message.to))
+    if (toGateway && big(message.value) < 2n ** 255n) return { ok: true, spends, calls: [] }
     add(spends, token.asset, to18(big(message.value), token.decimals))
     return { ok: true, spends, calls: [] }
   }

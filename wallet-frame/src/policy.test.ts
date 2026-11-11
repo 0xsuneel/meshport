@@ -47,6 +47,34 @@ describe('spend limit policy', () => {
     expect(burn.ok && fits(scope, left, burn)).not.toBeNull()
   })
 
+  // Circle's kit on Arc: a permit to Gateway + depositWithPermit, then the
+  // burn intent. Field 11 Nov: asked for the passcode three times.
+  it('a permit-based deposit to your own Gateway balance needs no extra passcode', () => {
+    const gw = parseAbi([
+      'function depositWithPermit(address token, address owner, uint256 value, uint256 deadline, bytes signature)',
+      'function depositWithPermit(address token, address owner, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)',
+      'function depositWithAuthorization(address token, address from, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, bytes signature)',
+    ])
+    const sig = ('0x' + '11'.repeat(65)) as `0x${string}`
+    const permitTo = (spender: string, value = '1000000') => ({ primaryType: 'Permit', domain: { verifyingContract: ARC_USDC }, message: { owner: me, spender, value, nonce: '0', deadline: '9999999999' } })
+    expect(spends(classify(me, 'sign:typed-data', { typedData: permitTo(GATEWAY) }))).toEqual({})
+    expect(spends(classify(me, 'sign:typed-data', { typedData: permitTo(them) }))).toEqual({ USDC: 10n ** 18n })
+    expect(spends(classify(me, 'sign:typed-data', { typedData: permitTo(GATEWAY, maxUint256.toString()) }))).not.toEqual({})
+    const call = (data: `0x${string}`) => classify(me, 'sign:transaction', { transaction: tx({ to: GATEWAY, data }) })
+    expect(spends(call(encodeFunctionData({ abi: gw, functionName: 'depositWithPermit', args: [ARC_USDC, me, 1_000_000n, 9_999_999_999n, sig] })))).toEqual({})
+    expect(spends(call(encodeFunctionData({ abi: gw, functionName: 'depositWithPermit', args: [ARC_USDC, me, 1_000_000n, 9_999_999_999n, 27, pad('0x01'), pad('0x02')] })))).toEqual({})
+    expect(spends(call(encodeFunctionData({ abi: gw, functionName: 'depositWithAuthorization', args: [ARC_USDC, me, 1_000_000n, 0n, 9_999_999_999n, pad('0x03'), sig] })))).toEqual({})
+    expect(spends(call(encodeFunctionData({ abi: gw, functionName: 'depositWithPermit', args: [ARC_USDC, them, 1_000_000n, 9_999_999_999n, sig] })))).toEqual({ USDC: 10n ** 18n })
+    // The whole route fits a limit of the amount + its fee: permit, deposit, burn intent.
+    const scope = parseScope({ limits: [{ asset: 'USDC', amount: '1.1' }] })
+    let left = { ...scope.limits }
+    const burn = classify(me, 'sign:typed-data', { typedData: { primaryType: 'BurnIntent', domain: { name: 'GatewayWallet' }, message: { maxBlockHeight: '1', maxFee: '50000', spec: { sourceToken: pad(ARC_USDC.toLowerCase() as `0x${string}`), value: '1000000' } } } })
+    for (const c of [classify(me, 'sign:typed-data', { typedData: permitTo(GATEWAY) }), call(encodeFunctionData({ abi: gw, functionName: 'depositWithPermit', args: [ARC_USDC, me, 1_000_000n, 9_999_999_999n, sig] })), burn]) {
+      const next = c.ok ? fits(scope, left, c) : null
+      expect(next).not.toBeNull(); left = next!
+    }
+  })
+
   it('an unlimited approval never fits a limit, and the exact view warns about it', () => {
     const scope = parseScope({ limits: [{ asset: 'USDC', amount: '1000000' }] })
     const data = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [GATEWAY, maxUint256] })
