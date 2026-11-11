@@ -12,6 +12,7 @@ const FILES = ['classifiers.ts', 'interpreter.ts', 'repository.ts', 'types.ts']
 /** Same code once import suffixes, dash styles and the copy's provenance header are set aside. */
 function normalize(text: string): string {
   return text
+    .replace(/\r\n/g, '\n') // a Windows checkout (core.autocrlf) has CRLF line endings
     .replace(/ \* ── PROVENANCE[\s\S]*?── Original header below, unchanged ─*\n/, '')
     .replace(/^ \* supabase\/functions\/ledger-interpret\/[\w.]+\n \*\n/m, '')
     .replace(/from '(\.[^']*?)(\.ts)?'/g, "from '$1'")
