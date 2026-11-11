@@ -245,6 +245,8 @@ const INITIAL_SWAP_PROGRESS: SwapProgressState = { approve: 'active', submit: 'w
 
 function applySwapProgress(s: SwapProgressState, p: SwapProgress): SwapProgressState {
   switch (p.kind) {
+    case 'stage':
+      return s // timing only
     case 'approve-sent':
       return { ...s, approve: 'sent', approveHash: p.hash }
     case 'swap-sent':
@@ -377,7 +379,10 @@ function SwapChecklist({ step, error, txHash, progress }: { step: string; error:
                     </svg>
                   ) : s.active ? (
 <MeshLoader size={15} label="In progress" />
-                  ) : null}
+                  ) : (
+                    // A step still to come: its number, as on the other progress lists.
+                    <span style={{ fontSize: 11, fontWeight: 700, lineHeight: 1, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{i + 1}</span>
+                  )}
                 </div>
               </div>
               {!isLast && (
@@ -1066,15 +1071,16 @@ export function SwapPage() {
   const [swapProgress, setSwapProgress] = useState<SwapProgressState>(INITIAL_SWAP_PROGRESS)
   // Step timings for this swap (lib/moveTimings → Supabase move_timings).
   const moveTimerRef = useRef<MoveTimer | null>(null)
+  const rawSwapError = useRef('')
   const onSwapProgress = useCallback((p: SwapProgress) => {
-    moveTimerRef.current?.mark(p.kind)
+    moveTimerRef.current?.mark(p.kind === 'stage' ? p.name : p.kind)
     setSwapProgress(prev => applySwapProgress(prev, p))
   }, [])
   useEffect(() => {
     const t = moveTimerRef.current
     if (!t || t.finished) return
     if (step === 'done') t.finish({ ok: true, txHash: txHash || undefined })
-    else if (step === 'failed') t.finish({ ok: false, error })
+    else if (step === 'failed') t.finish({ ok: false, error: rawSwapError.current ? `${error} | ${rawSwapError.current}` : error })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
   useEffect(() => () => { moveTimerRef.current?.finish({ ok: false, error: 'screen closed before the end' }) }, [])
@@ -1082,7 +1088,7 @@ export function SwapPage() {
   const executeSwap = useCallback(async () => {
     swapStartRef.current = Date.now()
     setSwapProgress(INITIAL_SWAP_PROGRESS)
-    setStep('swapping'); setError(''); setIsUncertainFailure(false)
+    setStep('swapping'); setError(''); setIsUncertainFailure(false); rawSwapError.current = ''
     const amt = parseFloat(amountIn)
 
     // ── The intent first, then the swap (same rule as Pay) ───────────────────
@@ -1346,6 +1352,11 @@ export function SwapPage() {
         }
       }
       setIsUncertainFailure(uncertain)
+      // The timing row keeps the underlying error too (Circle's / the
+      // network's words), so a failed swap can be explained from Supabase -
+      // the screen's message alone ("didn't go through") couldn't.
+      const raw = typeof e?.rawError === 'string' && e.rawError ? e.rawError : (e?.message ?? '')
+      if (raw && raw !== msg) rawSwapError.current = raw
       setError(msg); setStep('failed')
       // An uncertain outcome may still land: keep (or write) the recovery
       // marker for the swap that may be on its way - clearing it here let the

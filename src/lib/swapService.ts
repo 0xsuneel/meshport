@@ -95,9 +95,12 @@ function routeSwapServiceThroughServer() {
     }
     const { authApiHeaders } = await import('./supabase')
     const method = init?.method || (input instanceof Request ? input.method : 'GET')
-    return orig(`/api/swap-proxy?svc=${encodeURIComponent(u.pathname + u.search)}`, {
+    const res = await orig(`/api/swap-proxy?svc=${encodeURIComponent(u.pathname + u.search)}`, {
       method, headers: await authApiHeaders(), body: method === 'GET' ? undefined : init?.body, signal: init?.signal,
     })
+    // When each answer from Circle's swap service came back ("svc-quote"...).
+    _onSwapProgress?.({ kind: 'stage', name: 'svc-' + (u.pathname.split('/').filter(Boolean).pop() || 'call') })
+    return res
   }
 }
 
@@ -110,6 +113,9 @@ function routeSwapServiceThroughServer() {
 // approval, any other broadcast is the swap, and a non-null receipt is that
 // transaction's confirmation.
 export type SwapProgress =
+  // A point on the way, for the swap's timing record only (move_timings):
+  // where the seconds before the swap is sent go.
+  | { kind: 'stage'; name: string }
   | { kind: 'approve-sent'; hash: string }
   | { kind: 'swap-sent'; hash: string }
   | { kind: 'confirmed'; hash: string; success: boolean }
@@ -605,6 +611,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
   const sdkMods = await getSdkModules()
   const kit = getKit(sdkMods.AppKit)
   const adapter = await getAdapter(params.signer)
+  _onSwapProgress?.({ kind: 'stage', name: 'sdk' })
 
   const parsedAmt = parseFloat(params.amountIn)
   // Same formatting api/swap-proxy.js used - toFixed(8) then trim trailing
@@ -622,6 +629,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
     // The same MeshPort fee the estimate included (so the confirmed minimum still holds).
     config:   { ...swapConfig(slip, params.minAmountOut), customFee: await swapCustomFee(params.tokenIn, params.tokenOut, amountFormatted) },
   }
+  _onSwapProgress?.({ kind: 'stage', name: 'fee' })
 
   // The swap is on Arc: its Activity row is queued on this device first, so a
   // dropped connection or a closed tab can't lose it, then written.
