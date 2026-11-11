@@ -35,16 +35,18 @@ const NEWS_STEP_MS = 5000
 function Box({ title, onViewAll, flat, children }: { title: string; onViewAll?: () => void; flat?: boolean; children: ReactNode }) {
   // Desktop: the same drop shadow as Home's other desktop cards.
   const isDesktop = useMediaQuery('(min-width: 980px)')
+  // The phone's shared card (flat) is drawn 5% smaller.
+  const k = flat ? 0.95 : 1
   return (
-    <div style={flat ? { padding: 12, minWidth: 0 } : { background: 'var(--glass-fill)', border: isDesktop ? '1px solid var(--border)' : '1px solid var(--glass-edge)', borderRadius: 16, padding: 10, minWidth: 0, boxShadow: isDesktop ? 'var(--shadow-1)' : 'var(--glass-card)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-        <span style={{ fontSize: 'min(15px, 4.2vw)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}>{title}</span>
+    <div style={flat ? { padding: 12 * k, minWidth: 0 } : { background: 'var(--glass-fill)', border: isDesktop ? '1px solid var(--border)' : '1px solid var(--glass-edge)', borderRadius: 16, padding: 10, minWidth: 0, boxShadow: isDesktop ? 'var(--shadow-1)' : 'var(--glass-card)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4, marginBottom: 4 * k }}>
+        <span style={{ fontSize: `min(${15 * k}px, ${4.2 * k}vw)`, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}>{title}</span>
         {onViewAll && (
           <button onClick={onViewAll}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 1, padding: '4px 0 4px 2px', margin: '-4px 0',
-              background: 'none', border: 'none', cursor: 'pointer', fontSize: 'min(12.5px, 3.3vw)', fontWeight: 600, color: 'var(--brand-text)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              background: 'none', border: 'none', cursor: 'pointer', fontSize: `min(${12.5 * k}px, ${3.3 * k}vw)`, fontWeight: 600, color: 'var(--brand-text)', whiteSpace: 'nowrap', flexShrink: 0 }}>
             View all
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+            <svg width={12 * k} height={12 * k} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6"/></svg>
           </button>
         )}
       </div>
@@ -76,25 +78,28 @@ const FRONT_SHADOW = '0 6px 16px -6px color-mix(in srgb, var(--brand) 60%, trans
 // used to vanish). Deeper slots sit at the last visible spot, invisible, and
 // fade in as the queue rotates them forward, so the label always has room.
 const QUEUE_VISIBLE = 3
-function slotPose(slot: number, right: number) {
+function slotPose(slot: number, right: number, k = 1) {
   if (slot === 0) return { x: right, scale: 1, opacity: 1 }
   const depth = Math.min(slot, QUEUE_VISIBLE - 1)
   return {
-    x: right - 24 - (depth - 1) * 12,
+    x: right - 24 * k - (depth - 1) * 12 * k,
     scale: 0.76 - (depth - 1) * 0.07,
     opacity: slot < QUEUE_VISIBLE ? 0.95 - (slot - 1) * 0.18 : 0,
   }
 }
 
 /** Left edge of the queue as drawn (avatars shrink around their centre). */
-function queueLeftEdge(n: number, right: number) {
-  const back = slotPose(Math.min(n - 1, QUEUE_VISIBLE - 1), right)
-  return back.x + (AVATAR * (1 - back.scale)) / 2
+function queueLeftEdge(n: number, right: number, k = 1) {
+  const back = slotPose(Math.min(n - 1, QUEUE_VISIBLE - 1), right, k)
+  return back.x + (AVATAR * k * (1 - back.scale)) / 2
 }
 
 function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolean }) {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const reduce = useReducedMotion()
+  // The phone's shared card (flat) is drawn 5% smaller.
+  const k = flat ? 0.95 : 1
+  const ch = CONTENT_H * k, av = AVATAR * k, ring = 54 * k
   // Same cache key as the Home Recent row used, so the list is there instantly.
   const cacheKey = walletAddress ? `meshport_recents_${walletAddress.toLowerCase()}_5` : ''
   const [people, setPeople] = useState<RecentContact[]>(() => {
@@ -161,32 +166,32 @@ function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: bool
   if (!loaded && n === 0) {
     // Loading: the loaded row's shape (name + "Tap to pay", avatar on the right).
     content = (
-      <div aria-busy="true" aria-label="Loading recent people" style={{ height: CONTENT_H, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingRight: 6 }}>
+      <div aria-busy="true" aria-label="Loading recent people" style={{ height: ch, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingRight: 6 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
           <Skeleton className="h-3 w-3/5 rounded-full" />
           <Skeleton className="h-2.5 w-2/5 rounded-full" />
         </div>
-        <Skeleton className="rounded-full flex-shrink-0" style={{ width: AVATAR, height: AVATAR }} />
+        <Skeleton className="rounded-full flex-shrink-0" style={{ width: av, height: av }} />
       </div>
     )
   } else if (n === 0) {
     content = (
       <button onClick={() => navigate('/pay')}
-        style={{ height: CONTENT_H, width: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', gap: 2,
+        style={{ height: ch, width: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', gap: 2,
           background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>No one yet</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)' }}>Pay someone ›</span>
+        <span style={{ fontSize: 13 * k, fontWeight: 600, color: 'var(--text-secondary)' }}>No one yet</span>
+        <span style={{ fontSize: 13 * k, fontWeight: 700, color: 'var(--brand-text)' }}>Pay someone ›</span>
       </button>
     )
   } else {
-    const right = Math.max(0, width - 50)
-    const leftmost = queueLeftEdge(n, right)
+    const right = Math.max(0, width - 50 * k)
+    const leftmost = queueLeftEdge(n, right, k)
     content = (
       <div ref={areaRef} role="button" tabIndex={0} aria-label={front ? `Pay ${recentShortName(front)}` : 'Pay'}
         onClick={() => pay(front)}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pay(front) } }}
         onPointerDown={hold} onPointerUp={release} onPointerLeave={release} onPointerCancel={release}
-        style={{ position: 'relative', height: CONTENT_H, cursor: 'pointer', WebkitTapHighlightColor: 'transparent', touchAction: 'pan-y',
+        style={{ position: 'relative', height: ch, cursor: 'pointer', WebkitTapHighlightColor: 'transparent', touchAction: 'pan-y',
           // Its avatars and ring stack only inside this card (never over Home's search list).
           isolation: 'isolate' }}>
         {front && width > 0 && (
@@ -194,13 +199,13 @@ function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: bool
           <motion.div key={front.wallet_address} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
             style={{ position: 'absolute', left: 0, top: 0, bottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center',
               maxWidth: Math.max(0, leftmost - 4), minWidth: 0 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{recentShortName(front)}</span>
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--brand-text)', whiteSpace: 'nowrap' }}>Tap to pay</span>
+            <span style={{ fontSize: 13 * k, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{recentShortName(front)}</span>
+            <span style={{ fontSize: 11 * k, fontWeight: 600, color: 'var(--brand-text)', whiteSpace: 'nowrap' }}>Tap to pay</span>
           </motion.div>
         )}
         {width > 0 && people.map((c, i) => {
           const slot = Math.max(0, order.indexOf(i))
-          const pose = slotPose(slot, right)
+          const pose = slotPose(slot, right, k)
           const justLeftFront = rotating && step > 0 && slot === n - 1
           return (
             <motion.div key={c.wallet_address}
@@ -212,19 +217,19 @@ function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: bool
               transition={justLeftFront
                 ? { duration: 0.8, times: [0, 0.45, 0.47, 1], ease: 'easeOut' }
                 : { type: 'spring', stiffness: 260, damping: 22, delay: reduce ? 0 : slot * 0.045 }}
-              style={{ position: 'absolute', left: 0, top: (CONTENT_H - AVATAR) / 2, width: AVATAR, height: AVATAR, zIndex: 10 - slot,
+              style={{ position: 'absolute', left: 0, top: (ch - av) / 2, width: av, height: av, zIndex: 10 - slot,
                 // Depth from size and opacity only (the pose): a colour filter
                 // on each photo was redrawn on every step of the queue.
                 borderRadius: '50%', boxShadow: slot === 0 ? FRONT_SHADOW : 'none',
                 transition: 'box-shadow .6s ease', transformOrigin: 'center' }}>
-              <Face c={c} i={i} />
+              <Face c={c} i={i} size={av} />
             </motion.div>
           )
         })}
         {rotating && width > 0 && (
           // Countdown ring: fills around the front avatar, then the next person steps forward.
           <svg key={`${step}-${resumes}`} viewBox="0 0 54 54" aria-hidden
-            style={{ position: 'absolute', left: right - 5, top: (CONTENT_H - 54) / 2, width: 54, height: 54, zIndex: 20, pointerEvents: 'none', transform: 'rotate(-90deg)' }}>
+            style={{ position: 'absolute', left: right - 5 * k, top: (ch - ring) / 2, width: ring, height: ring, zIndex: 20, pointerEvents: 'none', transform: 'rotate(-90deg)' }}>
             <circle cx="27" cy="27" r="25" fill="none" strokeWidth="2.2" stroke="color-mix(in srgb, var(--brand) 14%, transparent)" />
             <circle cx="27" cy="27" r="25" fill="none" strokeWidth="2.2" strokeLinecap="round" stroke="var(--brand)"
               strokeDasharray="157" strokeDashoffset="157"
@@ -240,6 +245,9 @@ function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: bool
 
 function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolean }) {
   const reduce = useReducedMotion()
+  // The phone's shared card (flat) is drawn 5% smaller.
+  const sc = flat ? 0.95 : 1
+  const ch = CONTENT_H * sc, pic = NEWS_PIC_H * sc
   const [items, setItems] = useState<NewsItem[]>(() => readCachedHomeNews())
   const [loaded, setLoaded] = useState(() => items.length > 0)
   const [cur, setCur] = useState(0)
@@ -274,10 +282,10 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
 
   let content: ReactNode
   if (!n && !loaded) {
-    content = <Skeleton className="rounded-[10px]" style={{ height: CONTENT_H }} />
+    content = <Skeleton className="rounded-[10px]" style={{ height: ch }} />
   } else if (!n) {
     content = (
-      <div style={{ height: CONTENT_H, borderRadius: 10, display: 'flex', alignItems: 'center', padding: '0 8px',
+      <div style={{ height: ch, borderRadius: 10, display: 'flex', alignItems: 'center', padding: '0 8px',
         background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }}>
         <span style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.3 }}>Arc, Circle and MeshPort updates show here</span>
       </div>
@@ -295,7 +303,7 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
         onPointerLeave={() => { x0.current = null; setPaused(false) }}
         onPointerCancel={() => { x0.current = null; setPaused(false) }}
         onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && item) { e.preventDefault(); navigate(`/news/${item.id}`) } }}
-        style={{ position: 'relative', height: CONTENT_H, cursor: 'pointer',
+        style={{ position: 'relative', height: ch, cursor: 'pointer',
           touchAction: 'pan-y', userSelect: 'none', WebkitTapHighlightColor: 'transparent' }}>
         {items.map((it, k) => {
           const on = k === cur
@@ -304,7 +312,7 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
               style={{ position: 'absolute', inset: 0, opacity: on ? 1 : 0, transition: reduce ? 'none' : 'opacity .7s ease' }}>
               {/* The cover is shown as is: Arc's covers carry their own title text
                   and Circle's are white, so nothing is drawn over it but the label. */}
-              <div style={{ position: 'relative', height: NEWS_PIC_H, borderRadius: 10, overflow: 'hidden', background: NEWS_SOURCE_TINT[it.source] }}>
+              <div style={{ position: 'relative', height: pic, borderRadius: 10, overflow: 'hidden', background: NEWS_SOURCE_TINT[it.source] }}>
                 {it.image_url && !broken[it.id] ? (
                   <>
                     {/* All four covers load up front (not lazily), so the next one is
@@ -323,7 +331,7 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
                     )}
                     {imgLoaded[it.image_url] && (
                       <span style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(0,0,0,0.45)', borderRadius: 999, padding: '1px 7px',
-                        color: '#fff', fontSize: 11, fontWeight: 700, lineHeight: '15px' }}>{NEWS_SOURCE_LABEL[it.source]}</span>
+                        color: '#fff', fontSize: 11 * sc, fontWeight: 700, lineHeight: `${15 * sc}px` }}>{NEWS_SOURCE_LABEL[it.source]}</span>
                     )}
                   </>
                 ) : (
@@ -331,7 +339,7 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
                   <NewsArt item={it} variant="row" />
                 )}
               </div>
-              <div style={{ marginTop: 4, fontSize: 12, fontWeight: 650, lineHeight: '14px', color: 'var(--text-primary)',
+              <div style={{ marginTop: 4 * sc, fontSize: 12 * sc, fontWeight: 650, lineHeight: `${14 * sc}px`, color: 'var(--text-primary)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {coverReady(it) ? it.title : <Skeleton className="rounded-full" style={{ height: 9, width: '70%', marginTop: 2 }} />}
               </div>
@@ -341,12 +349,12 @@ function NewsBox({ navigate, flat }: { navigate: NavigateFunction; flat?: boolea
         {n > 1 && curReady && (
           // A soft dark band along the cover's foot, so the dots read on a
           // cover with its own text printed on it (Arc's).
-          <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, top: NEWS_PIC_H - 20, height: 20, borderRadius: '0 0 10px 10px', pointerEvents: 'none',
+          <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, top: pic - 20, height: 20, borderRadius: '0 0 10px 10px', pointerEvents: 'none',
             background: 'linear-gradient(transparent, rgba(0,0,0,0.5))' }} />
         )}
         {n > 1 && curReady && (
           // Bottom-right of the cover, clear of the source label and of a drawn cover's text.
-          <div aria-hidden style={{ position: 'absolute', top: NEWS_PIC_H - 11, right: 6, display: 'flex', gap: 3 }}>
+          <div aria-hidden style={{ position: 'absolute', top: pic - 11, right: 6, display: 'flex', gap: 3 }}>
             {items.map((it, k) => (
               <i key={it.id} style={{ display: 'block', height: 4, width: k === cur ? 10 : 4, borderRadius: 2,
                 background: k === cur ? '#fff' : 'rgba(255,255,255,0.5)', transition: 'width .35s ease, background .35s' }} />
@@ -370,11 +378,11 @@ export function RecentNewsRow({ navigate, footer }: { navigate: NavigateFunction
     return (
       // A real border (the light theme's glass edge is transparent): a white
       // card on the warm page lost its sides. Corners as the balance card's.
-      <div style={{ background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: 22, boxShadow: 'var(--glass-card)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: 21, boxShadow: 'var(--glass-card)', overflow: 'hidden' }}>
         {ring}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 1px minmax(0, 1fr)' }}>
           <RecentBox navigate={navigate} flat />
-          <div aria-hidden style={{ background: 'var(--border)', margin: '12px 0' }} />
+          <div aria-hidden style={{ background: 'var(--border)', margin: '11.4px 0' }} />
           <NewsBox navigate={navigate} flat />
         </div>
         {footer}

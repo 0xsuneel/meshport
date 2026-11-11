@@ -2302,9 +2302,9 @@ const FEATURE_BANNERS: Array<{ title: string; text: string; path: string; icon: 
 ]
 
 // Same icons as Home's buttons / More sheet; Pay in Chat uses the Chats tab icon.
-function BannerIcon({ kind }: { kind: typeof FEATURE_BANNERS[number]['icon'] }) {
-  if (kind === 'chat') return <NavIcon name="chat" size={24} color="#fff" />
-  return <ActionIcon name={kind === 'globe' ? 'hub' : kind} size={24} />
+function BannerIcon({ kind, size = 24 }: { kind: typeof FEATURE_BANNERS[number]['icon']; size?: number }) {
+  if (kind === 'chat') return <NavIcon name="chat" size={size} color="#fff" />
+  return <ActionIcon name={kind === 'globe' ? 'hub' : kind} size={size} />
 }
 
 function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onOpen: (path: string) => void; docked?: boolean; inCard?: boolean }) {
@@ -2326,7 +2326,7 @@ function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onO
   }, [idx, n, userMoved])
 
   const b = FEATURE_BANNERS[idx]
-  const dot = docked ? { w: 12, gap: 6, pill: 20 } : { w: 4, gap: 6, pill: 10 }
+  const dot = docked ? { w: 11.4, gap: 5.7, pill: 19 } : { w: 4, gap: 6, pill: 10 }
   const firstIdx = useRef(idx)
   const bannerMoved = useRef(false)
   if (idx !== firstIdx.current) bannerMoved.current = true
@@ -2347,7 +2347,7 @@ function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onO
         // Its own card 14px under the hero card (the column's gap is 18).
         position: 'relative', zIndex: 1, overflow: 'hidden', cursor: 'pointer',
         // At the foot of the Recent + Updates card it fills the card's bottom edge.
-        margin: inCard ? 0 : '-4px 0 0', padding: '14px 16px 10px', borderRadius: inCard ? 0 : 16,
+        margin: inCard ? 0 : '-4px 0 0', padding: '13.3px 15.2px 9.5px', borderRadius: inCard ? 0 : 16,
         // A deeper teal than the hero, so it reads as a separate card.
         background: 'color-mix(in srgb, var(--brand) 78%, #000)', display: 'flex', flexDirection: 'column', alignItems: 'stretch', boxSizing: 'border-box',
       } : {
@@ -2370,22 +2370,22 @@ function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onO
       )}
 
       {/* Slides in only when the banner changes - not when Home first opens. */}
-      <div key={idx} className={docked ? 'mp-press' : undefined} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: docked ? 10 : 12, flex: docked ? undefined : 1, minHeight: docked ? 48 : undefined, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 220ms var(--ease-out)' : undefined }}>
-        <div style={{ width: docked ? 42 : 40, height: docked ? 42 : 40, borderRadius: docked ? '50%' : 12, background: docked ? 'rgba(140,225,205,0.16)' : 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <BannerIcon kind={b.icon} />
+      <div key={idx} className={docked ? 'mp-press' : undefined} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: docked ? 9.5 : 12, flex: docked ? undefined : 1, minHeight: docked ? 45.6 : undefined, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 220ms var(--ease-out)' : undefined }}>
+        <div style={{ width: 40, height: 40, borderRadius: docked ? '50%' : 12, background: docked ? 'rgba(140,225,205,0.16)' : 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <BannerIcon kind={b.icon} size={docked ? 23 : 24} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hub(b.title)}</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.82)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.text}</div>
+          <div style={{ fontSize: docked ? 14.25 : 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hub(b.title)}</div>
+          <div style={{ fontSize: docked ? 12.35 : 13, color: 'rgba(255,255,255,0.82)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.text}</div>
         </div>
-        <span className={docked ? 'mp-try' : undefined} style={{ flexShrink: 0, position: 'relative', fontSize: docked ? 12.5 : 12, fontWeight: docked ? 600 : 700, color: docked ? '#0F2E2B' : 'var(--brand)', background: '#fff', borderRadius: 999,
-          padding: docked ? '0 12px' : '6px 12px', height: docked ? 32 : undefined, display: 'flex', alignItems: 'center', gap: 5, boxShadow: docked ? '0 2px 6px rgba(0,0,0,0.12)' : undefined }}>
+        <span className={docked ? 'mp-try' : undefined} style={{ flexShrink: 0, position: 'relative', fontSize: docked ? 11.9 : 12, fontWeight: docked ? 600 : 700, color: docked ? '#0F2E2B' : 'var(--brand)', background: '#fff', borderRadius: 999,
+          padding: docked ? '0 11.4px' : '6px 12px', height: docked ? 30.4 : undefined, display: 'flex', alignItems: 'center', gap: 5, boxShadow: docked ? '0 2px 6px rgba(0,0,0,0.12)' : undefined }}>
           <span className="mp-try-label">Try now</span>
-          {docked && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>}
+          {docked && <svg width="12.4" height="12.4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>}
         </span>
       </div>
 
-      <div style={docked ? { position: 'relative', display: 'flex', justifyContent: 'center', paddingTop: 10 } : { position: 'absolute', left: 0, right: 0, bottom: 6, display: 'flex', justifyContent: 'center' }}>
+      <div style={docked ? { position: 'relative', display: 'flex', justifyContent: 'center', paddingTop: 9.5 } : { position: 'absolute', left: 0, right: 0, bottom: 6, display: 'flex', justifyContent: 'center' }}>
         {/* Equal dots stay still; one white pill slides to the current banner
             (transform only - growing a dot's width re-laid out the row). */}
         <div style={{ position: 'relative', display: 'flex', gap: dot.gap }}>
@@ -4356,13 +4356,13 @@ export function HomePage() {
           {(heroSide === 1 && !businessAccount ? [
             { label: 'Transfer', path: '/multichain?tab=transfer', icon: 'hub' as const,     accent: true },
             { label: 'Bring',    path: '/multichain?tab=bring',    icon: 'receive' as const, accent: false },
-            { label: 'Activity', path: '/multichain?tab=activity', icon: 'clock' as const,   accent: false },
+            { label: 'Recovery', path: '/multichain?tab=recovery', icon: 'recover' as const, accent: false },
           ] : [
             { label: 'Pay',     path: '/pay',     icon: 'pay' as const,     accent: true },
             { label: 'Receive', path: '/receive', icon: 'receive' as const, accent: false },
             { label: 'Swap',    path: '/swap',    icon: 'swap' as const,    accent: false },
           ]).map(a => (
-            <button key={a.label} type="button" onClick={() => navigate(a.path)} className="mp-press"
+            <button key={a.label} type="button" onClick={() => navigate(a.path, a.path.endsWith('tab=recovery') ? { state: { tab: 'recovery' } } : undefined)} className="mp-press"
               style={{
                 position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: HERO_PILLS_H, borderRadius: 18,
                 border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12.6, fontWeight: 650, whiteSpace: 'nowrap',

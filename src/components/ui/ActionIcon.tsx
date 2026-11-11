@@ -5,7 +5,7 @@ import { useId } from 'react'
 // the gift ribbon, the globe lines…), Pay as a rounded line plane. Each glyph
 // is mask content: white = ink, black = cut-out. The mask paints one rect in
 // `color`, so the icon takes any colour, cut-outs show the background.
-export type ActionIconName = 'pay' | 'receive' | 'swap' | 'more' | 'bulk' | 'hub' | 'p2p' | 'rewards' | 'insights' | 'clock' | 'chat' | 'qr' | 'list' | 'wallet'
+export type ActionIconName = 'pay' | 'receive' | 'swap' | 'more' | 'bulk' | 'hub' | 'p2p' | 'rewards' | 'insights' | 'clock' | 'chat' | 'qr' | 'list' | 'wallet' | 'recover'
 
 // Static markup written here (never user data).
 const GLYPHS: Record<ActionIconName, string> = {
@@ -22,6 +22,8 @@ const GLYPHS: Record<ActionIconName, string> = {
   qr: "<rect x=\"3\" y=\"3\" width=\"8\" height=\"8\" rx=\"2\" fill=\"#fff\"/><rect x=\"13\" y=\"3\" width=\"8\" height=\"8\" rx=\"2\" fill=\"#fff\"/><rect x=\"3\" y=\"13\" width=\"8\" height=\"8\" rx=\"2\" fill=\"#fff\"/><rect x=\"5.6\" y=\"5.6\" width=\"2.8\" height=\"2.8\" rx=\".6\" fill=\"#000\"/><rect x=\"15.6\" y=\"5.6\" width=\"2.8\" height=\"2.8\" rx=\".6\" fill=\"#000\"/><rect x=\"5.6\" y=\"15.6\" width=\"2.8\" height=\"2.8\" rx=\".6\" fill=\"#000\"/><rect x=\"13\" y=\"13\" width=\"3.4\" height=\"3.4\" rx=\".9\" fill=\"#fff\"/><rect x=\"17.6\" y=\"17.6\" width=\"3.4\" height=\"3.4\" rx=\".9\" fill=\"#fff\"/><rect x=\"17.6\" y=\"13\" width=\"3.4\" height=\"3.4\" rx=\".9\" fill=\"#fff\"/><rect x=\"13\" y=\"17.6\" width=\"3.4\" height=\"3.4\" rx=\".9\" fill=\"#fff\"/>",
   list: "<rect x=\"2.8\" y=\"3.6\" width=\"4.6\" height=\"4.6\" rx=\"1.4\" fill=\"#fff\"/><rect x=\"2.8\" y=\"9.7\" width=\"4.6\" height=\"4.6\" rx=\"1.4\" fill=\"#fff\"/><rect x=\"2.8\" y=\"15.8\" width=\"4.6\" height=\"4.6\" rx=\"1.4\" fill=\"#fff\"/><rect x=\"9.6\" y=\"4.6\" width=\"11.6\" height=\"2.6\" rx=\"1.3\" fill=\"#fff\"/><rect x=\"9.6\" y=\"10.7\" width=\"11.6\" height=\"2.6\" rx=\"1.3\" fill=\"#fff\"/><rect x=\"9.6\" y=\"16.8\" width=\"8\" height=\"2.6\" rx=\"1.3\" fill=\"#fff\"/>",
   wallet: "<path d=\"M5.4 6.2 15.2 3.1c1.1-.35 2.2.45 2.2 1.6v1.5\" fill=\"none\" stroke=\"#fff\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"/><rect x=\"2.4\" y=\"6\" width=\"19.2\" height=\"14.6\" rx=\"3.2\" fill=\"#fff\"/><rect x=\"13.6\" y=\"10.2\" width=\"8\" height=\"6\" rx=\"2.2\" fill=\"#000\"/><circle cx=\"16.8\" cy=\"13.2\" r=\"1.3\" fill=\"#fff\"/>",
+  // Recover (Multichain Hub): a circular arrow turning back.
+  recover: "<path d=\"M3.6 12a8.4 8.4 0 1 0 2.5-6l-2.5 2.4\" fill=\"none\" stroke=\"#fff\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2.4\"/><path d=\"M3.4 3.2v5.6h5.6z\" fill=\"#fff\" stroke=\"#fff\" stroke-linejoin=\"round\" stroke-width=\"1.4\"/>",
   chat: "<path d=\"M12 3.2c-5 0-9 3.4-9 7.7 0 2.3 1.2 4.4 3 5.8l-.9 3.7 4.2-2.2c.85.2 1.75.3 2.7.3 5 0 9-3.4 9-7.6S17 3.2 12 3.2z\" fill=\"#fff\"/><circle cx=\"8\" cy=\"11\" r=\"1.35\" fill=\"#000\"/><circle cx=\"12\" cy=\"11\" r=\"1.35\" fill=\"#000\"/><circle cx=\"16\" cy=\"11\" r=\"1.35\" fill=\"#000\"/>",
 }
 
