@@ -1,15 +1,19 @@
 // ── Approving value-moving signatures in the wallet frame ───────────────────
 // The wallet frame (create / import wallets) signs transactions, permits and
-// Solana transactions only within 2 minutes of the person's passcode, checked
-// by the frame itself (wallet-frame/src/main.ts, "Approval"). So:
-//   - every passcode / fingerprint that passes in the app (verifyPasscode)
-//     is handed to the frame here - the existing PIN sheets need no change;
+// Solana transactions only after the person approved them on the frame's own
+// page (wallet-frame/confirm.html, lib/walletConfirm) - the passcode or
+// fingerprint is entered there, inside the wallet origin, never in the app.
+// A payment is confirmed with its exact transaction; other actions open a
+// 2-minute approval window. So:
+//   - a passcode typed in the app (lock screen, a keypad fallback) is only
+//     CHECKED by the frame here ('passcode:check', with its lockout) - it
+//     approves nothing;
 //   - an action the frame refuses ("approval-required" - one with no PIN
-//     step of its own, or after the 2 minutes) asks for the passcode once,
-//     on one shared sheet (WalletApprovalPrompt), then runs again;
+//     step of its own, or after the 2 minutes) asks once, on one shared
+//     sheet (WalletApprovalPrompt - the wallet's own page), then runs again;
 //   - background work (claims finishing, recoveries, expired P2P trades)
 //     never asks: it runs only while an approval is fresh (`approvalFresh`)
-//     and otherwise waits for the next passcode.
+//     and otherwise waits for the next one.
 
 import { create } from 'zustand'
 import { useAuthStore } from '@/store'
@@ -28,20 +32,18 @@ function frameWallet(): string | null {
 }
 
 /**
- * Hand the passcode to the frame. `required`: the frame really checked it
- * (the frame always does now). `error` is the frame's code when it
- * refused it.
+ * Have the frame check a passcode (approves nothing). A wallet-confirmed
+ * token (lib/walletConfirm) was checked on the wallet's page already.
+ * `error` is the frame's code when it refused it.
  */
-export async function approveWallet(passcode: string): Promise<{ ok: boolean; required?: boolean; error?: string; lockedForMs?: number }> {
+export async function checkWalletPasscode(passcode: string): Promise<{ ok: boolean; error?: string; lockedForMs?: number }> {
   const address = frameWallet()
   if (!address || !passcode) return { ok: true }
-  // Confirmed in the wallet's own page (lib/walletConfirm): already checked there.
-  if (isWalletConfirmToken(passcode)) return walletConfirmTokenValid(passcode) ? { ok: true, required: true } : { ok: false, error: 'bad-passcode' }
+  if (isWalletConfirmToken(passcode)) return walletConfirmTokenValid(passcode) ? { ok: true } : { ok: false, error: 'bad-passcode' }
   try {
-    const { approveFrameWallet } = await import('@/wallet')
-    const { required } = await approveFrameWallet(address, passcode)
-    approvedAt.set(address.toLowerCase(), Date.now())
-    return { ok: true, required }
+    const { checkFramePasscode } = await import('@/wallet')
+    await checkFramePasscode(address, passcode)
+    return { ok: true }
   } catch (e) {
     const { code, lockedForMs } = e as { code?: string; lockedForMs?: number }
     return { ok: false, error: code ?? 'failed', lockedForMs }
@@ -49,24 +51,24 @@ export async function approveWallet(passcode: string): Promise<{ ok: boolean; re
 }
 
 // The passcode check itself, for wallets whose passcode lives only in the
-// frame (security.ts FRAME_PASSCODE). A frame with no passcode for this
-// wallet never counts as a match.
+// frame (security.ts FRAME_PASSCODE).
 setFramePasscodeCheck(async passcode => {
-  const r = await approveWallet(passcode)
-  if (r.ok) return r.required === true
+  const r = await checkWalletPasscode(passcode)
+  if (r.ok) return true
   if (r.error === 'bad-passcode' || r.error === 'rate-limited') return false
   throw new Error(WALLET_UNAVAILABLE)
 })
 
 onPasscodeVerified(async passcode => {
-  const r = await approveWallet(passcode)
-  // The frame checked this passcode itself: the app's own hash is no longer
-  // needed - and is the one thing a copy of this page's storage could be
-  // brute-forced from. Keep only the marker from now on.
+  // Checked by the frame already (the marker) or on its own page (a token).
+  if (isWalletConfirmToken(passcode) || !frameWallet() || useAuthStore.getState().passcode === FRAME_PASSCODE) return
+  // A passcode the app checked against its own hash: have the frame check it
+  // too. Once it has, the app's hash is no longer needed - and is the one
+  // thing a copy of this page's storage could be brute-forced from. Keep
+  // only the marker from now on.
+  const r = await checkWalletPasscode(passcode)
   const stored = useAuthStore.getState().passcode
-  if (r.ok && r.required && stored !== FRAME_PASSCODE) {
-    useAuthStore.getState().setPasscode(FRAME_PASSCODE)
-  }
+  if (r.ok && stored !== FRAME_PASSCODE) useAuthStore.getState().setPasscode(FRAME_PASSCODE)
   // The app accepted this passcode but the frame's copy is sealed with a
   // different one: value-moving signatures from this wallet would be refused.
   if (r.error === 'bad-passcode') {

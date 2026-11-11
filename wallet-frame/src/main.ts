@@ -80,14 +80,15 @@ const signer = (address: string) => privateKeyToAccount(vault.keyFor(address) as
 // the app's page could post a signing request. So the frame signs
 // transactions, typed data (permits, transfer authorizations), Solana
 // transactions, passkey signatures and raw hashes only within APPROVAL_MS of
-// the person's passcode - checked by the frame itself (`approve`; every
-// passcode / fingerprint entry in the app sends it). Like a hosted wallet's
-// MFA window: one entry covers a multi-step action (approve + swap, a bridge).
+// the person's passcode - entered and checked on this origin's own page
+// (confirm.html, 'confirm:begin'), never one typed in the app. Like a hosted
+// wallet's MFA window: one entry covers a multi-step action (approve + swap,
+// a bridge). A payment confirmed with its exact transaction opens no window.
 // Left free: MeshPort's own text messages (sign-in binding, chat key, profile
 // update - they move nothing), MeshPort name registration on Arc, and a
 // 0-value, low-fee transfer to the wallet itself (cancelling a stuck payment).
 // A wallet with no passcode on this device signs nothing that needs approval
-// until `approve` gives it one.
+// until 'passcode:check' gives it one and confirm.html approves.
 const APPROVAL_MS = 2 * 60_000
 const approvedUntil = new Map<string, number>()
 function requireApproval(address: string) {
@@ -418,18 +419,19 @@ const handlers: Handlers = {
     return { ticket: newTicket(a, phrase, what) }
   },
 
-  async approve({ address, passcode }) {
+  async 'passcode:check'({ address, passcode }) {
     const a = addr(address)
     if (!vault.hasPasscode(a)) {
       // No passcode on this device yet (its setup didn't finish): the passcode
       // the person just typed becomes this wallet's passcode here.
       const pc = passcodeParam(passcode, true)!
       await vault.setPasscode(a, pc)
-    } else {
-      await vault.checkPasscode(a, String(passcode ?? ''))
+      return { ok: true as const, set: true }
     }
-    approvedUntil.set(a.toLowerCase(), Date.now() + APPROVAL_MS)
-    return { approved: true as const, required: true, validForMs: APPROVAL_MS }
+    await vault.checkPasscode(a, String(passcode ?? ''))
+    // Nothing approved: a passcode typed in the app's page could have been
+    // recorded there. Signing needs it entered on confirm.html.
+    return { ok: true as const, set: false }
   },
 
   async 'sign:message'({ address, message }) {
