@@ -25,7 +25,13 @@ export function fromPhrase(phrase: string): { privateKey: Hex; address: Hex; phr
 }
 
 export function fromKey(secret: string): { privateKey: Hex; address: Hex } {
-  const k = (secret.trim().startsWith('0x') ? secret.trim() : '0x' + secret.trim()) as Hex
-  if (!/^0x[0-9a-fA-F]{64}$/.test(k)) throw new KeyError('That private key is not valid')
-  return { privateKey: k.toLowerCase() as Hex, address: privateKeyToAccount(k).address }
+  // With or without 0x / 0X, any letter case - as OKX's and other wallets'
+  // importers take it.
+  const t = secret.trim()
+  const k = ('0x' + (/^0x/i.test(t) ? t.slice(2) : t).toLowerCase()) as Hex
+  if (!/^0x[0-9a-f]{64}$/.test(k)) throw new KeyError('That private key is not valid')
+  // 64 hex characters that are not a key on the curve (all zeros, or past
+  // its order) have no address.
+  try { return { privateKey: k, address: privateKeyToAccount(k).address } }
+  catch { throw new KeyError('That private key is not valid') }
 }

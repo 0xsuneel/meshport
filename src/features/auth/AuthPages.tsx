@@ -515,7 +515,7 @@ export function ImportWalletPage() {
       if (!v.valid) { setError(!([12,15,18,21,24].includes(v.wordCount)) ? `Need 12 words, got ${v.wordCount}.` : `Invalid characters in words: ${v.invalidWords.slice(0,3).join(', ')} - use only letters`); setLoading(false); return }
       secret = input.trim()
     } else {
-      const cleaned = input.trim().replace(/^0x/, '')
+      const cleaned = input.trim().replace(/^0x/i, '') // 0x or 0X, as other wallets export it
       if (!/^[0-9a-fA-F]{64}$/.test(cleaned)) { setError('Private key must be 64 hex characters.'); setLoading(false); return }
       secret = '0x' + cleaned
     }
