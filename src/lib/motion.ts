@@ -47,7 +47,18 @@ export const DESKTOP_QUERY = '(min-width: 980px)'
 export function isDesktopNow(): boolean {
   return typeof window !== 'undefined' && !!window.matchMedia?.(DESKTOP_QUERY).matches
 }
+/**
+ * Opacity fades run frame by frame on the main thread, not handed to the
+ * browser's animation engine: framer-motion 11's hand-back at the end of a
+ * browser-run fade left one frame at the old value - every sheet's dim
+ * blinked to 0 at the end of opening and flashed full at the end of
+ * closing (measured frame by frame). Any `onUpdate` keeps a fade on the main
+ * thread; spread into each preset that fades opacity.
+ */
+export const MAIN_THREAD = { onUpdate: () => {} } as const
+
 const DESKTOP_POPUP = {
+  ...MAIN_THREAD,
   initial: { opacity: 0, scale: 0.96, y: 0 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.98, y: 0, transition: { duration: 0.12, ease: [0.4, 0, 1, 1] } },
@@ -101,7 +112,9 @@ export const LIGHT_DIM = 'rgba(0,0,0,0.16)'
 /** The dim behind every centred popup (PopupDim). As light as SHEET_DIM, for
  *  the same reason. */
 export const POPUP_DIM = 'rgba(6,10,14,0.4)'
+
 export const SHEET_BACKDROP = {
+  ...MAIN_THREAD,
   initial: { opacity: 0 },
   animate: { opacity: 1 },
   // Closing: the dim lifts on the sheet's own exit timing (same duration, same
@@ -126,6 +139,7 @@ const POPUP_GROW = [0.16, 1, 0.3, 1] as const
  *  together). */
 const POPUP_EXIT: Transition = { duration: 0.16, ease: EASE_OUT }
 export const DIALOG_CARD = byScreen({
+  ...MAIN_THREAD,
   initial: { opacity: 0.85, scale: 0.94, y: 10 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.97, y: 4, transition: POPUP_EXIT },
@@ -134,6 +148,7 @@ export const DIALOG_CARD = byScreen({
 /** Centred popups (DesktopDialogFrame / Sheet): a slightly livelier pop-in
  *  than DIALOG_CARD, which the success receipt keeps. */
 export const POPUP_CARD = byScreen({
+  ...MAIN_THREAD,
   initial: { opacity: 0.85, scale: 0.9, y: 22 },
   animate: { opacity: 1, scale: 1, y: 0 },
   // Closing: card and dim leave together on one clock (POPUP_EXIT), like
@@ -142,11 +157,13 @@ export const POPUP_CARD = byScreen({
   transition: { duration: 0.36, ease: POPUP_GROW, opacity: POPUP_FADE } as Transition, // no overshoot
 } as const, DESKTOP_POPUP)
 export const DIALOG_BACKDROP = byScreen({
+  ...MAIN_THREAD,
   initial: { opacity: 0 },
   animate: { opacity: 1 },
   exit: { opacity: 0, transition: POPUP_EXIT },
   transition: { duration: 0.18, ease: EASE_OUT },
 } as const, {
+  ...MAIN_THREAD,
   initial: { opacity: 0 },
   animate: { opacity: 1 },
   exit: { opacity: 0, transition: { duration: 0.12, ease: EASE_OUT } },
@@ -158,6 +175,7 @@ export const CONTROL_MOTION: Transition = { duration: 0.22, ease: EASE_OUT }
 
 // ── Dropdown menus (TokenMenu and every menu like it) ─────────────────────
 export const MENU_MOTION = {
+  ...MAIN_THREAD,
   initial: { opacity: 0, y: -6, scale: 0.98 },
   animate: { opacity: 1, y: 0, scale: 1 },
   exit: { opacity: 0, y: -4, scale: 0.98 },
@@ -197,6 +215,7 @@ export const TOAST_MOTION = {
 } as const
 /** Bottom snackbars (e.g. "Deleted · UNDO"): same, rising from below. */
 export const SNACKBAR_MOTION = {
+  ...MAIN_THREAD,
   initial: { opacity: 0, y: 16, scale: 0.98 },
   animate: { opacity: 1, y: 0, scale: 1 },
   exit: { opacity: 0, y: 12, scale: 0.98 },
@@ -205,6 +224,7 @@ export const SNACKBAR_MOTION = {
 
 // ── Errors ─────────────────────────────────────────────────────────────────
 export const ERROR_MOTION = {
+  ...MAIN_THREAD,
   initial: { opacity: 0, y: -4 },
   animate: { opacity: 1, y: 0 },
   exit: { opacity: 0 },

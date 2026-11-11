@@ -140,6 +140,8 @@ export async function payConfirmIntent(token: 'USDC' | 'EURC' | 'cirBTC', to: st
  */
 let prewarmed = false
 export function prewarmWalletConfirm(theme: 'dark' | 'light'): void {
+  // Not "done" until it actually loaded the page: a try before the wallet
+  // could confirm there (no passcode yet) is tried again later.
   if (prewarmed || typeof document === 'undefined' || !walletConfirmAddress()) return
   prewarmed = true
   void import('@/wallet').then(({ walletOrigin }) => {

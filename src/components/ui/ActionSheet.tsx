@@ -86,10 +86,13 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
           // passcode → processing), the sheet stays in the old step's
           // picture and slides away with it (ScreenPush) - never vanishes.
           <motion.div key={sid + '-dim'} data-push-keep="" {...SHEET_BACKDROP} {...(inPlace ? { initial: false, animate: undefined } : null)} variants={{ leave: leaveVariant(() => ({ ...SHEET_BACKDROP.exit, transition: sheetExit(sid, SHEET_PANEL.exit).transition })) }} exit="leave"
-            className={`${pos} inset-0`} style={{ background: SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40, willChange: 'opacity', pointerEvents: held ? 'none' : undefined,
-              // In place: a plain CSS fade (the animation library's short fade
-              // blinked to 0 for a frame at its end). Closing still uses `exit`.
-              ...(inPlace ? { opacity: held ? 0 : 1, transition: 'opacity 160ms ease-out' } : null) }} onClick={onClose} />,
+            className={`${pos} inset-0`} style={{ background: inPlace ? undefined : SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40, willChange: 'opacity', pointerEvents: held ? 'none' : undefined }} onClick={onClose}>
+            {/* In place: the dim shows by a plain CSS fade on its own layer
+                (the animation library's short fade blinked at its end), and
+                closing fades this outer layer - two layers, so neither one's
+                end snaps the other back for a frame. */}
+            {inPlace && <div aria-hidden style={{ position: 'absolute', inset: 0, background: SHEET_DIM, opacity: held ? 0 : 1, transition: 'opacity 160ms ease-out' }} />}
+          </motion.div>,
           <motion.div key={sid} data-push-keep="" {...sheetDrag(sid, onClose)} {...SHEET_PANEL}
             // No fade on the panel: the wallet's page takes touches only once it is
             // fully opaque (plus ~0.1 s for the browser to confirm it) - shown at

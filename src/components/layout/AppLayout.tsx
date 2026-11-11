@@ -149,6 +149,21 @@ export function AppLayout() {
   // payment servers to wake from cold. While the app is idle, load the main
   // pages one at a time and wake the servers, so first use is as fast as the
   // second. Skipped on a slow connection or Data Saver.
+  // The wallet's passcode page (wallet-frame/confirm.html), cached so every
+  // payment's passcode step opens at once - also on a slow connection, where
+  // a cold one hurts most (it's ~30 KB with its font), and again once a new
+  // wallet's passcode is set (before that the wallet can't confirm there yet,
+  // and the first try did nothing). lib/walletConfirm prewarmWalletConfirm.
+  const passcodeSet = useAuthStore(s => !!s.passcode)
+  useEffect(() => {
+    if (!walletAddress || !passcodeSet) return
+    const t = window.setTimeout(() => {
+      const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
+      import('@/lib/walletConfirm').then(m => m.prewarmWalletConfirm(theme)).catch(() => {})
+    }, 1200)
+    return () => window.clearTimeout(t)
+  }, [walletAddress, passcodeSet])
+
   useEffect(() => {
     if (!walletAddress || isSlowNetwork() || (navigator as any).connection?.saveData) return
     const pages = [
@@ -179,13 +194,7 @@ export function AppLayout() {
     const start = window.setTimeout(() => {
       import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
       import('@/lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
-      // The wallet's passcode page, cached so the first payment's passcode
-      // step opens at once (lib/walletConfirm).
-      cancelIdle = whenIdle(() => {
-        const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
-        import('@/lib/walletConfirm').then(m => m.prewarmWalletConfirm(theme)).catch(() => {})
-        next(0)
-      }, { timeout: 3000 })
+      next(0)
     }, 1500)
     return () => {
       cancelled = true
