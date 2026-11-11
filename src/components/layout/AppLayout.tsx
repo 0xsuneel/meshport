@@ -179,7 +179,13 @@ export function AppLayout() {
     const start = window.setTimeout(() => {
       import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
       import('@/lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
-      next(0)
+      // The wallet's passcode page, cached so the first payment's passcode
+      // step opens at once (lib/walletConfirm).
+      cancelIdle = whenIdle(() => {
+        const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
+        import('@/lib/walletConfirm').then(m => m.prewarmWalletConfirm(theme)).catch(() => {})
+        next(0)
+      }, { timeout: 3000 })
     }, 1500)
     return () => {
       cancelled = true

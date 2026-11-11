@@ -130,3 +130,29 @@ export async function payConfirmIntent(token: 'USDC' | 'EURC' | 'cirBTC', to: st
     return null
   }
 }
+
+/**
+ * Loads the wallet's confirm page once, hidden, so its code, styles and font
+ * are cached before the first payment: the passcode step then opens at once
+ * instead of waiting on downloads. Without a ticket the page only says the
+ * link expired; nothing is started or signed. Once per app run.
+ */
+let prewarmed = false
+export function prewarmWalletConfirm(theme: 'dark' | 'light'): void {
+  if (prewarmed || typeof document === 'undefined' || !walletConfirmAddress()) return
+  prewarmed = true
+  void import('@/wallet').then(({ walletOrigin }) => {
+    const f = document.createElement('iframe')
+    f.src = `${walletOrigin()}/confirm.html#theme=${theme}`
+    f.title = ''
+    f.tabIndex = -1
+    f.setAttribute('aria-hidden', 'true')
+    f.setAttribute('referrerpolicy', 'no-referrer')
+    // Laid out (so the font is fetched too) but out of sight and untouchable.
+    Object.assign(f.style, { position: 'fixed', left: '-10000px', top: '0', width: '320px', height: '120px', border: '0', visibility: 'hidden', pointerEvents: 'none' })
+    const drop = () => setTimeout(() => f.remove(), 3000)
+    f.addEventListener('load', drop, { once: true })
+    setTimeout(() => f.remove(), 20_000) // never left behind
+    document.body.appendChild(f)
+  }).catch(() => { prewarmed = false })
+}
