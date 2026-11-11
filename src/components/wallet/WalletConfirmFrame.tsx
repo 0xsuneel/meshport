@@ -26,7 +26,9 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
   onUnavailable: () => void
 }) {
   const [src, setSrc] = useState<string | null>(null)
-  const [height, setHeight] = useState(480)
+  // About the page's height (card + dots + keypad) until it reports its own,
+  // so the sheet doesn't jump when it does.
+  const [height, setHeight] = useState(() => (typeof window !== 'undefined' && window.matchMedia?.('(max-height: 700px)').matches ? 356 : 400))
   const [shown, setShown] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -73,7 +75,10 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
         const started = await startWalletConfirm({ intent, scope, request: request.request, summary: request.summary }, theme)
         ticket = started.ticket
         if (done) { void import('@/wallet').then(m => m.cancelConfirm(started.ticket)); return }
-        setSrc(started.url)
+        // A short phone: the page uses the app keypad's shorter keys, so the
+        // whole step fits in the sheet (it accepts the passcode only while
+        // fully in view).
+        setSrc(started.url + (window.matchMedia?.('(max-height: 700px)').matches ? '&short=1' : ''))
         void poll(started.address, intent)
       } catch (e) {
         if (done) return
@@ -112,7 +117,9 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
     )
   }
   return (
-    <div className="relative w-full" style={{ height }}>
+    // Never squeezed by the sheet's column: a frame shorter than its page
+    // scrolled inside, so the page was never fully in view and stayed locked.
+    <div className="relative w-full" style={{ height, flexShrink: 0 }}>
       {!shown && <div className="absolute inset-0 rounded-2xl bg-surface mp-pulse" aria-hidden />}
       {src && (
         <iframe
