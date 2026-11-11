@@ -12,7 +12,7 @@ describe('timingRow', () => {
     expect(row.steps).toEqual({ passcode: 413, wallet_open: 1290, mint: 61001 })
     expect(row.total_ms).toBe(61010)
     expect(row.token).toBe('USDC')
-    expect(row.error).toHaveLength(200)
+    expect(row.error).toHaveLength(400) // room for the message and the underlying error
   })
 })
 

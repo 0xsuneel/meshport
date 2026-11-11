@@ -38,7 +38,7 @@ export function timingRow(p: {
     token: p.token ?? 'USDC',
     tx_hash: p.txHash ?? null,
     ok: p.ok,
-    error: p.error ? p.error.slice(0, 200) : null,
+    error: p.error ? p.error.slice(0, 400) : null, // the message, then ' | ' and the underlying error when there is one
     total_ms: Math.round(p.totalMs),
     steps: Object.fromEntries(Object.entries(p.steps).map(([k, v]) => [k, Math.round(v)])),
     app_version: p.version ?? null,
