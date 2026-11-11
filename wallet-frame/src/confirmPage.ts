@@ -211,7 +211,10 @@ async function passcodeFromFingerprint(b: ConfirmBiometric): Promise<string> {
 // new card and types it again. Before the browser has said the page is in
 // view, digits are kept, and dropped if it turns out not to be.
 interface Req { ticket: string; view: IntentView | null; summary: ConfirmSummary | null; biometric: ConfirmBiometric | null }
-const HIDDEN_SAY = 'Bring this fully into view to continue'
+// Plain words, one short line (a second line would change the page's height,
+// which Chrome counts as moving it). Shown when the browser says something
+// covers or cuts off this page - another app drawing on top, a popup.
+const HIDDEN_SAY = 'Close anything covering the screen'
 
 function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSummary | null) {
   let req: Req | null = first
