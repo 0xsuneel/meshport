@@ -14,7 +14,7 @@
 import { toAccount } from 'viem/accounts'
 import { bytesToHex, type LocalAccount, type SignableMessage, type TransactionSerializable, type TypedDataDefinition } from 'viem'
 import { callWallet, WalletFrameError } from './frameClient'
-import type { ConfirmIntent, FrameTransaction, Hex } from './protocol'
+import type { ConfirmIntent, ConfirmRequest, FrameTransaction, Hex, WalletParams, WalletResult } from './protocol'
 
 export type WalletAccount = LocalAccount<'custom'> & { readonly meshportWallet: true }
 
@@ -42,15 +42,18 @@ function plainMessage(message: SignableMessage): string | { raw: Hex } {
 }
 
 /**
- * A frame request that may be refused for want of the passcode
- * ("approval-required", lib/walletApproval): ask for it once, then retry.
+ * A frame request that may be refused for want of a confirmation
+ * ("approval-required": no spend limit in force covers it): the person
+ * confirms this exact request in the wallet (lib/walletApproval), then it
+ * runs again with that confirmation - once.
  */
-export async function withApproval<T>(request: () => Promise<T>): Promise<T> {
-  try { return await request() } catch (e) {
+export async function approvedCall<M extends ConfirmRequest['method']>(method: M, params: WalletParams<M>): Promise<WalletResult<M>> {
+  try { return await callWallet(method, params) } catch (e) {
     if (!(e instanceof WalletFrameError) || e.code !== 'approval-required') throw e
     const { requestWalletApproval } = await import('@/lib/walletApproval')
-    if (!(await requestWalletApproval())) throw e
-    return request()
+    const confirmation = await requestWalletApproval({ method, params: params as Record<string, unknown> })
+    if (!confirmation) throw e
+    return callWallet(method, { ...params, confirmation } as WalletParams<M>)
   }
 }
 
@@ -90,7 +93,7 @@ export function walletAccount(address: string): WalletAccount {
   const base = toAccount({
     address: address as Hex,
     async signMessage({ message }) {
-      return (await timedFrame('signMessage', () => withApproval(() => callWallet('sign:message', { address, message: plainMessage(message) })))).signature
+      return (await timedFrame('signMessage', () => approvedCall('sign:message', { address, message: plainMessage(message) }))).signature
     },
     async signTransaction(transaction) {
       const plain = plainTransaction(transaction)
@@ -100,11 +103,11 @@ export function walletAccount(address: string): WalletAccount {
         confirmed.delete(key)
         return (await timedFrame('signTransaction', () => callWallet('sign:transaction', { address, transaction: plain, confirmation }))).serialized
       }
-      return (await timedFrame('signTransaction', () => withApproval(() => callWallet('sign:transaction', { address, transaction: plain })))).serialized
+      return (await timedFrame('signTransaction', () => approvedCall('sign:transaction', { address, transaction: plain }))).serialized
     },
     async signTypedData(typedData) {
       const { domain, types, primaryType, message } = typedData as TypedDataDefinition
-      return (await timedFrame('signTypedData', () => withApproval(() => callWallet('sign:typed-data', { address, typedData: { domain, types, primaryType, message } as Record<string, unknown> })))).signature
+      return (await timedFrame('signTypedData', () => approvedCall('sign:typed-data', { address, typedData: { domain, types, primaryType, message } as Record<string, unknown> }))).signature
     },
   })
   const account = Object.assign(base, { meshportWallet: true as const }) as WalletAccount

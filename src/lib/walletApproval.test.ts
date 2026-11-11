@@ -22,10 +22,13 @@ const checkFramePasscode = vi.fn(async (_a: string, pin: string) => {
 })
 vi.mock('@/wallet', () => ({ checkFramePasscode: (a: string, p: string) => checkFramePasscode(a, p) }))
 vi.mock('./errorReport', () => ({ reportClientError: vi.fn() }))
+// The frame's signing calls: refused for want of a confirmation, until one comes.
+const callWallet = vi.fn()
+vi.mock('@/wallet/frameClient', async importOriginal => ({ ...(await importOriginal<object>()), callWallet: (m: string, p: unknown) => callWallet(m, p) }))
 
 const security = await import('./security')
 const approval = await import('./walletApproval')
-const { withApproval } = await import('@/wallet/account')
+const { approvedCall } = await import('@/wallet/account')
 const { WalletFrameError } = await import('@/wallet/frameClient')
 
 const refused = () => new WalletFrameError('approval-required' as never, 'Enter your passcode')
@@ -53,25 +56,47 @@ describe('wallet approval', () => {
     expect(checkFramePasscode).not.toHaveBeenCalled()
   })
 
-  it('a refused signature asks once on the shared sheet, then signs', async () => {
-    let calls = 0
-    const sign = () => { calls++; return calls === 1 ? Promise.reject(refused()) : Promise.resolve('0xsigned') }
-    const p = withApproval(sign)
+  const params = { address: auth.walletAddress, typedData: { primaryType: 'Permit' } }
+
+  it('a refused signature shows that exact request on the shared sheet, then signs with its confirmation', async () => {
+    callWallet.mockReset()
+    callWallet.mockImplementation(async (_m: string, p: { confirmation?: string }) => { if (!p.confirmation) throw refused(); return { signature: '0xsigned' } })
+    const p = approvedCall('sign:typed-data', params)
     await vi.waitFor(() => expect(approval.useApprovalPrompt.getState().open).toBe(true))
-    approval.useApprovalPrompt.getState().resolve?.(true)
-    expect(await p).toBe('0xsigned')
-    expect(calls).toBe(2)
+    expect(approval.useApprovalPrompt.getState().request).toEqual({ method: 'sign:typed-data', params })
+    approval.useApprovalPrompt.getState().resolve?.('0xticket')
+    expect(await p).toEqual({ signature: '0xsigned' })
+    expect(callWallet).toHaveBeenCalledTimes(2)
+    expect(callWallet).toHaveBeenLastCalledWith('sign:typed-data', { ...params, confirmation: '0xticket' })
   })
 
   it('cancelling the sheet keeps it refused - nothing signs', async () => {
-    const p = withApproval(() => Promise.reject(refused()))
+    callWallet.mockReset()
+    callWallet.mockRejectedValue(refused())
+    const p = approvedCall('sign:typed-data', params)
     await vi.waitFor(() => expect(approval.useApprovalPrompt.getState().open).toBe(true))
-    approval.useApprovalPrompt.getState().resolve?.(false)
+    approval.useApprovalPrompt.getState().resolve?.(null)
     await expect(p).rejects.toThrow('Enter your passcode')
+    expect(callWallet).toHaveBeenCalledTimes(1)
+  })
+
+  it('two refused requests are asked one after the other, each with its own confirmation', async () => {
+    callWallet.mockReset()
+    callWallet.mockImplementation(async (_m: string, p: { confirmation?: string }) => { if (!p.confirmation) throw refused(); return { signature: p.confirmation } })
+    const a = approvedCall('sign:typed-data', params)
+    const b = approvedCall('sign:message', { address: auth.walletAddress, message: 'hi' })
+    await vi.waitFor(() => expect(approval.useApprovalPrompt.getState().request?.method).toBe('sign:typed-data'))
+    approval.useApprovalPrompt.getState().resolve?.('0xa')
+    await vi.waitFor(() => expect(approval.useApprovalPrompt.getState().request?.method).toBe('sign:message'))
+    approval.useApprovalPrompt.getState().resolve?.('0xb')
+    expect(await a).toEqual({ signature: '0xa' })
+    expect(await b).toEqual({ signature: '0xb' })
   })
 
   it('background work never opens the sheet', async () => {
-    await expect(approval.inBackground(() => withApproval(() => Promise.reject(refused())))).rejects.toThrow()
+    callWallet.mockReset()
+    callWallet.mockRejectedValue(refused())
+    await expect(approval.inBackground(() => approvedCall('sign:typed-data', params))).rejects.toThrow()
     expect(approval.useApprovalPrompt.getState().open).toBe(false)
   })
 

@@ -6,6 +6,7 @@ import { startMoveTimer, type MoveTimer } from '@/lib/moveTimings'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { HistoryIcon } from '@/components/ui/HistoryRow'
 import { PinSheet } from '@/components/ui/PinSheet'
+import { spendScope } from '@/lib/walletConfirm'
 import { AmountKeypad, sanitizeAmountInput, tokenDecimals } from '@/components/ui/AmountKeypad'
 import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { AmountField } from '@/components/ui/AmountField'
@@ -2063,7 +2064,9 @@ export function SwapPage() {
 
       {/* Passcode step - opens on Swap tap, same page, no navigation. With no
           passcode set, a plain "Confirm Swap" button stands in for the keypad. */}
-      <PinSheet walletConfirm
+      <PinSheet
+        // The wallet counts the approval and the swap against what's being swapped.
+        walletConfirm={{ scope: spendScope([{ asset: tokenIn.id as 'USDC' | 'EURC' | 'cirBTC', amount: parseFloat(amountIn || '0') }]) }}
         open={showPasscodeSheet}
         onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
         id="sw-pass"

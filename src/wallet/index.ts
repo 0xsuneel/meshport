@@ -6,7 +6,7 @@
 
 import { callWallet, WalletFrameError, walletOrigin } from './frameClient'
 import { walletAccount, type WalletAccount } from './account'
-import type { ConfirmBiometric, ConfirmIntent, ConfirmOutcome, ConfirmSummary, PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
+import type { ConfirmBiometric, ConfirmIntent, ConfirmOutcome, ConfirmRequest, ConfirmScope, ConfirmSummary, PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
 
 export { walletAccount, quoteAccount, isWalletAccount, toEthersSigner, createWalletAdapter, type WalletAccount } from './account'
 export { WalletFrameError, walletOrigin, walletReady } from './frameClient'
@@ -107,8 +107,8 @@ export async function revealUrl(address: string, what: 'mnemonic' | 'privateKey'
  * (components/wallet/WalletPasskeyFrame.tsx) and the ticket to wait on.
  */
 export async function beginPasskey(request: PasskeyRequest, theme: 'dark' | 'light' = 'dark'): Promise<{ ticket: string; url: string }> {
-  const { withApproval } = await import('./account')
-  const { ticket } = await withApproval(() => callWallet('passkey:begin', request))
+  const { approvedCall } = await import('./account')
+  const { ticket } = await approvedCall('passkey:begin', request)
   return { ticket, url: `${walletOrigin()}/passkey.html#t=${ticket}&theme=${theme}` }
 }
 
@@ -128,8 +128,8 @@ export async function awaitPasskey(ticket: string, opts: { signal?: AbortSignal;
  * passcode in wallet-frame/confirm.html (components/wallet/WalletConfirmFrame).
  * Returns the URL for that visible iframe and the ticket to wait on.
  */
-export async function beginConfirm(address: string, request: { intent?: ConfirmIntent; summary?: ConfirmSummary; biometric?: ConfirmBiometric | null }, theme: 'dark' | 'light' = 'dark'): Promise<{ ticket: string; url: string }> {
-  const { ticket } = await callWallet('confirm:begin', { address, intent: request.intent, summary: request.summary, biometric: request.biometric ?? undefined })
+export async function beginConfirm(address: string, request: { intent?: ConfirmIntent; scope?: ConfirmScope; request?: ConfirmRequest; summary?: ConfirmSummary; biometric?: ConfirmBiometric | null }, theme: 'dark' | 'light' = 'dark'): Promise<{ ticket: string; url: string }> {
+  const { ticket } = await callWallet('confirm:begin', { address, intent: request.intent, scope: request.scope, request: request.request, summary: request.summary, biometric: request.biometric ?? undefined })
   return { ticket, url: `${walletOrigin()}/confirm.html#t=${ticket}&theme=${theme}` }
 }
 

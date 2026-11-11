@@ -80,15 +80,17 @@ function card(view: IntentView | null, summary: ConfirmSummary | null): HTMLElem
     c.append(el('div', 'to-address', view.to))
     for (const r of view.rows) c.append(row(r.label, r.value))
     for (const w of view.warnings) c.append(el('p', 'warn', w))
-    c.append(el('p', 'source', summary?.name
-      ? 'Amount and address read from the transaction by your wallet. The name is from MeshPort.'
-      : 'Read from the transaction by your wallet.'))
+    c.append(el('p', 'source', view.source
+      ? (summary?.name ? `${view.source} The name is from MeshPort.` : view.source)
+      : summary?.name
+        ? 'Amount and address read from the transaction by your wallet. The name is from MeshPort.'
+        : 'Read from the transaction by your wallet.'))
   } else if (summary) {
     const head = el('div', 'card-head')
     head.append(el('span', 'card-label', summary.label), amountNode(summary.amount ?? '', summary.unit))
     c.append(head, el('div', 'to-name', summary.name))
     if (summary.detail) c.append(el('div', 'muted', summary.detail))
-    c.append(el('p', 'source', 'Details from the MeshPort app. Approving lets your wallet sign for this action for 2 minutes.'))
+    c.append(el('p', 'source', 'Details from the MeshPort app.'))
   }
   return c
 }

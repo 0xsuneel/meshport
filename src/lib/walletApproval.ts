@@ -3,14 +3,16 @@
 // Solana transactions only after the person approved them on the frame's own
 // page (wallet-frame/confirm.html, lib/walletConfirm) - the passcode or
 // fingerprint is entered there, inside the wallet origin, never in the app.
-// A payment is confirmed with its exact transaction; other actions open a
-// 2-minute approval window. So:
+// A payment is confirmed with its exact transaction; a swap, bridge or claim
+// with a spend limit the frame counts every signature against for 2 minutes.
+// So:
 //   - a passcode typed in the app (lock screen, a keypad fallback) is only
 //     CHECKED by the frame here ('passcode:check', with its lockout) - it
 //     approves nothing;
-//   - an action the frame refuses ("approval-required" - one with no PIN
-//     step of its own, or after the 2 minutes) asks once, on one shared
-//     sheet (WalletApprovalPrompt - the wallet's own page), then runs again;
+//   - a signature the frame refuses ("approval-required" - no limit covers
+//     it, or the 2 minutes are over) is shown, exactly, on one shared sheet
+//     (WalletApprovalPrompt - the wallet's own page); once confirmed there it
+//     runs again with that confirmation, which signs only it;
 //   - background work (claims finishing, recoveries, expired P2P trades)
 //     never asks: it runs only while an approval is fresh (`approvalFresh`)
 //     and otherwise waits for the next one.
@@ -19,6 +21,7 @@ import { create } from 'zustand'
 import { useAuthStore } from '@/store'
 import { FRAME_PASSCODE, WALLET_UNAVAILABLE, onPasscodeVerified, setFramePasscodeCheck } from './security'
 import { isWalletConfirmToken, walletConfirmTokenValid } from './walletConfirmToken'
+import type { ConfirmRequest } from '@/wallet/protocol'
 
 const FRAME_SOURCES = new Set(['create', 'import-seed', 'import-privkey'])
 // A little under the frame's own 2 minutes, so a job that starts never runs out.
@@ -76,7 +79,7 @@ onPasscodeVerified(async passcode => {
   }
 })
 
-/** The wallet's own confirm page opened the approval window (lib/walletConfirm). */
+/** The wallet's own confirm page started a spend limit (lib/walletConfirm). */
 export function noteWalletApproved(address: string): void {
   approvedAt.set(address.toLowerCase(), Date.now())
 }
@@ -88,8 +91,14 @@ export function approvalFresh(): boolean {
 }
 
 // ── The shared passcode sheet ────────────────────────────────────────────────
-interface ApprovalPrompt { open: boolean; resolve: ((ok: boolean) => void) | null }
-export const useApprovalPrompt = create<ApprovalPrompt>(() => ({ open: false, resolve: null }))
+interface ApprovalPrompt {
+  open: boolean
+  /** The exact request to confirm in the wallet. */
+  request: ConfirmRequest | null
+  /** The confirmation ticket, or null when the person didn't confirm. */
+  resolve: ((ticket: string | null) => void) | null
+}
+export const useApprovalPrompt = create<ApprovalPrompt>(() => ({ open: false, request: null, resolve: null }))
 
 let quiet = 0
 /** Run background signing work: a refusal there never opens the sheet. */
@@ -98,13 +107,17 @@ export async function inBackground<T>(work: () => Promise<T>): Promise<T> {
   try { return await work() } finally { quiet-- }
 }
 
-let pending: Promise<boolean> | null = null
-/** Ask for the passcode on the shared sheet. True once the frame accepted it. */
-export function requestWalletApproval(): Promise<boolean> {
-  if (quiet > 0) return Promise.resolve(false)
-  if (pending) return pending
-  pending = new Promise<boolean>(resolve => {
-    useApprovalPrompt.setState({ open: true, resolve: ok => { pending = null; useApprovalPrompt.setState({ open: false, resolve: null }); resolve(ok) } })
-  })
-  return pending
+// One sheet at a time: a second request waits for the first to be answered.
+let queue: Promise<unknown> = Promise.resolve()
+/** Have the person confirm exactly `request` in the wallet. Its ticket, or null. */
+export function requestWalletApproval(request: ConfirmRequest): Promise<string | null> {
+  if (quiet > 0) return Promise.resolve(null)
+  const next = queue.then(() => new Promise<string | null>(resolve => {
+    useApprovalPrompt.setState({
+      open: true, request,
+      resolve: ticket => { useApprovalPrompt.setState({ open: false, request: null, resolve: null }); resolve(ticket) },
+    })
+  }))
+  queue = next.catch(() => null)
+  return next
 }

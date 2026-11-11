@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { WalletConfirmFrame, type WalletConfirmRequest } from '@/components/wallet/WalletConfirmFrame'
 import { walletConfirmAddress } from '@/lib/walletConfirm'
-import type { ConfirmIntent, ConfirmSummary } from '@/wallet/protocol'
+import type { ConfirmIntent, ConfirmRequest, ConfirmScope, ConfirmSummary } from '@/wallet/protocol'
 import { ActionSheet } from './ActionSheet'
 import { DesktopTransactionAuthDialog } from './DesktopTransactionAuthDialog'
 import { PinKeypad } from './PinKeypad'
@@ -68,11 +68,15 @@ export interface PinSheetProps {
   /**
    * Money moves: the passcode is typed in the wallet's own page instead of
    * this keypad (lib/walletConfirm), for wallets kept in the wallet frame.
-   * `intent`: the exact transaction (Pay) - the wallet shows what it reads
-   * from it and signs only that. Once approved, onChange / onComplete get a
-   * token in place of the passcode, which the passcode checks accept.
+   * What the wallet binds the approval to, read by the wallet itself:
+   * `intent`, the exact transaction (Pay) - signed once; `scope`, a spend
+   * limit (lib/walletConfirm spendScope) for the next 2 minutes; `request`,
+   * one exact signature request. With none of them (an amount not known
+   * yet) this keypad shows, and each signature is confirmed on its own.
+   * Once approved, onChange / onComplete get a token in place of the
+   * passcode, which the passcode checks accept.
    */
-  walletConfirm?: { intent?: () => Promise<ConfirmIntent | null>; summary?: ConfirmSummary } | true
+  walletConfirm?: { intent?: () => Promise<ConfirmIntent | null>; scope?: ConfirmScope | null; request?: ConfirmRequest | null; summary?: ConfirmSummary }
 }
 
 export function PinSheet(p: PinSheetProps) {
@@ -100,11 +104,12 @@ export function PinSheet(p: PinSheetProps) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.value, p.open])
-  const inWallet = !!p.walletConfirm && !p.fallbackConfirm && !keypadOnly && !!walletConfirmAddress()
+  const wc = p.walletConfirm
+  const inWallet = !!wc && !!(wc.intent || wc.scope || wc.request) && !p.fallbackConfirm && !keypadOnly && !!walletConfirmAddress()
   const subtitleText = typeof p.subtitle === 'string' ? p.subtitle : undefined
   const request: WalletConfirmRequest | null = inWallet ? {
-    intent: p.walletConfirm === true ? undefined : p.walletConfirm!.intent,
-    summary: p.walletConfirm !== true && p.walletConfirm?.summary ? p.walletConfirm.summary
+    intent: wc!.intent, scope: wc!.scope, request: wc!.request,
+    summary: wc!.summary ? wc!.summary
       : p.card
       ? { label: p.card.label, name: p.card.name, detail: p.card.detail, amount: p.card.amount, unit: p.card.unit }
       : { label: p.title, name: subtitleText || p.title, amount: p.amountLabel },

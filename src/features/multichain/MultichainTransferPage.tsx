@@ -9,6 +9,7 @@ import { EASE_OUT, PUSH_OPEN_MS, PUSH_EASE_CSS, DESKTOP_FADE_KEYFRAMES, DESKTOP_
 import { pushLook } from '@/lib/pushLook'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PinSheet } from '@/components/ui/PinSheet'
+import { bridgeScope } from '@/lib/walletConfirm'
 import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { HubPage, HubPageBack, HUB_PANEL_BOX } from '@/components/multichain/HubPage'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
@@ -4258,7 +4259,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           right-hand panel. A small summary card (where and how much); the fee
           breakdown is on the Review page underneath. Phone Back closes the
           sheet (back to Review) like any sheet. ── */}
-      <PinSheet walletConfirm open={step === 'confirm'} id="mt-pass"
+      <PinSheet open={step === 'confirm'} id="mt-pass"
+        // The amount, the quoted fees and a little room for them to move.
+        walletConfirm={{ scope: tokenSym === 'USDC' || tokenSym === 'EURC' ? bridgeScope(tokenSym, numAmount, feeEstimate.totalFee + 0.5) : null }}
         onClose={() => { setStep('review'); setPassEntry(''); setPassError('') }}
         title={desktopInput ? 'Authorize Transfer' : 'Confirm transfer'}
         subtitle={desktopInput ? `To ${chain.name}` : `Authorise ${tokenChar}${fmtTok(numAmount)} ${tokenSym} to ${chain.name}`}
