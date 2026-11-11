@@ -12,6 +12,7 @@ import { WalletConfirmFrame, type WalletConfirmRequest } from '@/components/wall
 import { walletConfirmAddress } from '@/lib/walletConfirm'
 import type { ConfirmIntent, ConfirmRequest, ConfirmScope, ConfirmSummary } from '@/wallet/protocol'
 import { ActionSheet } from './ActionSheet'
+import { waitOnPressedButton } from '@/lib/pressedButton'
 import { DesktopTransactionAuthDialog } from './DesktopTransactionAuthDialog'
 import { PinKeypad } from './PinKeypad'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -88,9 +89,12 @@ export function PinSheet(p: PinSheetProps) {
   // clears the token (its send failed and it asks again).
   const [attempt, setAttempt] = useState(0)
   const [keypadOnly, setKeypadOnly] = useState(false)
+  // The wallet's page is ready and has settled (WalletConfirmFrame): until
+  // then the sheet is laid out but not shown, and the pressed button waits.
+  const [usable, setUsable] = useState(false)
   const pending = useRef<{ token: string; via: boolean } | null>(null)
   const lastValue = useRef(p.value)
-  useEffect(() => { if (p.open) { setAttempt(a => a + 1); setKeypadOnly(false) } }, [p.open])
+  useEffect(() => { if (p.open) { setAttempt(a => a + 1); setKeypadOnly(false); setUsable(false) } }, [p.open])
   useEffect(() => {
     const was = lastValue.current
     lastValue.current = p.value
@@ -118,8 +122,25 @@ export function PinSheet(p: PinSheetProps) {
   const walletPad = request && (p.open
     ? <WalletConfirmFrame key={attempt} request={request}
         onUnavailable={() => setKeypadOnly(true)}
+        onUsable={() => setUsable(true)}
         onApproved={(token, via) => { pending.current = { token, via }; p.onChange(token) }} />
     : <div className="h-[480px]" aria-hidden />)
+
+  // Phone: the sheet with the wallet's page appears in place once the page
+  // can take touches - a sheet that slid up had dead keys for half a second
+  // (ActionSheet inPlace). Meanwhile the button that was pressed shows three
+  // dots. Never held for long: shown anyway after 4 s.
+  const held = !!walletPad && p.open && !usable && !desktop
+  const openedInPlace = useRef(false)
+  if (!p.open) openedInPlace.current = false
+  else if (walletPad) openedInPlace.current = true
+  const inPlace = openedInPlace.current
+  useEffect(() => {
+    if (!held) return
+    const end = waitOnPressedButton()
+    const t = setTimeout(() => setUsable(true), 4000)
+    return () => { end(); clearTimeout(t) }
+  }, [held])
 
   const pad = walletPad ? walletPad : p.fallbackConfirm ? (
     <button type="button" onClick={p.fallbackConfirm.onConfirm}
@@ -149,7 +170,8 @@ export function PinSheet(p: PinSheetProps) {
     )
   }
   return (
-    <ActionSheet open={p.open} onClose={close} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={p.backClose ?? true} zIndex={p.zIndex} leaveUnder={p.leaveUnder}>
+    <ActionSheet open={p.open} onClose={close} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={p.backClose ?? true} zIndex={p.zIndex} leaveUnder={p.leaveUnder}
+      inPlace={inPlace} held={held}>
       <div className="flex flex-col px-6 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] overflow-y-auto">
         {p.header}
         {/* With the wallet's page, its card sits 16px under the title (as the

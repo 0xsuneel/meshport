@@ -26,7 +26,7 @@ const leaveVariant = (own: object | (() => object)) => (under?: boolean): Target
   ? { opacity: 0, transition: { delay: PUSH_OPEN_MS / 1000, duration: 0 } }
   : (typeof own === 'function' ? own() : own) as TargetAndTransition
 
-export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, height = 'auto', backClose = true, desktopMaxWidth = 440, zIndex, leaveUnder = false, children }: {
+export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, height = 'auto', backClose = true, desktopMaxWidth = 440, zIndex, leaveUnder = false, inPlace = false, held = false, children }: {
   open: boolean
   onClose: () => void
   /** Defaults to the screen width (≥980px = desktop). */
@@ -47,6 +47,14 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
    *  the processing page): it stays exactly as it is until that page has
    *  arrived, then goes at once - no slide down / dim fade under the page. */
   leaveUnder?: boolean
+  /** Phone: appears where it stands (a short fade) instead of sliding up.
+   *  For a sheet holding another site's page (the wallet's passcode step):
+   *  Chrome ignores touches on such a page for half a second after it moves,
+   *  so a slide left its keys dead; a fade doesn't move it. */
+  inPlace?: boolean
+  /** With inPlace: laid out in its final place but not shown yet (and not
+   *  touchable) - while its content gets ready. */
+  held?: boolean
   children: ReactNode
 }) {
   const autoId = useId()
@@ -77,12 +85,17 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
           // data-push-keep: if the step under an open sheet changes (Bring's
           // passcode → processing), the sheet stays in the old step's
           // picture and slides away with it (ScreenPush) - never vanishes.
-          <motion.div key={sid + '-dim'} data-push-keep="" {...SHEET_BACKDROP} variants={{ leave: leaveVariant(() => ({ ...SHEET_BACKDROP.exit, transition: sheetExit(sid, SHEET_PANEL.exit).transition })) }} exit="leave"
-            className={`${pos} inset-0`} style={{ background: SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40, willChange: 'opacity' }} onClick={onClose} />,
-          <motion.div key={sid} data-push-keep="" {...sheetDrag(sid, onClose)} {...SHEET_PANEL} variants={{ leave: leaveVariant(() => sheetExit(sid, SHEET_PANEL.exit)) }} exit="leave"
+          <motion.div key={sid + '-dim'} data-push-keep="" {...SHEET_BACKDROP} {...(inPlace ? { animate: { opacity: held ? 0 : 1 }, transition: { duration: 0.14 } } : null)} variants={{ leave: leaveVariant(() => ({ ...SHEET_BACKDROP.exit, transition: sheetExit(sid, SHEET_PANEL.exit).transition })) }} exit="leave"
+            className={`${pos} inset-0`} style={{ background: SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40, willChange: 'opacity', pointerEvents: held ? 'none' : undefined }} onClick={onClose} />,
+          <motion.div key={sid} data-push-keep="" {...sheetDrag(sid, onClose)} {...SHEET_PANEL}
+            // No fade on the panel: the wallet's page takes touches only once it is
+            // fully opaque (plus ~0.1 s for the browser to confirm it) - shown at
+            // once, that is over before anyone can react; the dim still fades.
+            {...(inPlace ? { initial: { y: 0, opacity: 0 }, animate: { y: 0, opacity: held ? 0 : 1 }, transition: { duration: 0 } } : null)}
+            aria-hidden={held || undefined} variants={{ leave: leaveVariant(() => sheetExit(sid, SHEET_PANEL.exit)) }} exit="leave"
             role="dialog" aria-modal="true"
             className={`${pos} bottom-0 left-0 right-0 bg-surface border-t border-border rounded-t-3xl flex flex-col${fixed ? ' mx-auto max-w-md' : ''}${height === 'full' ? ' h-[calc(var(--frame-h,100dvh)*0.92)]' : ''}`}
-            style={{ maxHeight: 'calc(100% - 40px)', zIndex: z, boxShadow: '0 80px 0 var(--surface)' }}>
+            style={{ maxHeight: 'calc(100% - 40px)', zIndex: z, boxShadow: '0 80px 0 var(--surface)', pointerEvents: held ? 'none' : undefined }}>
             <div data-sheet-handle className="flex justify-center pt-2.5 pb-1 flex-shrink-0">
               <div style={{ width: 38, height: 5, borderRadius: 3, background: 'var(--border)' }} />
             </div>
