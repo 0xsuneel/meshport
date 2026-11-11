@@ -37,6 +37,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
   const [failed, setFailed] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   const frameRef = useRef<HTMLIFrameElement>(null)
+  const onFrameLoad = useRef<(() => void) | null>(null)
   const latest = useRef({ onApproved, onUnavailable })
   latest.current = { onApproved, onUnavailable }
 
@@ -47,6 +48,17 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
     let timer: ReturnType<typeof setTimeout> | null = null
     let fallback: ReturnType<typeof setTimeout> | null = null
     let ready = false
+    // A wallet page from before slots (the two sites deploying a moment
+    // apart) loads but never says it's ready: then it is opened by ticket -
+    // at once if the ticket is known, else as soon as it is.
+    let ticketUrl: string | null = null
+    let oldPage = false
+    let switched = false
+    const byTicket = () => { if (!done && !ready && !switched && ticketUrl) { switched = true; setSrc(ticketUrl) } }
+    onFrameLoad.current = () => {
+      if (ready || switched) return
+      setTimeout(() => { if (!done && !ready) { oldPage = true; byTicket() } }, 500)
+    }
     setFailed(null); setShown(false); setHeight(null)
     const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
     // The wallet's page opens now, by a slot name, before the request exists:
@@ -88,9 +100,10 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
         const started = await startWalletConfirm({ intent, scope, request: request.request, summary: request.summary }, theme, slot)
         ticket = started.ticket
         if (done) { void import('@/wallet').then(m => m.cancelConfirm(started.ticket)); return }
-        // A wallet page from before slots (the two sites deploying a moment
-        // apart) can't open by slot: if it hasn't come up, open it by ticket.
-        if (!ready) fallback = setTimeout(() => { if (!done && !ready) setSrc(started.url + (short ? '&short=1' : '')) }, 2500)
+        ticketUrl = started.url + (short ? '&short=1' : '')
+        if (oldPage) byTicket()
+        // No load event seen either way: the same, a little later.
+        else if (!ready) fallback = setTimeout(byTicket, 2500)
         void poll(started.address, intent)
       } catch (e) {
         if (done) return
@@ -143,9 +156,13 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
       {!live && <ConfirmStandIn summary={request.summary} short={short} />}
       {src && (
         <iframe
+          // A new address is a new page: the slot and ticket addresses differ
+          // only after '#', which on its own wouldn't reload it.
+          key={src}
           ref={frameRef}
           src={src}
           title="Confirm in your wallet"
+          onLoad={() => onFrameLoad.current?.()}
           allow="publickey-credentials-get"
           referrerPolicy="no-referrer"
           className="block w-full border-0"
