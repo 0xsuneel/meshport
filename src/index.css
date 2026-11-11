@@ -1034,3 +1034,25 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
   99.193% { opacity: 0; }
   100% { transform: translateY(107%); opacity: 0; }
 }
+
+/* A pressed button while its next step gets ready (lib/pressedButton.ts): the
+   label gives way to three dots, in the label's colour. The button keeps its
+   size and can't be pressed again meanwhile. */
+.mp-btn-wait { position: relative; color: transparent !important; pointer-events: none; }
+.mp-btn-wait > * { visibility: hidden; }
+.mp-btn-wait::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 34px; height: 8px; margin: -4px 0 0 -17px; visibility: visible;
+  --d: var(--mp-wait-color, #fff);
+  background:
+    radial-gradient(circle closest-side, var(--d) 92%, transparent) 0 50% / 8px 8px no-repeat,
+    radial-gradient(circle closest-side, var(--d) 92%, transparent) 50% 50% / 8px 8px no-repeat,
+    radial-gradient(circle closest-side, var(--d) 92%, transparent) 100% 50% / 8px 8px no-repeat;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mp-btn-wait::after { animation: mpBtnDots 0.9s linear infinite; }
+  @keyframes mpBtnDots {
+    0%, 100% { background-size: 8px 8px, 5px 5px, 5px 5px; opacity: 1; }
+    33% { background-size: 5px 5px, 8px 8px, 5px 5px; }
+    66% { background-size: 5px 5px, 5px 5px, 8px 8px; }
+  }
+}

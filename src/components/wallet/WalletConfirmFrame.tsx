@@ -21,10 +21,18 @@ export interface WalletConfirmRequest {
   summary: ConfirmSummary
 }
 
-export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
+// Chrome ignores touches on another site's page for half a second after it
+// moves or changes size. The sheet waits this long with the page sitting
+// still (out of sight) before showing it, so its keys work on the first tap.
+const SETTLE_MS = 560
+
+export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsable }: {
   request: WalletConfirmRequest
   onApproved: (token: string, viaBiometric: boolean) => void
   onUnavailable: () => void
+  /** The page is drawn and has sat still long enough to take touches (or it
+   *  failed and shows that): the sheet can be shown now. */
+  onUsable?: () => void
 }) {
   const [src, setSrc] = useState<string | null>(null)
   // About the page's height (card + dots + keypad) until it reports its own,
@@ -33,13 +41,38 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
   // The page's own height once it reports it; until then the stand-in below
   // sets the height (it is the same layout).
   const [height, setHeight] = useState<number | null>(null)
+  // The page's height, known ahead (its layout is the stand-in's): the frame
+  // has its final size from the start, so nothing moves when the page reports
+  // it - any move would restart Chrome's half second.
+  const estimate = (short ? 357 : 415) - (request.summary.detail ? 0 : 13)
   const [shown, setShown] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   const frameRef = useRef<HTMLIFrameElement>(null)
   const onFrameLoad = useRef<(() => void) | null>(null)
-  const latest = useRef({ onApproved, onUnavailable })
-  latest.current = { onApproved, onUnavailable }
+  const latest = useRef({ onApproved, onUnavailable, onUsable })
+  latest.current = { onApproved, onUnavailable, onUsable }
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  // Usable = drawn, sized, and its place on screen unchanged for SETTLE_MS
+  // (counted from when it was laid out - only a later move starts it again).
+  const live = shown && height !== null
+  const liveRef = useRef(live)
+  liveRef.current = live
+  useEffect(() => {
+    if (failed) { latest.current.onUsable?.(); return }
+    let raf = 0, last = '', lastMove = performance.now(), told = false
+    const tick = () => {
+      const r = boxRef.current?.getBoundingClientRect()
+      const at = r ? `${r.left.toFixed(1)},${r.top.toFixed(1)},${r.width.toFixed(1)},${r.height.toFixed(1)}` : ''
+      const now = performance.now()
+      if (at !== last) { last = at; lastMove = now }
+      if (liveRef.current && now - lastMove >= SETTLE_MS && !told) { told = true; latest.current.onUsable?.(); return }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [attempt, failed, src])
 
   useEffect(() => {
     let done = false
@@ -142,13 +175,12 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable }: {
       </div>
     )
   }
-  // Switch to the page once it is drawn AND has said how tall it is ('ready'
+  // The page shows once it is drawn AND has said how tall it is ('ready'
   // comes a frame before its size): never a frame with neither.
-  const live = shown && height !== null
   return (
     // Never squeezed by the sheet's column: a frame shorter than its page
     // scrolled inside, so the page was never fully in view and stayed locked.
-    <div className="relative w-full" style={{ height: live ? height! : undefined, flexShrink: 0 }}>
+    <div ref={boxRef} className="relative w-full" style={{ height: live ? height! : estimate, flexShrink: 0 }}>
       {/* On the first frame: the same card, dots and keys the wallet's page
           draws, so the sheet never opens blank. It takes no input - the
           passcode is only ever typed in the wallet's page, which loads on top
