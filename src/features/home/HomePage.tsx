@@ -1687,7 +1687,7 @@ function BowedShapeCard({
           <path d={path || fallbackPath} fill={background} />
         </svg>
       )}
-      <div style={{ position: 'relative', zIndex: 1, padding: flat ? '0 18px' : '16px 26px 16px', boxSizing: 'border-box',
+      <div style={{ position: 'relative', zIndex: 1, padding: flat ? '0 16px' : '16px 26px 16px', boxSizing: 'border-box',
         ...(fill ? { height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' } : null) }}>
         {children}
       </div>
@@ -1718,7 +1718,7 @@ function MultichainHubCard({
   // columns) rather than the full card.
   const statFontSize = (n: number) => {
     const digitCount = Math.trunc(Math.abs(n)).toString().length
-    return digitCount >= 9 ? 15 : digitCount >= 8 ? 17 : digitCount >= 7 ? 20 : digitCount >= 6 ? 23 : digitCount >= 5 ? 27 : 32
+    return digitCount >= 9 ? 13.5 : digitCount >= 8 ? 15.3 : digitCount >= 7 ? 18 : digitCount >= 6 ? 20.7 : digitCount >= 5 ? 24.3 : 28.8
   }
   // Whole part large, cents smaller + lighter (same treatment as the balance card).
   const renderStat = (n: number, _size: number | string) => {
@@ -1750,47 +1750,47 @@ function MultichainHubCard({
           on the right (replaces the old centered title + translucent
           globe badge, per the approved reference layout). */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.6, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
           {hub('Multichain Hub')}
           <button onClick={onToggleHidden} aria-label="Toggle balance visibility" className="mp-hit"
-            style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
+            style={{ width: 24, height: 24, borderRadius: '50%', background: 'transparent', border: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             {balanceHidden ? (
-              <svg width="19" height="15.5" viewBox="0 0 22 18" fill="none">
+              <svg width="17" height="14" viewBox="0 0 22 18" fill="none">
                 <path d="M2 2l18 14" stroke="rgba(255,255,255,.8)" strokeWidth="1.5" strokeLinecap="round"/>
                 <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke="rgba(255,255,255,.8)" strokeWidth="1.5" strokeLinecap="round"/>
                 <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke="rgba(255,255,255,.8)" strokeWidth="1.5" strokeLinecap="round"/>
                 <circle cx="11" cy="9" r="3" stroke="rgba(255,255,255,.8)" strokeWidth="1.5"/>
               </svg>
             ) : (
-              <svg width="19" height="13.5" viewBox="0 0 22 16" fill="none">
+              <svg width="17" height="12" viewBox="0 0 22 16" fill="none">
                 <ellipse cx="11" cy="8" rx="10" ry="7" stroke="rgba(255,255,255,.8)" strokeWidth="1.5"/>
                 <circle cx="11" cy="8" r="3" stroke="rgba(255,255,255,.8)" strokeWidth="1.5"/>
               </svg>
             )}
           </button>
         </span>
-        <span style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--accent)',
+        <span style={{ width: 31, height: 31, borderRadius: '50%', background: 'var(--accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <ActionIcon name="hub" size={18} />
+          <ActionIcon name="hub" size={16} />
         </span>
       </div>
 
       {/* Stat row - Available To Transfer / Available To Bring, sitting
           directly on the card (no separate white pill), each figure
           still shrinking independently via statFontSize() above. */}
-      <div style={{ display: 'flex', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 9 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px' }}>Available To Transfer</div>
+          <div style={{ fontSize: 10.8, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '13px', ...ellipsisLine }}>Available To Transfer</div>
           <div style={{ fontSize: transferFontSize, fontWeight: 800, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', ...ellipsisLine }}>
             {balanceHidden ? '••••' : <>${renderStat(arcAvailable, transferFontSize)}</>}
           </div>
         </div>
         <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
-          <div style={{ fontSize: 12, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px',
+          <div style={{ fontSize: 10.8, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '13px', ...ellipsisLine,
             ...(claimLoading ? { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5, overflow: 'visible' } : null) }}>
             {claimLoading && <span style={{ margin: '-2px 0', display: 'flex' }}><ChainScanSpinner chain={scanChain} /></span>}
-            <span style={claimLoading ? { minWidth: 0 } : undefined}>{isMerchantHero ? 'On Other Chains' : 'Available To Bring'}</span>
+            <span style={claimLoading ? { minWidth: 0, ...ellipsisLine } : undefined}>{isMerchantHero ? 'On Other Chains' : 'Available To Bring'}</span>
           </div>
           <div style={{ fontSize: claimFontSize, fontWeight: 800, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', ...ellipsisLine }}>
             {balanceHidden ? '••••' : <>${renderStat(claimAvailable, claimFontSize)}</>}
@@ -1800,7 +1800,7 @@ function MultichainHubCard({
 
       {/* Bottom room, kept so the card is the same height: the figures grew
           by what this gave up (the pager dots moved under the pills). */}
-      <div aria-hidden style={{ height: 12 }} />
+      <div aria-hidden style={{ height: 11 }} />
 
     </BowedShapeCard>
   )
@@ -1886,20 +1886,20 @@ function AvailableBalanceCard({
   return (
     <BowedShapeCard background="var(--hero-card)" cardRef={cardRef} flat>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.7, color: 'rgba(255,255,255,0.75)' }}>
           Total balance
           <button onClick={onToggleHidden} aria-label="Toggle balance visibility" className="mp-hit"
-            style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
+            style={{ width: 24, height: 24, borderRadius: '50%', background: 'transparent', border: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             {balanceHidden ? (
-              <svg width="17" height="14" viewBox="0 0 22 18" fill="none">
+              <svg width="15" height="12.5" viewBox="0 0 22 18" fill="none">
                 <path d="M2 2l18 14" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
                 <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
                 <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
                 <circle cx="11" cy="9" r="3" stroke={eyeStroke} strokeWidth="1.5"/>
               </svg>
             ) : (
-              <svg width="17" height="12" viewBox="0 0 22 16" fill="none">
+              <svg width="15" height="11" viewBox="0 0 22 16" fill="none">
                 <ellipse cx="11" cy="8" rx="10" ry="7" stroke={eyeStroke} strokeWidth="1.5"/>
                 <circle cx="11" cy="8" r="3" stroke={eyeStroke} strokeWidth="1.5"/>
               </svg>
@@ -1908,10 +1908,10 @@ function AvailableBalanceCard({
         </div>
         <button type="button" aria-label="Copy wallet address" className="mp-press mp-hit mp-hit-sm"
           onClick={() => { copyText(walletAddress || ''); showToastMessage('Address copied', 'success') }}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 10px', borderRadius: 14, border: 'none', cursor: 'pointer',
-            background: 'rgba(255,255,255,0.14)', color: '#fff', fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 0 }}>
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4.5, height: 25, padding: '0 9px', borderRadius: 12.5, border: 'none', cursor: 'pointer',
+            background: 'rgba(255,255,255,0.14)', color: '#fff', fontSize: 11.25, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 0 }}>
           {shortAddr}
-          <Copy size={12} style={{ opacity: 0.8, flexShrink: 0 }} />
+          <Copy size={11} style={{ opacity: 0.8, flexShrink: 0 }} />
         </button>
       </div>
 
@@ -1922,9 +1922,9 @@ function AvailableBalanceCard({
           // shrink so they stay inside the card.
           const [whole, cents] = fmt(displayedBalance).split('.')
           const digits = whole.replace(/[^0-9]/g, '').length
-          const size = digits >= 9 ? 22 : digits >= 8 ? 26 : digits >= 7 ? 30 : digits >= 6 ? 34 : 40
+          const size = digits >= 9 ? 20 : digits >= 8 ? 23.4 : digits >= 7 ? 27 : digits >= 6 ? 30.6 : 36
           return (
-            <div style={{ marginTop: 2, fontSize: `min(${size}px, 10.5vw)`, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1.1, color: '#fff', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            <div style={{ marginTop: 2, fontSize: `min(${size}px, 9.45vw)`, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 1.1, color: '#fff', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
               {balanceHidden ? '$••••••' : <>${whole}{cents ? <span style={{ color: 'rgba(255,255,255,0.6)' }}>.{cents}</span> : null}</>}
             </div>
           )
@@ -1932,7 +1932,7 @@ function AvailableBalanceCard({
       </AnimatedBalanceText>
 
       {/* The 7-day change; room on the right for the pager dots. */}
-      <div className={trend ? fade : undefined} style={{ marginTop: 6, paddingRight: 48, minHeight: 18, fontSize: 13, color: 'rgba(255,255,255,0.75)', fontVariantNumeric: 'tabular-nums' }}>
+      <div className={trend ? fade : undefined} style={{ marginTop: 5, paddingRight: 48, minHeight: 16, fontSize: 11.7, color: 'rgba(255,255,255,0.75)', fontVariantNumeric: 'tabular-nums' }}>
         {!trend ? null : balanceHidden ? '••••' : flat ? 'No change in the last 7 days' : <>
           <span style={{ fontWeight: 600, color: change > 0 ? '#8FE9CB' : '#FFB4A9' }}>{change > 0 ? '+' : '−'}${fmt(Math.abs(change)).replace(/^\$/, '')}</span> in the last 7 days
         </>}
@@ -1946,7 +1946,7 @@ const HERO_DOT = 5, HERO_DOT_GAP = 7, HERO_PILL = 14
 // The mobile hero's pills under the carousel: the gap above them, their
 // height, and the card's padding under them. The pager dots sit centred in
 // that bottom padding, so the carousel places them this far below itself.
-const HERO_PILLS_GAP = 14, HERO_PILLS_H = 40, HERO_BOTTOM_PAD = 16
+const HERO_PILLS_GAP = 12.5, HERO_PILLS_H = 36, HERO_BOTTOM_PAD = 14.5
 // ── Mobile Hero Carousel - Balance card / Multichain Hub card, swipeable ───
 // BUG FIX (swipe required twice + visible flicker): this carousel's state
 // (heroCardIndex, heroRowX, the drag handlers) used to live directly on
@@ -4315,7 +4315,7 @@ export function HomePage() {
           // Mobile hero: ONE teal card in the page's 20px margins - the
           // balance (swipe for the Multichain Hub card), then Pay / Receive /
           // Swap as pills along its bottom.
-          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: `16px 0 ${HERO_BOTTOM_PAD}px`, background: 'var(--glass-sheen), var(--hero-card)', borderRadius: 22, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)', overflow: 'hidden' }}>
+          <div style={{ position: 'relative', zIndex: 3, marginTop: 6, padding: `14.5px 0 ${HERO_BOTTOM_PAD}px`, background: 'var(--glass-sheen), var(--hero-card)', borderRadius: 20, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)', overflow: 'hidden' }}>
           <div style={{ position: 'relative' }}>
             {businessAccount ? (
               // Business accounts: the balance card only - no Cross-chain card
@@ -4352,7 +4352,7 @@ export function HomePage() {
         {/* Mobile only. Desktop is unaffected: it never rendered this row
             (its own Quick Actions card lives in column 2). Pay is the warm
             accent; the rest of the actions are in Quick actions below. */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, padding: `${HERO_PILLS_GAP}px 16px 0` }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 7, padding: `${HERO_PILLS_GAP}px 14.5px 0` }}>
           {(heroSide === 1 && !businessAccount ? [
             { label: 'Transfer', path: '/multichain?tab=transfer', icon: 'hub' as const,     accent: true },
             { label: 'Bring',    path: '/multichain?tab=bring',    icon: 'receive' as const, accent: false },
@@ -4364,14 +4364,14 @@ export function HomePage() {
           ]).map(a => (
             <button key={a.label} type="button" onClick={() => navigate(a.path)} className="mp-press"
               style={{
-                position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: HERO_PILLS_H, borderRadius: 20,
-                border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 14, fontWeight: 650, whiteSpace: 'nowrap',
+                position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: HERO_PILLS_H, borderRadius: 18,
+                border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12.6, fontWeight: 650, whiteSpace: 'nowrap',
                 background: a.accent ? 'var(--mustard)' : 'rgba(255,255,255,0.12)',
                 color: a.accent ? 'var(--mustard-ink)' : '#fff',
                 boxShadow: a.accent ? 'none' : 'inset 0 0 0 1px rgba(255,255,255,0.16)',
                 opacity: accountLock.locked ? 0.45 : 1,
               }}>
-              <ActionIcon name={a.icon} size={17} color="currentColor" />{a.label}
+              <ActionIcon name={a.icon} size={15} color="currentColor" />{a.label}
               {accountLock.locked && <LockBadge />}
             </button>
           ))}
