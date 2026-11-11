@@ -6,6 +6,7 @@ import { replaceClonedFrames } from '@/lib/snapshotFrames'
 import { useReducedMotion } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useNavDirection } from '@/hooks/useNavDirection'
+import { browserAnimatedBack } from '@/lib/uaBackTransition'
 
 interface PageTransitionProps {
   children: ReactNode
@@ -89,7 +90,10 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
   const snap = useRef<Snapshot | null>(null)
   const cleanup = useRef<(() => void) | null>(null)
 
-  const willSlide = !isDesktop && !reduceMotion && (nav === 'forward' || nav === 'back')
+  // A back the browser already animated (iOS edge swipe, Android predictive
+  // back): its own slide is the transition - ours on top showed it twice.
+  const uaBack = navType === 'POP' && browserAnimatedBack()
+  const willSlide = !isDesktop && !reduceMotion && !uaBack && (nav === 'forward' || nav === 'back')
 
   // The page is about to change: picture the old one while it's still on
   // screen (render runs before React touches the DOM).
@@ -212,7 +216,7 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
     // unless it came from the browser's back button. A first load / reload
     // (a POP with nothing before it) shows at once.
     const dir = navType === 'POP' ? (nav === 'none' ? null : 'back') : 'forward'
-    if (!page || reduceMotion || isDesktop || !dir) return
+    if (!page || reduceMotion || isDesktop || !dir || (navType === 'POP' && browserAnimatedBack())) return
     const a = page.animate([
       { opacity: 0, transform: `translateX(${dir === 'back' ? -FRAME_ENTRY_PX : FRAME_ENTRY_PX}px)` },
       { opacity: 1, transform: 'none' },

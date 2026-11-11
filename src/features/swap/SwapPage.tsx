@@ -1501,7 +1501,7 @@ export function SwapPage() {
           normal Swap header is skipped entirely once a swap has landed. */}
       {(step !== 'done' || successPhase === 'flash' || !heroCheckEl) && (
         <div className={cn("header-row flex-shrink-0 justify-between px-5 pt-header pb-header", !isDesktop && "sticky top-0 z-20 mp-glass-header")}
-          style={isDesktop ? { background:'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter:'blur(12px)', borderBottom:'1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' } : undefined}>
+          style={isDesktop ? { background:'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', borderBottom:'1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' } : undefined}>
           <div className="flex items-center gap-3">
             {!isDesktop && (
               // Review / a definite failure: back to the swap form (pushes back

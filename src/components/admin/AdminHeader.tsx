@@ -19,7 +19,7 @@ export function AdminHeader({ title, onMenuClick, adminEmail, onLogout }: AdminH
         justifyContent: 'space-between',
         padding: '14px 16px',
         background: 'color-mix(in srgb, var(--bg) 92%, transparent)',
-        backdropFilter: 'blur(10px)',
+        backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
         borderBottom: '1px solid var(--border)',
       }}
     >
