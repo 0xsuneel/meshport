@@ -10,8 +10,10 @@ import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { useUIStore } from '@/store'
 import { searchUsersDb, getUserByWalletAddress, type DbUser } from '@/lib/supabase'
 import { isValidAddress } from '@/lib/arcService'
-import { formatUnits } from 'viem'
-import jsQR from 'jsqr'
+import { ARC } from '@/blockchain/chains'
+import { isSolanaAddress } from '@/lib/solana'
+import { parseEip681, classifyForeignQr, chainNameOf } from '@/lib/qrPayload'
+import { nativeQrDetector, detectNative, decodeJsqr, centreSquare } from '@/lib/qrDecode'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { takePrewarmedCamera, openCameraStream } from '@/lib/scannerPrewarm'
 
@@ -52,6 +54,8 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
   const [scannedAmount, setScannedAmount] = useState<string | null>(null)
   // The token a Receive QR asks for (?token=EURC|cirBTC), carried into Pay.
   const [scannedToken, setScannedToken] = useState<string | null>(null)
+  // The network a wallet QR names, when it isn't Arc ("Base", "Solana").
+  const [scannedChain, setScannedChain] = useState<string | null>(null)
   const [resolving, setResolving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -67,6 +71,9 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef<number | null>(null)
   const hasScannedRef = useRef(false) // prevent scanning after first decode
+  // The scanner was closed: a read still in flight (the native reader
+  // answers asynchronously) must not act on it.
+  const closedRef = useRef(false)
 
   // ── Start camera ──
   // `cancelled` guards against React 18 StrictMode's dev-only double-invoke
@@ -78,9 +85,11 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
   // up post-unmount.
   useEffect(() => {
     let cancelled = false
+    closedRef.current = false
     startCamera(() => cancelled)
     return () => {
       cancelled = true
+      closedRef.current = true
       stopCamera()
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
@@ -165,24 +174,30 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
     streamRef.current = null
   }
 
-  // ── jsqr decode loop ──
-  // Two levers control detection latency:
-  //   1) how many pixels jsQR has to scan per attempt (bigger = slower)
-  //   2) how many frames we skip between attempts (more skipped = slower)
-  // The old version tried to control cost by skipping 3 of every 4 frames
-  // while still decoding the full 1280x720 capture - the expensive part.
-  // Downscaling the working canvas cuts jsQR's per-attempt cost by ~4-6x,
-  // which lets us scan nearly every frame instead and detect much faster
-  // in wall-clock time, without spiking CPU/battery.
+  // ── Decode loop ──
+  // The browser's own QR reader where there is one (Android: Google Play
+  // services' barcode scanner - reads small, far, tilted and blurry codes
+  // from the full camera frame, off the main thread); one read at a time,
+  // as fast as it answers. Elsewhere (iPhone) jsQR, alternating between the
+  // whole frame shrunk to DECODE_MAX_DIM and the square under the viewfinder
+  // at full detail - a small or far QR has too few pixels left once the
+  // whole frame is shrunk.
   const DECODE_MAX_DIM = 640      // long edge of the canvas jsQR actually scans
-  const FRAME_SKIP = 1            // 1 = scan every frame, 2 = every other frame, etc.
 
   const startDecoding = useCallback(() => {
-    let frameCount = 0
+    let frame = 0
+    let busy = false
+    // undefined: still asking whether the browser has a reader (jsQR meanwhile).
+    let detector: Awaited<ReturnType<typeof nativeQrDetector>> | undefined
+    nativeQrDetector().then(d => { detector = d })
+    const found = (data: string) => {
+      if (hasScannedRef.current || closedRef.current) return
+      hasScannedRef.current = true
+      handleScan(data)
+    }
     const tick = () => {
-      if (hasScannedRef.current) return
-      frameCount++
-      if (frameCount % FRAME_SKIP !== 0) { rafRef.current = requestAnimationFrame(tick); return }
+      if (hasScannedRef.current || closedRef.current) return
+      rafRef.current = requestAnimationFrame(tick)
 
       const video = videoRef.current
       const canvas = canvasRef.current
@@ -191,54 +206,26 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
       // videoWidth/videoHeight are still 0 on some browsers right after
       // the stream attaches, which produces a 0x0 canvas and silently
       // fails every decode.
-      if (
-        !video ||
-        !canvas ||
-        video.readyState < video.HAVE_CURRENT_DATA ||
-        video.videoWidth === 0 ||
-        video.videoHeight === 0
-      ) {
-        rafRef.current = requestAnimationFrame(tick)
+      if (!video || !canvas || video.readyState < video.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) return
+
+      if (detector) {
+        if (busy) return
+        busy = true
+        detectNative(detector, video)
+          .then(v => { if (v) found(v) })
+          .catch(() => { detector = null }) // reader broke: jsQR from now on
+          .finally(() => { busy = false })
         return
       }
 
       const ctx = canvas.getContext('2d', { willReadFrequently: true })
-      if (!ctx) { rafRef.current = requestAnimationFrame(tick); return }
-
-      // Downscale to DECODE_MAX_DIM on the long edge. drawImage does the
-      // scaling for us in one call - this is much cheaper than decoding
-      // the full-resolution frame, and a QR code that's actually readable
-      // on camera doesn't need 720p worth of pixels to decode correctly.
-      const srcW = video.videoWidth
-      const srcH = video.videoHeight
-      const scale = Math.min(1, DECODE_MAX_DIM / Math.max(srcW, srcH))
-      const w = Math.max(1, Math.round(srcW * scale))
-      const h = Math.max(1, Math.round(srcH * scale))
-
-      canvas.width = w
-      canvas.height = h
-      ctx.drawImage(video, 0, 0, w, h)
-
+      if (!ctx) return
+      frame++
       try {
-        const imageData = ctx.getImageData(0, 0, w, h)
-        // Use the same decode strategy as the upload path. The camera loop
-        // previously used 'dontInvert', which skips jsQR's inverted-color
-        // pass and misses QR codes that render as light-on-dark (dark
-        // backgrounds, inverted/dark-mode screens, some printed codes).
-        // That mismatch was the root cause of camera scans failing on
-        // images that the upload path decoded fine.
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'attemptBoth',
-        })
-
-        if (code?.data) {
-          hasScannedRef.current = true
-          handleScan(code.data)
-          return
-        }
-      } catch {}
-
-      rafRef.current = requestAnimationFrame(tick)
+        const srcW = video.videoWidth, srcH = video.videoHeight
+        const v = decodeJsqr(ctx, video, srcW, srcH, DECODE_MAX_DIM, frame % 2 === 0 ? centreSquare(srcW, srcH) : undefined)
+        if (v) found(v)
+      } catch { /* a bad frame - try the next one */ }
     }
     rafRef.current = requestAnimationFrame(tick)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
@@ -251,6 +238,7 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
     setResolvedUser(null)
     setScannedAmount(null)
     setScannedToken(null)
+    setScannedChain(null)
 
     try {
       let value = raw.trim()
@@ -265,47 +253,41 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
         if (orderCode) { setResolving(false); navigate(`/paylink/r/${orderCode.toLowerCase()}`); return }
       }
 
-      // EIP-681 payment URI - ethereum:<address>@<chainId>?value=<wei>.
-      // This is the format MyQrCard now generates for an amount-QR (see its
-      // own comment on why): the real cross-wallet standard, not a
-      // MeshPort-only link, so MetaMask/Rabby/Coinbase Wallet/OKX/Binance
-      // all understand "pay this address this amount" directly from it.
-      // Parsed here, BEFORE the generic prefix-stripping below (which only
-      // ever extracts the address) - otherwise `value=` gets silently
-      // dropped the exact same way the old MeshPort-URL `?amount=` param
-      // used to.
-      if (value.toLowerCase().startsWith('ethereum:') || /^https:\/\/metamask\.app\.link\/send\//i.test(value)) {
-        // Payment QR (EIP-681 or MetaMask link). Native: <to>?value=<wei>.
-        // ERC-20: <token>/transfer?address=<to>&uint256=<atomic> (6 dp USDC).
-        // Amounts may use scientific notation (1.25e7). MeshPort pays on
-        // Arc, so the recipient is the `address` param for token transfers
-        // (never the token contract).
-        const body = value.replace(/^ethereum:(pay-)?/i, '').replace(/^https:\/\/metamask\.app\.link\/send\//i, '')
-        const m = body.match(/^(0x[0-9a-fA-F]{40})(?:@\d+)?(\/transfer)?\??(.*)$/i)
-        if (m) {
-          const [, target, isTransfer, queryStr] = m
-          const params = new URLSearchParams(queryStr)
-          const toHuman = (raw: string | null, decimals: number): string | null => {
-            const n = raw?.trim().match(/^(\d+)(?:\.(\d+))?(?:e(\d+))?$/i)
-            if (!n) return null
-            const [, int, frac = '', exp = '0'] = n
-            const e = Number(exp) - frac.length
-            if (e < 0) return null
-            const atomic = BigInt(int + frac) * 10n ** BigInt(e)
-            if (atomic <= 0n) return null
-            const human = formatUnits(atomic, decimals)
-            return human.includes('.') ? human.replace(/0+$/, '').replace(/\.$/, '') : human
-          }
-          const amt = isTransfer ? toHuman(params.get('uint256'), 6) : toHuman(params.get('value'), 18)
-          if (amt) setScannedAmount(amt)
-          value = isTransfer ? (params.get('address') ?? target) : target
-          // A MeshPort request QR is just address + amount + network: open the
-          // matching open order (amount and order fixed), like a pay link.
-          if (!walletMode && amt && /^0x[0-9a-fA-F]{40}$/.test(value)) {
-            const { findOpenOrder } = await import('@/lib/merchantPay')
-            const hit = await findOpenOrder(value, Number(amt))
-            if (hit?.code) { setResolving(false); navigate(`/paylink/r/${hit.code}`); return }
-          }
+      // EIP-681 payment URI (or a MetaMask send link) - the cross-wallet
+      // standard MyQrCard, merchant QRs, MetaMask, OKX, Trust, Coinbase
+      // Wallet… generate: recipient, network and amount (see qrPayload).
+      // Read BEFORE the generic prefix-stripping below, which only keeps the
+      // address and would drop the amount.
+      const eip = parseEip681(value)
+      if (eip) {
+        // A token transfer naming no recipient: the address in it is the
+        // token contract - paying that loses the money.
+        if (!eip.to) { setError('This payment QR doesn\'t say who to pay.'); setResolving(false); return }
+        if (eip.amount) setScannedAmount(eip.amount)
+        if (eip.chainId !== null && eip.chainId !== ARC.chainId) setScannedChain(chainNameOf(eip.chainId) ?? `network ${eip.chainId}`)
+        value = eip.to
+        // A MeshPort request QR is just address + amount + network: open the
+        // matching open order (amount and order fixed), like a pay link.
+        if (!walletMode && eip.amount) {
+          const { findOpenOrder } = await import('@/lib/merchantPay')
+          const hit = await findOpenOrder(value, Number(eip.amount))
+          if (hit?.code) { setResolving(false); navigate(`/paylink/r/${hit.code}`); return }
+        }
+      } else {
+        // Not EVM: a Solana wallet (Phantom, Solflare… - sent to with
+        // Transfer), or a code MeshPort can't pay (Bitcoin, Tron, UPI,
+        // WalletConnect, a web link) - said plainly instead of being looked
+        // up as a username.
+        const foreign = classifyForeignQr(value)
+        if (foreign?.kind === 'unsupported') { setError(foreign.message); setResolving(false); return }
+        if (foreign?.kind === 'solana') {
+          setScannedChain('Solana')
+          setResolvedUser({
+            id: foreign.address, username: '', display_name: 'Solana Wallet',
+            wallet_address: foreign.address, email: '', avatar_url: null, created_at: '',
+          })
+          setResolving(false)
+          return
         }
       }
 
@@ -460,31 +442,31 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
       const dataUrl = ev.target?.result as string
       if (!dataUrl) return
       const img = new Image()
-      img.onload = () => {
+      img.onload = async () => {
         const W = img.naturalWidth || img.width
         const H = img.naturalHeight || img.height
-        const decode = (w: number, h: number, sx = 0, sy = 0, sw = W, sh = H) => {
-          try {
-            const c = document.createElement('canvas')
-            c.width = w; c.height = h
-            const cx = c.getContext('2d', { willReadFrequently: true })
-            if (!cx) return null
-            cx.imageSmoothingEnabled = true
-            cx.imageSmoothingQuality = 'high'
-            cx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h)
-            const d = cx.getImageData(0, 0, w, h)
-            return jsQR(d.data, d.width, d.height, { inversionAttempts: 'attemptBoth' })
-          } catch { return null }
+        const done = (v: string) => { hasScannedRef.current = true; handleScan(v) }
+        // The browser's own reader on the whole picture first (it finds a
+        // small QR anywhere in a photo by itself).
+        const detector = await nativeQrDetector()
+        if (detector) {
+          try { const v = await detectNative(detector, img); if (v) { done(v); return } } catch { /* jsQR below */ }
+        }
+        const c = document.createElement('canvas')
+        const cx = c.getContext('2d', { willReadFrequently: true })
+        if (!cx) { setUploadError('No QR code found in that image.'); return }
+        const decode = (size: number, region?: { x: number; y: number; w: number; h: number }) => {
+          try { return decodeJsqr(cx, img, W, H, size, region) } catch { return null }
         }
         for (const size of [512, 1024, 768, 256]) {
-          const r = decode(size, Math.round(size * H / W))
-          if (r?.data) { hasScannedRef.current = true; handleScan(r.data); return }
+          const v = decode(size)
+          if (v) { done(v); return }
         }
         for (let row = 0; row < 4; row++) {
           for (let col = 0; col < 4; col++) {
             const sw2 = Math.floor(W / 4), sh2 = Math.floor(H / 4)
-            const r = decode(512, 512, col * sw2, row * sh2, sw2, sh2)
-            if (r?.data) { hasScannedRef.current = true; handleScan(r.data); return }
+            const v = decode(512, { x: col * sw2, y: row * sh2, w: sw2, h: sh2 })
+            if (v) { done(v); return }
           }
         }
         setUploadError('No QR code found in that image.')
@@ -498,6 +480,14 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
   const handlePay = () => {
     if (!resolvedUser) return
     stopCamera()
+
+    // A Solana wallet is paid with Transfer (USDC to Solana over CCTP) - Pay
+    // only sends on Arc. Transfer reads the address and switches to Solana.
+    if (!walletMode && isSolanaAddress(resolvedUser.wallet_address)) {
+      embedded?.onClose()
+      navigate(`/multichain?scannedAddress=${encodeURIComponent(resolvedUser.wallet_address)}`)
+      return
+    }
 
     if (embedded) {
       if (walletMode) embedded.onWallet?.(resolvedUser.wallet_address)
@@ -535,6 +525,8 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
   const reset = () => {
     setResolvedUser(null)
     setScannedAmount(null)
+    setScannedToken(null)
+    setScannedChain(null)
     setError(null)
     setUploadError(null)
     setScanning(true)
@@ -599,7 +591,7 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
               )}
             </div>
             <p className="text-white/70 text-sm text-center mt-5">
-              {cameraError ? '\u00a0' : cameraReady ? 'Point at a MeshPort QR code' : 'Starting camera…'}
+              {cameraError ? '\u00a0' : cameraReady ? 'Point at a MeshPort or wallet QR code' : 'Starting camera…'}
             </p>
 
             <div className="flex items-start justify-center gap-14 mt-6">
@@ -671,10 +663,22 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
                     <p className="text-xs text-success">Verified MeshPort User</p>
                   </div>
                 )}
-                {!resolvedUser.username && (
+                {!resolvedUser.username && scannedChain !== 'Solana' && (
                   <div className="flex items-center gap-1 mt-1">
                     <AlertCircle className="w-3.5 h-3.5 text-warning" />
                     <p className="text-xs text-warning">External wallet - payment still works</p>
+                  </div>
+                )}
+                {/* The network the QR names when it isn't Arc: Pay sends on
+                    Arc, Transfer lets them pick that network. */}
+                {scannedChain && (
+                  <div className="flex items-start gap-1 mt-1">
+                    <AlertCircle className="w-3.5 h-3.5 text-warning flex-shrink-0 mt-px" />
+                    <p className="text-xs text-warning">
+                      {scannedChain === 'Solana'
+                        ? (walletMode ? 'Solana wallet - receives on Solana' : 'Solana wallet - sent with Transfer')
+                        : walletMode ? `QR is for ${scannedChain} - pick it as the network` : `QR is for ${scannedChain} - MeshPort pays on Arc`}
+                    </p>
                   </div>
                 )}
                 {scannedAmount && (
@@ -690,7 +694,7 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
               <Button variant="secondary" fullWidth onClick={reset}>Scan Again</Button>
               <Button fullWidth onClick={handlePay}>
                 <Zap className="w-4 h-4 mr-1.5" />
-                {walletMode ? 'Use this address' : scannedAmount ? `Pay $${scannedAmount}` : 'Pay'}
+                {walletMode ? 'Use this address' : scannedChain === 'Solana' ? 'Send on Solana' : scannedAmount ? `Pay $${scannedAmount}` : 'Pay'}
               </Button>
             </div>
           </div>

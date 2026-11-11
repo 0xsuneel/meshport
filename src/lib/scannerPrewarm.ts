@@ -4,18 +4,33 @@
 // loaded and rendered) lets the live picture show up right away, and
 // preloading the scanner's code on idle means the page itself opens at once.
 
+// 1080p: a small or far-away QR keeps enough pixels per square to read
+// (720p lost them). `ideal`, so a camera that can't gives what it has.
 const CAMERA_CONSTRAINTS: MediaStreamConstraints[] = [
-  { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+  { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
   { video: true },
 ]
 
 let pending: Promise<MediaStream | null> | null = null
 let expiry: ReturnType<typeof setTimeout> | null = null
 
+/** Keep refocusing as the phone moves (a QR held close stays sharp).
+ *  Cameras / browsers without focus control ignore it. */
+function keepFocusing(stream: MediaStream): void {
+  const track = stream.getVideoTracks()[0]
+  const caps = (track?.getCapabilities?.() ?? {}) as { focusMode?: string[] }
+  if (!caps.focusMode?.includes('continuous')) return
+  track.applyConstraints({ advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet] }).catch(() => {})
+}
+
 export async function openCameraStream(): Promise<{ stream: MediaStream | null; error: unknown }> {
   let lastErr: unknown = null
   for (const c of CAMERA_CONSTRAINTS) {
-    try { return { stream: await navigator.mediaDevices.getUserMedia(c), error: null } }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(c)
+      try { keepFocusing(stream) } catch { /* no capabilities API */ }
+      return { stream, error: null }
+    }
     catch (err) { lastErr = err }
   }
   return { stream: null, error: lastErr }
