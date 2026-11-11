@@ -52,7 +52,14 @@ function tellApp(msg: Record<string, unknown>) {
 }
 // The content's own height: the document's scrollHeight is never less than the
 // frame's, so the sheet could grow the frame but never shrink it to fit.
-function tellSize() { requestAnimationFrame(() => tellApp({ state: 'size', height: Math.ceil(document.body.getBoundingClientRect().height) })) }
+// Now and again on the next frame (after layout settles): the app shows the
+// page only once it knows its height, so the first report never waits on a
+// frame - a page the browser isn't drawing yet would never send one.
+function tellSize() {
+  const send = () => tellApp({ state: 'size', height: Math.ceil(document.body.getBoundingClientRect().height) })
+  send()
+  requestAnimationFrame(send)
+}
 try { new ResizeObserver(tellSize).observe(document.body) } catch { /* sized once per draw */ }
 
 // ── Visibility ──────────────────────────────────────────────────────────────

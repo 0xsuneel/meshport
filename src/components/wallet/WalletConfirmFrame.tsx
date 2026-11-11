@@ -55,21 +55,42 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
   const latest = useRef({ onApproved, onUnavailable, onUsable })
   latest.current = { onApproved, onUnavailable, onUsable }
   const boxRef = useRef<HTMLDivElement>(null)
+  // How long each step of opening the wallet's page took on this phone
+  // (wallet_events 'confirm_open'): sheet asked → page loaded → ready →
+  // sized → request in → usable, and how often it moved meanwhile.
+  const trace = useRef<{ t0: number; steps: Record<string, number>; moves: number; sizes: number; sent: boolean }>({ t0: performance.now(), steps: {}, moves: 0, sizes: 0, sent: false })
+  const mark = (name: string) => { const t = trace.current; if (!(name in t.steps)) t.steps[name] = performance.now() - t.t0 }
+  const sendTrace = (ok: boolean, error?: string) => {
+    const t = trace.current
+    if (t.sent) return
+    t.sent = true
+    const steps = { ...t.steps, moves: t.moves, sizes: t.sizes }
+    ;(window as { __hlog?: (s: string) => void }).__hlog?.(`confirm_open ok=${ok} ${JSON.stringify(steps)}`)
+    void import('@/lib/walletEvents').then(m => m.logWalletEvent({ event: 'confirm_open', ok, ms: performance.now() - t.t0, steps, error })).catch(() => {})
+  }
 
   // Usable = drawn, sized, and its place on screen unchanged for SETTLE_MS
   // (counted from when it was laid out - only a later move starts it again).
   const live = shown && height !== null
   const liveRef = useRef(live)
   liveRef.current = live
+  if (live) mark('live')
+  // Closed (or failed) before it was usable: that is worth knowing too.
+  useEffect(() => () => { if (performance.now() - trace.current.t0 > 1000) sendTrace(false, 'closed before usable') }, [])
   useEffect(() => {
     if (failed) { latest.current.onUsable?.(); return }
-    let raf = 0, last = '', lastMove = performance.now(), told = false
+    let raf = 0, last = '', lastMove = performance.now(), told = false, prev = performance.now()
     const tick = () => {
+      // The longest the app's screen was frozen meanwhile (heavy work on the
+      // phone delays everything here, the sheet included).
+      const n = performance.now()
+      if (n - prev > (trace.current.steps.gap ?? 0)) trace.current.steps.gap = n - prev
+      prev = n
       const r = boxRef.current?.getBoundingClientRect()
       const at = r ? `${r.left.toFixed(1)},${r.top.toFixed(1)},${r.width.toFixed(1)},${r.height.toFixed(1)}` : ''
       const now = performance.now()
-      if (at !== last) { last = at; lastMove = now }
-      if (liveRef.current && now - lastMove >= SETTLE_MS && !told) { told = true; latest.current.onUsable?.(); return }
+      if (at !== last) { if (last && liveRef.current) trace.current.moves++; last = at; lastMove = now }
+      if (liveRef.current && now - lastMove >= SETTLE_MS && !told) { told = true; mark('usable'); sendTrace(true); latest.current.onUsable?.(); return }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -93,10 +114,13 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
     let ticketUrl: string | null = null
     let oldPage = false
     let switched = false
-    const byTicket = () => { if (!done && !ready && !switched && ticketUrl) { switched = true; setSrc(ticketUrl) } }
+    const byTicket = () => { if (!done && !ready && !switched && ticketUrl) { switched = true; mark('byTicket'); setSrc(ticketUrl) } }
     onFrameLoad.current = () => {
       if (ready || switched) return
-      setTimeout(() => { if (!done && !ready) { oldPage = true; byTicket() } }, 500)
+      // 2 s, not 0.5: on a busy phone the page's "ready" can land well after
+      // its load event, and switching a live page to the ticket address
+      // throws away a page that was about to show.
+      setTimeout(() => { if (!done && !ready) { oldPage = true; byTicket() } }, 2000)
     }
     setFailed(null); setShown(false); setHeight(null)
     const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
@@ -155,6 +179,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
       try {
         const started = await startWalletConfirm({ intent, scope, request: request.request, summary: request.summary }, theme, slot)
         ticket = started.ticket
+        mark('begun')
         if (done) { void import('@/wallet').then(m => m.cancelConfirm(started.ticket)); return }
         ticketUrl = started.url + (short ? '&short=1' : '')
         if (oldPage) byTicket()
@@ -173,8 +198,8 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
       if (e.source !== frameRef.current?.contentWindow) return
       const d = e.data as { type?: string; state?: string; height?: number } | null
       if (!d || d.type !== 'mp-confirm') return
-      if (d.state === 'size' && typeof d.height === 'number') setHeight(Math.min(Math.max(d.height, 120), 900))
-      if (d.state === 'ready') { ready = true; setShown(true) }
+      if (d.state === 'size' && typeof d.height === 'number') { mark('size'); trace.current.sizes++; setHeight(Math.min(Math.max(d.height, 120), 900)) }
+      if (d.state === 'ready') { mark('ready'); ready = true; setShown(true) }
       if (d.state === 'approved') lookNow?.()
     }
     window.addEventListener('message', onMessage)
@@ -218,7 +243,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
           ref={frameRef}
           src={src}
           title="Confirm in your wallet"
-          onLoad={() => onFrameLoad.current?.()}
+          onLoad={() => { mark('load'); onFrameLoad.current?.() }}
           allow="publickey-credentials-get"
           referrerPolicy="no-referrer"
           className="block w-full border-0"
