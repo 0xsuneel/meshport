@@ -376,6 +376,32 @@ describe('confirmations', () => {
     expect((await ask('sign:transaction', { address, transaction: tx(), confirmation: ticket }))!.msg.error.code).toBe('mismatch')
   })
 
+  // A page the app opened at once (confirm.html#slot=) claims the request by
+  // its slot - asking again until the wallet has made it - then uses the ticket.
+  it('a page opened before its request claims it by slot, once', async () => {
+    const { address } = await wallet()
+    const slot = 'ab'.repeat(16)
+    const bySlot = () => new Promise<any>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('no request')), 3000)
+      const on = (e: MessageEvent) => { if (e.data?.type === 'request' && e.data.slot === slot) { clearTimeout(t); confirmPage.removeEventListener('message', on as any); resolve(e.data) } }
+      confirmPage.addEventListener('message', on as any)
+      confirmPage.postMessage({ type: 'claim', slot })
+    })
+    // Asked before the request exists: no answer yet.
+    await expect(Promise.race([bySlot(), new Promise(r => setTimeout(() => r('none'), 200))])).resolves.toBe('none')
+    const { ticket } = (await ask('confirm:begin', { address, intent, slot, summary: { label: 'Paying', name: 'ravi.arc' } }))!.msg.result
+    const req = await bySlot()
+    expect(req.ticket).toBe(ticket)
+    expect(req.view).toMatchObject({ action: 'Send', amount: '2.5', token: 'USDC', to: recipient })
+    // One page only, by slot or by ticket.
+    expect((await bySlot()).error).toBe('expired')
+    expect((await claim(ticket)).error).toBe('expired')
+    expect(await enter(ticket, '123456')).toMatchObject({ ok: true })
+    // A slot that isn't 32 hex characters is ignored (the ticket still works).
+    const odd = (await ask('confirm:begin', { address, intent, slot: 'nope' }))!.msg.result
+    await claim(odd.ticket)
+  })
+
   it('a ticket is shown by one page only, and cancelled ones never approve', async () => {
     const { address } = await wallet()
     const { ticket } = (await ask('confirm:begin', { address, intent }))!.msg.result

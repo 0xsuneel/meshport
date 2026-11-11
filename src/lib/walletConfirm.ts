@@ -46,14 +46,15 @@ export function walletConfirmAddress(): string | null {
 
 /** Start a confirmation for the signed-in wallet: the iframe URL and its ticket. */
 export interface WalletConfirmWhat { intent?: ConfirmIntent | null; scope?: ConfirmScope | null; request?: ConfirmRequest | null; summary: ConfirmSummary }
-export async function startWalletConfirm(what: WalletConfirmWhat, theme: 'dark' | 'light'): Promise<{ ticket: string; url: string; address: string }> {
+/** `slot`: the name of the confirm page the app already opened (confirm.html#slot=), so it can take the passcode while this runs. */
+export async function startWalletConfirm(what: WalletConfirmWhat, theme: 'dark' | 'light', slot?: string): Promise<{ ticket: string; url: string; address: string }> {
   const address = walletConfirmAddress()
   if (!address) throw new Error('unavailable')
   const { biometricEnabled } = useAuthStore.getState()
   const biometric = biometricEnabled ? await import('./biometric').then(m => m.biometricSealFor(address)).catch(() => null) : null
   const { beginConfirm } = await import('@/wallet')
   const { ticket, url } = await beginConfirm(address, {
-    intent: what.intent ?? undefined, scope: what.scope ?? undefined, request: what.request ?? undefined, summary: what.summary, biometric,
+    intent: what.intent ?? undefined, scope: what.scope ?? undefined, request: what.request ?? undefined, summary: what.summary, biometric, slot,
   }, theme)
   return { ticket, url, address }
 }

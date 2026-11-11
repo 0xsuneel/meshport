@@ -23,7 +23,12 @@ const LENGTH = 6
 const PRF_INFO = new TextEncoder().encode('meshport-biometric-prf-v3')
 
 const params = new URLSearchParams(location.hash.slice(1))
-const ticket = params.get('t') ?? ''
+// Either the confirmation's ticket (the page opened once it existed), or the
+// app's slot name for it (the page opened at once, the request follows -
+// confirm:begin with that slot) plus the app's summary to show meanwhile.
+const ticketParam = params.get('t') ?? ''
+const slotParam = params.get('slot') ?? ''
+const summaryParam = params.get('s')
 history.replaceState(null, '', location.pathname)
 document.documentElement.dataset.theme = params.get('theme') === 'light' ? 'light' : 'dark'
 // A short phone (the app's PinKeypad uses shorter keys there too), so the
@@ -52,9 +57,10 @@ try { new ResizeObserver(tellSize).observe(document.body) } catch { /* sized onc
 
 // ── Visibility ──────────────────────────────────────────────────────────────
 let visible = true
-function watchVisibility(onChange: () => void) {
+/** Whether the browser will say if the page is in view (false: input is simply accepted). */
+function watchVisibility(onChange: () => void): boolean {
   const IO = window.IntersectionObserver as unknown as (new (cb: (entries: Array<IntersectionObserverEntry & { isVisible?: boolean }>) => void, o: object) => IntersectionObserver) | undefined
-  if (!IO) return
+  if (!IO) return false
   try {
     const io = new IO(entries => {
       const last = entries[entries.length - 1]
@@ -62,10 +68,11 @@ function watchVisibility(onChange: () => void) {
       visible = last.isVisible
       onChange()
     }, { threshold: [1], trackVisibility: true, delay: 100 })
-    if (!('trackVisibility' in io)) { io.disconnect(); return } // not v2
+    if (!('trackVisibility' in io)) { io.disconnect(); return false } // not v2
     visible = false // until the browser says so
     io.observe(document.body)
-  } catch { /* not supported: keep accepting */ }
+    return true
+  } catch { return false /* not supported: keep accepting */ }
 }
 
 // ── The card ────────────────────────────────────────────────────────────────
@@ -99,22 +106,31 @@ function summaryCard(o: { label: string; name: string; detail?: string; amount?:
   return c
 }
 const num = (s: string | undefined) => { const n = parseFloat(String(s ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? n : NaN }
+/**
+ * The wallet's reading next to the app's words: the amount and token the
+ * wallet read, and whether the app's figure is that same amount (a spend
+ * limit counts as the same when it covers it with up to 10% for fees).
+ * Several tokens at once ("2 USDC + 1 EURC") never count as the app's one figure.
+ */
+function compare(view: IntentView, summary: ConfirmSummary | null) {
+  const scope = view.to === 'may leave your wallet'
+  const [amount, unit] = splitAmount(view.amount, view.token)
+  const appN = num(summary?.amount), walletN = num(amount)
+  const single = !!unit || !/\+/.test(view.amount)
+  const sameUnit = !summary?.unit || !unit || summary.unit === unit
+  const same = single && sameUnit && Number.isFinite(appN) && Number.isFinite(walletN)
+    && (scope ? walletN >= appN && walletN <= appN * 1.1 + 1e-9 : Math.abs(walletN - appN) < 1e-9)
+  return { scope, amount, unit, same }
+}
+/** A passcode typed before the wallet's reading arrived may go ahead: it is what the card showed. */
+function agrees(view: IntentView | null, appSummary: ConfirmSummary | null): boolean {
+  if (!view) return true // nothing read (an app summary on its own) - as shown
+  return !view.warnings.length && compare(view, appSummary).same
+}
 function card(view: IntentView | null, summary: ConfirmSummary | null): HTMLElement {
   const wrap = el('div')
   if (view) {
-    const scope = view.to === 'may leave your wallet'
-    const [amount, unit] = splitAmount(view.amount, view.token)
-    // The app's figure, exactly as the app's sheet showed it ("$5"), but only
-    // when it is the same amount and token the wallet read - otherwise the
-    // wallet's own figure, since that is what gets signed. A spend limit
-    // counts as the same when it covers the amount with up to 10% to spare
-    // for fees.
-    const appN = num(summary?.amount), walletN = num(amount)
-    const sameUnit = !summary?.unit || !unit || summary.unit === unit
-    // Several tokens at once ("2 USDC + 1 EURC") never count as the app's one figure.
-    const single = !!unit || !/\+/.test(view.amount)
-    const same = single && sameUnit && Number.isFinite(appN) && Number.isFinite(walletN)
-      && (scope ? walletN >= appN && walletN <= appN * 1.1 + 1e-9 : Math.abs(walletN - appN) < 1e-9)
+    const { scope, amount, unit, same } = compare(view, summary)
     const label = summary?.label || (view.action === 'Send' ? 'Paying' : view.action)
     const name = summary?.name || view.action
     // Who the wallet will actually pay is always on the card (the name is the
@@ -122,6 +138,9 @@ function card(view: IntentView | null, summary: ConfirmSummary | null): HTMLElem
     const detail = scope
       ? (same ? summary?.detail : `Up to ${view.amount} for 2 minutes`)
       : [summary?.detail, view.to ? shortAddress(view.to) : ''].filter(Boolean).join(' · ') || undefined
+    // The app's figure, exactly as the app's sheet showed it ("$5"), only
+    // when it is what the wallet read - otherwise the wallet's own figure,
+    // since that is what gets signed.
     wrap.append(summaryCard(same
       ? { label, name, detail, amount: summary!.amount, unit: summary!.unit ?? unit }
       : { label, name, detail, amount: scope ? view.amount : amount, unit: scope ? '' : unit }))
@@ -185,42 +204,72 @@ async function passcodeFromFingerprint(b: ConfirmBiometric): Promise<string> {
 }
 
 // ── The keypad ──────────────────────────────────────────────────────────────
-function run(channel: BroadcastChannel, view: IntentView | null, summary: ConfirmSummary | null, biometric: ConfirmBiometric | null) {
+// Live from the first frame. Opened by slot, the page shows the app's summary
+// and takes digits while the wallet is still making the request; a passcode
+// finished before it arrives waits, and goes ahead only if the wallet's
+// reading agrees with what the card showed - otherwise the person checks the
+// new card and types it again. Before the browser has said the page is in
+// view, digits are kept, and dropped if it turns out not to be.
+interface Req { ticket: string; view: IntentView | null; summary: ConfirmSummary | null; biometric: ConfirmBiometric | null }
+const HIDDEN_SAY = 'Bring this fully into view to continue'
+
+function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSummary | null) {
+  let req: Req | null = first
   let digits = ''
   let busy = false
   let lockedUntil = 0
+  // A passcode finished before the request arrived.
+  let held: { passcode: string; via: 'passcode' | 'biometric' } | null = null
+  let visKnown = true
   const dots = el('div', 'dots'); dots.setAttribute('aria-hidden', 'true')
   // Status / errors only, like the app's keypad (nothing under the dots normally).
   const say = el('p', 'say', '')
   say.setAttribute('role', 'status')
   const keys: HTMLButtonElement[] = []
+  const cardBox = el('div')
+  cardBox.append(card(req?.view ?? null, req?.summary ?? appSummary))
 
   const paint = () => {
     dots.replaceChildren(...Array.from({ length: LENGTH }, (_, i) => el('span', i < digits.length ? 'dot on' : 'dot')))
-    // Greyed only while checking or locked out. While the browser is still
-    // confirming the page is in view (a moment after it appears) the keys keep
-    // their look - press() ignores them until it is - so they don't flicker.
+    // Greyed only while checking or locked out - never while the browser is
+    // still confirming the page is in view, so nothing flickers.
     const blocked = busy || lockedUntil > Date.now()
     for (const k of keys) k.disabled = blocked
   }
   const sayIt = (text: string, bad = false) => { say.textContent = text; say.className = bad ? 'say error' : 'say' }
-  // Said only when the page stays covered or cut off - not in the moment
-  // before the browser's first answer.
+
+  const send = (passcode: string, via: 'passcode' | 'biometric') => {
+    channel.postMessage({ type: 'passcode', ticket: req!.ticket, passcode, via })
+  }
+  const submit = (passcode: string, via: 'passcode' | 'biometric') => {
+    busy = true; paint(); sayIt('Checking…')
+    if (req) send(passcode, via)
+    else held = { passcode, via } // goes when the request arrives
+  }
+  // Six digits in: on their way once the page is known to be in view.
+  const trySubmit = () => {
+    if (busy || digits.length !== LENGTH || !visKnown || !visible) return
+    submit(digits, 'passcode')
+  }
+
   let hiddenTimer: ReturnType<typeof setTimeout> | null = null
   const refreshVisibility = () => {
+    visKnown = true
     if (hiddenTimer) { clearTimeout(hiddenTimer); hiddenTimer = null }
-    if (!visible && !busy) hiddenTimer = setTimeout(() => { if (!visible && !busy) sayIt('Bring this fully into view to continue') }, 600)
-    else if (say.textContent === 'Bring this fully into view to continue') sayIt('')
+    if (!visible) {
+      // Typed while something may have covered the page: not used.
+      if (!busy && digits) { digits = '' }
+      if (!busy) hiddenTimer = setTimeout(() => { if (!visible && !busy) sayIt(HIDDEN_SAY) }, 600)
+    } else {
+      if (say.textContent === HIDDEN_SAY) sayIt('')
+      trySubmit()
+    }
     paint()
   }
 
-  const submit = (passcode: string, via: 'passcode' | 'biometric') => {
-    busy = true; paint(); sayIt('Checking…')
-    channel.postMessage({ type: 'passcode', ticket, passcode, via })
-  }
   channel.addEventListener('message', (e) => {
     const d = (e.data ?? {}) as { type?: string; ticket?: string; ok?: boolean; code?: string; message?: string; lockedForMs?: number }
-    if (d.type !== 'checked' || d.ticket !== ticket) return
+    if (d.type !== 'checked' || !req || d.ticket !== req.ticket) return
     busy = false
     if (d.ok) {
       show(el('div', 'done', 'Approved'))
@@ -242,11 +291,12 @@ function run(channel: BroadcastChannel, view: IntentView | null, summary: Confir
   })
 
   const press = (digit: string) => {
-    if (busy || lockedUntil > Date.now() || !visible || digits.length >= LENGTH) return
+    if (busy || lockedUntil > Date.now() || digits.length >= LENGTH) return
+    if (visKnown && !visible) return
     digits += digit
     if (say.className === 'say error') sayIt('')
     paint()
-    if (digits.length === LENGTH) { const p = digits; setTimeout(() => submit(p, 'passcode'), 80) }
+    if (digits.length === LENGTH) setTimeout(trySubmit, 80)
   }
   const back = () => { if (!busy && digits) { digits = digits.slice(0, -1); paint() } }
 
@@ -264,21 +314,22 @@ function run(channel: BroadcastChannel, view: IntentView | null, summary: Confir
     return b
   }
 
+  // The fingerprint key: once the request (and with it the sealed passcode) is here.
+  const fingerprintKey = (biometric: ConfirmBiometric) => key(fingerprintIcon(), async () => {
+    if (busy || !visKnown || !visible || lockedUntil > Date.now() || !req) return
+    busy = true; paint(); sayIt(`Waiting for ${biometric.label || 'fingerprint'}…`)
+    let passcode: string | null = null
+    try { passcode = await passcodeFromFingerprint(biometric) } catch { /* below */ }
+    busy = false
+    if (passcode) submit(passcode, 'biometric')
+    else { sayIt(`${biometric.label || 'Fingerprint'} didn't work - enter your passcode`, true); paint() }
+  }, 'key bio', `Use ${biometric.label || 'fingerprint'}`, true)
+  const canFingerprint = (b: ConfirmBiometric | null): b is ConfirmBiometric => !!b && !!window.PublicKeyCredential
+
   const pad = el('div', 'pad')
   for (const n of ['1', '2', '3', '4', '5', '6', '7', '8', '9']) pad.append(key(n, () => press(n)))
-  const canFingerprint = !!biometric && !!window.PublicKeyCredential
-  pad.append(canFingerprint
-    ? key(fingerprintIcon(), async () => {
-        if (busy || !visible || lockedUntil > Date.now()) return
-        busy = true; paint(); sayIt(`Waiting for ${biometric!.label || 'fingerprint'}…`)
-        let passcode: string | null = null
-        try { passcode = await passcodeFromFingerprint(biometric!) } catch { /* below */ }
-        busy = false
-        if (passcode) submit(passcode, 'biometric')
-        else { sayIt(`${biometric!.label || 'Fingerprint'} didn't work - enter your passcode`, true); paint() }
-      }, 'key bio', `Use ${biometric!.label || 'fingerprint'}`, true)
-    : Object.assign(el('span'), { ariaHidden: 'true' }))
-  pad.append(key('0', () => press('0')), key(deleteIcon(), back, 'key del', 'Delete'))
+  let bioCell: HTMLElement = canFingerprint(req?.biometric ?? null) ? fingerprintKey(req!.biometric!) : Object.assign(el('span'), { ariaHidden: 'true' })
+  pad.append(bioCell, key('0', () => press('0')), key(deleteIcon(), back, 'key del', 'Delete'))
 
   document.addEventListener('keydown', (e) => {
     if (/^[0-9]$/.test(e.key)) { press(e.key); e.preventDefault() }
@@ -287,28 +338,80 @@ function run(channel: BroadcastChannel, view: IntentView | null, summary: Confir
 
   const entry = el('div', 'entry')
   entry.append(dots, say, pad)
-  show(card(view, summary), entry)
-  watchVisibility(refreshVisibility)
+  show(cardBox, entry)
+  visKnown = !watchVisibility(refreshVisibility)
   paint()
   tellApp({ state: 'ready' })
+
+  // The request, for a page opened by slot.
+  return {
+    arrived(next: Req) {
+      req = next
+      cardBox.replaceChildren(card(next.view, next.summary ?? appSummary))
+      if (canFingerprint(next.biometric)) { const k = fingerprintKey(next.biometric); bioCell.replaceWith(k); bioCell = k }
+      tellSize()
+      if (held) {
+        const h = held; held = null
+        if (agrees(next.view, appSummary)) send(h.passcode, h.via)
+        else { busy = false; digits = ''; sayIt('Check the details, then enter your passcode', true); paint() }
+      }
+      paint()
+    },
+    failed(text: string) { show(el('p', 'error center', text)) },
+  }
 }
 
-if (!/^0x[0-9a-f]{32}$/.test(ticket)) {
-  show(el('p', 'error center', 'This link has expired. Close it and try again.'))
-} else {
-  let channel: BroadcastChannel | null = null
-  try { channel = new BroadcastChannel(CONFIRM_CHANNEL) } catch { show(el('p', 'error center', "This browser can't confirm here.")) }
-  if (channel) {
-    const timer = setTimeout(() => show(el('p', 'error center', 'The wallet is not open. Close this and try again.')), 5000)
-    const onRequest = (e: MessageEvent) => {
-      const d = e.data ?? {}
-      if (d.type !== 'request' || d.ticket !== ticket) return
-      clearTimeout(timer)
-      channel!.removeEventListener('message', onRequest)
-      if (d.error || (!d.view && !d.summary)) show(el('p', 'error center', 'This request has expired. Close it and try again.'))
-      else run(channel!, d.view ?? null, d.summary ?? null, d.biometric ?? null)
-    }
-    channel.addEventListener('message', onRequest)
-    channel.postMessage({ type: 'claim', ticket })
+/** The app's summary from the URL (its own words, kept short - as the frame does). */
+function appSummaryFrom(raw: string | null): ConfirmSummary | null {
+  try {
+    const r = JSON.parse(raw ?? 'null') as Record<string, unknown> | null
+    if (!r || typeof r !== 'object') return null
+    const clip = (v: unknown, n: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : undefined)
+    const label = clip(r.label, 40), name = clip(r.name, 80)
+    if (!label || !name) return null
+    return { label, name, detail: clip(r.detail, 80), amount: clip(r.amount, 32), unit: clip(r.unit, 16) }
+  } catch { return null }
+}
+
+let channel: BroadcastChannel | null = null
+try { channel = new BroadcastChannel(CONFIRM_CHANNEL) } catch { /* below */ }
+if (!channel) {
+  show(el('p', 'error center', "This browser can't confirm here."))
+} else if (/^[0-9a-f]{32}$/.test(slotParam)) {
+  // Opened at once: the keypad now, the request when the wallet has it.
+  const ch = channel
+  const page = run(ch, null, appSummaryFrom(summaryParam))
+  let done = false
+  const onRequest = (e: MessageEvent) => {
+    const d = e.data ?? {}
+    if (d.type !== 'request' || d.slot !== slotParam) return
+    done = true
+    ch.removeEventListener('message', onRequest)
+    if (d.error || typeof d.ticket !== 'string' || (!d.view && !d.summary)) page.failed('This request has expired. Close it and try again.')
+    else page.arrived({ ticket: d.ticket, view: d.view ?? null, summary: d.summary ?? null, biometric: d.biometric ?? null })
   }
+  ch.addEventListener('message', onRequest)
+  const started = Date.now()
+  const ask = () => {
+    if (done) return
+    if (Date.now() - started > 15_000) { page.failed('The wallet is not open. Close this and try again.'); return }
+    ch.postMessage({ type: 'claim', slot: slotParam })
+    setTimeout(ask, 150)
+  }
+  ask()
+} else if (/^0x[0-9a-f]{32}$/.test(ticketParam)) {
+  const ch = channel
+  const timer = setTimeout(() => show(el('p', 'error center', 'The wallet is not open. Close this and try again.')), 5000)
+  const onRequest = (e: MessageEvent) => {
+    const d = e.data ?? {}
+    if (d.type !== 'request' || d.ticket !== ticketParam) return
+    clearTimeout(timer)
+    ch.removeEventListener('message', onRequest)
+    if (d.error || (!d.view && !d.summary)) show(el('p', 'error center', 'This request has expired. Close it and try again.'))
+    else run(ch, { ticket: ticketParam, view: d.view ?? null, summary: d.summary ?? null, biometric: d.biometric ?? null }, null)
+  }
+  ch.addEventListener('message', onRequest)
+  ch.postMessage({ type: 'claim', ticket: ticketParam })
+} else {
+  show(el('p', 'error center', 'This link has expired. Close it and try again.'))
 }

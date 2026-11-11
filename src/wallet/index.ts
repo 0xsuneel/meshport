@@ -128,8 +128,8 @@ export async function awaitPasskey(ticket: string, opts: { signal?: AbortSignal;
  * passcode in wallet-frame/confirm.html (components/wallet/WalletConfirmFrame).
  * Returns the URL for that visible iframe and the ticket to wait on.
  */
-export async function beginConfirm(address: string, request: { intent?: ConfirmIntent; scope?: ConfirmScope; request?: ConfirmRequest; summary?: ConfirmSummary; biometric?: ConfirmBiometric | null }, theme: 'dark' | 'light' = 'dark'): Promise<{ ticket: string; url: string }> {
-  const { ticket } = await callWallet('confirm:begin', { address, intent: request.intent, scope: request.scope, request: request.request, summary: request.summary, biometric: request.biometric ?? undefined })
+export async function beginConfirm(address: string, request: { intent?: ConfirmIntent; scope?: ConfirmScope; request?: ConfirmRequest; summary?: ConfirmSummary; biometric?: ConfirmBiometric | null; slot?: string }, theme: 'dark' | 'light' = 'dark'): Promise<{ ticket: string; url: string }> {
+  const { ticket } = await callWallet('confirm:begin', { address, intent: request.intent, scope: request.scope, request: request.request, summary: request.summary, biometric: request.biometric ?? undefined, slot: request.slot })
   return { ticket, url: `${walletOrigin()}/confirm.html#t=${ticket}&theme=${theme}` }
 }
 
