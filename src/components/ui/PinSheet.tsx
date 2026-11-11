@@ -91,10 +91,20 @@ export function PinSheet(p: PinSheetProps) {
   const [keypadOnly, setKeypadOnly] = useState(false)
   // The wallet's page is ready and has settled (WalletConfirmFrame): until
   // then the sheet is laid out but not shown, and the pressed button waits.
-  const [usable, setUsable] = useState(false)
+  // Per opening: "usable" from the last time the sheet was open never counts
+  // for the next one - not even for its first frame (it used to flash the
+  // whole sheet, then hide it, on a reopen).
+  const openings = useRef(0)
+  const wasOpen = useRef(false)
+  if (p.open && !wasOpen.current) openings.current++
+  wasOpen.current = p.open
+  const opening = openings.current
+  const [usableFor, setUsableFor] = useState(-1)
+  const usable = usableFor === opening
+  const setUsable = (v: boolean) => setUsableFor(v ? opening : -1)
   const pending = useRef<{ token: string; via: boolean } | null>(null)
   const lastValue = useRef(p.value)
-  useEffect(() => { if (p.open) { setAttempt(a => a + 1); setKeypadOnly(false); setUsable(false) } }, [p.open])
+  useEffect(() => { if (p.open) { setAttempt(a => a + 1); setKeypadOnly(false) } }, [p.open])
   useEffect(() => {
     const was = lastValue.current
     lastValue.current = p.value
@@ -140,6 +150,7 @@ export function PinSheet(p: PinSheetProps) {
     const end = waitOnPressedButton()
     const t = setTimeout(() => setUsable(true), 4000)
     return () => { end(); clearTimeout(t) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- setUsable is for this opening, read when the effect starts
   }, [held])
 
   const pad = walletPad ? walletPad : p.fallbackConfirm ? (
