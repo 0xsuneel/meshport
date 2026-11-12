@@ -27,7 +27,7 @@ export function SplitSummaryRow() {
     : v.owe > 0 ? { text: `You owe ${money(v.owe)}`, fg: 'var(--warning-text)', bg: 'color-mix(in srgb, var(--warning) 15%, transparent)' }
     : v.owed > 0 ? { text: `You're owed ${money(v.owed)}`, fg: 'var(--brand-text)', bg: 'color-mix(in srgb, var(--brand) 13%, transparent)' }
     : v.any ? { text: 'All settled! 🎉', fg: 'var(--text-secondary)', bg: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }
-    : { text: 'Split a bill', fg: 'var(--brand-text)', bg: 'color-mix(in srgb, var(--brand) 13%, transparent)' }
+    : { text: 'Split Expense', fg: 'var(--brand-text)', bg: 'color-mix(in srgb, var(--brand) 13%, transparent)' }
   return (
     <button type="button" onClick={() => navigate('/splits')}
       className="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-left active:scale-[0.99] transition-transform"
