@@ -1,5 +1,5 @@
 import { CONTROL_MOTION } from '@/lib/motion'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -183,6 +183,10 @@ export function BottomNav() {
   }, [location.pathname])
 
   const activeTab = getActiveTabId(location.pathname, tabList)
+  // The pill opens out only when the tab changes - not on the app's first draw.
+  const firstTab = useRef(activeTab)
+  const pillReveal = activeTab !== firstTab.current
+  useEffect(() => { if (activeTab !== firstTab.current) firstTab.current = '' }, [activeTab])
 
   return (
     <div data-bottom-nav="" style={{
@@ -250,11 +254,13 @@ export function BottomNav() {
                     position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     width: 48, height: 32, borderRadius: 16,
                   }}>
-                    {/* Selected tab: solid brand-teal pill, slides between tabs */}
+                    {/* Selected tab: solid brand-teal pill. It doesn't travel
+                        between tabs (Material 3 / WhatsApp): the old one goes at
+                        once and the new one opens out from its centre
+                        (index.css .mp-nav-pill-in) - same size and shape, only
+                        revealed. Not on the first draw of the app. */}
                     {isActive && (
-                      <motion.div
-                        layoutId="bottom-nav-pill"
-                        transition={CONTROL_MOTION}
+                      <div className={pillReveal ? 'mp-nav-pill-in' : undefined}
                         style={{ position: 'absolute', inset: 0, borderRadius: 16, background: 'var(--brand)' }}
                       />
                     )}

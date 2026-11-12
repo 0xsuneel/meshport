@@ -1062,3 +1062,13 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
     66% { background-size: 5px 5px, 5px 5px, 8px 8px; }
   }
 }
+
+/* Bottom nav: the selected tab's pill opens out from its centre (Material 3,
+   like WhatsApp) instead of sliding over from the last tab. Clipped, not
+   scaled, so its rounded ends keep their shape while it opens. */
+@keyframes mpNavPillIn {
+  from { clip-path: inset(0 30% round 16px); opacity: 0.35; }
+  to   { clip-path: inset(0 0 round 16px); opacity: 1; }
+}
+.mp-nav-pill-in { animation: mpNavPillIn 200ms cubic-bezier(0.2, 0, 0, 1) both; }
+@media (prefers-reduced-motion: reduce) { .mp-nav-pill-in { animation: none; } }
