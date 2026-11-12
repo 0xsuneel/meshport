@@ -962,8 +962,14 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
   top: 0; bottom: -24px;
   -webkit-mask-image: linear-gradient(#000 calc(100% - 24px), transparent calc(100% - 24px));
   mask-image: linear-gradient(#000 calc(100% - 24px), transparent calc(100% - 24px));
-  background: linear-gradient(var(--frost-tint, var(--bg)), transparent 28px), color-mix(in srgb, var(--frost-tint, var(--bg)) 55%, transparent);
+  background: linear-gradient(var(--frost-tint, var(--bg)), transparent var(--mp-top-fade)), color-mix(in srgb, var(--frost-tint, var(--bg)) 55%, transparent);
 }
+/* Drawn under the phone's status bar (the app draws edge to edge, e.g.
+   Median with its status bar over the page, or an installed iPhone web app):
+   the glass runs up behind the status bar too, no plain strip on top. Only
+   a page that can't draw there keeps the fade into the bar's colour. 28px
+   with no top inset, 0 with one (any inset × 1000 takes it below zero). */
+:root { --mp-top-fade: max(0px, calc(28px - env(safe-area-inset-top, 0px) * 1000)); }
 /* The nav's glass reads 24px above the bar (cut back to it, as the header
    does above) so text at its top edge blurs too, and runs past the bottom of
    the screen (the app frame clips it) so no line shows along the bottom. */
