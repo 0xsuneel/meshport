@@ -65,7 +65,7 @@ export function SplitsPage() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg)', paddingBottom: 90 }}>
-      <SplitHeader title="Splits" onBack={() => navigate(-1)} right={
+      <SplitHeader title="Split Expense" onBack={() => navigate(-1)} right={
         <button type="button" onClick={() => navigate('/splits/new')}
           style={{ display: 'flex', alignItems: 'center', gap: 4, height: 36, padding: '0 14px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--brand-text)', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
           <Plus size={15} strokeWidth={2.6} />New split
@@ -97,7 +97,7 @@ export function SplitsPage() {
               <div style={{ fontSize: 30 }}>🧾</div>
               <div style={{ ...nameStyle, marginTop: 8, whiteSpace: 'normal' }}>{tab === 'open' ? 'No open splits' : 'Nothing settled yet'}</div>
               <p style={{ ...subStyle, marginTop: 4 }}>Paid for a group? Split it - everyone pays you back their share in USDC.</p>
-              {tab === 'open' && <button type="button" onClick={() => navigate('/splits/new')} style={{ marginTop: 14, height: 44, padding: '0 20px', borderRadius: 14, border: 'none', background: 'var(--brand)', color: '#fff', fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}>Split a bill</button>}
+              {tab === 'open' && <button type="button" onClick={() => navigate('/splits/new')} style={{ marginTop: 14, height: 44, padding: '0 20px', borderRadius: 14, border: 'none', background: 'var(--brand)', color: '#fff', fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}>Split Expense</button>}
             </div>
           )}
       </div>

@@ -144,7 +144,7 @@ export function SplitNewPage() {
     } finally { setBusy(false) }
   }
 
-  const headerTitle = step === 'amount' ? 'Split a bill' : step === 'review' ? 'Review split' : step === 'sent' ? '' : `Split ${money(total)}`
+  const headerTitle = step === 'amount' ? 'Split Expense' : step === 'review' ? 'Review split' : step === 'sent' ? '' : `Split ${money(total)}`
   const errorBox = error ? <div role="alert" className="mp-alert" style={{ ...card, padding: '12px 14px', color: 'var(--danger)', fontSize: 13.5, fontWeight: 600 }}>{error}</div> : null
 
   return (
