@@ -58,7 +58,7 @@ export interface CreatedSplit { splitId: string; requests: CreatedSplitRequest[]
 
 export type SplitMemberStatus = 'pending' | 'partially_paid' | 'processing' | 'paid' | 'expired' | 'cancelled' | 'failed'
 export interface SplitMember {
-  id: string; code: string; username: string | null; name: string | null; avatar: string | null
+  id: string; code: string; userId: string | null; isMe: boolean; username: string | null; name: string | null; avatar: string | null
   amount: number; received: number; status: SplitMemberStatus
   paidAt: string | null; completedByMe: boolean; completedNote: string | null
   lastRemindedAt: string | null; createdAt: string
@@ -66,7 +66,7 @@ export interface SplitMember {
 export interface SplitSummary {
   id: string; title: string; emoji: string | null; total: number; myShare: number; currency: string
   createdAt: string; isCreator: boolean; sourceTx: string | null
-  creator: { username: string | null; name: string | null; avatar: string | null }
+  creator: { userId: string | null; username: string | null; name: string | null; avatar: string | null }
   people: number; requests: number; paidCount: number; owedLeft: number
   members: SplitMember[]
 }
@@ -93,7 +93,8 @@ function normSummary(d: any): SplitSummary {
   return {
     ...d, total: num(d.total), myShare: num(d.myShare), owedLeft: num(d.owedLeft),
     people: num(d.people), requests: num(d.requests), paidCount: num(d.paidCount),
-    members: (d.members ?? []).map((m: any) => ({ ...m, amount: num(m.amount), received: num(m.received), completedByMe: !!m.completedByMe })),
+    creator: { userId: d.creator?.userId ?? null, username: d.creator?.username ?? null, name: d.creator?.name ?? null, avatar: d.creator?.avatar ?? null },
+    members: (d.members ?? []).map((m: any) => ({ ...m, userId: m.userId ?? null, isMe: !!m.isMe, amount: num(m.amount), received: num(m.received), completedByMe: !!m.completedByMe })),
   }
 }
 
@@ -176,4 +177,62 @@ export async function markSplitReceived(code: string): Promise<void> {
 /** "$8.33" */
 export function money(v: number): string {
   return `$${(Math.round(v * 100) / 100).toFixed(2)}`
+}
+
+// ── Split groups: everyone in a split, with their own message thread ──────
+export interface SplitGroup {
+  id: string; title: string; emoji: string | null; total: number; isCreator: boolean
+  people: number; paidCount: number; requests: number
+  lastBody: string | null; lastSender: string | null; lastIsMe: boolean; at: string
+}
+export interface SplitMessage { id: string; split_id: string; sender_user_id: string; body: string; created_at: string }
+
+/** Every split group you're in (made or asked in), newest activity first. */
+export async function mySplitGroups(): Promise<SplitGroup[]> {
+  const { data, error } = await supabase.rpc('my_split_groups')
+  fail(error)
+  return ((data ?? []) as any[]).map(g => ({ ...g, total: num(g.total), people: num(g.people), paidCount: num(g.paidCount), requests: num(g.requests), lastIsMe: !!g.lastIsMe }))
+}
+
+export async function splitMessages(splitId: string): Promise<SplitMessage[]> {
+  const { data, error } = await supabase.from('split_messages').select('id, split_id, sender_user_id, body, created_at')
+    .eq('split_id', splitId).order('created_at', { ascending: true }).limit(500)
+  fail(error)
+  return (data ?? []) as SplitMessage[]
+}
+
+export async function sendSplitMessage(splitId: string, body: string): Promise<SplitMessage> {
+  const text = body.trim().slice(0, 1000)
+  if (!text) throw new Error('Nothing to send')
+  const { useAuthStore } = await import('@/store')
+  const me = useAuthStore.getState().user?.id
+  if (!me) throw new Error('Sign in to send messages')
+  const { data, error } = await supabase.from('split_messages').insert({ split_id: splitId, sender_user_id: me, body: text })
+    .select('id, split_id, sender_user_id, body, created_at').single()
+  fail(error)
+  changed()
+  return data as SplitMessage
+}
+
+/** New messages in a group as they arrive; returns the unsubscribe. */
+export function watchSplitMessages(splitId: string, onMessage: (m: SplitMessage) => void): () => void {
+  const ch = supabase.channel(`split-msgs-${splitId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'split_messages', filter: `split_id=eq.${splitId}` },
+      (p: { new: SplitMessage }) => onMessage(p.new))
+    .subscribe()
+  return () => { void supabase.removeChannel(ch) }
+}
+
+// When you last looked at each group (this device): a group with newer
+// activity shows as unread in Chats.
+const SEEN_KEY = 'mp_split_group_seen'
+export function splitGroupSeenAt(id: string): number {
+  try { return Number(JSON.parse(localStorage.getItem(SEEN_KEY) || '{}')[id]) || 0 } catch { return 0 }
+}
+export function markSplitGroupSeen(id: string): void {
+  try {
+    const all = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}')
+    all[id] = Date.now()
+    localStorage.setItem(SEEN_KEY, JSON.stringify(all))
+  } catch { /* private mode */ }
 }

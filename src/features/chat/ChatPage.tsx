@@ -77,6 +77,26 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { readChatListCache, writeChatListCache } from '@/lib/chatListCache'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useLeaveGuard } from '@/lib/leaveGuard'
+import { SplitGroupRow, useSplitGroups } from '@/features/split/SplitGroupRow'
+import type { SplitGroup } from '@/lib/splits'
+
+/** Chats and split groups in one list: pinned chats first, then everything
+ *  by its latest activity (a group by its newest message or payment). */
+function mergeSplitGroups(convs: DbConversation[], groups: SplitGroup[], pinnedIds: string[]): Array<{ conv: DbConversation } | { group: SplitGroup }> {
+  if (!groups.length) return convs.map(conv => ({ conv }))
+  const pinned = convs.filter(c => pinnedIds.includes(c.id))
+  const rest = convs.filter(c => !pinnedIds.includes(c.id))
+  const out: Array<{ conv: DbConversation } | { group: SplitGroup }> = pinned.map(conv => ({ conv }))
+  const gs = [...groups].sort((a, b) => (a.at < b.at ? 1 : -1))
+  let gi = 0
+  for (const conv of rest) {
+    const t = new Date(conv.last_message_at).getTime()
+    while (gi < gs.length && new Date(gs[gi].at).getTime() >= t) out.push({ group: gs[gi++] })
+    out.push({ conv })
+  }
+  while (gi < gs.length) out.push({ group: gs[gi++] })
+  return out
+}
 
 // ─── Hidden chats helpers - wallet-scoped so Wallet A hidden chats never bleed into Wallet B
 // Desktop pay drawer + its dim: closing animates; moving on to processing
@@ -573,6 +593,8 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   // All / Unread / Archived. Archived chats are the hidden ones (hideChat):
   // nothing is deleted, and new activity brings one back to All by itself.
   const [listTab, setListTab] = useState<'all' | 'unread' | 'requests' | 'archived'>('all')
+  // Split groups (lib/splits) appear in All, among the chats, by their latest activity.
+  const splitGroups = useSplitGroups(true)
   // Chat privacy (your profile picture): who can message you, payments from
   // strangers. With "Contacts only", strangers' chats sit in Requests.
   const [privacy, setPrivacy] = useState<ChatPrivacy>(() => cachedPrivacy(user?.id))
@@ -1238,7 +1260,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
             <p className="text-text-muted text-sm mt-1">Long-press a chat to archive it</p>
           )}
         </div>
-      ) : filtered.length === 0 && !searchQ ? (
+      ) : filtered.length === 0 && !searchQ && !(listTab === 'all' && splitGroups.length) ? (
         <div className="text-center py-16 px-5">
           <div className="w-16 h-16 bg-surface rounded-full flex items-center justify-center mx-auto mb-4">
             <SendIcon size={28} color="var(--text-secondary)" style={{ marginLeft: 3 }} />
@@ -1260,7 +1282,10 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
           {searchQ && filtered.length > 0 && (
             <p className="px-4 pt-3 pb-1 text-[12px] font-semibold text-text-secondary">Chats</p>
           )}
-          {filtered.map((conv) => {
+          {mergeSplitGroups(filtered, listTab === 'all' && !searchQ ? splitGroups : [], pinnedIds).map((it) => {
+            // A split group (lib/splits): its own row, by its latest activity.
+            if ('group' in it) return <SplitGroupRow key={`split-${it.group.id}`} g={it.group} />
+            const conv = it.conv
             // A self-conversation (paying/messaging your own username) has
             // conv.other_user resolved to your OWN user record - see
             // fetchConversations's otherIdByConv in supabase.ts, which
