@@ -149,43 +149,21 @@ export function AppLayout() {
     return () => { cancelWait(); cancelIdle?.() }
   }, [])
 
+  // The wallet's passcode page is kept warm app-wide (lib/walletWarmth: from
+  // the unlock screen on, and while the app is in use); opening a money
+  // screen also re-warms it (at most every 45 s), so a dropped idle
+  // connection is replaced while the amount is typed, not after Confirm.
+  const moneyScreen = /^\/(pay|swap|multichain|scan|chat|business|p2p|bulk)/.test(location.pathname)
+  useEffect(() => {
+    if (!moneyScreen) return
+    import('@/lib/walletWarmth').then(m => m.warmWalletNow()).catch(() => {})
+  }, [moneyScreen, location.pathname])
+
   // The first tap on each feature used to wait for that page's code to load
   // (and on a fresh install, to download), and the first payment for the
   // payment servers to wake from cold. While the app is idle, load the main
   // pages one at a time and wake the servers, so first use is as fast as the
   // second. Skipped on a slow connection or Data Saver.
-  // The wallet's passcode page (wallet-frame/confirm.html), cached so every
-  // payment's passcode step opens at once - also on a slow connection, where
-  // a cold one hurts most (it's ~30 KB with its font), and again once a new
-  // wallet's passcode is set (before that the wallet can't confirm there yet,
-  // and the first try did nothing). lib/walletConfirm prewarmWalletConfirm.
-  const passcodeSet = useAuthStore(s => !!s.passcode)
-  useEffect(() => {
-    if (!walletAddress || !passcodeSet) return
-    const t = window.setTimeout(() => {
-      const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
-      import('@/lib/walletConfirm').then(m => m.prewarmWalletConfirm(theme)).catch(() => {})
-    }, 1200)
-    return () => window.clearTimeout(t)
-  }, [walletAddress, passcodeSet])
-
-  // ...and again (at most every 45 s) when a money screen opens or the app
-  // comes back to the front: a mobile network's dropped idle connection is
-  // found and replaced while the amount is typed, not after Confirm (a Bring's
-  // passcode page hung 9.6 s on one - lib/walletConfirm prewarmWalletConfirm).
-  const moneyScreen = /^\/(pay|swap|multichain|scan|chat|business|p2p|bulk)/.test(location.pathname)
-  useEffect(() => {
-    if (!walletAddress || !passcodeSet) return
-    const warm = () => {
-      const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
-      import('@/lib/walletConfirm').then(m => m.prewarmWalletConfirm(theme, { refresh: true })).catch(() => {})
-    }
-    if (moneyScreen) warm()
-    const onVisible = () => { if (document.visibilityState === 'visible') warm() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [walletAddress, passcodeSet, moneyScreen, location.pathname])
-
   useEffect(() => {
     if (!walletAddress || isSlowNetwork() || (navigator as any).connection?.saveData) return
     const pages = [
