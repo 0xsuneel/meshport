@@ -352,7 +352,10 @@ const CHAT_SIDE_PANEL = {
 const CHAT_PAY_DRAWER_WIDTH = 'min(400px, 90vw)'
 /** Phone: the one chat-pay sheet's height - the same for every step (the
  *  Review + passcode step's size), capped to the space above the keyboard. */
-const CHAT_PAY_SHEET_H = 'min(640px, calc(var(--frame-h, 100dvh) - 96px))'
+const CHAT_PAY_SHEET_H = 'min(548px, calc(var(--frame-h, 100dvh) - 96px))'
+/** The sheet's grab handle above the content (ActionSheet): the success
+ *  flash reaches over it, so it fills the whole sheet. */
+const CHAT_PAY_HANDLE_H = 19
 
 // ─── ChatPay token display helpers ──────────────────────────────────────────
 // USDC/EURC are both ~$1-pegged, so 3 decimals used to read fine - but that
@@ -4408,8 +4411,9 @@ export function ChatConversationPage() {
         // On to processing / from the amount sheet: one steady dim.
         dimHandoff={payStep !== 'closed'}
         bioVerb="Pay"
-        title={isDesktop ? 'Authorize Payment' : 'Enter passcode'}
-        subtitle={isDesktop ? `To ${recipientClean}.arc` : 'To confirm this payment'}
+        // Phone: the header above carries the title.
+        title={isDesktop ? 'Authorize Payment' : ''}
+        subtitle={isDesktop ? `To ${recipientClean}.arc` : 'Enter your passcode'}
         walletConfirm={{
           summary: { label: 'Paying', name: `${recipientClean}.arc`, amount: payAmount, unit: payToken },
           intent: () => {
@@ -4423,19 +4427,19 @@ export function ChatConversationPage() {
         error={payError || undefined}
         onComplete={(_, viaBiometric) => { setPayViaBiometric(!!viaBiometric); import('@/lib/perfTrace').then(m => m.payApprovedVia(viaBiometric)).catch(() => {}); executeChatPayment() }}
         header={isDesktop ? undefined : (
-          <div className="relative text-center mb-2">
+          // Who and how much are on the wallet's own card below - only what
+          // it doesn't show here (a second summary read as the step twice).
+          <div className="relative text-center mb-3">
             <button onClick={() => setPayStep('form')} aria-label="Back to amount"
-              className="absolute left-0 top-0 -ml-2 p-2 rounded-full text-text-secondary hover:bg-[rgb(var(--text-primary-rgb)/0.10)]">
+              className="absolute left-0 top-0 -ml-2 -mt-1 p-2 rounded-full text-text-secondary hover:bg-[rgb(var(--text-primary-rgb)/0.10)]">
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div className="flex justify-center"><Avatar name={otherUser?.display_name || recipientClean} src={otherUser?.avatar_url ?? null} size="md" /></div>
-            <p className="mt-1.5 text-[15px] font-bold text-text-primary truncate px-8">Paying {otherUser?.display_name || recipientClean}</p>
-            <p className="tabular-nums mt-1" style={{ fontSize: 34, fontWeight: 800, letterSpacing: -1, lineHeight: 1.15, color: 'var(--text-primary)' }}>{payAmountText(parseFloat(payAmount) || 0)}</p>
-            <p className="text-[12.5px] text-text-secondary">
-              {payToken} · to <span className="text-link font-semibold">{recipientClean}.arc</span> · {payEstimatedFee > 0 ? `fee ~${formatAmount(payEstimatedFee, 4)} USDC` : 'no fee'}
+            <h2 className="text-lg font-bold text-text-primary">Confirm payment</h2>
+            <p className="text-[12.5px] text-text-secondary mt-0.5 truncate px-6">
+              {[billPay ? orderTitle(billPay.kind, billPay.number) : null,
+                payEstimatedFee > 0 ? `Fee ~${formatAmount(payEstimatedFee, 4)} USDC` : 'No network fee',
+                payNote ? `“${payNote}”` : null].filter(Boolean).join(' · ')}
             </p>
-            {billPay && <p className="text-[12.5px] text-text-secondary mt-0.5">{orderTitle(billPay.kind, billPay.number)}</p>}
-            {payNote && <p className="text-[12.5px] text-text-secondary mt-0.5 truncate">“{payNote}”</p>}
           </div>
         )}
         amountLabel={`${formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} ${payToken}`}
@@ -4567,20 +4571,9 @@ export function ChatConversationPage() {
       })).catch(() => {})
     }
   }
-  // Phone chat pay, amount step: the amount is the hero - who you pay on
-  // top, token + quick amounts under it, the app's keypad (boxed keys) and
+  // Phone chat pay, amount step: who you pay on top, the app's amount box
+  // (token chip inside, quick amounts + Max), its keypad (boxed keys) and
   // Pay at the foot of the sheet.
-  const payHeroAmount = () => {
-    const raw = payAmount || '0'
-    const dot = raw.indexOf('.')
-    const int = dot < 0 ? raw : raw.slice(0, dot)
-    const intText = Number(int || '0').toLocaleString('en-US')
-    return (
-      <>{chatPayTokenSymbolChar(payToken)}{intText}{dot >= 0
-        ? <>{raw.slice(dot)}</>
-        : <span style={{ color: 'var(--text-muted)', opacity: 0.45 }}>.00</span>}</>
-    )
-  }
   const payAmountText = (n: number) => payToken === 'cirBTC'
     ? `${formatAmount(n, chatPayTokenDecimals(payToken))} cirBTC`
     : `${chatPayTokenSymbolChar(payToken)}${formatAmount(n, Math.max(2, Math.min(chatPayTokenDecimals(payToken), (String(n).split('.')[1] || '').length)))}`
@@ -4592,40 +4585,45 @@ export function ChatConversationPage() {
     const setAmt = (n: number) => { setPayAmount(trimTrailingZeros(n.toFixed(dec))); setPayError('') }
     const n = parseFloat(payAmount) || 0
     const name = otherUser?.display_name || recipientClean
-    const chip = (label: string, onClick: () => void, disabled = false, key?: string) => (
-      <button key={key ?? label} type="button" onClick={onClick} disabled={disabled}
-        className="active:scale-95 transition-transform disabled:opacity-40"
-        style={{ padding: '5px 11px', borderRadius: 99, fontSize: 12, fontWeight: 700, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
-        {label}
-      </button>
-    )
     return (
       <div className="h-full flex flex-col px-5" style={{ paddingBottom: 'max(14px, env(safe-area-inset-bottom, 0px))' }}>
         <div className="text-center pt-1">
-          <div className="flex justify-center"><Avatar name={name} src={otherUser?.avatar_url ?? null} size="md" /></div>
-          <p className="mt-1.5 text-[15px] font-bold text-text-primary truncate">Paying {name}</p>
-          <p className="text-[12px] text-link">{recipientClean}.arc</p>
+          <div className="flex items-center justify-center gap-2.5 min-w-0">
+            <Avatar name={name} src={otherUser?.avatar_url ?? null} size="sm" />
+            <div className="text-left min-w-0">
+              <p className="text-[15px] font-bold text-text-primary truncate">Paying {name}</p>
+              <p className="text-[12px] text-link truncate">{recipientClean}.arc</p>
+            </div>
+          </div>
           {(billPay || linkPay?.amount) && (
             <p className="inline-block mt-2 text-[12px] font-semibold" style={{ padding: '4px 10px', borderRadius: 99, background: 'color-mix(in srgb, var(--brand) 10%, transparent)', color: 'var(--brand-text)' }}>
               {billPay ? `${orderTitle(billPay.kind, billPay.number)} · Amount set by business` : `Payment link · Amount set by ${linkPay?.username}.arc`}
             </p>
           )}
         </div>
-        <p className="text-center tabular-nums mt-2" aria-label={`Amount in ${payToken}`}
-          style={{ fontSize: payAmount.length > 9 ? 40 : 52, fontWeight: 800, letterSpacing: -2, lineHeight: 1.1, color: payInsufficient ? 'var(--danger-text)' : 'var(--text-primary)' }}>
-          {payHeroAmount()}
-        </p>
-        <div className="flex items-center justify-center gap-1.5 flex-wrap mt-2">
-          {renderPayTokenPicker()}
-          {!payLocked && [10, 30, 50].map(v => {
-            const amt = isBtc ? (btcUsd > 0 ? Math.round((v / btcUsd) * 10 ** dec) / 10 ** dec : 0) : v
-            return chip(`${isBtc ? '$' : chatPayTokenSymbolChar(payToken)}${v}`, () => setAmt(amt), amt <= 0 || amt > bal)
-          })}
-          {!payLocked && max > 0 && chip('Max', () => setAmt(max))}
+        {/* The same amount box as Pay / Swap / Transfer: the token chip inside
+            it, quick amounts + Max under it. The keypad below is always up. */}
+        <div className="mt-3">
+          <AmountField
+            value={payAmount}
+            onChange={raw => { if (payLocked) return; setPayAmount(sanitizeAmountInput(raw, dec)); setPayError('') }}
+            readOnly={payLocked}
+            onTap={() => {}}
+            editing={!payLocked}
+            invalid={payInsufficient}
+            symbol={chatPayTokenSymbolChar(payToken)}
+            tokenPicker={renderPayTokenPicker()}
+            ariaLabel={`Amount in ${payToken}`}
+            quick={payLocked ? [] : [10, 30, 50].map(v => {
+              const amt = isBtc ? (btcUsd > 0 ? Math.round((v / btcUsd) * 10 ** dec) / 10 ** dec : 0) : v
+              return { label: `${isBtc ? '$' : chatPayTokenSymbolChar(payToken)}${v}`, onClick: () => setAmt(amt), disabled: amt <= 0 || amt > bal }
+            })}
+            onMax={payLocked || max <= 0 ? undefined : () => setAmt(max)}
+          />
+          <p className="text-xs" style={{ color: payInsufficient ? 'var(--danger-text)' : 'var(--text-secondary)', marginTop: 8, fontWeight: payInsufficient ? 600 : undefined }}>
+            {payInsufficient ? 'Insufficient balance · ' : 'Balance '}{chatPayTokenSymbolChar(payToken)}{formatAmount(bal, dec)} {payToken}
+          </p>
         </div>
-        <p className="text-center text-xs mt-2" style={{ color: payInsufficient ? 'var(--danger-text)' : 'var(--text-secondary)', fontWeight: payInsufficient ? 600 : undefined }}>
-          {payInsufficient ? 'Insufficient balance · ' : 'Balance '}{chatPayTokenSymbolChar(payToken)}{formatAmount(bal, dec)} {payToken}
-        </p>
         {payError && <p role="alert" className="text-sm text-danger text-center mt-1">{payError}</p>}
         <div className="mt-auto pt-3">
           {!payLocked && (
@@ -5658,7 +5656,7 @@ export function ChatConversationPage() {
           and still), processing fades in over it, and the receipt follows. */}
       <ActionSheet open={!isDesktop && payStep !== 'closed'} onClose={closePhonePay} isDesktop={false} id="chat-pay"
         backClose={payStep !== 'processing'}>
-        <div className="relative overflow-hidden" style={{ height: CHAT_PAY_SHEET_H }}>
+        <div className="relative" style={{ height: CHAT_PAY_SHEET_H }}>
           {(payStep === 'form' || (payStep === 'confirm' && !pinVisible)) && (
             <div className="absolute inset-0 overflow-y-auto overflow-x-hidden">
               {renderPhonePayAmount()}
@@ -5667,11 +5665,16 @@ export function ChatConversationPage() {
           {!isDesktop && chatPin(true)}
           <AnimatePresence>
             {(payStep === 'processing' || payStep === 'success') && !pinVisible && (
+              // From the sheet's very top (over its grab handle) to its foot,
+              // so the success flash fills the whole sheet.
               <motion.div key="chat-pay-run" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18 }}
                 data-leave-guard={payStep === 'processing' ? '' : undefined}
-                className="absolute inset-0 flex flex-col overflow-y-auto overflow-x-hidden bg-surface">
-                <div className="relative flex flex-col flex-1 min-h-0"
-                  style={payStep === 'success' && paySuccessPhase === 'collapsed' ? { padding: '0 12px calc(12px + env(safe-area-inset-bottom, 0px))' } : undefined}>
+                className="absolute left-0 right-0 bottom-0 flex flex-col overflow-y-auto overflow-x-hidden bg-surface rounded-t-3xl"
+                style={{ top: -CHAT_PAY_HANDLE_H }}>
+                <div className="relative flex flex-col flex-1 min-h-0 rounded-t-3xl"
+                  style={payStep === 'success' && paySuccessPhase === 'collapsed'
+                    ? { padding: `${CHAT_PAY_HANDLE_H}px 12px calc(12px + env(safe-area-inset-bottom, 0px))` }
+                    : { paddingTop: CHAT_PAY_HANDLE_H }}>
                   {renderRun()}
                 </div>
               </motion.div>
