@@ -2,14 +2,18 @@
 //
 // POST /rewards-claim-sign
 //
-// Body: { userId: string, walletAddress: string, points: number, claimId: string }
+// Body: { points: number, claimId: string }  (who is claiming comes from the session)
 //   claimId: 0x + 64 hex chars (bytes32), generated client-side.
+//   { action: 'pending' } → { pending: { points, claimId } | null }: an unfinished claim.
+// An unfinished claim (points reserved, voucher not yet paid on-chain) is
+// always finished first: the response then carries ITS points and claimId
+// (resumed: true) - see openReservation.
 //
 // Validates the caller's real point balance from `user_points`, then signs a
 // claim voucher with REWARDS_SIGNER_PRIVATE_KEY for consumption by the
 // MeshPortRewards.claimRewards(points, claimId, signature) on-chain call.
 //
-// Returns: { signature: string }  - 0x-prefixed hex, 65 bytes (EIP-191 v=27/28)
+// Returns: { signature, points, claimId, resumed } - signature 0x-prefixed hex, 65 bytes (EIP-191 v=27/28)
 //
 // Security: the private key NEVER leaves this function - not in logs, not in
 // responses, not in errors. Same discipline as RELAY_PRIVATE_KEY in relay-deposit.js.
@@ -66,8 +70,10 @@ Deno.serve(async (req: Request) => {
     return json({ success: false, error: 'Invalid JSON body' }, 400)
   }
 
-  const points       = Number(body?.points)
-  const claimId      = (body?.claimId      ?? '').toString().trim().toLowerCase()
+  const action       = String(body?.action ?? 'sign')
+  let points         = Number(body?.points)
+  let claimId        = (body?.claimId      ?? '').toString().trim().toLowerCase()
+  if (action === 'pending') { points = MIN_CLAIM_POINTS; claimId = '0x' + '0'.repeat(64) } // only who's asking matters
 
   if (!claimId) {
     return json({ success: false, error: 'claimId is required' }, 400)
@@ -96,6 +102,24 @@ Deno.serve(async (req: Request) => {
   if (!me?.id || !me.wallet_address) return json({ success: false, error: 'Account not linked to this session' }, 403)
   const userId = me.id as string
   const walletAddress = String(me.wallet_address).toLowerCase()
+
+  // ── An unfinished claim comes first ──────────────────────────────────────
+  // Points are reserved (deducted) when a voucher is signed. If sending it
+  // then failed, those points are held for that voucher - and it is still
+  // valid on-chain, so they can't simply be handed back (the voucher could
+  // then pay out too). So the next claim FINISHES that one: the same voucher,
+  // the same points, whatever amount was asked for - never a second
+  // reservation (a failed 100-point claim, then a claim from another device
+  // or for another amount, used to hold the first 100 for good).
+  // The contract says whether a voucher was used (isClaimUsed): a used one is
+  // done (USDC was paid) and its claim record is marked so.
+  const open = await openReservation(supabase, userId)
+  if (open === 'unknown') return json({ success: false, error: "Couldn't check your earlier claim - try again in a moment" }, 503)
+  if (action === 'pending') return json({ success: true, pending: open ? { points: open.points, claimId: open.claimId } : null })
+  if (open && open.claimId !== claimId) {
+    points = open.points
+    claimId = open.claimId
+  }
 
   // ── Same claimId again (a retry after a failed send): re-issue the same
   // voucher. Points were already reserved for it, so nothing is deducted twice.
@@ -167,5 +191,53 @@ Deno.serve(async (req: Request) => {
   const account = privateKeyToAccount(signerKey as `0x${string}`)
   const signature = await account.signMessage({ message: { raw: digest as `0x${string}` } })
 
-  return json({ success: true, signature })
+  return json({ success: true, signature, points, claimId, resumed: !!open })
 })
+
+// ── Unfinished reservations ─────────────────────────────────────────────────
+const ARC_RPC = (Deno.env.get('ARC_RPC_URL') ?? 'https://rpc.testnet.arc.io').trim()
+
+/** Has the contract already paid this voucher? null when the chain can't be asked. */
+async function claimUsed(claimId: string): Promise<boolean | null> {
+  try {
+    const { encodeFunctionData, parseAbi } = await import('npm:viem@2')
+    const data = encodeFunctionData({ abi: parseAbi(['function isClaimUsed(bytes32) view returns (bool)']), functionName: 'isClaimUsed', args: [claimId as `0x${string}`] })
+    const r = await fetch(ARC_RPC, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(6000),
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: REWARDS_CONTRACT, data }, 'latest'] }),
+    })
+    const j = await r.json()
+    if (typeof j?.result !== 'string') return null
+    return BigInt(j.result) !== 0n
+  } catch { return null }
+}
+
+/**
+ * The user's reservation whose voucher hasn't been paid yet (null: none;
+ * 'unknown': the chain couldn't be asked). Reservations the contract already
+ * paid are marked completed on their claim records along the way.
+ */
+async function openReservation(supabase: any, userId: string): Promise<{ points: number; claimId: string } | null | 'unknown'> {
+  const since = new Date(Date.now() - 60 * 86400_000).toISOString()
+  const { data: reserved } = await supabase.from('point_transactions')
+    .select('points, tx_hash, created_at').eq('user_id', userId).eq('reason', 'claim_reserved')
+    .gte('created_at', since).order('created_at', { ascending: true }).limit(50)
+  const ids = (reserved ?? []).map((r: any) => String(r.tx_hash)).filter((x: string) => /^0x[0-9a-f]{64}$/.test(x))
+  if (!ids.length) return null
+  const { data: done } = await supabase.from('reward_claims').select('claim_id_bytes32').in('claim_id_bytes32', ids).eq('status', 'completed')
+  const finished = new Set((done ?? []).map((r: any) => String(r.claim_id_bytes32)))
+  for (const r of reserved ?? []) {
+    const id = String(r.tx_hash)
+    if (finished.has(id) || !/^0x[0-9a-f]{64}$/.test(id)) continue
+    const used = await claimUsed(id)
+    if (used === null) return 'unknown'
+    if (used) {
+      // Paid on-chain but never marked (the app closed before it could).
+      await supabase.from('reward_claims').update({ status: 'completed', claimed_at: new Date().toISOString() })
+        .eq('claim_id_bytes32', id).neq('status', 'completed')
+      continue
+    }
+    return { points: Math.abs(Number(r.points) || 0), claimId: id }
+  }
+  return null
+}

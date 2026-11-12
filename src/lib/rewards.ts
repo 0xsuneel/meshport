@@ -299,6 +299,21 @@ export async function getDailyClaimedOnChain(walletAddress: string): Promise<num
 }
 
 
+// ─── An unfinished claim ─────────────────────────────────────────────────────
+/**
+ * Points held for a claim whose voucher was signed but never paid on-chain
+ * (the send failed): { points, claimId }, or null. The server finishes that
+ * claim before any new one (rewards-claim-sign), so these points are never
+ * lost and never deducted twice.
+ */
+export async function fetchPendingClaim(): Promise<{ points: number; claimId: `0x${string}` } | null> {
+  try {
+    const { data } = await supabase.functions.invoke('rewards-claim-sign', { body: { action: 'pending' } })
+    const p = data?.pending
+    return p && Number(p.points) > 0 && /^0x[0-9a-f]{64}$/.test(String(p.claimId)) ? { points: Number(p.points), claimId: p.claimId } : null
+  } catch { return null }
+}
+
 // ─── Claim rewards (on-chain via MeshPortRewards contract) ───────────────────────
 export async function claimPointsAsUSDC(params: {
   userId: string
@@ -309,7 +324,12 @@ export async function claimPointsAsUSDC(params: {
   /** Progress for the claim screen: called as each real step finishes. */
   onStep?: (step: 'check' | 'approve' | 'send') => void
 }): Promise<{ txHash: string | null; usdcReceived: number; error: string | null }> {
-  const { userId, username, walletAddress, signer, points } = params
+  const { userId, username, walletAddress, signer } = params
+  let points = params.points
+  // An earlier claim that didn't finish holds its points: finish that one
+  // (same voucher, same points) - the server would anyway.
+  const pending = REWARDS_CONTRACT ? await fetchPendingClaim() : null
+  if (pending) points = pending.points
   const step = (s: 'check' | 'approve' | 'send') => { try { params.onStep?.(s) } catch { /* display only */ } }
 
   if (points < MIN_CLAIM_POINTS) {
@@ -339,11 +359,11 @@ export async function claimPointsAsUSDC(params: {
   }
 
   const available = userPts?.total_points || 0
-  if (available < points) {
+  if (!pending && available < points) {
     return { txHash: null, usdcReceived: 0, error: `Only ${available} points available, need ${points}` }
   }
 
-  const usdcAmount = pointsToUSDC(points)
+  let usdcAmount = pointsToUSDC(points)
   step('check')
 
   // A claim that failed goes to Activity as a failed "Reward claim" row with
@@ -363,7 +383,8 @@ export async function claimPointsAsUSDC(params: {
   const pendingKey = `mp_reward_claim_${walletAddress.toLowerCase()}`
   let pendingClaim: { claimId: string; points: number } | null = null
   try { pendingClaim = JSON.parse(localStorage.getItem(pendingKey) || 'null') } catch { /* none */ }
-  const claimIdBytes32 = (pendingClaim && pendingClaim.points === points && /^0x[0-9a-f]{64}$/.test(pendingClaim.claimId)
+  let claimIdBytes32 = (pending ? pending.claimId
+    : pendingClaim && pendingClaim.points === points && /^0x[0-9a-f]{64}$/.test(pendingClaim.claimId)
     ? pendingClaim.claimId
     : '0x' + crypto.randomUUID().replace(/-/g, '').padEnd(64, '0')) as `0x${string}`
 
@@ -424,6 +445,15 @@ export async function claimPointsAsUSDC(params: {
         return { txHash: null, usdcReceived: 0, error: `Claim signing failed: ${msg}. Your points are safe.` }
       }
       const claimSignature = signData.signature as `0x${string}`
+      // The server finished an earlier unfinished claim instead: send exactly
+      // that voucher (its points and id) - the signature is over those.
+      if (typeof signData.claimId === 'string' && /^0x[0-9a-f]{64}$/.test(signData.claimId) && Number(signData.points) > 0
+        && (signData.claimId !== claimIdBytes32 || Number(signData.points) !== points)) {
+        claimIdBytes32 = signData.claimId as `0x${string}`
+        points = Number(signData.points)
+        usdcAmount = pointsToUSDC(points)
+        await supabase.from('reward_claims').update({ points_claimed: points, usdc_received: usdcAmount, claim_id_bytes32: claimIdBytes32 }).eq('id', claimRecord?.id)
+      }
       step('approve')
       try { localStorage.setItem(pendingKey, JSON.stringify({ claimId: claimIdBytes32, points })) } catch { /* private mode */ }
 
