@@ -47,6 +47,7 @@ import { ScreenPush } from '@/components/ui/ScreenPush'
 import { readPeople, writePeople } from '@/lib/peopleCache'
 import { loadPayContacts } from '@/lib/payPeople'
 import { SearchField } from '@/components/ui/SearchField'
+import { SplitSummaryRow } from '@/features/split/SplitSummaryRow'
 import { useUserSearch } from '@/hooks/useUserSearch'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { reachCheck, STRANGER_PAY_BLOCKED, BLOCKED_YOU, PAYMENT_REACH_WAIT_MS } from '@/lib/privacy'
@@ -1271,6 +1272,9 @@ export function PaySendPage() {
 
             <div className="flex-1 overflow-y-auto px-5 pb-6 space-y-5">
 
+              {/* Split expense (as PhonePe's Send Money): every split and where you stand. */}
+              {!query.trim() && <SplitSummaryRow />}
+
               {/* ── Address preview card (when 0x address entered) ── */}
               {(addressResolving || addressPreview) && (
                 <div>
@@ -1696,12 +1700,6 @@ export function PaySendPage() {
                   fullHash={txHash || undefined}
                   links={txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: txHash, href: arcExplorerTxUrl(txHash) }] : undefined}
                   onPrimary={finishDone}
-                  // A USDC bill paid for a group: split it right here (lib/splits) -
-                  // everyone pays you back their share by a payment request.
-                  actions={!payPending && token === 'USDC' && numAmount > 0 ? [
-                    { label: 'Split bill', onClick: () => navigate('/splits/new', { state: { total: numAmount, title: recipient.isUsername ? `Paid to ${recipient.displayName || recipient.display}` : (merchantUsername ? `Paid to ${merchantUsername}` : ''), sourceTx: txHash || undefined } }) },
-                    { label: 'Done', primary: true, onClick: finishDone },
-                  ] : undefined}
                   checkRef={heroCheckCallback}
                   revealed={travelDone}
                   checkContent={paidViaBiometric && travelDone
