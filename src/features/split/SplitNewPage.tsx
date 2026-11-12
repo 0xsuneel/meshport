@@ -48,6 +48,14 @@ export function SplitNewPage() {
   const [emoji, setEmojiState] = useState<string>(() => categoryForTitle(init.title ?? '').emoji)
   const [catByHand, setCatByHand] = useState(false)
   const setEmoji = (e: string) => { setCatByHand(true); setEmojiState(e) }
+  // Tapping a category also fills "What for" with its name ("Taxi") when it's
+  // empty or still the name a category filled in - never over words typed by
+  // hand. It's a normal field: erase it and type anything.
+  const autoTitle = useRef('')
+  const pickCategory = (c: { emoji: string; label: string }) => {
+    setEmoji(c.emoji)
+    if (c.label !== 'Other' && (!title.trim() || title === autoTitle.current)) { setTitle(c.label); autoTitle.current = c.label }
+  }
   useEffect(() => { if (!catByHand) setEmojiState(categoryForTitle(title).emoji) }, [title, catByHand])
   const [picked, setPicked] = useState<Person[]>([])
   const [mode, setMode] = useState<Mode>('equal')
@@ -194,7 +202,7 @@ export function SplitNewPage() {
               aria-label="Bill total"
               style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', textAlign: 'center', fontSize: 40, fontWeight: 700, letterSpacing: '-1px', color: 'var(--text-primary)', marginTop: 6 }} />
           </div>
-          <TitleCard title={title} setTitle={setTitle} emoji={emoji} setEmoji={setEmoji} />
+          <TitleCard title={title} setTitle={setTitle} emoji={emoji} onPick={pickCategory} />
         </>)}
 
         {step === 'people' && (<>
@@ -229,7 +237,7 @@ export function SplitNewPage() {
         </>)}
 
         {step === 'how' && (<>
-          <TitleCard title={title} setTitle={setTitle} emoji={emoji} setEmoji={setEmoji} />
+          <TitleCard title={title} setTitle={setTitle} emoji={emoji} onPick={pickCategory} />
           <div role="tablist" style={{ display: 'flex', background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', borderRadius: 14, padding: 4 }}>
             {([['equal', 'Equally'], ['amounts', 'Amounts'], ['percent', '%']] as [Mode, string][]).map(([id, label]) => (
               <button key={id} role="tab" aria-selected={mode === id} type="button" onClick={() => switchMode(id)}
@@ -381,7 +389,7 @@ function PeopleList({ title, people, isPicked, toggle }: { title: string; people
   </>)
 }
 
-function TitleCard({ title, setTitle, emoji, setEmoji }: { title: string; setTitle: (s: string) => void; emoji: string; setEmoji: (s: string) => void }) {
+function TitleCard({ title, setTitle, emoji, onPick }: { title: string; setTitle: (s: string) => void; emoji: string; onPick: (c: { emoji: string; label: string }) => void }) {
   const cat = categoryForEmoji(emoji)
   // The chosen category stays in view in the row (picked from the name too).
   const rowRef = useRef<HTMLDivElement>(null)
@@ -403,7 +411,7 @@ function TitleCard({ title, setTitle, emoji, setEmoji }: { title: string; setTit
         {SPLIT_CATEGORIES.map(c => {
           const on = c.emoji === emoji
           return (
-            <button key={c.id} type="button" role="radio" aria-checked={on} aria-label={c.label} onClick={() => setEmoji(c.emoji)}
+            <button key={c.id} type="button" role="radio" aria-checked={on} aria-label={c.label} onClick={() => onPick(c)}
               style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, height: 34, padding: '0 11px 0 8px', borderRadius: 999, cursor: 'pointer', fontSize: 13, fontWeight: 600,
                 color: on ? 'var(--brand-text)' : 'var(--text-secondary)', whiteSpace: 'nowrap',
                 border: on ? '1.5px solid var(--brand)' : '1px solid var(--border)', background: on ? 'color-mix(in srgb, var(--brand) 10%, var(--surface))' : 'var(--bg)' }}>
