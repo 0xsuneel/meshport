@@ -204,11 +204,8 @@ export async function splitMessages(splitId: string): Promise<SplitMessage[]> {
 export async function sendSplitMessage(splitId: string, body: string): Promise<SplitMessage> {
   const text = body.trim().slice(0, 1000)
   if (!text) throw new Error('Nothing to send')
-  const { useAuthStore } = await import('@/store')
-  const me = useAuthStore.getState().user?.id
-  if (!me) throw new Error('Sign in to send messages')
-  const { data, error } = await supabase.from('split_messages').insert({ split_id: splitId, sender_user_id: me, body: text })
-    .select('id, split_id, sender_user_id, body, created_at').single()
+  // The server checks you're in the split and sets you as the sender.
+  const { data, error } = await supabase.rpc('split_send_message', { p_split: splitId, p_body: text })
   fail(error)
   changed()
   return data as SplitMessage
