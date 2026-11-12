@@ -42,7 +42,7 @@ export function Toast() {
   // alone (its compensating translateX dropped) positions the box's LEFT
   // EDGE at center, not the box itself.
   return createPortal(
-    <div style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }} className="max-w-xs w-full px-4">
+    <div style={{ position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 16px)', left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }} className="max-w-xs w-full px-4">
       {/* Always mounted, so a toast also animates OUT (it used to vanish). */}
       <AnimatePresence>
         {toast && (
