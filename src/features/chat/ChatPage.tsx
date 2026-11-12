@@ -2759,6 +2759,8 @@ export function ChatConversationPage() {
   // amount-entry time as a free warm-up window instead.
   useEffect(() => {
     if (payStep === 'form' || payStep === 'confirm') preparePayments() // + the wallet (lib/paymentReadiness)
+    // The passcode page is moments away: a fresh connection to the wallet now.
+    if (payStep === 'form') void import('@/lib/walletWarmth').then(m => m.warmWalletForPayment()).catch(() => {})
   }, [payStep])
   // Broadcast but not yet confirmed - shown as "submitted", not success.
   const [payPending, setPayPending] = useState(false)
