@@ -28,13 +28,18 @@ function theme(): 'dark' | 'light' {
   return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
 }
 
-/** Warm (or re-warm, at most every 45 s) the passcode page now. */
-export function warmWalletNow(): void {
+/** Warm (or re-warm, at most every 45 s) the passcode page now. `force`:
+ *  now regardless - the connection was likely dropped (network changed, back
+ *  online, back to the front) or a payment is about to need it. */
+export function warmWalletNow(force = false): void {
   if (typeof document === 'undefined') return
   const { walletAddress, passcode } = useAuthStore.getState()
   if (!walletAddress || !passcode) return
-  import('./walletConfirm').then(m => m.prewarmWalletConfirm(theme(), { refresh: true })).catch(() => {})
+  import('./walletConfirm').then(m => m.prewarmWalletConfirm(theme(), { refresh: true, force })).catch(() => {})
 }
+
+/** A payment's amount step opened: the passcode page is moments away. */
+export function warmWalletForPayment(): void { warmWalletNow(true) }
 
 export function installWalletWarmth(): void {
   if (installed || typeof window === 'undefined') return
@@ -66,6 +71,13 @@ export function installWalletWarmth(): void {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return
     lastActive = Date.now()
-    warmWalletNow()
+    warmWalletNow(true)
   })
+
+  // The network changed (3G ↔ 4G, Wi-Fi ↔ mobile) or came back: the open
+  // connection to the wallet is gone - make a new one now, not when the
+  // next payment needs it.
+  const net = (navigator as Navigator & { connection?: EventTarget }).connection
+  net?.addEventListener?.('change', () => warmWalletNow(true))
+  window.addEventListener('online', () => warmWalletNow(true))
 }

@@ -150,11 +150,15 @@ let prewarmed = false
 let warmedAt = 0
 let warming = false
 const REWARM_MS = 45_000
-export function prewarmWalletConfirm(theme: 'dark' | 'light', opts: { refresh?: boolean } = {}): void {
+/** `force`: warm now even if it was warmed in the last 45 s - the network
+ *  just changed (3G → 4G, Wi-Fi → mobile, back online), which drops the open
+ *  connection: the next passcode page waited ~10 s for it to time out
+ *  (chat Pay, 12 Nov: 1.1 s, then 30 s later on 4G 11 s). */
+export function prewarmWalletConfirm(theme: 'dark' | 'light', opts: { refresh?: boolean; force?: boolean } = {}): void {
   // Not "done" until it actually loaded the page: a try before the wallet
   // could confirm there (no passcode yet) is tried again later.
   if (typeof document === 'undefined' || !walletConfirmAddress() || warming) return
-  if (prewarmed && !(opts.refresh && Date.now() - warmedAt > REWARM_MS)) return
+  if (prewarmed && !opts.force && !(opts.refresh && Date.now() - warmedAt > REWARM_MS)) return
   prewarmed = true
   warming = true
   warmedAt = Date.now()

@@ -10,7 +10,8 @@ const listeners: Record<string, Array<() => void>> = {}
 let visibility = 'visible'
 beforeEach(() => {
   vi.useFakeTimers()
-  vi.stubGlobal('window', { addEventListener: () => {} })
+  vi.stubGlobal('window', { addEventListener: (t: string, f: () => void) => { (listeners['win:' + t] ??= []).push(f) } })
+  vi.stubGlobal('navigator', { connection: { addEventListener: (t: string, f: () => void) => { (listeners['net:' + t] ??= []).push(f) } } })
   vi.stubGlobal('document', {
     get visibilityState() { return visibility },
     documentElement: { getAttribute: () => 'light' },
@@ -30,7 +31,7 @@ describe('walletWarmth', () => {
     state.walletAddress = '0xabc'; state.passcode = 'h'; subs.forEach(f => f())
     vi.advanceTimersByTime(800); await flush()
     expect(prewarm).toHaveBeenCalledTimes(1)
-    expect(prewarm).toHaveBeenLastCalledWith('light', { refresh: true })
+    expect(prewarm).toHaveBeenLastCalledWith('light', { refresh: true, force: false })
     vi.advanceTimersByTime(45_000); await flush()
     expect(prewarm).toHaveBeenCalledTimes(2) // in use: heartbeat
     vi.advanceTimersByTime(4 * 60_000); await flush()
@@ -39,5 +40,11 @@ describe('walletWarmth', () => {
     expect(prewarm.mock.calls.length).toBe(afterIdle) // idle: no more
     listeners.visibilitychange.forEach(f => f()); await flush()
     expect(prewarm.mock.calls.length).toBe(afterIdle + 1) // back to the front
+    expect(prewarm).toHaveBeenLastCalledWith('light', { refresh: true, force: true }) // the connection may be gone
+    listeners['net:change'].forEach(f => f()); await flush()
+    expect(prewarm).toHaveBeenLastCalledWith('light', { refresh: true, force: true }) // 3G ↔ 4G: a new connection now
+    expect(prewarm.mock.calls.length).toBe(afterIdle + 2)
+    listeners['win:online'].forEach(f => f()); await flush()
+    expect(prewarm.mock.calls.length).toBe(afterIdle + 3) // back online
   })
 })
