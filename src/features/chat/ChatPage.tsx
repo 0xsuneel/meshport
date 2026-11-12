@@ -4589,10 +4589,10 @@ export function ChatConversationPage() {
     const name = otherUser?.display_name || recipientClean
     return (
       <div className="h-full flex flex-col px-5" style={{ paddingBottom: 'max(14px, env(safe-area-inset-bottom, 0px))' }}>
-        <div className="text-center pt-1">
-          <div className="flex items-center justify-center gap-2.5 min-w-0">
+        <div className="pt-1">
+          <div className="flex items-center gap-2.5 min-w-0">
             <Avatar name={name} src={otherUser?.avatar_url ?? null} size="sm" />
-            <div className="text-left min-w-0">
+            <div className="min-w-0">
               <p className="text-[15px] font-bold text-text-primary truncate">Paying {name}</p>
               <p className="text-[12px] text-link truncate">{recipientClean}.arc</p>
             </div>
@@ -4622,9 +4622,18 @@ export function ChatConversationPage() {
             })}
             onMax={payLocked || max <= 0 ? undefined : () => setAmt(max)}
           />
-          <p className="text-xs" style={{ color: payInsufficient ? 'var(--danger-text)' : 'var(--text-secondary)', marginTop: 8, fontWeight: payInsufficient ? 600 : undefined }}>
-            {payInsufficient ? 'Insufficient balance · ' : 'Balance '}{chatPayTokenSymbolChar(payToken)}{formatAmount(bal, dec)} {payToken}
-          </p>
+          {/* While Pay's dots wait for the passcode step (a slow network), the
+              balance line says what they are waiting for - same place, so
+              nothing in the sheet moves. */}
+          {payStep === 'confirm' ? (
+            <p key="opening" className="text-xs text-text-secondary" style={{ marginTop: 8, animation: 'mpFadeIn 200ms ease-out 1200ms both' }}>
+              Opening your wallet…
+            </p>
+          ) : (
+            <p className="text-xs" style={{ color: payInsufficient ? 'var(--danger-text)' : 'var(--text-secondary)', marginTop: 8, fontWeight: payInsufficient ? 600 : undefined }}>
+              {payInsufficient ? 'Insufficient balance · ' : 'Balance '}{chatPayTokenSymbolChar(payToken)}{formatAmount(bal, dec)} {payToken}
+            </p>
+          )}
         </div>
         {payError && <p role="alert" className="text-sm text-danger text-center mt-1">{payError}</p>}
         <div className="mt-auto pt-3">
@@ -4639,6 +4648,7 @@ export function ChatConversationPage() {
             style={{ background: 'var(--brand)' }}>
             {n > 0 ? `Pay ${payAmountText(n)}` : 'Pay'}
           </button>
+
         </div>
       </div>
     )
@@ -5660,7 +5670,11 @@ export function ChatConversationPage() {
         backClose={payStep !== 'processing'}>
         <div className="relative" style={{ height: CHAT_PAY_SHEET_H }}>
           {(payStep === 'form' || (payStep === 'confirm' && !pinVisible)) && (
-            <div className="absolute inset-0 overflow-y-auto overflow-x-hidden">
+            // While the passcode step gets ready (Pay shows dots) the amount
+            // stays in view but can't change: the wallet is already being
+            // asked to approve this exact amount.
+            <div className="absolute inset-0 overflow-y-auto overflow-x-hidden"
+              style={payStep === 'confirm' ? { pointerEvents: 'none' } : undefined} aria-busy={payStep === 'confirm' || undefined}>
               {renderPhonePayAmount()}
             </div>
           )}

@@ -144,7 +144,12 @@ export function PinSheet(p: PinSheetProps) {
     const t = setTimeout(() => setLinger(false), APPROVED_SHOW_MS - since)
     return () => clearTimeout(t)
   }, [p.open])
-  const shownOpen = p.open || linger
+  // The render the screen closes it in (approved → processing), before the
+  // effect above has set `linger`: still shown. Without this, that one render
+  // dropped the wallet's page and the next one opened a NEW page - a second
+  // passcode step flashed in after the passcode was already typed (chat Pay).
+  const justApproved = !p.open && wasOpenForLinger.current && approvedAt.current > 0 && performance.now() - approvedAt.current < APPROVED_SHOW_MS
+  const shownOpen = p.open || linger || justApproved
   // While it only lingers to show the tick, the screen has already moved on:
   // it is not a layer any more - Back and taps on the dim aren't its to
   // take. (A screen tidying up its own Back entry right then fires a Back;
@@ -202,7 +207,12 @@ export function PinSheet(p: PinSheetProps) {
     const end = waitOnPressedButton()
     // A very slow connection: the sheet opens anyway after 8 s, showing that
     // the wallet is still opening (WalletConfirmFrame `waiting`).
-    const t = setTimeout(() => setUsable(true), 8000)
+    // Inline (chat Pay keeps every step in one sheet): the step before stays
+    // up with its button's dots instead - the stand-in looked like a passcode
+    // screen that took no input, and the real page then came in over it (read
+    // as the passcode being asked twice). Only a page that is still not there
+    // after 15 s shows the stand-in ("Opening your wallet...").
+    const t = setTimeout(() => setUsable(true), p.inline ? 15000 : 8000)
     return () => { end(); clearTimeout(t) }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- setUsable is for this opening, read when the effect starts
   }, [held])
