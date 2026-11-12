@@ -1,7 +1,7 @@
 // New split: amount (when not coming from a payment) → who's in → how to
 // split → review → requests sent. Creating a split moves no money: every
 // friend gets a payment request for their share (lib/splits).
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Search, X, Check } from 'lucide-react'
 import { useAuthStore } from '@/store'
@@ -13,7 +13,7 @@ import {
 } from '@/lib/splits'
 import {
   SplitHeader, SplitAvatar, ListCard, ProgressBar, Pill, ActionBar, Btn, Tick,
-  card, rowStyle, subStyle, nameStyle, amountStyle, SPLIT_EMOJIS,
+  card, rowStyle, subStyle, nameStyle, amountStyle, SPLIT_CATEGORIES, categoryForTitle, categoryForEmoji,
 } from './splitUi'
 
 type Step = 'amount' | 'people' | 'how' | 'review' | 'sent'
@@ -21,7 +21,11 @@ type Mode = 'equal' | 'amounts' | 'percent'
 type Person = { username: string; name: string; avatar: string | null; userId: string | null }
 type Group = { key: string; title: string; emoji: string | null; people: Person[] }
 
-export interface SplitNewState { total?: number; title?: string; sourceTx?: string; with?: string[] }
+export interface SplitNewState {
+  total?: number; title?: string; sourceTx?: string
+  /** People already in (Split again with this group). */
+  with?: Array<string | { username: string; name?: string | null; avatar?: string | null }>
+}
 
 const clean = (u: string) => u.trim().replace(/^@/, '').replace(/\.arc$/i, '').toLowerCase()
 const parseAmount = (s: string) => {
@@ -40,7 +44,11 @@ export function SplitNewPage() {
   const [totalText, setTotalText] = useState(init.total ? String(init.total) : '')
   const total = parseAmount(totalText)
   const [title, setTitle] = useState(init.title ?? '')
-  const [emoji, setEmoji] = useState<string>('🧾')
+  // The expense's category icon: picked from its name until chosen by hand.
+  const [emoji, setEmojiState] = useState<string>(() => categoryForTitle(init.title ?? '').emoji)
+  const [catByHand, setCatByHand] = useState(false)
+  const setEmoji = (e: string) => { setCatByHand(true); setEmojiState(e) }
+  useEffect(() => { if (!catByHand) setEmojiState(categoryForTitle(title).emoji) }, [title, catByHand])
   const [picked, setPicked] = useState<Person[]>([])
   const [mode, setMode] = useState<Mode>('equal')
   const [amounts, setAmounts] = useState<Record<string, string>>({})
@@ -76,7 +84,10 @@ export function SplitNewPage() {
   // Coming back from a chat or a group: people already named.
   useEffect(() => {
     if (!init.with?.length) return
-    setPicked(init.with.map(u => ({ username: clean(u), name: clean(u), avatar: null, userId: null })))
+    setPicked(init.with.map(u => typeof u === 'string'
+      ? { username: clean(u), name: clean(u), avatar: null, userId: null }
+      : { username: clean(u.username), name: u.name || clean(u.username), avatar: u.avatar ?? null, userId: null })
+      .filter(p => p.username && p.username !== myName))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -347,6 +358,14 @@ function PeopleList({ title, people, isPicked, toggle }: { title: string; people
 }
 
 function TitleCard({ title, setTitle, emoji, setEmoji }: { title: string; setTitle: (s: string) => void; emoji: string; setEmoji: (s: string) => void }) {
+  const cat = categoryForEmoji(emoji)
+  // The chosen category stays in view in the row (picked from the name too).
+  const rowRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const row = rowRef.current
+    const on = row?.querySelector<HTMLElement>('[aria-checked="true"]')
+    if (row && on) row.scrollTo({ left: Math.max(0, on.offsetLeft - row.clientWidth / 2 + on.clientWidth / 2), behavior: 'smooth' })
+  }, [emoji])
   return (
     <div style={card}>
       <div style={subStyle}>What for</div>
@@ -355,12 +374,19 @@ function TitleCard({ title, setTitle, emoji, setEmoji }: { title: string; setTit
         <input value={title} maxLength={60} onChange={e => setTitle(e.target.value)} placeholder="Dinner, rent, cab…" aria-label="What the bill is for"
           style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 17, fontWeight: 650, color: 'var(--text-primary)', minWidth: 0 }} />
       </div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
-        {SPLIT_EMOJIS.map(e => (
-          <button key={e} type="button" aria-label={`Icon ${e}`} aria-pressed={emoji === e} onClick={() => setEmoji(e)}
-            style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 10, fontSize: 18, cursor: 'pointer',
-              border: emoji === e ? '2px solid var(--brand)' : '1px solid var(--border)', background: emoji === e ? 'color-mix(in srgb, var(--brand) 10%, var(--surface))' : 'var(--bg)' }}>{e}</button>
-        ))}
+      <div style={{ ...subStyle, marginTop: 12 }}>Category · <b style={{ color: 'var(--text-primary)' }}>{cat.label}</b></div>
+      <div ref={rowRef} role="radiogroup" aria-label="Category" style={{ position: 'relative', display: 'flex', gap: 6, marginTop: 6, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
+        {SPLIT_CATEGORIES.map(c => {
+          const on = c.emoji === emoji
+          return (
+            <button key={c.id} type="button" role="radio" aria-checked={on} aria-label={c.label} onClick={() => setEmoji(c.emoji)}
+              style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, height: 34, padding: '0 11px 0 8px', borderRadius: 999, cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                color: on ? 'var(--brand-text)' : 'var(--text-secondary)', whiteSpace: 'nowrap',
+                border: on ? '1.5px solid var(--brand)' : '1px solid var(--border)', background: on ? 'color-mix(in srgb, var(--brand) 10%, var(--surface))' : 'var(--bg)' }}>
+              <span aria-hidden style={{ fontSize: 16 }}>{c.emoji}</span>{c.label}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
