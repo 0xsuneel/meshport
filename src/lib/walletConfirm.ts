@@ -133,17 +133,31 @@ export async function payConfirmIntent(token: 'USDC' | 'EURC' | 'cirBTC', to: st
 }
 
 /**
- * Loads the wallet's confirm page once, hidden, so its code, styles and font
- * are cached before the first payment: the passcode step then opens at once
- * instead of waiting on downloads. Without a ticket the page only says the
- * link expired; nothing is started or signed. Once per app run.
+ * Loads the wallet's confirm page hidden, so its code, styles and font are
+ * cached before the first payment and the passcode step opens at once.
+ * Without a ticket the page only says the link expired; nothing is started or
+ * signed.
+ *
+ * `refresh`: load it again (at most every 45 s) - when a money screen opens
+ * or the app comes back to the front. Mobile networks drop idle connections
+ * without telling the phone, and the first request on such a dead connection
+ * hangs ~10 s: field, Bring (12 Nov) - the passcode page never even loaded
+ * for 9.6 s; the next try loaded in 1.5 s. A small reload here finds (and
+ * replaces) the dead connection while the amount is still being typed, not
+ * after Confirm.
  */
 let prewarmed = false
-export function prewarmWalletConfirm(theme: 'dark' | 'light'): void {
+let warmedAt = 0
+let warming = false
+const REWARM_MS = 45_000
+export function prewarmWalletConfirm(theme: 'dark' | 'light', opts: { refresh?: boolean } = {}): void {
   // Not "done" until it actually loaded the page: a try before the wallet
   // could confirm there (no passcode yet) is tried again later.
-  if (prewarmed || typeof document === 'undefined' || !walletConfirmAddress()) return
+  if (typeof document === 'undefined' || !walletConfirmAddress() || warming) return
+  if (prewarmed && !(opts.refresh && Date.now() - warmedAt > REWARM_MS)) return
   prewarmed = true
+  warming = true
+  warmedAt = Date.now()
   void import('@/wallet').then(({ walletOrigin }) => {
     const f = document.createElement('iframe')
     f.src = `${walletOrigin()}/confirm.html#theme=${theme}`
@@ -153,9 +167,10 @@ export function prewarmWalletConfirm(theme: 'dark' | 'light'): void {
     f.setAttribute('referrerpolicy', 'no-referrer')
     // Laid out (so the font is fetched too) but out of sight and untouchable.
     Object.assign(f.style, { position: 'fixed', left: '-10000px', top: '0', width: '320px', height: '120px', border: '0', visibility: 'hidden', pointerEvents: 'none' })
-    const drop = () => setTimeout(() => f.remove(), 3000)
+    const done = () => { warming = false; warmedAt = Date.now() }
+    const drop = () => { done(); setTimeout(() => f.remove(), 3000) }
     f.addEventListener('load', drop, { once: true })
-    setTimeout(() => f.remove(), 20_000) // never left behind
+    setTimeout(() => { done(); f.remove() }, 20_000) // never left behind
     document.body.appendChild(f)
-  }).catch(() => { prewarmed = false })
+  }).catch(() => { prewarmed = false; warming = false })
 }

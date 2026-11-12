@@ -169,6 +169,23 @@ export function AppLayout() {
     return () => window.clearTimeout(t)
   }, [walletAddress, passcodeSet])
 
+  // ...and again (at most every 45 s) when a money screen opens or the app
+  // comes back to the front: a mobile network's dropped idle connection is
+  // found and replaced while the amount is typed, not after Confirm (a Bring's
+  // passcode page hung 9.6 s on one - lib/walletConfirm prewarmWalletConfirm).
+  const moneyScreen = /^\/(pay|swap|multichain|scan|chat|business|p2p|bulk)/.test(location.pathname)
+  useEffect(() => {
+    if (!walletAddress || !passcodeSet) return
+    const warm = () => {
+      const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
+      import('@/lib/walletConfirm').then(m => m.prewarmWalletConfirm(theme, { refresh: true })).catch(() => {})
+    }
+    if (moneyScreen) warm()
+    const onVisible = () => { if (document.visibilityState === 'visible') warm() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [walletAddress, passcodeSet, moneyScreen, location.pathname])
+
   useEffect(() => {
     if (!walletAddress || isSlowNetwork() || (navigator as any).connection?.saveData) return
     const pages = [
