@@ -110,4 +110,35 @@ export function when(iso: string | null | undefined): string {
   return `${date}, ${time}`
 }
 
-export const SPLIT_EMOJIS = ['🍕', '🍔', '☕', '🍻', '🛒', '🏠', '🚕', '✈️', '🎬', '🎁', '💡', '🧾']
+/**
+ * Expense categories, each with its icon - grouped the way expense apps do
+ * (Splitwise: Food & drink, Home, Transport, Entertainment, Life…). The
+ * category is picked from the expense's name ("Uber to airport" → Taxi) until
+ * one is chosen by hand.
+ */
+export interface SplitCategory { id: string; label: string; emoji: string; words: RegExp }
+export const SPLIT_CATEGORIES: SplitCategory[] = [
+  { id: 'dining',    label: 'Dining out',  emoji: '🍕', words: /\b(dinner|lunch|breakfast|brunch|meal|restaurant|food|pizza|biryani|burger|cafe|dine|dining|swiggy|zomato|treat)\b/i },
+  { id: 'groceries', label: 'Groceries',   emoji: '🛒', words: /\b(grocer(y|ies)|supermarket|vegetables?|fruits?|milk|blinkit|zepto|bigbasket|instamart|dmart|kirana)\b/i },
+  { id: 'coffee',    label: 'Coffee',      emoji: '☕', words: /\b(coffee|chai|tea|starbucks|snacks?)\b/i },
+  { id: 'drinks',    label: 'Drinks',      emoji: '🍻', words: /\b(drinks?|beers?|bar|pub|party|wine|cocktails?)\b/i },
+  { id: 'rent',      label: 'Rent',        emoji: '🏠', words: /\b(rent|flat|apartment|house|pg|hostel|deposit|maintenance)\b/i },
+  { id: 'utilities', label: 'Utilities',   emoji: '💡', words: /\b(electricity|power|water|gas|wifi|wi-fi|internet|broadband|bill|utilities|recharge|phone)\b/i },
+  { id: 'taxi',      label: 'Taxi',        emoji: '🚕', words: /\b(cab|taxi|uber|ola|rapido|auto|ride)\b/i },
+  { id: 'fuel',      label: 'Fuel',        emoji: '⛽', words: /\b(fuel|petrol|diesel|gas station|toll|parking)\b/i },
+  { id: 'travel',    label: 'Travel',      emoji: '✈️', words: /\b(flights?|trip|travel|train|bus|tickets?|airport|vacation|holiday|goa)\b/i },
+  { id: 'hotel',     label: 'Hotel',       emoji: '🏨', words: /\b(hotel|stay|airbnb|resort|room|booking)\b/i },
+  { id: 'movies',    label: 'Movies',      emoji: '🎬', words: /\b(movies?|cinema|film|netflix|show|concert|event|game|match|sports?)\b/i },
+  { id: 'shopping',  label: 'Shopping',    emoji: '🛍️', words: /\b(shopping|clothes|shoes|amazon|flipkart|myntra|mall)\b/i },
+  { id: 'gifts',     label: 'Gifts',       emoji: '🎁', words: /\b(gifts?|birthday|wedding|anniversary|present|farewell)\b/i },
+  { id: 'health',    label: 'Health',      emoji: '💊', words: /\b(medicines?|doctor|hospital|pharmacy|clinic|gym|health)\b/i },
+  { id: 'other',     label: 'Other',       emoji: '🧾', words: /$^/ },
+]
+export const DEFAULT_SPLIT_CATEGORY = SPLIT_CATEGORIES[SPLIT_CATEGORIES.length - 1]
+/** The category an expense's name points to (Other when nothing matches). */
+export function categoryForTitle(title: string): SplitCategory {
+  return SPLIT_CATEGORIES.find(c => c.words.test(title)) ?? DEFAULT_SPLIT_CATEGORY
+}
+export function categoryForEmoji(emoji: string | null | undefined): SplitCategory {
+  return SPLIT_CATEGORIES.find(c => c.emoji === emoji) ?? DEFAULT_SPLIT_CATEGORY
+}

@@ -124,6 +124,11 @@ export function SplitDetailPage() {
   const settled = isSettled(s)
   const mine = s.members.find(m => m.isMe) ?? null
   const owedTotal = s.members.reduce((a, m) => a + m.amount, 0)
+  // Everyone else in this group (for "Split again with group").
+  const groupPeople = [
+    ...(!s.isCreator && s.creator.username ? [{ username: s.creator.username, name: s.creator.name, avatar: s.creator.avatar }] : []),
+    ...s.members.filter(m => !m.isMe && m.username).map(m => ({ username: m.username!, name: m.name, avatar: m.avatar })),
+  ]
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
@@ -219,7 +224,18 @@ export function SplitDetailPage() {
         })())}
       </div>
 
-      {/* Message the group. */}
+      {/* Settled: the split is closed (as Google Pay closes a paid bill) - no
+          more messages here; split something new, with the same people or
+          anyone (as PhonePe adds a new expense to a group). */}
+      {settled ? (
+        <div style={{ flexShrink: 0, padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 14px)', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+          <p style={{ ...subStyle, textAlign: 'center', marginBottom: 10 }}>All settled 🎉 · This split is closed</p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Btn kind="ghost" style={{ height: 48, fontSize: 14.5 }} onClick={() => navigate('/splits/new')}>New split expense</Btn>
+            <Btn style={{ height: 48, fontSize: 14.5 }} onClick={() => navigate('/splits/new', { state: { with: groupPeople } })}>Split again with group</Btn>
+          </div>
+        </div>
+      ) : (
       <form onSubmit={e => { e.preventDefault(); void send() }}
         style={{ flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px calc(env(safe-area-inset-bottom, 0px) + 10px)', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
         <input value={draft} onChange={e => setDraft(e.target.value)} maxLength={1000} placeholder="Message the group" aria-label="Message the group"
@@ -229,6 +245,7 @@ export function SplitDetailPage() {
           <Send size={18} />
         </button>
       </form>
+      )}
     </div>
   )
 }
