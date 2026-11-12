@@ -32,6 +32,35 @@ if (typeof window !== 'undefined') {
   for (const e of USE_EVENTS) window.addEventListener(e, mark, { capture: true, passive: true })
 }
 
+// Typing (a key or text input) in the last moments: a switch now would
+// throw away what's being typed.
+let lastTypedAt = 0
+if (typeof window !== 'undefined') {
+  const typed = () => { lastTypedAt = Date.now() }
+  window.addEventListener('keydown', typed, { capture: true, passive: true })
+  window.addEventListener('input', typed, { capture: true, passive: true })
+}
+const typingRecently = () => Date.now() - lastTypedAt < 8_000
+
+// ── Before there is a wallet ───────────────────────────────────────────────
+// Someone who hasn't made (or brought) a wallet yet has nothing to lose to a
+// reload: the landing page, sign-in / sign-up and the wallet choice. There a
+// newer version is switched to at once - even after a tap - so a new user
+// never signs up on the old version and gets "Updating MeshPort…" after
+// registering (field, 12 Nov). From creating / importing a wallet on, the
+// usual rules hold (a switch never lands in the middle of it).
+const BEFORE_WALLET = [/^\/$/, /^\/auth\/?$/, /^\/auth\/wallet-setup\/?$/]
+export function isBeforeWallet(pathname: string, hasWallet: boolean): boolean {
+  return !hasWallet && BEFORE_WALLET.some(r => r.test(pathname))
+}
+function hasWalletNow(): boolean {
+  try {
+    const st = JSON.parse(localStorage.getItem('meshport-auth-v4') || 'null')?.state
+    return !!st?.walletAddress
+  } catch { return true } // unknown: treat as signed in (the careful rules)
+}
+const beforeWalletNow = () => typeof window !== 'undefined' && isBeforeWallet(window.location.pathname, hasWalletNow())
+
 async function registration(): Promise<ServiceWorkerRegistration | undefined> {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return undefined
   try { return await navigator.serviceWorker.getRegistration() } catch { return undefined }
@@ -190,9 +219,12 @@ export function decideLoadSwitch(found: boolean, sincePageStartMs: number, check
 export async function applyWaitingUpdate(opts: { checkMs?: number } = {}): Promise<boolean> {
   let target: string | null = null
   try { target = sessionStorage.getItem(TARGET_KEY); sessionStorage.removeItem(TARGET_KEY) } catch { /* private mode */ }
-  const checkMs = opts.checkMs
+  // Before there's a wallet the opening check gets longer (a slow connection
+  // still switches) and taps don't hold it back - only typing does.
+  const fresh = beforeWalletNow()
+  const checkMs = opts.checkMs === undefined ? undefined : fresh ? Math.max(opts.checkMs, 10_000) : opts.checkMs
   if (await checkForUpdate(checkMs)) {
-    if (checkMs !== undefined && !decideLoadSwitch(true, performance.now(), checkMs, used)) return false
+    if (checkMs !== undefined && !decideLoadSwitch(true, performance.now(), checkMs, fresh ? (beforeWalletNow() ? typingRecently() : true) : used)) return false
     // We just reloaded for this very version and still came back on the old
     // one: the device's offline copy keeps answering with the old page. Clear
     // it completely and load from the server (lib/lazyRetry - it stops after
@@ -266,7 +298,10 @@ export const QUIET_SWITCH_AFTER_HIDDEN_MS = 60_000
  *   - anywhere else on screen: 'pill' ("Update ready" - only if they tap it);
  *   - otherwise 'wait'. Pure - unit tested.
  */
-export function decideApply(p: { visible: boolean; hiddenForMs: number; resting: boolean; onLock: boolean; lockTouched: boolean }): 'quiet' | 'now' | 'pill' | 'wait' {
+export function decideApply(p: { visible: boolean; hiddenForMs: number; resting: boolean; onLock: boolean; lockTouched: boolean; beforeWallet?: boolean; typing?: boolean }): 'quiet' | 'now' | 'pill' | 'wait' {
+  // No wallet yet (landing, sign-in / sign-up, the wallet choice): nothing
+  // to lose - switch now, unless something is being typed this moment.
+  if (p.beforeWallet) return p.typing ? 'wait' : 'now'
   if (!p.visible) return p.hiddenForMs >= QUIET_SWITCH_AFTER_HIDDEN_MS && p.resting ? 'quiet' : 'wait'
   if (p.onLock && !p.lockTouched) return 'now'
   return 'pill'
@@ -313,6 +348,7 @@ export function watchForUpdates(): () => void {
     const action = decideApply({
       visible, hiddenForMs: hiddenSince ? Date.now() - hiddenSince : 0,
       resting: onRestingScreen(), onLock: nowLock, lockTouched,
+      beforeWallet: beforeWalletNow(), typing: typingRecently(),
     })
     if (action === 'quiet') void switchQuietly()
     else if (action === 'now') { applying = true; void switchToNewVersion().finally(() => { applying = false }) }
