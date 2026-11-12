@@ -6,7 +6,8 @@
 //   (getPayment(code) → orderPaySendUrl → the normal passcode-confirmed pay).
 //
 // "Hide reminder" hides one item from the popup for good (it stays payable
-// in chat and Activity). "Close all" keeps the popup away for 12 hours.
+// in chat and Activity). "Close all" keeps those items away for 12 hours;
+// something new that arrives meanwhile still shows (on its own).
 // Both are this device's choice, per wallet.
 
 import { supabase } from './supabase'
@@ -47,11 +48,31 @@ export function hideReminder(wallet: string, code: string) {
   list.push(code)
   write(key(wallet, 'hidden'), JSON.stringify(list.slice(-HIDDEN_MAX)))
 }
-/** "Close all" (or the popup was shown and dismissed): wait 12 h. */
-export function snoozeReminders(wallet: string, now = Date.now()) { write(key(wallet, 'closed'), String(now)) }
+/** Items the popup has already shown on this device. */
+export function seenCodes(wallet: string): Set<string> {
+  try {
+    const v = JSON.parse(read(key(wallet, 'seen')) || '[]')
+    return new Set(Array.isArray(v) ? v.filter((c): c is string => typeof c === 'string') : [])
+  } catch { return new Set() }
+}
+/** The popup showed (or "Close all"): these items wait 12 h before showing again. */
+export function snoozeReminders(wallet: string, codes: string[] = [], now = Date.now()) {
+  write(key(wallet, 'closed'), String(now))
+  if (!codes.length) return
+  const list = [...seenCodes(wallet)].filter(c => !codes.includes(c))
+  write(key(wallet, 'seen'), JSON.stringify([...list, ...codes].slice(-HIDDEN_MAX)))
+}
 export function remindersSnoozed(wallet: string, now = Date.now()): boolean {
   const t = Number(read(key(wallet, 'closed')) || 0)
   return t > 0 && now - t < REMIND_EVERY_MS && t <= now
+}
+/** What the popup shows now: not hidden; within the 12 h wait, only items
+ *  that arrived since it last showed (a new bill doesn't wait half a day). */
+export function remindersToShow(list: DueRequest[], wallet: string, now = Date.now()): DueRequest[] {
+  const shown = visibleReminders(list, hiddenCodes(wallet))
+  if (!remindersSnoozed(wallet, now)) return shown
+  const seen = seenCodes(wallet)
+  return shown.filter(r => !seen.has(r.code))
 }
 
 const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
