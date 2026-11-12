@@ -9,6 +9,8 @@
 //     card, and this card turns into "Payment received" (merchant) /
 //     "Paid" (customer). A paid or closed card can't be opened or paid again.
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { splitForCode, type SplitSummary } from '@/lib/splits'
 import { CheckCircle2, Clock, Receipt } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import { cardInnerWidth } from '@/features/chat/chatCard'
@@ -193,6 +195,8 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
           </div>
         )}
         {v.note && <div style={{ fontSize: 12, color: muted, marginTop: isBill ? 5 : 0 }}>{v.note}</div>}
+        {/* A share of a split bill (lib/splits): how many have paid, and the whole split. */}
+        {!isBill && v.note?.startsWith('Split ·') && <SplitStrip code={code} />}
         {dueLine && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: dueColor, marginTop: (isBill || v.note) ? 6 : 0 }}>
             <Clock size={12} /> {dueLine.text}
@@ -215,6 +219,31 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
         onClose={() => setOpen(false)} />}
       </AnimatePresence>
     </div>
+  )
+}
+
+function SplitStrip({ code }: { code: string }) {
+  const navigate = useNavigate()
+  const [s, setS] = useState<SplitSummary | null>(null)
+  useEffect(() => {
+    let live = true
+    const load = () => { void splitForCode(code).then(v => { if (live) setS(v) }) }
+    load()
+    window.addEventListener(BILL_UPDATED_EVENT, load)
+    return () => { live = false; window.removeEventListener(BILL_UPDATED_EVENT, load) }
+  }, [code])
+  if (!s) return null
+  return (
+    <button type="button" onClick={e => { e.stopPropagation(); navigate(`/splits/${s.id}`) }}
+      style={{ width: '100%', marginTop: 7, padding: 0, border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--text-secondary)' }}>
+      <div style={{ height: 5, borderRadius: 9, overflow: 'hidden', background: 'color-mix(in srgb, var(--text-primary) 9%, transparent)' }}>
+        <div style={{ height: '100%', width: `${s.requests ? (s.paidCount / s.requests) * 100 : 0}%`, background: 'var(--brand)', borderRadius: 9 }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginTop: 4 }}>
+        <span>{s.paidCount} of {s.requests} paid · {s.people} people</span>
+        <span style={{ fontWeight: 700, color: 'var(--brand-text)' }}>View split ›</span>
+      </div>
+    </button>
   )
 }
 

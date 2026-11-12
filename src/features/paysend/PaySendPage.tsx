@@ -1696,6 +1696,12 @@ export function PaySendPage() {
                   fullHash={txHash || undefined}
                   links={txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: txHash, href: arcExplorerTxUrl(txHash) }] : undefined}
                   onPrimary={finishDone}
+                  // A USDC bill paid for a group: split it right here (lib/splits) -
+                  // everyone pays you back their share by a payment request.
+                  actions={!payPending && token === 'USDC' && numAmount > 0 ? [
+                    { label: 'Split bill', onClick: () => navigate('/splits/new', { state: { total: numAmount, title: recipient.isUsername ? `Paid to ${recipient.displayName || recipient.display}` : (merchantUsername ? `Paid to ${merchantUsername}` : ''), sourceTx: txHash || undefined } }) },
+                    { label: 'Done', primary: true, onClick: finishDone },
+                  ] : undefined}
                   checkRef={heroCheckCallback}
                   revealed={travelDone}
                   checkContent={paidViaBiometric && travelDone

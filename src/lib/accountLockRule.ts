@@ -68,7 +68,7 @@ export function assertAccountUnlocked(): void {
 const LOCKED_PREFIXES = [
   '/pay', '/pay-send', '/paylink', '/scanner', '/receive', '/swap', '/multichain', '/multichain-recovery',
   '/multichain-transfer', '/multichain-claim', '/bulk-payout', '/p2p', '/chat', '/rewards', '/insights',
-  '/recent-paid', '/asset', '/news',
+  '/recent-paid', '/asset', '/news', '/splits',
 ]
 export function isLockedPath(path: string): boolean {
   const p = (path.split(/[?#]/)[0] || '/').replace(/\/+$/, '') || '/'

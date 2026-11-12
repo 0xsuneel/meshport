@@ -5,7 +5,7 @@ import { AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
 import {useLocation, useNavigate, useSearchParams} from 'react-router-dom'
-import { RefreshCw, Loader2, X } from 'lucide-react'
+import { RefreshCw, Loader2, X, Users } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useActivity } from '@/hooks/useActivity'
 import { ActivityRecord, ActivityType, recoveredViaLabel, merchantRefundInfo } from '@/lib/ActivityService'
@@ -1135,11 +1135,19 @@ export function ActivityPage() {
               </button>
             )}
           </div>
-          <button onClick={refresh} disabled={loading} aria-label="Refresh"
-            className="mp-hit mp-hit-sm w-9 h-9 rounded-2xl flex items-center justify-center active:scale-95 disabled:opacity-40"
-            style={{ background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-            <RefreshCw className={cn('w-4 h-4 text-text-secondary', loading && 'animate-spin')} />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Split expense: bills shared with friends (what you're owed / owe). */}
+            <button onClick={() => navigateAll('/splits')} aria-label="Splits"
+              className="mp-hit mp-hit-sm h-9 px-3 rounded-2xl flex items-center gap-1.5 active:scale-95 text-[13px] font-bold"
+              style={{ background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--brand-text)' }}>
+              <Users className="w-4 h-4" />Splits
+            </button>
+            <button onClick={refresh} disabled={loading} aria-label="Refresh"
+              className="mp-hit mp-hit-sm w-9 h-9 rounded-2xl flex items-center justify-center active:scale-95 disabled:opacity-40"
+              style={{ background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
+              <RefreshCw className={cn('w-4 h-4 text-text-secondary', loading && 'animate-spin')} />
+            </button>
+          </div>
         </div>
         <div className="px-4 lg:max-w-[1100px] lg:mx-auto" style={{ ...collapseStyle(searchHidden, 72), paddingBottom: searchHidden ? 0 : 12 }}>
           <SearchField value={searchInput} onChange={setSearchInput} ariaLabel="Search username, wallet, or tx hash"

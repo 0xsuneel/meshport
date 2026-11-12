@@ -30,7 +30,7 @@ import { whenIdle } from '@/lib/idle'
 const noNavRoutes = [
   '/pay-send', '/receive', '/bulk-payout', '/profile', '/notifications',
   '/security', '/backup', '/edit-profile', '/transaction', '/feature-guide', '/about', '/terms-privacy', '/help-support', '/appearance',
-  '/swap', '/insights', '/p2p', '/multichain',
+  '/swap', '/insights', '/p2p', '/multichain', '/splits',
 ]
 
 // Pages that scroll under the frosted bottom nav, like Home (each pads the
