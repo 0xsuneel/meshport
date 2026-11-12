@@ -51,6 +51,9 @@ const InsightsPage          = lazyRetry(() => import('./features/insights/Insigh
 const BusinessPage          = lazyRetry(() => import('./features/business/BusinessPage').then(m => ({ default: m.BusinessPage })), 'BusinessPage')
 const RewardsPage           = lazyRetry(() => import('./features/rewards/RewardsPage').then(m => ({ default: m.RewardsPage })), 'RewardsPage')
 const AssetPage             = lazyRetry(() => import('./features/home/AssetPage').then(m => ({ default: m.AssetPage })), 'AssetPage')
+const SplitsPage            = lazyRetry(() => import('./features/split/SplitsPage').then(m => ({ default: m.SplitsPage })), 'SplitsPage')
+const SplitNewPage          = lazyRetry(() => import('./features/split/SplitNewPage').then(m => ({ default: m.SplitNewPage })), 'SplitNewPage')
+const SplitDetailPage       = lazyRetry(() => import('./features/split/SplitDetailPage').then(m => ({ default: m.SplitDetailPage })), 'SplitDetailPage')
 const RecentPaidPage        = lazyRetry(() => import('./features/recent/RecentPaidPage').then(m => ({ default: m.RecentPaidPage })), 'RecentPaidPage')
 const NewsPage              = lazyRetry(() => import('./features/news/NewsPage').then(m => ({ default: m.NewsPage })), 'NewsPage')
 const NewsArticlePage       = lazyRetry(() => import('./features/news/NewsArticlePage').then(m => ({ default: m.NewsArticlePage })), 'NewsArticlePage')
@@ -474,6 +477,9 @@ const router = createBrowserRouter([
       { path: 'rewards',                    element: <Unlocked title="Rewards"><PersonalOnly><FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate></PersonalOnly></Unlocked> },
       { path: 'business',                   element: <BusinessPage /> },
       { path: 'recent-paid',                element: <Unlocked title="Recent"><RecentPaidPage /></Unlocked> },
+      { path: 'splits',                     element: <Unlocked title="Splits"><SplitsPage /></Unlocked> },
+      { path: 'splits/new',                 element: <Unlocked title="Split a bill"><SplitNewPage /></Unlocked> },
+      { path: 'splits/:id',                 element: <Unlocked title="Split"><SplitDetailPage /></Unlocked> },
       { path: 'asset/:token',               element: <Unlocked title="Asset"><AssetPage /></Unlocked> },
       { path: 'news',                       element: <Unlocked title="News"><NewsPage /></Unlocked> },
       { path: 'news/:id',                   element: <Unlocked title="News"><NewsArticlePage /></Unlocked> },
