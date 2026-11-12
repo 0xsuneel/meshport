@@ -163,11 +163,12 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
           <PopupDim background="rgba(0,0,0,0.5)" />
           <div className="absolute inset-0 flex flex-col items-center" style={{ padding: 'calc(env(safe-area-inset-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 36px)' }}>
           <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-            {/* The card itself stays solid: only what's inside slides between
+            {/* The card is solid from its first frame (no fade-in: Home showed
+                through it) and stays solid: only what's inside slides between
                 items (a card that faded let Home show through it), and its
                 height eases to the next item's. Swipe left / right to switch. */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.94, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0, height: h }}
+              initial={{ scale: 0.94, y: 12 }} animate={{ scale: 1, y: 0 }}
               transition={{ type: 'spring', stiffness: 420, damping: 38 }}
               drag={n > 1 && !busy ? 'x' : false} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.35} dragSnapToOrigin
               onDragEnd={(_, info) => {
@@ -175,8 +176,13 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
                 if (swipe < -60) go(at + 1)
                 else if (swipe > 60) go(at - 1)
               }}
-              className="relative touch-pan-y"
-              style={{ width: 'min(318px, calc(100vw - 32px))', borderRadius: 28, background: 'var(--surface)', boxShadow: '0 30px 60px -20px rgba(0,0,0,.5)', overflowX: 'hidden', overflowY: h === 'auto' || h < maxH ? 'hidden' : 'auto', maxHeight: maxH }}>
+              className="touch-pan-y overflow-hidden"
+              style={{ width: 'min(318px, calc(100vw - 32px))', borderRadius: 28, background: 'var(--surface)', boxShadow: '0 30px 60px -20px rgba(0,0,0,.5)' }}>
+            {/* Height on its own layer: tied to the pop-in it restarted it
+                and blanked the card for a frame. */}
+            <motion.div className="relative" initial={false} animate={{ height: h }}
+              transition={{ type: 'spring', stiffness: 420, damping: 38 }}
+              style={{ overflowX: 'hidden', overflowY: h === 'auto' || h < maxH ? 'hidden' : 'auto', maxHeight: maxH }}>
             <AnimatePresence initial={false} mode="popLayout" custom={dir}>
             <motion.div key={r.code} ref={contentRef} custom={dir}
               variants={CARD} initial="enter" animate="center" exit="exit"
@@ -240,6 +246,7 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
               </div>
             </motion.div>
             </AnimatePresence>
+            </motion.div>
             </motion.div>
           </div>
             <button type="button" onClick={closeAll} disabled={busy} className="shrink-0 text-center text-white" style={{ marginTop: 18 }}>
