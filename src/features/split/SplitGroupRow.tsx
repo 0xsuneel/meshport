@@ -36,7 +36,7 @@ export function SplitGroupRow({ g }: { g: SplitGroup }) {
   const settled = g.requests > 0 && g.paidCount >= g.requests
   const preview = g.lastBody
     ? `${g.lastIsMe ? 'You' : (g.lastSender ?? 'Someone')}: ${g.lastBody}`
-    : settled ? 'All settled 🎉' : `Split · ${g.paidCount} of ${g.requests} paid`
+    : settled ? 'All settled 🎉' : `Split · ${g.paidCount + 1} of ${g.requests + 1} paid`
   return (
     <button type="button" onClick={() => navigate(`/splits/${g.id}`)}
       className="flex items-center gap-3 px-4 py-3 w-full active:bg-[rgb(var(--text-primary-rgb)/0.05)] transition-colors">

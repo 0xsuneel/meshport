@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Bell, ChevronDown, Send } from 'lucide-react'
 import {
-  getSplit, remindSplitMember, markSplitReceived, isSettled, memberOpen, money, splitMessages, sendSplitMessage,
+  getSplit, paidOf, remindSplitMember, markSplitReceived, isSettled, memberOpen, money, splitMessages, sendSplitMessage,
   watchSplitMessages, markSplitGroupSeen, SPLITS_CHANGED_EVENT, type SplitSummary, type SplitMember, type SplitMessage,
 } from '@/lib/splits'
 import { canRemindAt } from '@/lib/businessBills'
@@ -59,6 +59,7 @@ export function SplitDetailPage() {
     if (!s) return []
     const creatorName = s.isCreator ? 'You' : (s.creator.name ?? 'Someone')
     const out: Item[] = [{ kind: 'event', at: s.createdAt, text: `${creatorName} split ${money(s.total)} · ${s.emoji ? `${s.emoji} ` : ''}${s.title}` }]
+    if (s.myShare > 0) out.push({ kind: 'event', at: s.createdAt, text: `${creatorName} paid the bill · ${s.isCreator ? 'your' : 'their'} share ${money(s.myShare)} is paid` })
     for (const m of s.members) {
       if (m.status !== 'paid' || !m.paidAt) continue
       const who = m.isMe ? 'You' : (m.name ?? 'Someone')
@@ -152,16 +153,26 @@ export function SplitDetailPage() {
               ? <Btn style={{ flex: 'none', height: 42, padding: '0 18px', borderRadius: 14, fontSize: 14.5 }} disabled={busy === 'pay'} onClick={() => payMine(mine.code)}>{busy === 'pay' ? 'Opening…' : 'Pay'}</Btn>
               : <Pill tone={mine.status === 'paid' ? 'paid' : 'muted'}>{mine.status === 'paid' ? 'Paid' : mine.status}</Pill>)}
           </div>
-          <div style={{ marginTop: 10 }}><ProgressBar value={s.requests ? s.paidCount / s.requests : 0} /></div>
+          <div style={{ marginTop: 10 }}><ProgressBar value={paidOf(s).paid / paidOf(s).of} /></div>
           <button type="button" onClick={() => setDetails(d => !d)} aria-expanded={details}
             style={{ ...rowStyle, width: '100%', marginTop: 8, padding: 0, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-            <span style={{ ...subStyle, flex: 1, textAlign: 'left' }}>{s.paidCount} of {s.requests} paid · bill {money(s.total)}</span>
+            <span style={{ ...subStyle, flex: 1, textAlign: 'left' }}>{paidOf(s).paid} of {paidOf(s).of} paid · bill {money(s.total)}</span>
             <span style={{ ...subStyle, fontWeight: 700, color: 'var(--brand-text)', display: 'flex', alignItems: 'center', gap: 2 }}>
               {details ? 'Hide' : 'Everyone'} <ChevronDown size={14} style={{ transform: details ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
             </span>
           </button>
           {details && (
             <div style={{ marginTop: 6 }}>
+              {/* The person who made the split paid the bill: their share is paid, automatically. */}
+              <div style={{ ...rowStyle, padding: '10px 0', borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
+                <SplitAvatar name={s.creator.name} username={s.creator.username} avatar={s.creator.avatar} you={s.isCreator} size={34} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={nameStyle}>{s.isCreator ? 'You' : (s.creator.name ?? `${s.creator.username}.arc`)}</div>
+                  <div style={subStyle}>Paid the bill · {when(s.createdAt)}</div>
+                </div>
+                <div style={{ ...amountStyle, fontSize: 14.5 }}>{money(s.myShare)}</div>
+                <Pill tone="paid">Paid</Pill>
+              </div>
               {s.members.map(m => {
                 const paid = m.status === 'paid'
                 const open = memberOpen(m)
@@ -190,13 +201,6 @@ export function SplitDetailPage() {
                   </div>
                 )
               })}
-              {s.myShare > 0 && (
-                <div style={{ ...rowStyle, padding: '10px 0', borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-                  <SplitAvatar name={s.creator.name} username={s.creator.username} avatar={s.creator.avatar} you={s.isCreator} size={34} />
-                  <div style={{ flex: 1, minWidth: 0 }}><div style={nameStyle}>{s.isCreator ? 'Your share' : `${s.creator.name ?? 'Their'} share`}</div><div style={subStyle}>Paid with the bill</div></div>
-                  <div style={{ ...amountStyle, fontSize: 14.5, color: 'var(--text-secondary)' }}>{money(s.myShare)}</div>
-                </div>
-              )}
             </div>
           )}
         </div>
