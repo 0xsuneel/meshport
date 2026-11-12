@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, Receipt } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
+import { pendingOrdersLabel } from '@/lib/orderLabels'
 import {
   listChatPendingOrders, getPayment, paidLocally, subscribeMerchantPayments, orderLabel, orderKindOf, orderTitle, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type ChatPendingOrder,
 } from '@/lib/merchantPay'
@@ -116,7 +117,7 @@ export function ChatPendingOrders({ otherUserId, refreshKey }: { otherUserId: st
           style={{ padding: '9px 12px', background: 'transparent', border: 'none', cursor: 'pointer' }}>
           <Receipt size={16} color="var(--warning)" style={{ flexShrink: 0 }} />
           <span className="flex-1 min-w-0 truncate" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-            {shownOrders.length} pending {shownOrders.length === 1 ? (shownOrders[0].kind === 'invoice' ? 'bill' : 'request') : 'bills'}
+            {pendingOrdersLabel(shownOrders.map(o => o.kind))}
             <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
               {' · '}${formatAmount(totalDue)} USDC {iAmMerchant ? 'to receive' : 'due'}
             </span>
