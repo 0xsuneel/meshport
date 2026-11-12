@@ -62,6 +62,10 @@ interface SuccessReceiptProps {
   actions?: Array<{ label: string; onClick: () => void; primary?: boolean }>
   /** The daily reward task this action counts for: "+20 points · …" once it pays out. */
   reward?: RewardActionType
+  /** Fills its box edge to edge (a sheet holding it, chat Pay): no card
+   *  frame or margin around it, the header from the very top, the button at
+   *  the foot - instead of a card floating in white space. */
+  fill?: boolean
 }
 
 /** Size of the header's white check circle - the traveling checkmark's target. */
@@ -140,7 +144,7 @@ function Confetti() {
 export function SuccessReceipt({
   title, subtitle, pill, bubble, rows, steps, detailRows, fullHash, links, linksNote,
   primaryLabel = 'Done', onPrimary, checkRef, revealed, checkContent, style,
-  status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions, reward,
+  status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions, reward, fill = false,
 }: SuccessReceiptProps) {
   // Takes over from the success flash, which switches the page's blurs off
   // while it's up. Holding them off here too means the hand-off doesn't turn
@@ -213,7 +217,12 @@ export function SuccessReceipt({
         display: 'flex', flexDirection: 'column',
         padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 16px 16px',
       } : { display: 'contents' }}>
-      <div ref={cardRef} className="shadow-elevation-1" style={{
+      <div ref={cardRef} className={fill ? undefined : 'shadow-elevation-1'} style={fill ? {
+        // The whole box: grows to fill it (taller when details open, then it scrolls).
+        position: 'relative', width: '100%', flex: '1 0 auto', minHeight: '100%', boxSizing: 'border-box',
+        display: 'flex', flexDirection: 'column', background: 'var(--surface)', overflow: 'hidden',
+        paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
+      } : {
         // margin auto: centred top-to-bottom with equal space above and below
         // when it fits; when it's taller than the screen (details open) the
         // auto margins collapse to 0 and it scrolls from the top as before.
@@ -250,7 +259,7 @@ export function SuccessReceipt({
           </div>
         </div>
 
-        <div style={{ padding: '16px 20px 0', textAlign: 'center', color: 'var(--text-primary)' }}>
+        <div style={{ padding: '16px 20px 0', textAlign: 'center', color: 'var(--text-primary)', ...(fill ? { flex: 1, display: 'flex', flexDirection: 'column' } : null) }}>
           <Reveal i={0} revealed={revealed}>
             <h2 style={{ fontSize: 25, fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>{title}</h2>
           </Reveal>
@@ -351,7 +360,7 @@ export function SuccessReceipt({
           </div>
 
           {!actions?.length && (
-            <Reveal i={rows.length + 4} revealed={revealed}>
+            <Reveal i={rows.length + 4} revealed={revealed} style={fill ? { marginTop: 'auto', paddingTop: 12 } : undefined}>
               <motion.button onClick={onPrimary} whileTap={{ scale: 0.98 }}
                 style={{
                   width: '100%', marginTop: 12, padding: 15, border: 0, borderRadius: 999, cursor: 'pointer',

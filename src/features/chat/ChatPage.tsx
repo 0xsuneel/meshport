@@ -4488,6 +4488,8 @@ export function ChatConversationPage() {
                 return (
                 <SuccessReceipt
                   reward="chatpay"
+                  // Phone: fills the pay sheet edge to edge (desktop: the card in the drawer).
+                  fill={!isDesktop}
                   style={{ flex: 1, minHeight: 0, height: 'auto', padding: 0, background: 'transparent' }}
                   title={payPending ? 'Payment Submitted' : 'Payment Sent'}
                   subtitle={payPending ? <>Still confirming on Arc. Activity updates when it lands.</> : <>Delivered in your chat</>}
@@ -5688,9 +5690,8 @@ export function ChatConversationPage() {
                 className="absolute left-0 right-0 bottom-0 flex flex-col overflow-y-auto overflow-x-hidden bg-surface rounded-t-3xl"
                 style={{ top: -CHAT_PAY_HANDLE_H }}>
                 <div className="relative flex flex-col flex-1 min-h-0 rounded-t-3xl"
-                  style={payStep === 'success' && paySuccessPhase === 'collapsed'
-                    ? { padding: `${CHAT_PAY_HANDLE_H}px 12px calc(12px + env(safe-area-inset-bottom, 0px))` }
-                    : { paddingTop: CHAT_PAY_HANDLE_H }}>
+                  // The receipt fills the sheet itself (its header from the very top).
+                  style={payStep === 'success' && paySuccessPhase === 'collapsed' ? undefined : { paddingTop: CHAT_PAY_HANDLE_H }}>
                   {renderRun()}
                 </div>
               </motion.div>
