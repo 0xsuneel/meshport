@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 vi.mock('./supabase', () => ({ supabase: { rpc: vi.fn() } }))
-import { equalShares, percentShares, sharesGap, isSettled, money } from './splits'
+import { equalShares, percentShares, sharesGap, isSettled, money, capShareInput } from './splits'
 
 describe('split maths', () => {
   it('equal shares add up exactly; the payer keeps the extra cent', () => {
@@ -20,6 +20,15 @@ describe('split maths', () => {
     expect(sharesGap(25, [5, 12, 8])).toBe(0)
     expect(sharesGap(25, [5, 12])).toBe(800)
     expect(sharesGap(25, [5, 12, 9])).toBe(-100)
+  })
+  it('a typed share never goes above what is left', () => {
+    expect(capShareInput('500', 17)).toEqual({ text: '17', capped: true })
+    expect(capShareInput('12.5', 17)).toEqual({ text: '12.5', capped: false })
+    expect(capShareInput('17', 17)).toEqual({ text: '17', capped: false })
+    expect(capShareInput('150', 66.67)).toEqual({ text: '66.67', capped: true })
+    expect(capShareInput('5', -3)).toEqual({ text: '0', capped: true })
+    expect(capShareInput('', 10)).toEqual({ text: '', capped: false })
+    expect(capShareInput('8.', 10)).toEqual({ text: '8.', capped: false })
   })
   it('settled and money', () => {
     expect(isSettled({ requests: 2, paidCount: 2 })).toBe(true)

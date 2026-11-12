@@ -9,7 +9,7 @@ import { readPeople } from '@/lib/peopleCache'
 import { useUserSearch } from '@/hooks/useUserSearch'
 import type { DbUser } from '@/lib/supabase'
 import {
-  equalShares, percentShares, sharesGap, createSplit, mySplits, money, MAX_SPLIT_PEOPLE, type CreatedSplit,
+  equalShares, percentShares, sharesGap, createSplit, mySplits, money, capShareInput, MAX_SPLIT_PEOPLE, type CreatedSplit,
 } from '@/lib/splits'
 import {
   SplitHeader, SplitAvatar, ListCard, ProgressBar, Pill, ActionBar, Btn, Tick,
@@ -119,6 +119,25 @@ export function SplitNewPage() {
   const howOk = title.trim().length > 0 && gap === 0 && friendsOk && (mode !== 'percent' || Math.abs(pctTotal - 100) < 1e-6)
   const getBack = shares.slice(1).reduce((a, s) => a + s, 0)
 
+  // A share typed in Amounts / % follows the bill: never more than what's
+  // left after everyone else's shares (the server checks the total too).
+  const [capNote, setCapNote] = useState('')
+  useEffect(() => { if (!capNote) return; const t = setTimeout(() => setCapNote(''), 3500); return () => clearTimeout(t) }, [capNote])
+  const setShare = (key: string, label: string, text: string) => {
+    const keys = [myName, ...picked.map(p => p.username)].filter(k => k !== key)
+    if (mode === 'amounts') {
+      const others = keys.reduce((a, k) => a + parseAmount(amounts[k] ?? ''), 0)
+      const r = capShareInput(text, total - others)
+      if (r.capped) setCapNote(`Only ${money(Math.max(0, total - others))} of the ${money(total)} bill is left for ${label}`)
+      setAmounts(a => ({ ...a, [key]: r.text }))
+    } else {
+      const others = keys.reduce((a, k) => a + Number(percents[k] || 0), 0)
+      const r = capShareInput(text, 100 - others)
+      if (r.capped) setCapNote(`Only ${Math.max(0, Math.round((100 - others) * 100) / 100)}% is left for ${label}`)
+      setPercents(a => ({ ...a, [key]: r.text }))
+    }
+  }
+
   // Switching to Amounts / % starts from the equal split.
   const switchMode = (m: Mode) => {
     if (m === mode) return
@@ -167,7 +186,11 @@ export function SplitNewPage() {
           <div style={{ ...card, textAlign: 'center', padding: '26px 16px' }}>
             <div style={subStyle}>Bill total (USDC)</div>
             <input autoFocus inputMode="decimal" placeholder="$0.00" value={totalText ? `$${totalText}` : ''}
-              onChange={e => setTotalText(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/^(\d*\.\d{0,2}).*$/, '$1'))}
+              onChange={e => {
+                const t = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/^(\d*\.\d{0,2}).*$/, '$1')
+                // Up to $1,000,000 a bill (the server's limit too).
+                if (Number(t) <= 1_000_000) setTotalText(t)
+              }}
               aria-label="Bill total"
               style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', textAlign: 'center', fontSize: 40, fontWeight: 700, letterSpacing: '-1px', color: 'var(--text-primary)', marginTop: 6 }} />
           </div>
@@ -223,10 +246,10 @@ export function SplitNewPage() {
                 <div style={subStyle}>{p.you ? `Paid ${money(total)}` : `${p.username}.arc`}</div>
               </div>
               {mode === 'equal' ? <div style={amountStyle}>{money(shares[i] ?? 0)}</div>
-                : mode === 'amounts' ? <NumField prefix="$" value={amounts[p.username] ?? ''} onChange={v => setAmounts(a => ({ ...a, [p.username]: v }))} />
+                : mode === 'amounts' ? <NumField prefix="$" value={amounts[p.username] ?? ''} onChange={v => setShare(p.username, p.you ? 'you' : p.name, v)} />
                 : <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ ...subStyle, fontVariantNumeric: 'tabular-nums' }}>{money(shares[i] ?? 0)}</span>
-                    <NumField suffix="%" value={percents[p.username] ?? ''} onChange={v => setPercents(a => ({ ...a, [p.username]: v }))} />
+                    <NumField suffix="%" value={percents[p.username] ?? ''} onChange={v => setShare(p.username, p.you ? 'you' : p.name, v)} />
                   </div>}
             </div>
           ))}</ListCard>
@@ -246,6 +269,7 @@ export function SplitNewPage() {
               <div style={amountStyle}>{money(total - gap / 100)} <span style={subStyle}>of {money(total)}</span></div>
             </div>
             <ProgressBar value={total > 0 ? (total - gap / 100) / total : 0} />
+            {capNote && <p role="status" style={{ ...subStyle, textAlign: 'center', fontWeight: 600, color: 'var(--warning-text)' }}>{capNote}</p>}
             <p style={{ ...subStyle, textAlign: 'center', fontWeight: 600, color: gap === 0 && friendsOk ? 'var(--brand-text)' : 'var(--warning-text)' }}>
               {gap === 0 ? (friendsOk ? `✓ All ${money(total)} assigned` : 'Everyone you add needs a share above $0')
                 : gap > 0 ? `${money(gap / 100)} still to assign` : `${money(-gap / 100)} over the bill`}
