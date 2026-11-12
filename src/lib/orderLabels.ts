@@ -89,12 +89,22 @@ export function paidTitleFromTag(t: { number: string; kind: OrderKind | null }, 
   return orderTitle(t.kind, t.number, received ? { received: true, short } : { paid: true, short })
 }
 
+/** A payment request card that is a share of a Split Expense: the split's
+ *  name from its note line ("Split · 🍕 Dinner" → "🍕 Dinner"), else null. */
+export function splitNoteOf(text: string): string | null {
+  const line = text.split('\n')[1]?.trim() ?? ''
+  return line.startsWith('Split · ') ? line.slice('Split · '.length).trim() || null : null
+}
+
 /** A bill / request card's text → its one-line preview (chat list, reply
  *  quotes, search): "💸 Payment request · Order #ORD-100010 · $5.3 USDC…" →
- *  "💸 Request ORD-00010 · $5.3 USDC". null for any other text. */
+ *  "💸 Request ORD-00010 · $5.3 USDC" (a Split Expense share: "🧾 Split
+ *  Expense · 🍕 Dinner · $5 USDC"). null for any other text. */
 export function orderCardPreview(text: string): string | null {
   const m = /^(🧾 Bill|💸 Payment request)(?: · Order #([A-Z0-9-]{3,20}))? · \$([\d.,]+) USDC/u.exec(text)
   if (!m) return null
+  const split = m[1].startsWith('💸') ? splitNoteOf(text) : null
+  if (split) return `🧾 Split Expense · ${split} · $${m[3]} USDC`
   const bill = m[1].startsWith('🧾')
   const no = m[2] ? ' ' + displayOrderNumber(m[2]) : ''
   return `${bill ? '🧾 Bill' : '💸 Request'}${no} · $${m[3]} USDC`
