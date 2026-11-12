@@ -106,7 +106,6 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
     let approved = false
     let ticket: string | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
-    let fallback: ReturnType<typeof setTimeout> | null = null
     let ready = false
     // A wallet page from before slots (the two sites deploying a moment
     // apart) loads but never says it's ready: then it is opened by ticket -
@@ -182,9 +181,11 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
         mark('begun')
         if (done) { void import('@/wallet').then(m => m.cancelConfirm(started.ticket)); return }
         ticketUrl = started.url + (short ? '&short=1' : '')
+        // Only a page that loaded and never said it's ready is an old one.
+        // A page still loading is just slow (3G): it used to be swapped for
+        // the ticket address after 2.5 s, which threw the half-loaded page
+        // away and started again - a passcode sheet took 10 s (field, Pay, 3G).
         if (oldPage) byTicket()
-        // No load event seen either way: the same, a little later.
-        else if (!ready) fallback = setTimeout(byTicket, 2500)
         void poll(started.address, intent)
       } catch (e) {
         if (done) return
@@ -206,7 +207,6 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
     return () => {
       done = true
       if (timer) clearTimeout(timer)
-      if (fallback) clearTimeout(fallback)
       window.removeEventListener('message', onMessage)
       if (ticket && !approved) void import('@/wallet').then(m => m.cancelConfirm(ticket!)).catch(() => {})
     }
