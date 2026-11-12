@@ -293,6 +293,32 @@ export function AppLayout() {
     return () => window.removeEventListener('meshport:arc-deposit', onDeposit)
   }, [walletAddress])
 
+  // A payment, swap, transfer or deposit anywhere in the app: refresh
+  // Activity's saved list in the background (twice - the server writes some
+  // rows a few seconds after the transaction), so opening Activity shows the
+  // new rows straight away instead of the old list and then a jump.
+  useEffect(() => {
+    if (!walletAddress) return
+    const timers: number[] = []
+    const refresh = () => {
+      for (const t of timers.splice(0)) window.clearTimeout(t)
+      for (const ms of [3000, 12000]) {
+        timers.push(window.setTimeout(() => {
+          if (isSlowNetwork()) return // Activity loads it itself when opened
+          import('@/hooks/useActivity').then(m => m.prefetchActivity(walletAddress)).catch(() => {})
+        }, ms))
+      }
+    }
+    // 'meshport:balances-stale' = BALANCES_STALE_EVENT (lib/balanceRefresh): every finished transaction.
+    window.addEventListener('meshport:balances-stale', refresh)
+    window.addEventListener('meshport:onchain-activity', refresh)
+    return () => {
+      window.removeEventListener('meshport:balances-stale', refresh)
+      window.removeEventListener('meshport:onchain-activity', refresh)
+      for (const t of timers) window.clearTimeout(t)
+    }
+  }, [walletAddress])
+
   // ── PHASE 6 - resume policy (proposal §19) ────────────────────────────────
   // On return to the foreground, refresh only what the elapsed absence
   // justifies: nothing under 5 min, {arc}+{claims} at 5 min, plus {external}
