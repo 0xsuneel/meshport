@@ -132,6 +132,13 @@ export function PinSheet(p: PinSheetProps) {
     return () => clearTimeout(t)
   }, [p.open])
   const shownOpen = p.open || linger
+  // While it only lingers to show the tick, the screen has already moved on:
+  // it is not a layer any more - Back and taps on the dim aren't its to
+  // take. (A screen tidying up its own Back entry right then fires a Back;
+  // the lingering sheet took it as "close" and sent Transfer back to Review
+  // while the transfer was already running.)
+  const closeNow = p.open ? close : () => {}
+  const backCloseNow = (p.backClose ?? true) && p.open
   const lastValue = useRef(p.value)
   useEffect(() => {
     const was = lastValue.current
@@ -204,8 +211,8 @@ export function PinSheet(p: PinSheetProps) {
     return (
       <AnimatePresence custom={!!p.leaveUnder}>
         {shownOpen && (
-          <DesktopTransactionAuthDialog key={p.id ?? 'pin'} onClose={close} title={p.title} amountLabel={p.amountLabel} subLabel={said}
-            placement={p.placement} panelWidth={p.panelWidth} anchor={p.anchor} instantExit={p.instantExit} backClose={p.backClose ?? true} zIndex={p.zIndex}>
+          <DesktopTransactionAuthDialog key={p.id ?? 'pin'} onClose={closeNow} title={p.title} amountLabel={p.amountLabel} subLabel={said}
+            placement={p.placement} panelWidth={p.panelWidth} anchor={p.anchor} instantExit={p.instantExit} backClose={backCloseNow} zIndex={p.zIndex}>
             {p.header}
             {pad}
             {p.footer}
@@ -215,7 +222,7 @@ export function PinSheet(p: PinSheetProps) {
     )
   }
   return (
-    <ActionSheet open={shownOpen} onClose={close} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={p.backClose ?? true} zIndex={p.zIndex} leaveUnder={p.leaveUnder}
+    <ActionSheet open={shownOpen} onClose={closeNow} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={backCloseNow} zIndex={p.zIndex} leaveUnder={p.leaveUnder}
       inPlace={inPlace} held={held}>
       <div className="flex flex-col px-6 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] overflow-y-auto">
         {p.header}
