@@ -4,7 +4,7 @@
 // Hide reminder (this item, for good). "Close all" - and any showing - keeps
 // the popup away for 12 hours. Nothing here moves money.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -20,6 +20,14 @@ import {
 } from '@/lib/dueReminders'
 
 const SHOW_AFTER_MS = 1500
+// Inside the (solid) card: the next item slides in, the last slides out.
+// Like a carousel: both stay opaque, side by side - no see-through mix of two.
+const CARD = {
+  enter: (d: number) => ({ x: `${d * 100}%` }),
+  center: { x: '0%' },
+  exit: (d: number) => ({ x: `${d * -100}%` }),
+}
+const SLIDE = { type: 'tween', ease: [0.32, 0.72, 0, 1], duration: 0.3 } as const
 const BAND = { split: 'var(--brand)', bill: '#B9761F', request: '#2B5C8A' } as const
 const TITLE = { split: 'Split Expense', bill: 'Bill Reminder', request: 'Payment Request' } as const
 /** Checked once per wallet per app session. */
@@ -84,13 +92,34 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
 
   const drop = (code: string) => {
     const next = list.filter(r => r.code !== code)
-    setErr('')
+    setErr(''); setDir(1)
     if (!next.length) { setOpen(false); return }
     setList(next)
     setAt(i => Math.min(i, next.length - 1))
   }
 
+  // Switching cards slides them (old out, new in - no blank frame between);
+  // swipe left / right on the card does the same.
+  const [dir, setDir] = useState(1)
+  // The card's height follows the item shown (eased, not snapped).
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [h, setH] = useState<number | 'auto'>('auto')
+  const maxH = typeof window !== 'undefined' ? Math.max(320, window.innerHeight - 190) : 600
+  const go = (i: number) => {
+    if (busy || i === at || i < 0 || i >= list.length) return
+    setErr(''); setDir(i > at ? 1 : -1); setAt(i)
+  }
+
   const r = list[at]
+  const code = open ? r?.code : undefined
+  useLayoutEffect(() => {
+    const el = contentRef.current
+    if (!code || !el) { setH('auto'); return }
+    setH(el.offsetHeight)
+    const ro = new ResizeObserver(() => setH(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [code])
   const hide = () => { if (!r || busy) return; hideReminder(wallet, r.code); drop(r.code) }
   const pay = async () => {
     if (!r || busy) return
@@ -132,12 +161,27 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
           exit={{ opacity: 0, transition: { duration: 0.18 } }}
           onKeyDown={e => { if (e.key === 'Escape') closeAll() }}>
           <PopupDim background="rgba(0,0,0,0.5)" />
-          <div className="relative flex flex-col items-center" style={{ maxHeight: '100%', padding: '24px 16px' }}>
-            <motion.div key={r.code}
-              initial={{ opacity: 0, scale: 0.94, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-              className="overflow-hidden"
-              style={{ width: 'min(318px, calc(100vw - 32px))', borderRadius: 28, background: 'var(--surface)', boxShadow: '0 30px 60px -20px rgba(0,0,0,.5)', overflowY: 'auto', maxHeight: 'calc(100dvh - 180px)' }}>
+          <div className="absolute inset-0 flex flex-col items-center" style={{ padding: 'calc(env(safe-area-inset-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 36px)' }}>
+          <div className="flex-1 min-h-0 w-full flex items-center justify-center">
+            {/* The card itself stays solid: only what's inside slides between
+                items (a card that faded let Home show through it), and its
+                height eases to the next item's. Swipe left / right to switch. */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0, height: h }}
+              transition={{ type: 'spring', stiffness: 420, damping: 38 }}
+              drag={n > 1 && !busy ? 'x' : false} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.35} dragSnapToOrigin
+              onDragEnd={(_, info) => {
+                const swipe = info.offset.x + info.velocity.x * 0.2
+                if (swipe < -60) go(at + 1)
+                else if (swipe > 60) go(at - 1)
+              }}
+              className="relative touch-pan-y"
+              style={{ width: 'min(318px, calc(100vw - 32px))', borderRadius: 28, background: 'var(--surface)', boxShadow: '0 30px 60px -20px rgba(0,0,0,.5)', overflowX: 'hidden', overflowY: h === 'auto' || h < maxH ? 'hidden' : 'auto', maxHeight: maxH }}>
+            <AnimatePresence initial={false} mode="popLayout" custom={dir}>
+            <motion.div key={r.code} ref={contentRef} custom={dir}
+              variants={CARD} initial="enter" animate="center" exit="exit"
+              transition={SLIDE}
+              style={{ background: 'var(--surface)' }}>
               <div className="relative text-center text-white" style={{ padding: '22px 20px 54px', background: BAND[r.kind] }}>
                 {n > 1 && (
                   <span className="absolute font-bold" style={{ top: 14, right: 16, fontSize: 11.5, background: 'rgba(255,255,255,.2)', padding: '3px 8px', borderRadius: 99 }}>
@@ -186,7 +230,7 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
                 {n > 1 && (
                   <div className="flex justify-center" style={{ gap: 6, marginTop: 8 }}>
                     {list.map((x, i) => (
-                      <button key={x.code} type="button" aria-label={`Reminder ${i + 1} of ${n}`} onClick={() => { if (!busy) { setErr(''); setAt(i) } }}
+                      <button key={x.code} type="button" aria-label={`Reminder ${i + 1} of ${n}`} onClick={() => go(i)}
                         style={{ padding: '6px 0' }}>
                         <i className="block transition-all" style={{ width: i === at ? 16 : 6, height: 6, borderRadius: 9, background: i === at ? 'var(--brand)' : 'rgba(128,128,128,.4)' }} />
                       </button>
@@ -195,7 +239,10 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
                 )}
               </div>
             </motion.div>
-            <button type="button" onClick={closeAll} disabled={busy} className="text-center text-white" style={{ marginTop: 22 }}>
+            </AnimatePresence>
+            </motion.div>
+          </div>
+            <button type="button" onClick={closeAll} disabled={busy} className="shrink-0 text-center text-white" style={{ marginTop: 18 }}>
               <span className="mx-auto flex items-center justify-center rounded-full" style={{ width: 48, height: 48, background: 'rgba(255,255,255,.18)' }}>
                 <X size={22} />
               </span>
