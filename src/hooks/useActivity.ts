@@ -93,6 +93,25 @@ function writeCache(wallet: string, filter: string | undefined, search: string |
 /** Logout: forget every cached list. */
 export function clearActivityCache() { memCache.clear() }
 
+/**
+ * Refresh the saved first page in the background (after a payment, swap or
+ * deposit made elsewhere in the app), so opening Activity shows the current
+ * list at once. The saved copy used to follow only what the Activity page
+ * itself had on screen: after paying from Pay, Activity opened on the old
+ * list and the new rows then pushed everything down (field video, 11 Nov).
+ */
+export async function prefetchActivity(walletAddress: string | null | undefined): Promise<void> {
+  if (!walletAddress) return
+  try {
+    const meta: NonNullable<FetchOptions['meta']> = {}
+    const data = await fetchActivity(walletAddress, { limit: PAGE_SIZE, offset: 0, meta })
+    if (meta.failed) return
+    // Same rows the page's own first load shows (on-chain deposits the
+    // database hasn't caught up to yet included).
+    writeCache(walletAddress, undefined, undefined, refreshFirstPage(walletAddress, [], data, getRecentArcDeposits()))
+  } catch { /* the page loads it itself */ }
+}
+
 function onchainTxToActivityRecord(walletAddress: string, tx: OnchainReceivedTx): ActivityRecord {
   return {
     id:                  `onchain_${tx.txHash}`,
