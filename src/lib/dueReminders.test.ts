@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 vi.mock('./supabase', () => ({ supabase: { rpc: vi.fn() } }))
 const store = new Map<string, string>()
 vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v) }, clear: () => store.clear() })
-import { toDueRequest, visibleReminders, hideReminder, hiddenCodes, snoozeReminders, remindersSnoozed, REMIND_EVERY_MS, agoText, dueChip } from './dueReminders'
+import { toDueRequest, visibleReminders, remindersToShow, hideReminder, hiddenCodes, snoozeReminders, remindersSnoozed, REMIND_EVERY_MS, agoText, dueChip } from './dueReminders'
 
 const W = '0xAbC'
 const row = (o: Record<string, unknown> = {}) => ({ code: 'c1', orderNumber: 'ORD-100042', kind: 'bill', amount: 10, due: 10, note: ' ', items: null, dueDate: null, createdAt: '2026-11-10T10:00:00Z', fromName: '', fromUsername: 'bob.arc', fromAvatar: null, split: null, ...o })
@@ -30,9 +30,21 @@ describe('dueReminders', () => {
   it('close all waits 12 hours', () => {
     const t = 1_000_000_000_000
     expect(remindersSnoozed(W, t)).toBe(false)
-    snoozeReminders(W, t)
+    snoozeReminders(W, [], t)
     expect(remindersSnoozed(W, t + REMIND_EVERY_MS - 1)).toBe(true)
     expect(remindersSnoozed(W, t + REMIND_EVERY_MS)).toBe(false)
+  })
+
+  it('within the 12 h wait, only new items show', () => {
+    const t = Date.now()
+    const a = toDueRequest(row({ code: 'a' }))!, b = toDueRequest(row({ code: 'b' }))!, c = toDueRequest(row({ code: 'c' }))!
+    expect(remindersToShow([a, b], W, t).map(r => r.code)).toEqual(['a', 'b'])
+    snoozeReminders(W, ['a', 'b'], t)
+    expect(remindersToShow([a, b], W, t + 1000)).toEqual([])
+    expect(remindersToShow([a, b, c], W, t + 1000).map(r => r.code)).toEqual(['c'])
+    hideReminder(W, 'c')
+    expect(remindersToShow([a, b, c], W, t + 1000)).toEqual([])
+    expect(remindersToShow([a, b, c], W, t + REMIND_EVERY_MS).map(r => r.code)).toEqual(['a', 'b'])
   })
 
   it('reads dates', () => {

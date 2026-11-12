@@ -15,8 +15,8 @@ import { PopupDim } from '@/components/ui/PopupDim'
 import { useBackLayer } from '@/lib/backLayers'
 import { shortOrderNumber } from '@/lib/orderLabels'
 import {
-  fetchDueRequests, hiddenCodes, hideReminder, snoozeReminders, remindersSnoozed,
-  visibleReminders, agoText, dueChip, type DueRequest,
+  fetchDueRequests, hideReminder, snoozeReminders, remindersToShow,
+  agoText, dueChip, type DueRequest,
 } from '@/lib/dueReminders'
 
 const SHOW_AFTER_MS = 1500
@@ -64,7 +64,7 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
   useEffect(() => () => { alive.current = false }, [])
 
   useEffect(() => {
-    if (!enabled || !wallet || isLocked || checked.has(wallet) || remindersSnoozed(wallet)) return
+    if (!enabled || !wallet || isLocked || checked.has(wallet)) return
     let stop = false
     const t = setTimeout(() => {
       if (checked.has(wallet)) return
@@ -72,9 +72,9 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
       fetchDueRequests().then(all => {
         // Left Home or locked meanwhile: try again next time Home opens.
         if (stop || !alive.current || useAuthStore.getState().isLocked || window.location.pathname !== '/') { checked.delete(wallet); return }
-        const shown = visibleReminders(all, hiddenCodes(wallet))
+        const shown = remindersToShow(all, wallet)
         if (!shown.length) return
-        snoozeReminders(wallet)
+        snoozeReminders(wallet, shown.map(x => x.code))
         setList(shown); setAt(0); setOpen(true)
       }).catch(e => { checked.delete(wallet); console.warn('[due reminders]', e) })
     }, SHOW_AFTER_MS)
@@ -83,9 +83,9 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
 
   const closeAll = useCallback(() => {
     if (busy) return
-    if (wallet) snoozeReminders(wallet)
+    if (wallet) snoozeReminders(wallet, list.map(x => x.code))
     setOpen(false)
-  }, [busy, wallet])
+  }, [busy, wallet, list])
   useBackLayer(open, closeAll)
   // Locked (or left Home) while open: close.
   useEffect(() => { if (isLocked && open) setOpen(false) }, [isLocked, open])
