@@ -58,6 +58,7 @@ import { startWalletReadiness } from './lib/walletReadiness'
 import { awayPastAutoLock } from './lib/autoLock'
 import { initSecretClipboard } from './lib/secretClipboard'
 import { installGlassHeaders } from './lib/glassHeaders'
+import { installWalletWarmth } from './lib/walletWarmth'
 import { installViewportDebug } from './lib/viewportDebug'
 
 // Clear all legacy mock/fake data from localStorage on startup
@@ -130,6 +131,8 @@ void import('./lib/swUpdate').then(m => {
 })
 
 installGlassHeaders()
+// The wallet's passcode page, warm from the unlock screen on and while the app is in use.
+installWalletWarmth()
 installViewportDebug()
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
