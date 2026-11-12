@@ -2722,6 +2722,13 @@ export function ChatConversationPage() {
 
   // ── In-chat payment modal state ──────────────────────────────────────────
   const [payStep, setPayStep] = useState<'closed' | 'form' | 'confirm' | 'processing' | 'success'>('closed')
+  // Phone: the passcode sheet is on screen (PinSheet onVisible). The amount
+  // sheet stays up until it is (no empty chat while the wallet's page gets
+  // ready), and the processing card waits until it has gone (no card over
+  // the sheet's Approved tick) - one hand-over each, same frame, same dim.
+  const [pinVisible, setPinVisible] = useState(false)
+  // Until when a click belongs to the tap that just closed the keyboard.
+  const kbTapUntilRef = useRef(0)
   // After the passcode the payment is on-chain: hold Back / other chats / sidebar until it lands.
   useLeaveGuard(payStep === 'processing', 'Payment')
   // The step before this one: moving between the amount and Review sheets
@@ -4703,7 +4710,11 @@ export function ChatConversationPage() {
         // (keepAnchor). No stretch / bounce at the ends.
         style={{ visibility: messagesReady ? 'visible' : 'hidden', overflowAnchor: nativeAnchor ? 'auto' : 'none', overscrollBehaviorY: 'none' }}
         onClick={() => { if (isKeyboardOpen.current) messageInputRef.current?.blur() }}
-        onTouchStart={() => { if (isKeyboardOpen.current) messageInputRef.current?.blur() }}
+        // A tap that closes the keyboard only closes it: it used to also open
+        // whatever was under the finger (a payment's receipt popped up).
+        onTouchStart={() => { if (isKeyboardOpen.current) { kbTapUntilRef.current = performance.now() + 700; messageInputRef.current?.blur() } }}
+        onTouchMove={() => { kbTapUntilRef.current = 0 }}
+        onClickCapture={e => { if (performance.now() < kbTapUntilRef.current) { kbTapUntilRef.current = 0; e.stopPropagation(); e.preventDefault() } }}
         onScroll={(e) => {
           const el = e.currentTarget
           updateNearBottom()
@@ -5391,8 +5402,9 @@ export function ChatConversationPage() {
           chat's own header blur is off too. */}
       {payStep !== 'closed' && <PopupOpen />}
       <AnimatePresence>
-        {!isDesktop && (payStep === 'processing' || payStep === 'success') && (
-          <motion.div key="chat-pay-dim" {...SHEET_BACKDROP}
+        {!isDesktop && (payStep === 'processing' || payStep === 'success') && !pinVisible && (
+          // Takes the dim over from the passcode sheet: there at once.
+          <motion.div key="chat-pay-dim" {...SHEET_BACKDROP} initial={false}
             className="absolute inset-0 z-40" style={{ background: SHEET_DIM, willChange: 'opacity' }}
             onClick={() => {
               if (payStep === 'success') { setPayStep('closed'); setMessagesReady(true); setTimeout(() => scrollToBottom(false), 50) }
@@ -5448,7 +5460,8 @@ export function ChatConversationPage() {
       {/* Phone: the app's bottom sheet, in the chat. Fits its content (capped,
           then scrolls with Cancel/Pay pinned) - a fixed 70vh left a blank
           band under the buttons on iPhone. Back is left to the page. */}
-      <ActionSheet open={!isDesktop && payStep === 'form'} onClose={closePayForm} isDesktop={false} id="chat-pay">
+      <ActionSheet open={!isDesktop && (payStep === 'form' || (payStep === 'confirm' && !pinVisible))} onClose={closePayForm} isDesktop={false} id="chat-pay"
+        leaveUnder={payStep === 'confirm'} dimHandoff={payStep === 'confirm'}>
         <div className="min-h-0 overflow-y-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           {renderPayForm()}
         </div>
@@ -5465,6 +5478,9 @@ export function ChatConversationPage() {
         onClose={isDesktop ? () => { setPayStep('form'); setPayPassEntry('') } : () => { setPayStep('closed'); setPayPassEntry('') }}
         id="chat-pay-pin"
         inPanel
+        onVisible={setPinVisible}
+        // On to processing / from the amount sheet: one steady dim.
+        dimHandoff={payStep !== 'closed'}
         bioVerb="Pay"
         title="Authorize Payment"
         subtitle={isDesktop ? `To ${recipientClean}.arc` : 'Enter passcode to confirm'}
@@ -5502,9 +5518,9 @@ export function ChatConversationPage() {
         instantExit
       />
 
-      {/* STEP 3: processing + the receipt. */}
+      {/* STEP 3: processing + the receipt (phone: once the passcode sheet has gone). */}
       <AnimatePresence custom={payStep}>
-        {(payStep === 'processing' || payStep === 'success') && (
+        {(payStep === 'processing' || payStep === 'success') && !pinVisible && (
           (() => {
             const closeStep2 = () => {
               if (payStep === 'success') { setPayStep('closed'); setMessagesReady(true); setTimeout(() => scrollToBottom(false), 50) }

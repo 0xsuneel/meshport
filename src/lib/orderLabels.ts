@@ -109,3 +109,14 @@ export function orderCardPreview(text: string): string | null {
   const no = m[2] ? ' ' + displayOrderNumber(m[2]) : ''
   return `${bill ? '🧾 Bill' : '💸 Request'}${no} · $${m[3]} USDC`
 }
+
+/** The chat's pending strip: "1 pending bill" / "2 pending requests" /
+ *  "1 bill · 1 request pending" (a mix was all called "bills"). */
+export function pendingOrdersLabel(kinds: (string | null | undefined)[]): string {
+  const bills = kinds.filter(k => k === 'invoice').length
+  const reqs = kinds.length - bills
+  const n = (c: number, w: string) => `${c} ${w}${c === 1 ? '' : 's'}`
+  if (!reqs) return `${bills} pending bill${bills === 1 ? '' : 's'}`
+  if (!bills) return `${reqs} pending request${reqs === 1 ? '' : 's'}`
+  return `${n(bills, 'bill')} · ${n(reqs, 'request')} pending`
+}

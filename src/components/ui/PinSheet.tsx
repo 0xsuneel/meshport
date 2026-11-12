@@ -6,7 +6,7 @@
 // The error shows in one place on both: under the title, in red, and the
 // dots shake. With no passcode set, a plain confirm button stands in for the
 // keypad, so it's still an explicit "are you sure" step.
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { WalletConfirmFrame, type WalletConfirmRequest } from '@/components/wallet/WalletConfirmFrame'
 import { walletConfirmAddress } from '@/lib/walletConfirm'
@@ -66,6 +66,13 @@ export interface PinSheetProps {
    *  is right → processing): it leaves underneath that page - no slide down
    *  or fade on top of it. */
   leaveUnder?: boolean
+  /** Phone: whether the sheet is on screen (shown, not held while the
+   *  wallet's page gets ready, and not yet gone - the Approved tick lingers).
+   *  Told before paint, so the screen can swap its own sheet / popup in the
+   *  same frame. */
+  onVisible?: (visible: boolean) => void
+  /** Phone: its dim is handed over to / from the screen's own (ActionSheet dimHandoff). */
+  dimHandoff?: boolean
   /**
    * Money moves: the passcode is typed in the wallet's own page instead of
    * this keypad (lib/walletConfirm), for wallets kept in the wallet frame.
@@ -207,6 +214,11 @@ export function PinSheet(p: PinSheetProps) {
     ? <span role="alert" className="text-danger">{p.error}</span>
     : p.subtitle
 
+  const visible = !desktop && shownOpen && !held
+  const onVisible = useRef(p.onVisible)
+  onVisible.current = p.onVisible
+  useLayoutEffect(() => { onVisible.current?.(visible) }, [visible])
+
   if (desktop) {
     return (
       <AnimatePresence custom={!!p.leaveUnder}>
@@ -223,7 +235,7 @@ export function PinSheet(p: PinSheetProps) {
   }
   return (
     <ActionSheet open={shownOpen} onClose={closeNow} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={backCloseNow} zIndex={p.zIndex} leaveUnder={p.leaveUnder}
-      inPlace={inPlace} held={held}>
+      inPlace={inPlace} held={held} dimHandoff={p.dimHandoff}>
       <div className="flex flex-col px-6 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] overflow-y-auto">
         {p.header}
         {/* With the wallet's page, its card sits 16px under the title (as the

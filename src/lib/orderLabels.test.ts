@@ -133,3 +133,15 @@ describe('a Split Expense share in previews', () => {
     expect(orderCardPreview('💸 Payment request · Order #ORD-100152 · $5 USDC\nFor the cake\nhttps://meshport.xyz/pay/r/abc')).toBe('💸 Request #152 · $5 USDC')
   })
 })
+
+import { pendingOrdersLabel } from './orderLabels'
+describe('pendingOrdersLabel', () => {
+  it('names bills and requests apart', () => {
+    expect(pendingOrdersLabel(['invoice'])).toBe('1 pending bill')
+    expect(pendingOrdersLabel(['invoice', 'invoice'])).toBe('2 pending bills')
+    expect(pendingOrdersLabel(['request'])).toBe('1 pending request')
+    expect(pendingOrdersLabel(['request', null])).toBe('2 pending requests')
+    expect(pendingOrdersLabel(['invoice', 'request'])).toBe('1 bill · 1 request pending')
+    expect(pendingOrdersLabel(['invoice', 'request', 'request'])).toBe('1 bill · 2 requests pending')
+  })
+})
