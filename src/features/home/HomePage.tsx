@@ -58,6 +58,7 @@ import { biometricLabel } from '@/lib/biometric'
 import { ServiceIcon } from '@/components/ui/ServiceIcon'
 import { pressable } from '@/lib/pressable'
 import { StuckPaymentsBanner } from '@/components/StuckPaymentsBanner'
+import { DueRemindersPopup } from '@/components/DueRemindersPopup'
 import { qrRevealPose } from '@/lib/qrReveal'
 import { QuickIcon } from '@/components/ui/QuickIcon'
 
@@ -4409,6 +4410,9 @@ export function HomePage() {
 
         {/* Payments queued on Arc behind a missing nonce: cancel them (lib/stuckPayments). */}
         <StuckPaymentsBanner />
+
+        {/* Bills, payment requests and Split Expense shares waiting for you (lib/dueReminders). */}
+        <DueRemindersPopup enabled={!accountLock.locked} />
 
         {/* ── FEATURE BANNERS - promo carousel for what MeshPort can do ─────── */}
         {/* Same width/radius as the old Multichain Hub row, 10% taller. */}
