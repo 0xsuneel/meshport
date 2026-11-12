@@ -73,6 +73,12 @@ export interface PinSheetProps {
   onVisible?: (visible: boolean) => void
   /** Phone: its dim is handed over to / from the screen's own (ActionSheet dimHandoff). */
   dimHandoff?: boolean
+  /** Phone: no sheet of its own - just its content, for a screen that keeps
+   *  every step in one sheet (chat pay). Laid out in place but not shown
+   *  while the wallet's page gets ready (onVisible says when it is). */
+  inline?: boolean
+  /** With inline: classes for the content's box (placed by the screen). */
+  inlineClassName?: string
   /**
    * Money moves: the passcode is typed in the wallet's own page instead of
    * this keypad (lib/walletConfirm), for wallets kept in the wallet frame.
@@ -233,9 +239,7 @@ export function PinSheet(p: PinSheetProps) {
       </AnimatePresence>
     )
   }
-  return (
-    <ActionSheet open={shownOpen} onClose={closeNow} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={backCloseNow} zIndex={p.zIndex} leaveUnder={p.leaveUnder}
-      inPlace={inPlace} held={held} dimHandoff={p.dimHandoff}>
+  const body = (
       <div className="flex flex-col px-6 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] overflow-y-auto">
         {p.header}
         {/* With the wallet's page, its card sits 16px under the title (as the
@@ -248,6 +252,22 @@ export function PinSheet(p: PinSheetProps) {
         {pad}
         {p.footer}
       </div>
+  )
+  if (p.inline) {
+    if (!shownOpen) return null
+    // Shown at once (never faded or moved): the wallet's page takes touches
+    // only while it is fully visible and still.
+    return (
+      <div className={p.inlineClassName} aria-hidden={held || undefined}
+        style={{ opacity: held ? 0 : 1, pointerEvents: held ? 'none' : undefined }}>
+        {body}
+      </div>
+    )
+  }
+  return (
+    <ActionSheet open={shownOpen} onClose={closeNow} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={backCloseNow} zIndex={p.zIndex} leaveUnder={p.leaveUnder}
+      inPlace={inPlace} held={held} dimHandoff={p.dimHandoff}>
+      {body}
     </ActionSheet>
   )
 }
