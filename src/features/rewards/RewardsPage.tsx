@@ -8,7 +8,7 @@ import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { Info, Check, X } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import {
-  fetchUserPoints, claimPointsAsUSDC, fetchClaimsHistory, fetchPointHistory,
+  fetchUserPoints, claimPointsAsUSDC, fetchPendingClaim, fetchClaimsHistory, fetchPointHistory,
   fetchDailyClaimedPoints, getDailyClaimedOnChain, rewardsUserId, REWARD_TASKS, rewardTaskOf, pointsToUSDC, MIN_CLAIM_POINTS, MAX_CLAIM_POINTS, POINTS_PER_TX, MAX_DAILY_POINTS, MAX_DAILY_EARN_POINTS,
 } from '@/lib/rewards'
 import { timeAgo, formatAmount } from '@/lib/utils'
@@ -377,19 +377,31 @@ export function RewardsPage() {
   // `claiming` is set, and both the Claim button and the keypad's Enter call
   // it - a second tap / Enter in that gap used to start a second claim.
   const claimOnce = useSingleFlight()
-  const handleClaim = () => { void claimOnce(runClaim) }
-  const runClaim = async () => {
+  // An unfinished claim goes first (the server would finish it anyway).
+  const handleClaim = () => { void claimOnce(() => runClaim(pendingClaim?.points)) }
+  // A claim whose voucher was signed but never paid holds its points (they
+  // already left the balance): Finish claim pays it out - same voucher, same
+  // points, nothing deducted again (lib/rewards fetchPendingClaim).
+  const [pendingClaim, setPendingClaim] = useState<{ points: number } | null>(null)
+  useEffect(() => {
+    if (!userId || !walletAddress) return
+    let live = true
+    void fetchPendingClaim().then(p => { if (live) setPendingClaim(p) })
+    return () => { live = false }
+  }, [userId, walletAddress, claiming])
+  const finishPending = () => { if (pendingClaim) void claimOnce(() => runClaim(pendingClaim.points)) }
+  const runClaim = async (finishing?: number) => {
     setClaimError(null)
     if (!walletAddress)        { setClaimError('Wallet not connected'); return }
     if (!userId)               { setClaimError('User not found - please log out and back in'); return }
     if (!username)             { setClaimError('Username not set'); return }
-    if (totalPoints < MIN_CLAIM_POINTS) { setClaimError(`Need at least ${MIN_CLAIM_POINTS} points to claim`); return }
+    if (!finishing && totalPoints < MIN_CLAIM_POINTS) { setClaimError(`Need at least ${MIN_CLAIM_POINTS} points to claim`); return }
 
     const activeSigner = await getReadySigner()
     if (!activeSigner) { useAuthStore.getState().lock(); window.location.href = '/auth/lock'; return }
 
-    const pointsToUse = Math.min(typedPoints, totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
-    if (pointsToUse < MIN_CLAIM_POINTS) {
+    const pointsToUse = finishing ?? Math.min(typedPoints, totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
+    if (!finishing && pointsToUse < MIN_CLAIM_POINTS) {
       setClaimError(`Select at least ${MIN_CLAIM_POINTS} points${dailyRemaining < MIN_CLAIM_POINTS ? ` (daily limit: ${dailyRemaining} pts remaining today)` : ''}`)
       return
     }
@@ -422,7 +434,9 @@ export function RewardsPage() {
     // Let the travelling check land on the last step before the result.
     await new Promise(r => setTimeout(r, Math.max(0, 650 - (Date.now() - last))))
     setProgress(p => p ? { ...p, done: ['check', 'approve', 'send'], phase: 'success', txHash: result.txHash, usdcReceived: result.usdcReceived } : p)
-    setTotalPoints(prev => Math.max(0, prev - pointsToUse))
+    // A finished earlier claim's points already left the balance.
+    if (!finishing) setTotalPoints(prev => Math.max(0, prev - pointsToUse))
+    setPendingClaim(null)
     await load()
     setHistoryTab('claimed')
     setClaiming(false)
@@ -483,6 +497,15 @@ export function RewardsPage() {
           cursor: canOpenClaim ? 'pointer' : 'default', opacity: canOpenClaim && !claiming ? 1 : 0.6 }}>
         {claiming ? 'Claiming…' : dailyCapHit ? 'Daily claim limit reached' : 'Claim USDC'}
       </button>
+      {pendingClaim && !claiming && (
+        // Points held by a claim that didn't finish - not lost, waiting to be paid.
+        <div role="status" style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.35 }}>
+            <b>{pendingClaim.points.toLocaleString()} pts</b> are held for a claim that didn't finish - they're safe. Finish it to get ${formatAmount(pointsToUSDC(pendingClaim.points))} USDC.
+          </div>
+          <button onClick={finishPending} style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 10, border: 'none', background: '#fff', color: '#0B3F3B', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Finish claim</button>
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.85, marginTop: 10, gap: 8 }}>
         <span>Claimed today {dailyClaimedPoints.toLocaleString()} / {MAX_DAILY_POINTS.toLocaleString()} pts</span>
         <span>1,000 pts = ${formatAmount(pointsToUSDC(1000))}</span>
