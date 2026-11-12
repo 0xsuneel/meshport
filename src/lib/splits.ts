@@ -99,6 +99,13 @@ function fail(error: { message?: string } | null): void {
 }
 const num = (v: unknown) => Number(v) || 0
 
+/**
+ * Paid, counting the person who made the split: they paid the bill, so their
+ * own share is paid from the start ("2 of 3 paid" once one friend has paid).
+ */
+export function paidOf(s: { requests: number; paidCount: number }): { paid: number; of: number } {
+  return { paid: s.paidCount + 1, of: s.requests + 1 }
+}
 export const isSettled = (s: { requests: number; paidCount: number }) => s.requests > 0 && s.paidCount >= s.requests
 export const memberOpen = (m: Pick<SplitMember, 'status'>) => m.status === 'pending' || m.status === 'partially_paid'
 

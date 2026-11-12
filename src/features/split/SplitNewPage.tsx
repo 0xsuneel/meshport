@@ -302,8 +302,11 @@ export function SplitNewPage() {
             )),
             <div key="me" style={rowStyle}>
               <SplitAvatar you />
-              <div style={{ flex: 1 }}><div style={nameStyle}>Your share</div><div style={subStyle}>{init.sourceTx ? 'Already paid' : 'Not requested'}</div></div>
-              <div style={{ ...amountStyle, color: 'var(--text-secondary)' }}>{money(shares[0] ?? 0)}</div>
+              <div style={{ flex: 1 }}><div style={nameStyle}>Your share</div><div style={subStyle}>You paid the bill</div></div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                <div style={{ ...amountStyle, color: 'var(--text-secondary)' }}>{money(shares[0] ?? 0)}</div>
+                <Pill tone="paid">Paid</Pill>
+              </div>
             </div>,
           ]}</ListCard>
           <div style={{ ...card, ...rowStyle, gap: 10 }}>
@@ -320,7 +323,13 @@ export function SplitNewPage() {
             <p style={{ ...subStyle, textAlign: 'center' }}>
               {created.requests.length === 1 ? `${created.requests[0].username}.arc gets a request` : `${created.requests.length} people each get a request`} in chat and a notification.
             </p>
-            <ListCard>{created.requests.map(r => {
+            <ListCard>{[
+              <div key="me" style={rowStyle}>
+                <SplitAvatar you />
+                <div style={{ flex: 1, minWidth: 0 }}><div style={nameStyle}>You</div><div style={subStyle}>{money(shares[0] ?? 0)} · you paid the bill</div></div>
+                <Pill tone="paid">Paid</Pill>
+              </div>,
+              ...created.requests.map(r => {
               const p = picked.find(x => x.username === r.username)
               return (
                 <div key={r.code} style={rowStyle}>
@@ -329,7 +338,7 @@ export function SplitNewPage() {
                   <Pill tone="pending">Requested</Pill>
                 </div>
               )
-            })}</ListCard>
+            })]}</ListCard>
             {created.notPosted.length > 0 && (
               <p style={{ ...subStyle, textAlign: 'center', color: 'var(--warning-text)' }}>
                 Couldn't post the card in {created.notPosted.map(u => `${u}.arc`).join(', ')}'s chat - their request is still there; use Remind on the split.

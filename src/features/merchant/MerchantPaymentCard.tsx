@@ -237,10 +237,10 @@ function SplitStrip({ code }: { code: string }) {
     <button type="button" onClick={e => { e.stopPropagation(); navigate(`/splits/${s.id}`) }}
       style={{ width: '100%', marginTop: 7, padding: 0, border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--text-secondary)' }}>
       <div style={{ height: 5, borderRadius: 9, overflow: 'hidden', background: 'color-mix(in srgb, var(--text-primary) 9%, transparent)' }}>
-        <div style={{ height: '100%', width: `${s.requests ? (s.paidCount / s.requests) * 100 : 0}%`, background: 'var(--brand)', borderRadius: 9 }} />
+        <div style={{ height: '100%', width: `${((s.paidCount + 1) / (s.requests + 1)) * 100}%`, background: 'var(--brand)', borderRadius: 9 }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginTop: 4 }}>
-        <span>{s.paidCount} of {s.requests} paid · {s.people} people</span>
+        <span>{s.paidCount + 1} of {s.requests + 1} paid · {s.people} people</span>
         <span style={{ fontWeight: 700, color: 'var(--brand-text)' }}>View split ›</span>
       </div>
     </button>
