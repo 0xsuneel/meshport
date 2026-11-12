@@ -368,7 +368,7 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
       const u = who.ok && Array.isArray(who.data) ? who.data[0] : null
       const from = u?.display_name || (u?.username ? String(u.username).replace(/\.arc$/i, '') + '.arc' : 'MeshPort')
       const sealed = /^e2e:(v1|v2):/.test(String(content))
-      const body = sealed ? 'New message' : String(content).split('\n')[0].slice(0, 120)
+      const body = sealed ? 'New message' : pushLine(String(content))
       const push = await Promise.race([
         sendPushToUser(recipientId, {
           title: from,
@@ -498,6 +498,18 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
 
   await lastMessageUpdate
   return res.status(200).json({ data: msgRow, error: null })
+}
+
+// What a plain-text message says in its notification: its first line - but a
+// share of a Split Expense (a payment request card whose note line is
+// "Split · 🍕 Dinner", src/lib/splits) says so: "Split Expense · 🍕 Dinner ·
+// your share $5 USDC" rather than "💸 Payment request · Order #… · $5 USDC".
+export function pushLine(content: string): string {
+  const lines = content.split('\n')
+  const req = /^💸 Payment request(?: · Order #[A-Z0-9-]{3,20})? · \$([\d.,]+) USDC/u.exec(lines[0] ?? '')
+  const note = (lines[1] ?? '').trim()
+  if (req && note.startsWith('Split · ')) return `Split Expense · ${note.slice('Split · '.length).trim()} · your share $${req[1]} USDC`.slice(0, 120)
+  return (lines[0] ?? '').slice(0, 120)
 }
 
 // ── action=touch - update a conversation's last_message preview ────────────

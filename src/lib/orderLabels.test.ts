@@ -123,3 +123,13 @@ describe('shopFrom', () => {
     expect(shopFrom('Sunil R')).toBe('Sunil R')
   })
 })
+
+describe('a Split Expense share in previews', () => {
+  it('reads as Split Expense with the split name, not a request', () => {
+    const card = '💸 Payment request · Order #ORD-100152 · $5 USDC\nSplit · 🍕 Dinner\nhttps://meshport.xyz/pay/r/abc'
+    expect(orderCardPreview(card)).toBe('🧾 Split Expense · 🍕 Dinner · $5 USDC')
+  })
+  it('a plain request still reads as a request', () => {
+    expect(orderCardPreview('💸 Payment request · Order #ORD-100152 · $5 USDC\nFor the cake\nhttps://meshport.xyz/pay/r/abc')).toBe('💸 Request #152 · $5 USDC')
+  })
+})
