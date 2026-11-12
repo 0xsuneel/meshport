@@ -4408,8 +4408,8 @@ export function ChatConversationPage() {
         // On to processing / from the amount sheet: one steady dim.
         dimHandoff={payStep !== 'closed'}
         bioVerb="Pay"
-        title="Authorize Payment"
-        subtitle={isDesktop ? `To ${recipientClean}.arc` : 'Enter passcode to confirm'}
+        title={isDesktop ? 'Authorize Payment' : 'Enter passcode'}
+        subtitle={isDesktop ? `To ${recipientClean}.arc` : 'To confirm this payment'}
         walletConfirm={{
           summary: { label: 'Paying', name: `${recipientClean}.arc`, amount: payAmount, unit: payToken },
           intent: () => {
@@ -4423,18 +4423,19 @@ export function ChatConversationPage() {
         error={payError || undefined}
         onComplete={(_, viaBiometric) => { setPayViaBiometric(!!viaBiometric); import('@/lib/perfTrace').then(m => m.payApprovedVia(viaBiometric)).catch(() => {}); executeChatPayment() }}
         header={isDesktop ? undefined : (
-          <div className="mb-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-text-primary">Review Payment</h2>
-              <button onClick={() => setPayStep('form')} aria-label="Back to amount" className="p-2 rounded-full hover:bg-[rgb(var(--text-primary-rgb)/0.10)] text-text-secondary"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="bg-surface rounded-2xl border border-border mt-2">
-              <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Recipient</span><span className="text-sm font-semibold text-link">{recipientClean}.arc</span></div>
-              {billPay && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">{billPay.kind === 'bill' ? 'Bill' : billPay.kind === 'merchant_request' ? 'Requested Payment' : billPay.kind === 'shop' ? 'Payment' : 'Request'}</span><span className="text-sm font-semibold text-text-primary">{displayOrderNumber(billPay.number)}</span></div>}
-              <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Amount</span><span className="text-sm font-bold text-text-primary">{formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} {payToken}</span></div>
-              <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Network Fee</span><span className="text-sm font-semibold text-success">{payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free'}</span></div>
-              {payNote && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Note</span><span className="text-sm text-text-primary truncate max-w-[60%]">{payNote}</span></div>}
-            </div>
+          <div className="relative text-center mb-2">
+            <button onClick={() => setPayStep('form')} aria-label="Back to amount"
+              className="absolute left-0 top-0 -ml-2 p-2 rounded-full text-text-secondary hover:bg-[rgb(var(--text-primary-rgb)/0.10)]">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="flex justify-center"><Avatar name={otherUser?.display_name || recipientClean} src={otherUser?.avatar_url ?? null} size="md" /></div>
+            <p className="mt-1.5 text-[15px] font-bold text-text-primary truncate px-8">Paying {otherUser?.display_name || recipientClean}</p>
+            <p className="tabular-nums mt-1" style={{ fontSize: 34, fontWeight: 800, letterSpacing: -1, lineHeight: 1.15, color: 'var(--text-primary)' }}>{payAmountText(parseFloat(payAmount) || 0)}</p>
+            <p className="text-[12.5px] text-text-secondary">
+              {payToken} · to <span className="text-link font-semibold">{recipientClean}.arc</span> · {payEstimatedFee > 0 ? `fee ~${formatAmount(payEstimatedFee, 4)} USDC` : 'no fee'}
+            </p>
+            {billPay && <p className="text-[12.5px] text-text-secondary mt-0.5">{orderTitle(billPay.kind, billPay.number)}</p>}
+            {payNote && <p className="text-[12.5px] text-text-secondary mt-0.5 truncate">“{payNote}”</p>}
           </div>
         )}
         amountLabel={`${formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} ${payToken}`}
@@ -4515,6 +4516,133 @@ export function ChatConversationPage() {
     if (payStep === 'success') { setPayStep('closed'); setMessagesReady(true); setTimeout(() => scrollToBottom(false), 50); return }
     setPayStep('closed'); setPayPassEntry(''); setShowAmountPad(false)
   }
+  // The token chip (USDC / EURC / cirBTC) with its menu; just the token when the amount is fixed.
+  const renderPayTokenPicker = () => payLocked ? (
+                    <span className="text-sm font-bold text-text-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <TokenLogo token={payToken} size={20} />{payToken}
+                    </span>
+                  ) : (
+                    <div style={{ position: 'relative', zIndex: payTokenMenu ? 41 : undefined }}>
+                      <button onClick={() => setPayTokenMenu(v => !v)} aria-expanded={payTokenMenu}
+                        className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
+                        style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
+                        <TokenLogo token={payToken} size={20} />
+                        <span className="text-sm font-bold text-text-primary">{payToken}</span>
+                        <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)', transform: payTokenMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
+                      </button>
+                      <AnimatePresence>
+                        {payTokenMenu && (
+                          <TokenMenu selected={payToken} onClose={() => setPayTokenMenu(false)}
+                            onSelect={id => { setPayToken(id as typeof payToken); setPayAmount(''); setPayError('') }}
+                            options={payTokenList.map(t => ({ id: t, label: t, icon: <TokenLogo token={t} size={22} /> }))} />
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )
+  // Pay on the amount step: on to Review + passcode (and start preparing the payment).
+  const startPayConfirm = () => {
+    const n = parseFloat(payAmount)
+    if (!n || n <= 0) { setPayError('Enter a valid amount'); return }
+    if (payInsufficient) { setPayError('Insufficient balance'); return }
+    setShowAmountPad(false)
+    setPayPassEntry('')
+    setPayStep('confirm')
+    // PERF FIX: start the preflight the instant the user
+    // taps Pay (amount is now known), so it overlaps with
+    // PIN entry (~1-3s for 6 digits, sub-second for bio).
+    // executeChatPayment picks up the same promise by
+    // idempotency key; if the key doesn't match it just
+    // starts a fresh preflight - no harm, no double-send.
+    const fromAddr = useAuthStore.getState().walletAddress
+    const toAddr = otherUser?.wallet_address
+    if (fromAddr && toAddr && n > 0) {
+      const idemSig = `${toAddr}:${n}:${payToken}:${billPay?.code ?? ''}`
+      if (chatPayIdempotencyKeyRef.current?.signature !== idemSig) {
+        chatPayIdempotencyKeyRef.current = { signature: idemSig, key: crypto.randomUUID() }
+      }
+      const idemKey = chatPayIdempotencyKeyRef.current.key
+      import('@/lib/arcService').then(({ preparePayment }) => preparePayment({
+        token: payToken === 'EURC' || payToken === 'cirBTC' ? payToken : 'USDC',
+        from: fromAddr, to: toAddr, amount: n, idempotencyKey: idemKey, memo: chatOrderMemo(),
+      })).catch(() => {})
+    }
+  }
+  // Phone chat pay, amount step: the amount is the hero - who you pay on
+  // top, token + quick amounts under it, the app's keypad (boxed keys) and
+  // Pay at the foot of the sheet.
+  const payHeroAmount = () => {
+    const raw = payAmount || '0'
+    const dot = raw.indexOf('.')
+    const int = dot < 0 ? raw : raw.slice(0, dot)
+    const intText = Number(int || '0').toLocaleString('en-US')
+    return (
+      <>{chatPayTokenSymbolChar(payToken)}{intText}{dot >= 0
+        ? <>{raw.slice(dot)}</>
+        : <span style={{ color: 'var(--text-muted)', opacity: 0.45 }}>.00</span>}</>
+    )
+  }
+  const payAmountText = (n: number) => payToken === 'cirBTC'
+    ? `${formatAmount(n, chatPayTokenDecimals(payToken))} cirBTC`
+    : `${chatPayTokenSymbolChar(payToken)}${formatAmount(n, Math.max(2, Math.min(chatPayTokenDecimals(payToken), (String(n).split('.')[1] || '').length)))}`
+  const renderPhonePayAmount = () => {
+    const dec = chatPayTokenDecimals(payToken)
+    const bal = payTokenBalanceOf(payToken)
+    const isBtc = payToken === 'cirBTC'
+    const max = Math.floor(bal * 10 ** dec) / 10 ** dec
+    const setAmt = (n: number) => { setPayAmount(trimTrailingZeros(n.toFixed(dec))); setPayError('') }
+    const n = parseFloat(payAmount) || 0
+    const name = otherUser?.display_name || recipientClean
+    const chip = (label: string, onClick: () => void, disabled = false, key?: string) => (
+      <button key={key ?? label} type="button" onClick={onClick} disabled={disabled}
+        className="active:scale-95 transition-transform disabled:opacity-40"
+        style={{ padding: '5px 11px', borderRadius: 99, fontSize: 12, fontWeight: 700, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+        {label}
+      </button>
+    )
+    return (
+      <div className="h-full flex flex-col px-5" style={{ paddingBottom: 'max(14px, env(safe-area-inset-bottom, 0px))' }}>
+        <div className="text-center pt-1">
+          <div className="flex justify-center"><Avatar name={name} src={otherUser?.avatar_url ?? null} size="md" /></div>
+          <p className="mt-1.5 text-[15px] font-bold text-text-primary truncate">Paying {name}</p>
+          <p className="text-[12px] text-link">{recipientClean}.arc</p>
+          {(billPay || linkPay?.amount) && (
+            <p className="inline-block mt-2 text-[12px] font-semibold" style={{ padding: '4px 10px', borderRadius: 99, background: 'color-mix(in srgb, var(--brand) 10%, transparent)', color: 'var(--brand-text)' }}>
+              {billPay ? `${orderTitle(billPay.kind, billPay.number)} · Amount set by business` : `Payment link · Amount set by ${linkPay?.username}.arc`}
+            </p>
+          )}
+        </div>
+        <p className="text-center tabular-nums mt-2" aria-label={`Amount in ${payToken}`}
+          style={{ fontSize: payAmount.length > 9 ? 40 : 52, fontWeight: 800, letterSpacing: -2, lineHeight: 1.1, color: payInsufficient ? 'var(--danger-text)' : 'var(--text-primary)' }}>
+          {payHeroAmount()}
+        </p>
+        <div className="flex items-center justify-center gap-1.5 flex-wrap mt-2">
+          {renderPayTokenPicker()}
+          {!payLocked && [10, 30, 50].map(v => {
+            const amt = isBtc ? (btcUsd > 0 ? Math.round((v / btcUsd) * 10 ** dec) / 10 ** dec : 0) : v
+            return chip(`${isBtc ? '$' : chatPayTokenSymbolChar(payToken)}${v}`, () => setAmt(amt), amt <= 0 || amt > bal)
+          })}
+          {!payLocked && max > 0 && chip('Max', () => setAmt(max))}
+        </div>
+        <p className="text-center text-xs mt-2" style={{ color: payInsufficient ? 'var(--danger-text)' : 'var(--text-secondary)', fontWeight: payInsufficient ? 600 : undefined }}>
+          {payInsufficient ? 'Insufficient balance · ' : 'Balance '}{chatPayTokenSymbolChar(payToken)}{formatAmount(bal, dec)} {payToken}
+        </p>
+        {payError && <p role="alert" className="text-sm text-danger text-center mt-1">{payError}</p>}
+        <div className="mt-auto pt-3">
+          {!payLocked && (
+            <AmountKeypad variant="inline" open value={payAmount}
+              onChange={v => { setPayAmount(v); setPayError('') }}
+              token={payToken} decimals={dec} showMax={false} />
+          )}
+          <button type="button" onClick={startPayConfirm}
+            disabled={!payAmount || n <= 0 || payInsufficient}
+            className="w-full py-3.5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40 active:scale-[0.98] transition-transform"
+            style={{ background: 'var(--brand)' }}>
+            {n > 0 ? `Pay ${payAmountText(n)}` : 'Pay'}
+          </button>
+        </div>
+      </div>
+    )
+  }
   const renderPayForm = () => (
               <div className="px-5 pt-4 pb-6 space-y-3">
                 {/* Header */}
@@ -4557,28 +4685,7 @@ export function ChatConversationPage() {
                   const isBtc = payToken === 'cirBTC'
                   // Rounded down so Max never asks for more than is there.
                   const max = Math.floor(bal * 10 ** dec) / 10 ** dec
-                  const tokenPicker = payLocked ? (
-                    <span className="text-sm font-bold text-text-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <TokenLogo token={payToken} size={20} />{payToken}
-                    </span>
-                  ) : (
-                    <div style={{ position: 'relative', zIndex: payTokenMenu ? 41 : undefined }}>
-                      <button onClick={() => setPayTokenMenu(v => !v)} aria-expanded={payTokenMenu}
-                        className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
-                        style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-                        <TokenLogo token={payToken} size={20} />
-                        <span className="text-sm font-bold text-text-primary">{payToken}</span>
-                        <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)', transform: payTokenMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
-                      </button>
-                      <AnimatePresence>
-                        {payTokenMenu && (
-                          <TokenMenu selected={payToken} onClose={() => setPayTokenMenu(false)}
-                            onSelect={id => { setPayToken(id as typeof payToken); setPayAmount(''); setPayError('') }}
-                            options={payTokenList.map(t => ({ id: t, label: t, icon: <TokenLogo token={t} size={22} /> }))} />
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  )
+                  const tokenPicker = renderPayTokenPicker()
                   return (
                     <div>
                       <AmountField
@@ -4643,33 +4750,7 @@ export function ChatConversationPage() {
                     Cancel
                   </button>
                   <button
-                    onClick={() => {
-                      const n = parseFloat(payAmount)
-                      if (!n || n <= 0) { setPayError('Enter a valid amount'); return }
-                      if (payInsufficient) { setPayError('Insufficient balance'); return }
-                      setShowAmountPad(false)
-                      setPayPassEntry('')
-                      setPayStep('confirm')
-                      // PERF FIX: start the preflight the instant the user
-                      // taps Pay (amount is now known), so it overlaps with
-                      // PIN entry (~1-3s for 6 digits, sub-second for bio).
-                      // executeChatPayment picks up the same promise by
-                      // idempotency key; if the key doesn't match it just
-                      // starts a fresh preflight - no harm, no double-send.
-                      const fromAddr = useAuthStore.getState().walletAddress
-                      const toAddr = otherUser?.wallet_address
-                      if (fromAddr && toAddr && n > 0) {
-                        const idemSig = `${toAddr}:${n}:${payToken}:${billPay?.code ?? ''}`
-                        if (chatPayIdempotencyKeyRef.current?.signature !== idemSig) {
-                          chatPayIdempotencyKeyRef.current = { signature: idemSig, key: crypto.randomUUID() }
-                        }
-                        const idemKey = chatPayIdempotencyKeyRef.current.key
-                        import('@/lib/arcService').then(({ preparePayment }) => preparePayment({
-                          token: payToken === 'EURC' || payToken === 'cirBTC' ? payToken : 'USDC',
-                          from: fromAddr, to: toAddr, amount: n, idempotencyKey: idemKey, memo: chatOrderMemo(),
-                        })).catch(() => {})
-                      }
-                    }}
+                    onClick={startPayConfirm}
                     disabled={!payAmount || parseFloat(payAmount) <= 0 || payInsufficient}
                     className="flex-1 py-3.5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40 active:scale-95 transition-transform"
                     style={{ background: 'var(--brand)' }}>
@@ -5579,8 +5660,8 @@ export function ChatConversationPage() {
         backClose={payStep !== 'processing'}>
         <div className="relative overflow-hidden" style={{ height: CHAT_PAY_SHEET_H }}>
           {(payStep === 'form' || (payStep === 'confirm' && !pinVisible)) && (
-            <div className="absolute inset-0 overflow-y-auto overflow-x-hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-              {renderPayForm()}
+            <div className="absolute inset-0 overflow-y-auto overflow-x-hidden">
+              {renderPhonePayAmount()}
             </div>
           )}
           {!isDesktop && chatPin(true)}
