@@ -46,6 +46,19 @@ export function percentShares(total: number, percents: number[]): number[] {
   return parts.map(fromCents)
 }
 
+/**
+ * A share typed into Amounts / %: never more than what's left for it - the
+ * bill (or 100%) minus everyone else's shares. Returns the text to show and
+ * whether it had to be lowered. `left` is in the field's own unit ($ or %).
+ */
+export function capShareInput(text: string, left: number): { text: string; capped: boolean } {
+  const v = Number(text)
+  if (!text || !Number.isFinite(v)) return { text, capped: false }
+  const max = Math.max(0, Math.floor(left * 100 + 1e-6) / 100)
+  if (v <= max + 1e-9) return { text, capped: false }
+  return { text: String(max), capped: true }
+}
+
 /** How far the shares are from the bill, in cents (0 = they add up). */
 export function sharesGap(total: number, shares: number[]): number {
   return toCents(total) - shares.reduce((a, s) => a + toCents(s), 0)
