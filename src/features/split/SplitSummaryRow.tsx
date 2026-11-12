@@ -1,4 +1,4 @@
-// Pay → "Split summary" (as PhonePe's Send Money): one row to every split,
+// Pay → "Split Expense" (as PhonePe's Send Money): one row to every split,
 // with where you stand - all settled, what you're owed, or what you owe.
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -27,13 +27,13 @@ export function SplitSummaryRow() {
     : v.owe > 0 ? { text: `You owe ${money(v.owe)}`, fg: 'var(--warning-text)', bg: 'color-mix(in srgb, var(--warning) 15%, transparent)' }
     : v.owed > 0 ? { text: `You're owed ${money(v.owed)}`, fg: 'var(--brand-text)', bg: 'color-mix(in srgb, var(--brand) 13%, transparent)' }
     : v.any ? { text: 'All settled! 🎉', fg: 'var(--text-secondary)', bg: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }
-    : { text: 'Split Expense', fg: 'var(--brand-text)', bg: 'color-mix(in srgb, var(--brand) 13%, transparent)' }
+    : null // no splits yet: the row's own name says it
   return (
     <button type="button" onClick={() => navigate('/splits')}
       className="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-left active:scale-[0.99] transition-transform"
       style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
       <span aria-hidden className="flex items-center justify-center flex-shrink-0 rounded-xl" style={{ width: 40, height: 40, background: 'color-mix(in srgb, var(--brand) 12%, transparent)', fontSize: 20 }}>🧾</span>
-      <span className="flex-1 min-w-0 text-[15px] font-semibold text-text-primary whitespace-nowrap truncate">Split summary</span>
+      <span className="flex-1 min-w-0 text-[15px] font-semibold text-text-primary whitespace-nowrap truncate">Split Expense</span>
       {pill && <span className="text-[12px] font-bold rounded-full px-2.5 py-1 whitespace-nowrap" style={{ color: pill.fg, background: pill.bg }}>{pill.text}</span>}
       <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-secondary)' }} />
     </button>
