@@ -157,9 +157,11 @@ export function SplitDetailPage() {
       <div style={{ padding: '0 16px 10px', flexShrink: 0, width: '100%', maxWidth: 560, margin: '0 auto' }}>
         <div style={{ ...card, padding: 14 }}>
           {/* Which expense this is - the group's latest (each keeps its own category). */}
+          {s.groupSplits.length > 0 && (
           <div style={{ ...subStyle, fontSize: 12, fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', marginBottom: 6 }}>
             {s.groupSplits.some(g => g.createdAt > s.createdAt) ? 'Expense' : 'Latest expense'} · <span style={{ textTransform: 'none', letterSpacing: 0, color: 'var(--text-primary)' }}>{s.emoji ? `${s.emoji} ` : ''}{s.title} · {when(s.createdAt)}</span>
           </div>
+          )}
           <div style={rowStyle}>
             <div style={{ flex: 1, minWidth: 0 }}>
               {s.isCreator ? (<>
@@ -251,24 +253,25 @@ export function SplitDetailPage() {
         })())}
       </div>
 
-      {/* Message the group, or add an expense to it - any time (as Google Pay /
-          PhonePe): the group's people already added, it joins this group. */}
+      {/* Settled: this split is closed. Its one next step is a NEW split
+          expense - a new group (the same people already added; they can be
+          changed). Open: message the group. */}
+      {settled ? (
+        <div style={{ flexShrink: 0, padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 14px)', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+          <p style={{ ...subStyle, textAlign: 'center', marginBottom: 10 }}>All settled 🎉 This split is closed.</p>
+          <Btn style={{ height: 48, fontSize: 15, width: '100%' }} onClick={() => navigate('/splits/new', { state: { with: groupPeople } })}>＋ Create new split expense</Btn>
+        </div>
+      ) : (
       <form onSubmit={e => { e.preventDefault(); void send() }}
         style={{ flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px calc(env(safe-area-inset-bottom, 0px) + 10px)', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
         <input value={draft} onChange={e => setDraft(e.target.value)} maxLength={1000} placeholder="Message the group" aria-label="Message the group"
           style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 22, border: '1px solid var(--border)', background: 'var(--bg)', padding: '0 16px', fontSize: 15, color: 'var(--text-primary)', outline: 'none' }} />
-        {draft.trim() ? (
-          <button type="submit" aria-label="Send" disabled={sending}
-            style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: 'var(--brand)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: sending ? 0.5 : 1, flexShrink: 0 }}>
-            <Send size={18} />
-          </button>
-        ) : (
-          <button type="button" onClick={() => navigate('/splits/new', { state: { with: groupPeople, group: s.groupId, groupName: s.groupName, groupEmoji: s.groupEmoji } })}
-            style={{ height: 44, padding: '0 16px', borderRadius: 22, border: 'none', background: 'var(--brand)', color: '#fff', fontWeight: 700, fontSize: 14.5, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
-            ＋ Expense
-          </button>
-        )}
+        <button type="submit" aria-label="Send" disabled={!draft.trim() || sending}
+          style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: 'var(--brand)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: !draft.trim() || sending ? 0.5 : 1, flexShrink: 0 }}>
+          <Send size={18} />
+        </button>
       </form>
+      )}
 
     </div>
   )
