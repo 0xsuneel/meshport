@@ -6,7 +6,11 @@
 //
 // Detected from what this device itself sees, so a wrong phone clock cannot
 // cause a false alarm: the newest block's number has not changed for a few
-// seconds of OUR looking. The block's own timestamp only speeds that up.
+// seconds of OUR looking (the block's own timestamp only speeds that up), OR
+// over the last ~12 s or more of our looking, blocks came on average more than
+// 1 s apart. The second rule is what catches the 13 Nov 09:47+ pattern
+// (gaps of 10 s, 5 s, then a few quick blocks): the head moves between every
+// 8 s look, so "same number twice" alone never fired.
 //
 // One cheap read every 8 s while the app is visible (every 2 s while the head
 // looks stuck, to tell a stall from a quiet moment). Reads go through
@@ -22,6 +26,8 @@ export interface HealthState {
   slow: boolean
   /** When the head was last seen stuck (this device's clock); 0 = never. */
   stuckAt: number
+  /** Recent looks (this device's clock, block number), oldest first, for the block rate. */
+  seen: { at: number; number: number }[]
 }
 
 /** The head has not moved for this long on our own clock: a stall. */
@@ -36,22 +42,33 @@ export const POLL_STUCK_MS = 2_000
  *  ~15 s of normal blocks); clearing on the first new block made the pill
  *  blink on and off every few seconds. */
 export const CLEAR_AFTER_MS = 20_000
+/** The block rate is judged over at least this much of our own looking... */
+export const RATE_WINDOW_MS = 12_000
+/** ...and looks older than this are dropped. */
+export const RATE_KEEP_MS = 30_000
+/** Blocks this far apart on average is slow: twice a healthy Arc's ~510 ms
+ *  (13 Nov 10:04: a stalled spell averaging 1.3 s slipped under 1.5 s). */
+export const SLOW_BLOCK_MS = 1_000
 
-export const INITIAL_HEALTH: HealthState = { number: null, changedAt: 0, slow: false, stuckAt: 0 }
+export const INITIAL_HEALTH: HealthState = { number: null, changedAt: 0, slow: false, stuckAt: 0, seen: [] }
 
 /** Pure: the next state after reading the head at `now` (ms, this device's clock). */
 export function nextHealth(prev: HealthState, sample: HeadSample, now: number): HealthState {
-  if (sample.number !== prev.number) {
-    // A new block: still slow while the last stall was recent.
-    const slow = prev.slow && now - prev.stuckAt < CLEAR_AFTER_MS
-    return { number: sample.number, changedAt: now, slow, stuckAt: prev.stuckAt }
-  }
-  const stuckMs = now - prev.changedAt
+  // A number lower than one already seen is a node a beat behind: not a new look at the head.
+  const seen = [...prev.seen.filter(x => now - x.at <= RATE_KEEP_MS && x.number <= sample.number), { at: now, number: sample.number }]
+  const oldest = seen[0]
+  const span = now - oldest.at
+  const slowRate = span >= RATE_WINDOW_MS && span / Math.max(1, sample.number - oldest.number) >= SLOW_BLOCK_MS
+
+  const moved = sample.number !== prev.number
+  const stuckMs = moved ? 0 : now - prev.changedAt
   const blockAgeMs = now - sample.timestampSec * 1000
-  const stuck = stuckMs >= STUCK_MS || (stuckMs >= STUCK_WITH_OLD_BLOCK_MS && blockAgeMs >= OLD_BLOCK_MS)
-  if (stuck) return { ...prev, slow: true, stuckAt: now }
-  const slow = prev.slow && now - prev.stuckAt < CLEAR_AFTER_MS
-  return slow === prev.slow ? prev : { ...prev, slow }
+  const stuckHead = !moved && (stuckMs >= STUCK_MS || (stuckMs >= STUCK_WITH_OLD_BLOCK_MS && blockAgeMs >= OLD_BLOCK_MS))
+
+  const base = { number: sample.number, changedAt: moved ? now : prev.changedAt, seen }
+  if (stuckHead || slowRate) return { ...base, slow: true, stuckAt: now }
+  // Still slow while the last slow look was recent (no blinking through a stall cycle).
+  return { ...base, slow: prev.slow && now - prev.stuckAt < CLEAR_AFTER_MS, stuckAt: prev.stuckAt }
 }
 
 let state: HealthState = INITIAL_HEALTH
