@@ -437,12 +437,18 @@ export async function adminListOrderPayments(intentId: string): Promise<Merchant
   return (data ?? []).map(mapPayment)
 }
 
-export async function listMyPayments(limit = 500): Promise<MerchantPayment[]> {
+/**
+ * Payments on my own orders, newest first. A failed read gives [] - or, with
+ * `strict`, throws, so a screen can keep what it shows (and try again)
+ * instead of showing no sales.
+ */
+export async function listMyPayments(limit = 500, opts: { strict?: boolean } = {}): Promise<MerchantPayment[]> {
   const uid = await myAuthUid()
   if (!uid) return []
   // Payments on my own orders (mp_select_own), via the intent_id foreign key.
-  const { data } = await supabase.from('merchant_payments').select('*, merchant_payment_intents!inner(merchant_auth_uid, kind, via, personal)')
+  const { data, error } = await supabase.from('merchant_payments').select('*, merchant_payment_intents!inner(merchant_auth_uid, kind, via, personal)')
     .eq('merchant_payment_intents.merchant_auth_uid', uid).order('created_at', { ascending: false }).limit(limit)
+  if (error && opts.strict) throw new Error(error.message || 'Could not load payments')
   return (data ?? []).map(mapPayment)
 }
 

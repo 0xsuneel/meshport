@@ -250,7 +250,9 @@ export function deriveActivityRow(record: ActivityRecord) {
     : counterpartyUsername
     ? (SYSTEM_LABELS[counterpartyUsername] ?? `${counterpartyUsername.replace(/\.arc$/i, '')}.arc`)
     : counterparty
-    ? (counterparty.startsWith('0x')
+    // Any long address is shortened - a Solana one (base58, no 0x) too;
+    // short names stay whole.
+    ? (counterparty.length > 16 && !/\s/.test(counterparty)
         ? counterparty.slice(0, 6) + '...' + counterparty.slice(-6)
         : counterparty)
     : ''

@@ -3,6 +3,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { RECENT_AVATAR_COLORS } from '@/lib/recentContacts'
+import { Skeleton } from '@/components/ui/Skeleton'
 
 export function SplitHeader({ title, onBack, right }: { title: string; onBack?: () => void; right?: ReactNode }) {
   return (
@@ -141,4 +142,62 @@ export function categoryForTitle(title: string): SplitCategory {
 }
 export function categoryForEmoji(emoji: string | null | undefined): SplitCategory {
   return SPLIT_CATEGORIES.find(c => c.emoji === emoji) ?? DEFAULT_SPLIT_CATEGORY
+}
+
+// ── Loading placeholders, shaped like what loads ───────────────────────────
+const line = (w: string | number, h = 12) => <Skeleton className="rounded-full" style={{ width: w, height: h }} />
+
+/** A list of splits (avatar, two lines, a status pill) while it loads. */
+export function SplitListSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <div style={{ ...card, padding: '4px 14px' }} aria-busy="true" aria-label="Loading">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} style={{ ...rowStyle, padding: '12px 0', borderTop: i ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'none' }}>
+          <Skeleton className="rounded-full flex-shrink-0" style={{ width: 38, height: 38 }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>{line('55%', 13)}{line('35%', 11)}</div>
+          <Skeleton className="rounded-full" style={{ width: 62, height: 22 }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** People in a split (avatar, name, amount) - an expanded group row loading. */
+export function SplitPeopleSkeleton({ count = 2 }: { count?: number }) {
+  return (
+    <div aria-busy="true" aria-label="Loading">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} style={{ ...rowStyle, padding: '8px 0' }}>
+          <Skeleton className="rounded-full flex-shrink-0" style={{ width: 30, height: 30 }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>{line('45%', 12)}{line('28%', 10)}</div>
+          {line(44, 14)}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** The split group screen: who's in it, the split card, and the thread. */
+export function SplitDetailSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading" style={{ width: '100%', maxWidth: 560, margin: '0 auto' }}>
+      <div style={{ padding: '2px 20px 12px' }}>{line('62%', 12)}</div>
+      <div style={{ padding: '0 16px 12px' }}>
+        <div style={{ ...card, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {line('48%', 11)}
+          <div style={rowStyle}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>{line('38%', 11)}{line('44%', 22)}</div>
+            <Skeleton className="flex-shrink-0" style={{ width: 76, height: 40, borderRadius: 14 }} />
+          </div>
+          <Skeleton className="rounded-full" style={{ width: '100%', height: 8 }} />
+          <div style={{ ...rowStyle, justifyContent: 'space-between' }}>{line('42%', 11)}{line(64, 11)}</div>
+        </div>
+      </div>
+      <div style={{ padding: '6px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {[['70%', 'flex-start'], ['56%', 'flex-end'], ['64%', 'flex-start']].map(([w, side], i) => (
+          <Skeleton key={i} style={{ width: w, height: i === 0 ? 64 : 40, borderRadius: 16, alignSelf: side }} />
+        ))}
+      </div>
+    </div>
+  )
 }
