@@ -161,13 +161,17 @@ function card(view: IntentView | null, summary: ConfirmSummary | null): HTMLElem
   return wrap
 }
 
-function fingerprintIcon(): SVGElement {
+// The same icons as the app's own passcode pad (PinKeypad: lucide-react
+// Fingerprint, or ScanFace for Face ID), drawn here - this page loads no
+// library. Lucide's paths, 24 px, stroke 2.
+const FINGERPRINT_PATHS = ['M2 12C2 6.5 6.5 2 12 2a10 10 0 0 1 8 4', 'M5 19.5C5.5 18 6 15 6 12c0-.7.12-1.37.34-2', 'M17.29 21.02c.12-.6.43-2.3.5-3.02', 'M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4', 'M8.65 22c.21-.66.45-1.32.57-2', 'M14 13.12c0 2.38 0 6.38-1 8.88', 'M2 16h.01', 'M21.8 16c.2-2 .131-5.354 0-6', 'M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2']
+const SCAN_FACE_PATHS = ['M3 7V5a2 2 0 0 1 2-2h2', 'M17 3h2a2 2 0 0 1 2 2v2', 'M21 17v2a2 2 0 0 1-2 2h-2', 'M7 21H5a2 2 0 0 1-2-2v-2', 'M8 14s1.5 2 4 2 4-2 4-2', 'M9 9h.01', 'M15 9h.01']
+function fingerprintIcon(label?: string): SVGElement {
   const NS = 'http://www.w3.org/2000/svg'
   const svg = document.createElementNS(NS, 'svg')
-  for (const [k, v] of [['viewBox', '0 0 24 24'], ['fill', 'none'], ['stroke', 'currentColor'], ['stroke-width', '1.8'],
+  for (const [k, v] of [['viewBox', '0 0 24 24'], ['fill', 'none'], ['stroke', 'currentColor'], ['stroke-width', '2'],
     ['stroke-linecap', 'round'], ['stroke-linejoin', 'round'], ['aria-hidden', 'true']]) svg.setAttribute(k, v)
-  for (const d of ['M12 11c0 3.5-1 6.5-3 9', 'M8.5 6.7A6 6 0 0 1 18 11c0 2.5-.3 4.8-1 7', 'M6 9.5A6 6 0 0 0 6 11c0 2-.5 3.8-1.5 5.5',
-    'M12 7.5A3.5 3.5 0 0 1 15.5 11c0 3-.6 5.6-1.8 8', 'M8.5 11a3.5 3.5 0 0 1 1-2.4']) {
+  for (const d of /face/i.test(label ?? '') ? SCAN_FACE_PATHS : FINGERPRINT_PATHS) {
     const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); svg.append(p)
   }
   return svg
@@ -290,6 +294,8 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
       if (earlyTimer) { clearTimeout(earlyTimer); earlyTimer = null }
       if (say.textContent === HIDDEN_SAY) sayIt('')
       trySubmit()
+      const w = bioWanted
+      if (w && Date.now() < w.until && !busy) { bioWanted = null; const k = bioCell; void runFingerprint(w.biometric, k) }
     }
     paint()
   }
@@ -363,15 +369,35 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
   }
 
   // The fingerprint key: once the request (and with it the sealed passcode) is here.
-  const fingerprintKey = (biometric: ConfirmBiometric) => key(fingerprintIcon(), async () => {
-    if (busy || !visKnown || !visible || lockedUntil > Date.now() || !req) return
-    busy = true; paint(); sayIt(`Waiting for ${biometric.label || 'fingerprint'}…`)
+  // A tap while the page isn't confirmed visible yet - the sheet still sliding
+  // in, the first ~0.6 s - used to do nothing at all. It now waits up to 1 s
+  // for the page to be visible, then opens the prompt (the OS prompt itself
+  // needs the person's finger or face); still covered, it says so.
+  let bioWanted: { biometric: ConfirmBiometric; until: number } | null = null
+  const runFingerprint = async (biometric: ConfirmBiometric, keyEl: HTMLElement) => {
+    if (busy || lockedUntil > Date.now() || !req) return
+    if (!visKnown || !visible) {
+      bioWanted = { biometric, until: Date.now() + 1000 }
+      setTimeout(() => { if (bioWanted && Date.now() >= bioWanted.until && !busy) { bioWanted = null; sayIt(HIDDEN_SAY, false, true) } }, 1050)
+      return
+    }
+    bioWanted = null
+    const name = biometric.label || 'Fingerprint'
+    busy = true; keyEl.classList.add('trying'); paint(); sayIt(`Waiting for ${name.toLowerCase() === 'face id' ? name : name.toLowerCase()}…`)
     let passcode: string | null = null
-    try { passcode = await passcodeFromFingerprint(biometric) } catch { /* below */ }
-    busy = false
+    let cancelled = false
+    try { passcode = await passcodeFromFingerprint(biometric) } catch (e) {
+      // Cancelled or timed out (NotAllowedError / AbortError): a normal choice - no error, as on the lock screen.
+      cancelled = e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'AbortError')
+    }
+    busy = false; keyEl.classList.remove('trying')
     if (passcode) submit(passcode, 'biometric')
-    else { sayIt(`${biometric.label || 'Fingerprint'} didn't work - enter your passcode`, true); paint() }
-  }, 'key bio', `Use ${biometric.label || 'fingerprint'}`, true)
+    else { sayIt(cancelled ? '' : `${name} didn't work - enter your passcode`, !cancelled); paint() }
+  }
+  const fingerprintKey = (biometric: ConfirmBiometric) => {
+    const k = key(fingerprintIcon(biometric.label), () => { void runFingerprint(biometric, k) }, 'key bio', `Use ${biometric.label || 'fingerprint'}`, true)
+    return k
+  }
   const canFingerprint = (b: ConfirmBiometric | null): b is ConfirmBiometric => !!b && !!window.PublicKeyCredential
 
   const pad = el('div', 'pad')

@@ -71,6 +71,11 @@ main { padding: 0; }
 .key:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .key svg { width: 22px; height: 22px; }
 .key.bio svg { width: 24px; height: 24px; }
+/* Waiting for the fingerprint / face: the icon pulses, as on the app's lock screen. */
+@media (prefers-reduced-motion: no-preference) {
+  .key.bio.trying svg { animation: bio-pulse 1.1s ease-in-out infinite; }
+  @keyframes bio-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.18); opacity: .55; } }
+}
 /* Approved: a small tick over the keypad, in place (same height). */
 .entry { position: relative; }
 .entry > .dots, .entry > .say, .entry > .pad { transition: opacity .14s ease-out; }
