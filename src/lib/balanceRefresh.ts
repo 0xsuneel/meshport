@@ -7,7 +7,7 @@
 //      token shows its new amount immediately - USDC in the store, EURC /
 //      cirBTC in the saved slot Home and Swap paint from (pendingTxBalance).
 //   2. The cached reads are dropped and USDC is read from the chain - again
-//      a few times over ~15s while it still shows the pre-transaction value
+//      a few times (~12s, up to ~42s while Arc is stalled) while it still shows the pre-transaction value
 //      (an RPC node can answer from a block before the transaction landed),
 //      so a stale first answer no longer sticks until the next 90s poll.
 //   3. Home is told to re-read EURC / cirBTC too (BALANCES_STALE_EVENT).
@@ -42,12 +42,19 @@ export function isLaggingRead(address: string | null | undefined, token: TxToken
 }
 
 export function pendingTxBalance(address: string | null | undefined, token: TxToken): { before: number; after: number } | null {
-  if (!address || !lastTxBalances || msSinceLastTx() > 30_000) return null
+  if (!address || !lastTxBalances || msSinceLastTx() > PENDING_WINDOW_MS) return null
   if (lastTxBalances.address.toLowerCase() !== address.toLowerCase()) return null
   return lastTxBalances.balances[token] ?? null
 }
 // Gaps between the follow-up reads while the chain still shows the old value.
-const RETRY_GAPS_MS = [1500, 2000, 3500, 5000]
+// The first four cover a healthy Arc (blocks every ~0.5 s). The rest cover a
+// stalled one (13 Nov 2026: gaps of up to 24 s between blocks): without them
+// the last read, taken ~12 s after sending, put the PRE-payment balance back on
+// screen while the payment was still waiting for its block, and it jumped down
+// again when the block came.
+const RETRY_GAPS_MS = [1500, 2000, 3500, 5000, 5000, 5000, 5000, 5000, 5000, 5000]
+/** How long after sending the shown (instant) balance is protected from a node still on the old block. */
+const PENDING_WINDOW_MS = 50_000
 
 const sameWallet = (address: string) => {
   const cur = useWalletStore.getState()._currentAddr
