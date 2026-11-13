@@ -504,12 +504,28 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
 // share of a Split Expense (a payment request card whose note line is
 // "Split · 🍕 Dinner", src/lib/splits) says so: "Split Expense · 🍕 Dinner ·
 // your share $5 USDC" rather than "💸 Payment request · Order #… · $5 USDC".
+// A bill / request card reads as the chat list shows it (src/lib/orderLabels
+// orderCardPreview): "🧾 Bill #170 · $0.1 USDC", "💸 Request #171 · $1 USDC" -
+// never the card's raw "Order #ORD-100170" (the number people see is #170).
 export function pushLine(content: string): string {
   const lines = content.split('\n')
-  const req = /^💸 Payment request(?: · Order #[A-Z0-9-]{3,20})? · \$([\d.,]+) USDC/u.exec(lines[0] ?? '')
+  const first = lines[0] ?? ''
+  const card = /^(🧾 Bill|💸 Payment request)(?: · Order #([A-Z0-9-]{3,20}))? · \$([\d.,]+) USDC/u.exec(first)
   const note = (lines[1] ?? '').trim()
-  if (req && note.startsWith('Split · ')) return `Split Expense · ${note.slice('Split · '.length).trim()} · your share $${req[1]} USDC`.slice(0, 120)
-  return (lines[0] ?? '').slice(0, 120)
+  if (card && card[1].startsWith('💸') && note.startsWith('Split · ')) {
+    return `Split Expense · ${note.slice('Split · '.length).trim()} · your share $${card[3]} USDC`.slice(0, 120)
+  }
+  if (card) {
+    const no = card[2] ? ` ${shortOrderNumber(card[2])}` : ''
+    return `${card[1].startsWith('🧾') ? '🧾 Bill' : '💸 Request'}${no} · $${card[3]} USDC`.slice(0, 120)
+  }
+  return first.slice(0, 120)
+}
+/** ORD-100170 → #170 (src/lib/orderLabels shortOrderNumber); anything else as it is. */
+function shortOrderNumber(n: string): string {
+  const m = /^ORD-(\d+)$/i.exec(n)
+  const k = m ? Number(m[1]) - 100000 : 0
+  return k > 0 ? `#${k}` : n
 }
 
 // ── action=touch - update a conversation's last_message preview ────────────
