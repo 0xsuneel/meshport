@@ -415,9 +415,10 @@ const ALL_CHAINS = [
   { id: 'arb',       name: 'Arbitrum',    testnet: 'Arbitrum Sepolia',    sdk: 'Arbitrum_Sepolia', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(27,74,221,0.15)',  ub: true,  popular: true,  layer: 'L2' },
   { id: 'pol',       name: 'Polygon',     testnet: 'Polygon PoS Amoy',    sdk: 'Polygon_Amoy_Testnet', gasToken: 'POL',  minGas: 0.01,  time: '<10s',  bg: 'rgba(130,71,229,0.15)', ub: true,  popular: true,  layer: 'L2' },
   { id: 'op',        name: 'Optimism',    testnet: 'OP Sepolia',          sdk: 'Optimism_Sepolia', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(255,4,32,0.12)',   ub: true,  popular: true,  layer: 'L2' },
-  // Not EVM: recipient is a Solana address. Both routes (Unified Balance and
-  // CCTP) mint there through Circle's forwarder, and MeshPort opens the
-  // recipient's USDC account first (lib/solanaBridge.ts).
+  // Not EVM: recipient is a Solana address. Both routes mint there through
+  // Circle's forwarder. Unified Balance needs the recipient's USDC account to
+  // exist first, so MeshPort opens it (lib/solanaBridge.ts); on CCTP the
+  // forwarder creates it.
   { id: 'sol',       name: 'Solana',      testnet: 'Solana Devnet',       sdk: 'Solana_Devnet', gasToken: 'SOL',  minGas: 0,     time: '<30s',  bg: 'rgba(153,69,255,0.15)', ub: true,  popular: true,  layer: 'L1' },
   { id: 'avax',      name: 'Avalanche',   testnet: 'Avalanche Fuji',      sdk: 'Avalanche_Fuji', gasToken: 'AVAX', minGas: 0.01,  time: '<15s',  bg: 'rgba(232,65,66,0.12)',  ub: true,  popular: true,  layer: 'L1' },
   { id: 'hyperevm',  name: 'HyperEVM',    testnet: 'HyperEVM Testnet',    sdk: 'HyperEVM_Testnet', gasToken: 'HYPE', minGas: 0.01,  time: '<10s',  bg: 'rgba(250,204,21,0.12)', ub: true,  popular: false, layer: 'L2' },
@@ -2248,7 +2249,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // cheap/stable routes keep exactly the same protection they had),
         // capped so a single very-high-fee chain can't eat an unreasonable
         // chunk of the transfer.
-        // Solana: Circle's forwarder mints into the recipient's USDC account - MeshPort opens it first.
+        // Solana (Unified Balance): the spend needs the recipient's USDC account
+        // to exist and the SDK doesn't create it (Arc docs: unified-balance /
+        // estimate-spend-fees) - MeshPort opens it first.
         if (chain.sdk === 'Solana_Devnet') {
           const { ensureSolanaUsdcAccount } = await import('@/lib/solanaBridge')
           await ensureSolanaUsdcAccount(address)
@@ -2925,12 +2928,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       }
       maxFee = clampedMaxFee.toFixed(6)
 
-      // Solana: Circle mints into the recipient's USDC account, which has to
-      // exist first - MeshPort opens it (and pays its rent) if it doesn't.
-      if (chain.sdk === 'Solana_Devnet') {
-        const { ensureSolanaUsdcAccount } = await import('@/lib/solanaBridge')
-        await ensureSolanaUsdcAccount(address)
-      }
+      // Solana (CCTP, Circle's forwarder): the forwarder creates the
+      // recipient's USDC account itself - its fee covers it (Arc docs:
+      // App Kit / use-forwarding-service, "Solana destinations"), and the
+      // live maxFee above includes that cost. MeshPort no longer opens it
+      // first here (it paid the rent twice). The Unified Balance route still
+      // does: its spend requires the account to exist and the SDK doesn't
+      // create it (Arc docs: unified-balance / estimate-spend-fees).
 
       let result = await Promise.race([
         useFastCctp
