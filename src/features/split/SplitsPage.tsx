@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { mySplits, money, isSettled, SPLITS_CHANGED_EVENT, type MySplitMade, type MySplitOwe } from '@/lib/splits'
-import { SplitHeader, ListCard, card, rowStyle, subStyle, nameStyle, amountStyle, when } from './splitUi'
+import { SplitHeader, ListCard, card, rowStyle, subStyle, nameStyle, amountStyle, when, SplitListSkeleton } from './splitUi'
 
 type Tab = 'open' | 'settled'
 const oweOpen = (o: MySplitOwe) => (o.status === 'pending' || o.status === 'partially_paid') && o.left > 0
@@ -90,7 +90,7 @@ export function SplitsPage() {
           ))}
         </div>
         {error ? <div role="alert" style={{ ...card, color: 'var(--danger)', fontWeight: 600, fontSize: 14 }}>{error}</div>
-          : !data ? <div style={{ ...card, height: 160 }} className="animate-pulse" />
+          : !data ? <SplitListSkeleton />
           : rows.length ? <ListCard>{rows.map(r => <div key={r.key}>{r.node}</div>)}</ListCard>
           : (
             <div style={{ ...card, textAlign: 'center', padding: '28px 16px' }}>

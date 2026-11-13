@@ -14,7 +14,7 @@ import {
 } from '@/lib/splits'
 import { canRemindAt } from '@/lib/businessBills'
 import { useAuthStore, useUIStore } from '@/store'
-import { SplitHeader, SplitAvatar, ProgressBar, Pill, Btn, card, rowStyle, subStyle, nameStyle, amountStyle, when } from './splitUi'
+import { SplitHeader, SplitAvatar, ProgressBar, Pill, Btn, card, rowStyle, subStyle, nameStyle, amountStyle, when, SplitDetailSkeleton, SplitPeopleSkeleton } from './splitUi'
 
 type Item =
   | { kind: 'msg'; at: string; m: SplitMessage }
@@ -128,9 +128,9 @@ export function SplitDetailPage() {
     return (
       <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
         <SplitHeader title="Split" onBack={back} />
-        <div style={{ padding: '0 16px' }}>{error
-          ? <div role="alert" style={{ ...card, color: 'var(--danger)', fontWeight: 600, fontSize: 14 }}>{error}</div>
-          : <div style={{ ...card, height: 140 }} className="animate-pulse" />}</div>
+        {error
+          ? <div style={{ padding: '0 16px' }}><div role="alert" style={{ ...card, color: 'var(--danger)', fontWeight: 600, fontSize: 14 }}>{error}</div></div>
+          : <SplitDetailSkeleton />}
       </div>
     )
   }
@@ -309,7 +309,7 @@ function GroupExpense({ g }: { g: SplitGroupSplit }) {
       {open && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '6px 14px 10px' }}>
           {err ? <div style={{ ...subStyle, padding: '6px 0' }}>{err}</div>
-            : !full ? <div style={{ ...subStyle, padding: '6px 0' }}>Loading…</div>
+            : !full ? <SplitPeopleSkeleton />
             : (<>
               <div style={{ ...rowStyle, padding: '6px 0' }}>
                 <SplitAvatar name={full.creator.name} username={full.creator.username} avatar={full.creator.avatar} size={30} />

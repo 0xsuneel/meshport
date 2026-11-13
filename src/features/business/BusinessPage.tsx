@@ -129,8 +129,19 @@ function OwnerBusinessPage() {
   // isn't a sale: it stays a plain receive in Activity. (A direct transfer of
   // exactly an open order's amount is matched to that order by the watcher.)
   const seenReceipts = useRef<Set<string> | null>(null)
+  // A failed read (network) keeps what is shown - the loading placeholders
+  // on a first load - and tries again in 4 s, rather than showing no sales.
+  const retry = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (retry.current) clearTimeout(retry.current) }, [])
   const load = useCallback(async () => {
-    const [orders, rcpts] = await Promise.all([listMyPayments(500), listChainReceipts(300).catch(() => null)])
+    let orders: MerchantPayment[], rcpts: Awaited<ReturnType<typeof listChainReceipts>> | null
+    try {
+      [orders, rcpts] = await Promise.all([listMyPayments(500, { strict: true }), listChainReceipts(300).catch(() => null)])
+    } catch {
+      if (retry.current) clearTimeout(retry.current)
+      retry.current = setTimeout(() => { retry.current = null; void load() }, 4_000)
+      return
+    }
     const receipts = rcpts ?? []
     // USDC just landed on another chain: re-read that chain's balance at once
     // (the "to settle" figure and Settle all), like Home does for Arc.

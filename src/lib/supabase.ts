@@ -22,6 +22,30 @@ if (!SUPABASE_URL || !SUPABASE_ANON) {
 // still fails (a network error against a nonexistent project), which the
 // rest of the codebase already handles gracefully (retries, toasts, safe
 // fallback values) rather than crashing outright.
+// Database and sign-in requests give up after 20 s. On a phone switching
+// networks a reply can be lost: the server answered (its log says 200) but
+// the phone never got it, and fetch then waits for minutes. The auth client
+// holds its session lock while it waits, and every other database call waits
+// behind that lock - Business sat on loading placeholders while the balances
+// (read from the chains, not the database) showed (14 Nov). Timed out, the
+// call fails like any network error and the screens' own retry loads it.
+// File uploads and server functions (/storage, /functions) can take longer
+// and keep no limit; a request that brings its own abort signal keeps it too.
+export const SUPABASE_FETCH_TIMEOUT_MS = 20_000
+export function timedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  if (/\/(storage|functions)\/v1\//.test(url) || typeof AbortController === 'undefined') return fetch(input, init)
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), SUPABASE_FETCH_TIMEOUT_MS)
+  let signal: AbortSignal = ctrl.signal
+  if (init?.signal) {
+    const any = (AbortSignal as unknown as { any?: (s: AbortSignal[]) => AbortSignal }).any
+    if (!any) { clearTimeout(timer); return fetch(input, init) }
+    signal = any([init.signal, ctrl.signal])
+  }
+  return fetch(input, { ...init, signal }).finally(() => clearTimeout(timer))
+}
+
 export const supabase = createClient(
   SUPABASE_URL  || 'https://placeholder.supabase.co',
   SUPABASE_ANON || 'placeholder-anon-key',
@@ -39,6 +63,7 @@ export const supabase = createClient(
     // the server dropped the socket, and chat/P2P updates arrived late until
     // the reconnect. Worker timers are throttled far less.
     realtime: { worker: true },
+    global: { fetch: timedFetch },
   },
 )
 
