@@ -11,13 +11,15 @@
 //                resume         back from the background → signing again
 //                sign           one signature: detail = signTypedData / signTransaction / signMessage
 //                confirm_open   the passcode sheet's wallet page: ms to load / ready / size / live / usable, moves
+//                nonce          a transaction number from Circle's SDK that the chain could not run, corrected before signing (wallet/account usableNonce)
+//                frame          the wallet frame was recovered: detail = reopened / reloaded and why
 //
 // Never blocks or fails anything: fire-and-forget, dropped when offline or
 // signed out. Only timings and outcomes - never keys, signatures, messages,
 // amounts or passcodes.
 
 export type WalletEvent =
-  | 'startup' | 'open' | 'resume' | 'sign' | 'confirm_open'
+  | 'startup' | 'open' | 'resume' | 'sign' | 'confirm_open' | 'nonce' | 'frame'
 
 export interface WalletEventInput {
   event: WalletEvent

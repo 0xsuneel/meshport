@@ -34,6 +34,8 @@ const ALLOWED_PARENTS = new Set(parseOrigins(import.meta.env.VITE_WALLET_PARENT_
   ?? (import.meta.env.DEV ? DEV_PARENTS : '')))
 
 class RpcError extends Error {
+  /** approval-required: why no spend limit covered the request (protocol.ts). */
+  reason?: string
   constructor(public code: WalletErrorCode, message: string, public lockedForMs?: number) { super(message) }
 }
 
@@ -111,12 +113,20 @@ function requireApproval(address: string, method: string, params: Record<string,
     return
   }
   const w = spendWindows.get(a)
-  if (w && w.until > Date.now() && vault.hasPasscode(address)) {
+  // Why it isn't covered - which the app records (wallet_events), so a
+  // "confirm again" in the middle of a transfer can be traced to its cause.
+  let reason = 'no-limit'
+  if (w && w.until <= Date.now()) reason = 'expired'
+  else if (w && !vault.hasPasscode(address)) reason = 'no-passcode'
+  else if (w) {
     const c = classify(a, method, params)
     const next = c.ok ? fits(w.scope, w.remaining, c) : null
     if (next) { w.remaining = next; return }
+    reason = c.ok ? 'over-limit' : 'unreadable'
   }
-  throw new RpcError('approval-required', 'Confirm this in your wallet')
+  const refused = new RpcError('approval-required', 'Confirm this in your wallet')
+  refused.reason = reason
+  throw refused
 }
 
 const ARC_CHAIN_ID = 5042002
@@ -673,8 +683,10 @@ function reply(target: MessageEventSource, origin: string, msg: Omit<WalletRespo
 
 // Error text the app sees: the frame's own messages, never a library's (which
 // could echo what it was given).
-function errorReply(err: unknown): { code: WalletErrorCode; message: string; lockedForMs?: number } {
-  if (err instanceof RpcError || err instanceof VaultError) return { code: err.code, message: err.message, lockedForMs: err.lockedForMs || undefined }
+function errorReply(err: unknown): { code: WalletErrorCode; message: string; lockedForMs?: number; reason?: string } {
+  if (err instanceof RpcError || err instanceof VaultError) {
+    return { code: err.code, message: err.message, lockedForMs: err.lockedForMs || undefined, reason: err instanceof RpcError ? err.reason : undefined }
+  }
   return { code: 'failed', message: 'Wallet request failed' }
 }
 

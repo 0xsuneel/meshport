@@ -201,7 +201,7 @@ function reportSwapProgress(reqs: any[], results: any[], Transaction: any) {
 // same-process call available from the browser - this is the real network
 // hop equivalent of it).
 const SWAP_RPC_TIMEOUT_MS = 20_000
-function buildArcForwardProvider(JsonRpcProvider: any, Transaction: any) {
+function buildArcForwardProvider(JsonRpcProvider: any, Transaction: any, run?: SwapRun) {
   class ArcForwardProvider extends JsonRpcProvider {
     constructor() {
       // pollingInterval: ethers' 4000ms default made every receipt wait inside
@@ -210,6 +210,11 @@ function buildArcForwardProvider(JsonRpcProvider: any, Transaction: any) {
     }
     async _send(payload: any) {
       const isBatch = Array.isArray(payload)
+      // A swap the screen stopped waiting for (abandonSwap): nothing more is
+      // sent for it, and it learns nothing more - its SDK call ends in an error.
+      if (run?.dead) {
+        return (isBatch ? payload : [payload]).map((p: any) => ({ id: p.id, error: { code: -32603, message: 'This swap was stopped' } }))
+      }
       noteSwapSends(isBatch ? payload : [payload], Transaction)
       // A send goes out the way Pay's does (lib/arcRelaySend): one request,
       // the server broadcasts to every node and waits for the receipt.
@@ -544,6 +549,31 @@ async function swapBlockNumber(hash: string, receipt?: any): Promise<string | un
 // module state above (hash, receipt, progress) under the first and could
 // swap twice. Held until the first one's own promise settles.
 let _inFlight: Promise<SwapOutcome> | null = null
+// The swap now running: its own provider (and so its own off switch).
+type SwapRun = { dead: boolean }
+let _run: SwapRun | null = null
+
+/**
+ * The screen stopped waiting for the swap (its 60 s are up). Circle's SDK call
+ * can't be cancelled - it used to stay alive and could still sign and send
+ * the swap minutes later, long after "couldn't confirm" was shown. Now its
+ * provider is switched off: nothing more is ever sent for that swap.
+ *   'not-sent' - no swap transaction went out (at most its token approval,
+ *                which moves nothing): definitely nothing was swapped, and
+ *                another swap may start.
+ *   'sent'     - the swap transaction did go out: its result is read from Arc
+ *                (the swap's own error path), as before.
+ */
+export function abandonSwap(): 'not-sent' | 'sent' {
+  const run = _run
+  if (!run || !_inFlight) return 'not-sent'
+  if (_swapSendAttempted) return 'sent'
+  run.dead = true
+  _run = null
+  _inFlight = null
+  _onSwapProgress = null
+  return 'not-sent'
+}
 export class SwapBusyError extends Error {
   readonly isUncertain = false
   constructor() { super('Your previous swap is still finishing - nothing new was sent. Check Activity before swapping again.') }
@@ -562,6 +592,8 @@ export function executeSwapLocal(params: ExecuteSwapParams): Promise<SwapOutcome
 
 async function executeSwapOnce(params: ExecuteSwapParams): Promise<SwapOutcome> {
   assertAccountUnlocked() // business not approved yet: nothing moves
+  const run: SwapRun = { dead: false }
+  _run = run
   _onSwapProgress = params.onProgress ?? null
   _confirmedHashes = new Set()
   _swapBroadcast = false; _swapSendAttempted = false
@@ -569,17 +601,22 @@ async function executeSwapOnce(params: ExecuteSwapParams): Promise<SwapOutcome> 
   const times = _swapTimes = { start: performance.now() } as NonNullable<typeof _swapTimes>
   let outcome = 'failed'
   try {
-    const out = await runSwap(params)
+    const out = await runSwap(params, run)
     outcome = 'success'
     return out
   } finally {
-    _onSwapProgress = null
-    _swapConfirmed = false
-    _swapTimes = null
-    const { reportSwap } = await import('./perfTrace')
-    reportSwap(times.sent != null ? times.sent - times.start : undefined,
-      times.sent != null && times.confirmed != null ? times.confirmed - times.sent : undefined,
-      times.sent == null ? `${outcome}, not sent` : outcome)
+    // A stopped swap ends later, maybe while another one runs: it must not
+    // touch that one's state (and its timing was the screen's 60 s, not Arc's).
+    if (!run.dead) {
+      if (_run === run) _run = null
+      _onSwapProgress = null
+      _swapConfirmed = false
+      _swapTimes = null
+      const { reportSwap } = await import('./perfTrace')
+      reportSwap(times.sent != null ? times.sent - times.start : undefined,
+        times.sent != null && times.confirmed != null ? times.confirmed - times.sent : undefined,
+        times.sent == null ? `${outcome}, not sent` : outcome)
+    }
   }
 }
 
@@ -607,10 +644,14 @@ export function swapConfig(slippageBps: number, minAmountOut?: string | null): {
   return /^\d+(\.\d+)?$/.test(min) && Number(min) > 0 ? { slippageBps, stopLimit: min } : { slippageBps }
 }
 
-async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
+async function runSwap(params: ExecuteSwapParams, run: SwapRun): Promise<SwapOutcome> {
   const sdkMods = await getSdkModules()
   const kit = getKit(sdkMods.AppKit)
-  const adapter = await getAdapter(params.signer)
+  // Its own adapter and provider, so it can be switched off alone (abandonSwap).
+  const adapter = await (await import('@/wallet')).createWalletAdapter({
+    account: params.signer,
+    getProvider: () => buildArcForwardProvider(sdkMods.JsonRpcProvider, sdkMods.Transaction, run),
+  })
   _onSwapProgress?.({ kind: 'stage', name: 'sdk' })
 
   const parsedAmt = parseFloat(params.amountIn)
@@ -659,6 +700,9 @@ async function runSwap(params: ExecuteSwapParams): Promise<SwapOutcome> {
     const blockNumber = result?.txHash ? await swapBlockNumber(result.txHash, _swapReceipt) : undefined
     return { txHash: result?.txHash || '', amountOut, explorerUrl: result?.explorerUrl || '', blockNumber }
   } catch (e1: any) {
+    // Stopped by the screen (abandonSwap): nothing was swapped and the module
+    // state now belongs to whatever runs next - say so and touch nothing.
+    if (run.dead) throw Object.assign(new Error("The swap didn't go through - nothing was swapped. Please try again."), { isLiquidity: false, isUncertain: false })
     const { raw: raw1, userMessage: msg1, isLiquidity, isUncertain } = extractError(e1, sdkMods)
     console.warn('[Swap] attempt 1 failed:', msg1)
 

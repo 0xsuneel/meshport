@@ -88,3 +88,32 @@ describe('wallet account (signs through the frame)', () => {
       .rejects.toThrow(/different address/)
   })
 })
+
+import { usableNonce } from './account'
+describe('usableNonce (the SDK counter vs the chain)', () => {
+  const chain = (latest: number, pending: number | number[]) => {
+    const p = Array.isArray(pending) ? [...pending] : [pending]
+    return { getTransactionCount: async (_a: string, tag: 'latest' | 'pending') => tag === 'latest' ? latest : (p.length > 1 ? p.shift()! : p[0]) }
+  }
+  const noWait = async () => {}
+  it('keeps a nonce the chain can run', async () => {
+    expect(await usableNonce(chain(106, 106), '0xa', 106, noWait)).toBe(106)
+    // Replacing a waiting transaction (106 is in the mempool) is the caller's choice.
+    expect(await usableNonce(chain(106, 107), '0xa', 106, noWait)).toBe(106)
+    expect(await usableNonce(chain(106, 107), '0xa', 107, noWait)).toBe(107)
+  })
+  it('replaces a used nonce (the counter fell behind MeshPort\'s own payments)', async () => {
+    expect(await usableNonce(chain(106, 106), '0xa', 104, noWait)).toBe(106)
+    expect(await usableNonce(chain(106, 107), '0xa', 105, noWait)).toBe(107)
+  })
+  it('replaces a nonce above the chain (the counter ran ahead after a failed send) - after a second look', async () => {
+    expect(await usableNonce(chain(106, 106), '0xa', 107, noWait)).toBe(106)
+    // The transaction just before it reached the node meanwhile: no gap after all.
+    expect(await usableNonce(chain(106, [106, 107]), '0xa', 107, noWait)).toBe(107)
+  })
+  it('leaves it alone when it cannot tell', async () => {
+    expect(await usableNonce(null, '0xa', 5, noWait)).toBe(5)
+    expect(await usableNonce(chain(1, 1), '0xa', undefined, noWait)).toBeUndefined()
+    expect(await usableNonce({ getTransactionCount: async () => { throw new Error('offline') } }, '0xa', 5, noWait)).toBe(5)
+  })
+})

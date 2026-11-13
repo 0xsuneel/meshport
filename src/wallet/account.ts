@@ -68,7 +68,7 @@ async function timedFrame<T>(what: string, sign: () => Promise<T>): Promise<T> {
     log(true)
     return out
   } catch (e) {
-    log(false, e instanceof WalletFrameError ? `${e.code}: ${e.message}` : e instanceof Error ? e.message : String(e))
+    log(false, e instanceof WalletFrameError ? `${e.code}${e.reason ? ` (${e.reason})` : ''}: ${e.message}` : e instanceof Error ? e.message : String(e))
     throw e
   }
 }
@@ -133,6 +133,46 @@ export function isWalletAccount(v: unknown): v is WalletAccount {
   return !!v && typeof v === 'object' && (v as any).meshportWallet === true
 }
 
+// ── A nonce Arc (or any chain) can actually run ─────────────────────────────
+// Circle's SDK numbers its own transactions: a counter per wallet, read from
+// the chain once and then only ever counted up (adapter-ethers-v6
+// EthersNonceManager). It is never handed back: a transaction that was
+// refused, whose passcode prompt was closed, or that failed to send leaves
+// the counter one ahead for the rest of the session - and every later swap /
+// transfer / claim is then signed with a nonce ABOVE the chain's, waits in
+// the nodes' queues behind the gap ("couldn't confirm") and runs whenever a
+// normal payment fills it. And after MeshPort's own payments the counter is
+// BEHIND: the SDK signs once with a used nonce, is refused, and signs again -
+// a wasted signature that still counts against the approved spend limit
+// (the surprise "confirm again" in the middle of a transfer).
+//
+// So, right before the frame signs for the SDK, a nonce the chain cannot run
+// is replaced with the one it can:
+//   below `latest`   (already used)         → the chain's next
+//   above `pending`  (a gap; read twice)    → the chain's next
+//   in between       (replaces a waiting transaction, or simply right) → kept
+// Unreadable chain: kept as given.
+export async function usableNonce(
+  provider: { getTransactionCount(address: string, tag: 'latest' | 'pending'): Promise<number | bigint> } | null | undefined,
+  address: string, nonce: number | null | undefined,
+  pause: (ms: number) => Promise<void> = ms => new Promise(r => setTimeout(r, ms)),
+): Promise<number | null | undefined> {
+  if (!provider || nonce == null) return nonce
+  try {
+    const [latest, pending] = (await Promise.all([
+      provider.getTransactionCount(address, 'latest'), provider.getTransactionCount(address, 'pending'),
+    ])).map(Number)
+    if (!Number.isFinite(latest) || !Number.isFinite(pending)) return nonce
+    if (nonce < latest) return Math.max(latest, pending)
+    if (nonce <= pending) return nonce
+    // Above the chain's next: maybe the transaction just before it hasn't
+    // reached this node yet - look once more before calling it a gap.
+    await pause(400)
+    const again = Number(await provider.getTransactionCount(address, 'pending'))
+    return Number.isFinite(again) && nonce > again ? again : nonce
+  } catch { return nonce }
+}
+
 // ── ethers v6 ───────────────────────────────────────────────────────────────
 // ethers stays code-split (see blockchain/ProviderManager.ts), so the Signer
 // class is built on first use.
@@ -159,8 +199,13 @@ function ethersSignerClass(): Promise<any> {
         }
         if (req.to) req.to = await resolveAddress(req.to, this.provider)
         const t = Transaction.from(req)
+        // The SDK's own counter can be ahead of or behind the chain (usableNonce).
+        const nonce = await usableNonce(this.provider as any, this.account.address, t.nonce)
+        if (nonce != null && nonce !== t.nonce) {
+          void import('@/lib/walletEvents').then(m => m.logWalletEvent({ kind: 'frame', event: 'nonce', ok: true, ms: 0, detail: `sdk ${t.nonce} -> chain ${nonce} (chain ${Number(t.chainId)})` })).catch(() => {})
+        }
         const base = {
-          chainId: Number(t.chainId), nonce: t.nonce, to: (t.to ?? undefined) as Hex | undefined,
+          chainId: Number(t.chainId), nonce: nonce ?? t.nonce, to: (t.to ?? undefined) as Hex | undefined,
           value: t.value, data: t.data as Hex, gas: t.gasLimit,
         }
         const accessList = t.accessList?.map(a => ({ address: a.address as Hex, storageKeys: a.storageKeys as Hex[] }))

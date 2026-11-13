@@ -129,7 +129,10 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
     // gets the app keypad's shorter keys, so the whole step fits.
     const slot = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('')
     const view = `&theme=${theme}${short ? '&short=1' : ''}`
-    setSrc(`${walletOrigin()}/confirm.html#slot=${slot}${view}&s=${encodeURIComponent(JSON.stringify(request.summary))}`)
+    // "Try again" after a failure: a one-off address, so a fresh copy is
+    // fetched instead of the page the browser kept (wallet-frame/vercel.json).
+    const fresh = attempt > 0 ? `?r=${attempt}-${Date.now().toString(36)}` : ''
+    setSrc(`${walletOrigin()}/confirm.html${fresh}#slot=${slot}${view}&s=${encodeURIComponent(JSON.stringify(request.summary))}`)
 
     const scope = request.scope ?? null
     // The wallet's page says "approved" the moment the passcode is checked:

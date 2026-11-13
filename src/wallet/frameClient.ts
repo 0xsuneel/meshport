@@ -17,6 +17,8 @@ export function walletOrigin(): string {
 }
 
 export class WalletFrameError extends Error {
+  /** approval-required: why the frame's spend limit didn't cover it (protocol.ts). */
+  reason?: string
   constructor(public code: WalletErrorCode | 'timeout' | 'unavailable', message: string, public lockedForMs = 0) { super(message) }
 }
 
@@ -48,7 +50,11 @@ function onMessage(e: MessageEvent) {
   if (!p) return
   pending.delete(msg.id)
   clearTimeout(p.timer)
-  if (msg.error) p.reject(new WalletFrameError(msg.error.code, msg.error.message, msg.error.lockedForMs ?? 0))
+  if (msg.error) {
+    const err = new WalletFrameError(msg.error.code, msg.error.message, msg.error.lockedForMs ?? 0)
+    if (typeof msg.error.reason === 'string') err.reason = msg.error.reason.slice(0, 24)
+    p.reject(err)
+  }
   else p.resolve(msg.result)
 }
 
@@ -62,7 +68,13 @@ function mount(): HTMLIFrameElement {
   if (frame?.isConnected) return frame
   window.addEventListener('message', onMessage)
   const f = document.createElement('iframe')
-  f.src = `${walletOrigin()}/`
+  // The wallet's pages are kept by the browser for 10 minutes
+  // (wallet-frame/vercel.json), so opening one doesn't wait on the network -
+  // a connection to the wallet host that had gone stale cost ~10 s each time.
+  // A frame being loaded AGAIN because the last one didn't answer gets a
+  // one-off address instead, which always fetches a fresh copy: a kept page
+  // that is broken must not be loaded a second time.
+  f.src = frameReloads > 0 ? `${walletOrigin()}/?r=${frameReloads}-${Date.now().toString(36)}` : `${walletOrigin()}/`
   f.title = 'MeshPort wallet'
   f.setAttribute('aria-hidden', 'true')
   f.tabIndex = -1
@@ -155,11 +167,34 @@ export function walletReady(): Promise<void> {
   return readyPromise
 }
 
+// The frame says "locked" to a request for a wallet the app holds as open:
+// the frame was loaded afresh meanwhile (it stopped answering and was
+// replaced below; another tab locked it) and its memory is empty. A page
+// reload would reopen it from this tab's session copy without asking - so do
+// exactly that, once, and run the request again, instead of failing a payment
+// with "Wallet is locked". No session copy (it was really locked): stays
+// locked. At most one try per wallet every few seconds.
+const NO_REOPEN = new Set<WalletMethod>(['unlock', 'lock', 'forget', 'status', 'ping', 'create', 'import', 'adopt'])
+const REOPEN_EVERY_MS = 5_000
+const lastReopen = new Map<string, number>()
+async function reopenFromSession(address: string): Promise<boolean> {
+  const a = address.toLowerCase()
+  if (Date.now() - (lastReopen.get(a) ?? 0) < REOPEN_EVERY_MS) return false
+  lastReopen.set(a, Date.now())
+  try { return !!(await post('unlock', { address }, 120_000)).unlocked } catch { return false }
+}
+
 export async function callWallet<M extends WalletMethod>(method: M, params: WalletParams<M>): Promise<WalletResult<M>> {
   await walletReady()
+  const timeoutMs = SLOW_METHODS.has(method) ? 120_000 : DEFAULT_TIMEOUT_MS
   try {
-    return await post(method, params, SLOW_METHODS.has(method) ? 120_000 : DEFAULT_TIMEOUT_MS)
+    return await post(method, params, timeoutMs)
   } catch (e) {
+    const address = (params as { address?: unknown } | undefined)?.address
+    if (e instanceof WalletFrameError && e.code === 'locked' && !NO_REOPEN.has(method) && typeof address === 'string' && await reopenFromSession(address)) {
+      void import('@/lib/walletEvents').then(m => m.logWalletEvent({ kind: 'frame', event: 'frame', ok: true, detail: `reopened after locked: ${method}` })).catch(() => {})
+      return await post(method, params, timeoutMs)
+    }
     // A quick request that never came back: if the frame doesn't answer a
     // ping either (its process was discarded, say), load a fresh one so the
     // next request doesn't hang on a dead frame until the page reloads.
@@ -177,4 +212,5 @@ export function resetWalletFrame() {
   pending.clear()
   window.removeEventListener('message', onMessage)
   frame?.remove(); frame = null; readyPromise = null; frameLoadedAt = null; frameReloads = 0
+  lastReopen.clear()
 }
