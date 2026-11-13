@@ -87,7 +87,7 @@ export function TermsPrivacyPage() {
 
         {tab === 'terms' ? <TermsContent /> : <PrivacyContent />}
 
-        <p className="text-xs text-text-secondary text-center pt-2">Last updated: 4 October 2026 (draft)</p>
+        <p className="text-xs text-text-secondary text-center pt-2">Last updated: 14 November 2026 (draft)</p>
       </div>
     </div>
   )
@@ -118,9 +118,9 @@ function TermsContent() {
       </Block>
 
       <Block title="4. Your wallet is yours">
-        <p>Every MeshPort wallet is <span className="text-text-primary">self-custodial</span>. Whether you create a wallet or import one, the wallet’s private key is generated or kept on your own device. MeshPort never receives it and never stores it - not in plain form, not encrypted. MeshPort cannot move, freeze, recover or reverse funds in your wallet.</p>
+        <p>Every MeshPort wallet is <span className="text-text-primary">self-custodial</span>. You create a wallet in the app or import your own; either way the wallet’s private key is generated or kept on your own device. MeshPort never receives it and never stores it - not in plain form, not encrypted. MeshPort cannot move, freeze, recover or reverse funds in your wallet.</p>
         <p>Your 12 secret words or private key are the only way to restore the wallet. Store them offline and never share them. MeshPort has no copy.</p>
-        <p>You’re responsible for your passcode, passkeys, secret words or private key, and the devices you use MeshPort on.</p>
+        <p>You’re responsible for your passcode, your secret words or private key, and the devices you use MeshPort on.</p>
       </Block>
 
       <Block title="5. Payments are final">
@@ -161,55 +161,69 @@ function PrivacyContent() {
   return (
     <div className="space-y-4">
       <Block title="1. The short version">
-        <p>MeshPort never has your wallet key, can’t read your chats, and doesn’t sell your data. We keep what’s needed to run your account - your profile, your public wallet address and your app activity.</p>
+        <p>MeshPort doesn’t collect personal data. No email, no phone number, no real name, no ID documents, no location, no contacts from your phone - and no trackers or ads.</p>
+        <p>What we keep is what a payments app needs to work: your <span className="text-text-primary">.arc username</span> and <span className="text-text-primary">public wallet address</span>, a <span className="text-text-primary">profile photo</span> and display name only if you add them, and your <span className="text-text-primary">payment history</span>. Your wallet key and your chats never reach us in a form we can use.</p>
       </Block>
 
-      <Block title="2. What we collect">
-        <p><span className="text-text-primary">Account</span> - your username, display name and profile photo if you add one.</p>
-        <p><span className="text-text-primary">Wallet</span> - your public wallet address.</p>
-        <p><span className="text-text-primary">Activity</span> - payments, swaps, multichain transfers, claims, bulk payouts, rewards, P2P trades and business bills you make in the app, to show your history, Insights and notifications. Most of this is also public on the blockchain.</p>
-        <p><span className="text-text-primary">Chats</span> - messages, photos and files are end-to-end encrypted, so we only relay them as ciphertext: each one is deleted from our servers once the other person’s phone has it, or after 30 days if it’s never delivered. We don’t back up chats; they live on your phone, so a new device or a reinstall starts without old messages. We can see who you chat with and when, and the details of payment cards (amount, token, transaction), which are public on the blockchain anyway. Your chat key’s public half and your wallet’s signature over it are stored so others can verify it’s really you.</p>
-        <p><span className="text-text-primary">Business accounts and support</span> - what you enter when you apply for a business account (business name, type, optional contact) and the tickets you send to Help & Support.</p>
-        <p><span className="text-text-primary">Device and usage</span> - notification subscriptions if you allow push notifications, and basic technical logs (errors, feature usage) to keep the app working.</p>
+      <Block title="2. What we keep">
+        <p><span className="text-text-primary">Your profile</span> - your .arc username, your public wallet address, and a display name and profile photo if you choose to add them. Others see these when they pay or chat with you.</p>
+        <p><span className="text-text-primary">Your payment history</span> - payments, requests, bills, swaps, cross-chain transfers, claims, rewards and P2P trades you make in MeshPort, so the app can show your Activity, Insights and receipts and send the notifications you turn on. The same payments are public on the blockchain anyway.</p>
+        <p><span className="text-text-primary">Payment cards in chat</span> - when you pay someone you chat with, the card (amount, token, transaction) is kept so it shows on both phones. It’s the same information that’s public on the blockchain.</p>
+        <p><span className="text-text-primary">Your chat key’s public half</span> - with your wallet’s signature over it, so others can check a message really comes from you (see section 4).</p>
       </Block>
 
-      <Block title="3. What we never collect">
-        <p>Your private key or secret words - for any kind of wallet. The secret your passkey produces. Your passcode (only a scrambled check of it stays on your device). The contents of your chats.</p>
-        <p>On your device, MeshPort keeps a copy of your wallet key sealed with a key that never leaves your browser, so reopening the app is instant. Logging out removes it.</p>
+      <Block title="3. Only if you use these features">
+        <p><span className="text-text-primary">Business account</span> - the business name and type you apply with, an optional contact, your stores (and a tax number if you add one), saved items and the bills and payments of your business.</p>
+        <p><span className="text-text-primary">P2P trading and Cash out</span> - the payout method you add (for example a UPI ID or bank account), shown only to the person you’re trading with so they can pay you.</p>
+        <p><span className="text-text-primary">Help & Support</span> - what you write in a support ticket.</p>
+        <p><span className="text-text-primary">Notifications</span> - your device’s push subscription, if you allow notifications.</p>
+        <p><span className="text-text-primary">Error reports</span> - when something breaks, the error, the screen and your browser type, so we can fix it. No location, no IP address and no message content.</p>
       </Block>
 
-      <Block title="4. How we use your data">
-        <p>To run your account and wallet, deliver payments and messages, show your history and Insights, send notifications you’ve turned on, verify cross-chain transfers, answer support requests, prevent fraud and abuse, and improve the app.</p>
+      <Block title="4. How your messages are encrypted">
+        <p>Messages, photos and files are <span className="text-text-primary">end-to-end encrypted</span> on your phone before they’re sent. Each one gets its own new 256-bit key and is locked with AES-256-GCM; that key is then locked for just the two of you with a shared secret (X25519) that only your two phones can work out. MeshPort relays the locked message but has no key to open it.</p>
+        <p>Your chat key comes from your wallet and is signed by it. The app only uses a contact’s key if their wallet’s signature checks out, and it warns you if a contact’s key ever changes - so nobody, including MeshPort, can quietly swap in their own key.</p>
+        <p>A message is deleted from our servers as soon as the other person’s phone has it, or after 30 days if it’s never delivered. Chats are not backed up: they live on your phone, so a new device or a reinstall starts without old messages (payment cards still show).</p>
+        <p>What we can see: who you chat with and when - not what you say.</p>
       </Block>
 
-      <Block title="5. Who we share it with">
-        <p><span className="text-text-primary">Supabase</span> - our database and sign-in provider. It stores your account data, activity and encrypted messages.</p>
-        <p><span className="text-text-primary">Vercel</span> - hosts the app and builds payment-link previews (name, photo and amount of a link you share).</p>
-        <p><span className="text-text-primary">Circle and blockchain networks</span> - Arc, Circle’s Gateway and CCTP, and public blockchain nodes process your transactions. Nodes can see the requests your device sends, like any blockchain app.</p>
-        <p>We don’t sell your personal data or share it with advertisers. We may disclose information if the law requires it.</p>
+      <Block title="5. What we never collect">
+        <p>Your <span className="text-text-primary">private key or 12 secret words</span> - your wallet key is made on your device and never sent to us, in any form.</p>
+        <p>Your <span className="text-text-primary">passcode</span> - only a scrambled check of it stays on your device.</p>
+        <p>Your <span className="text-text-primary">face or fingerprint</span> - Face ID / fingerprint unlock is handled by your phone; MeshPort only gets a yes from it, never your biometrics.</p>
+        <p>The <span className="text-text-primary">contents of your chats</span>, photos and files.</p>
+        <p>Your <span className="text-text-primary">email, phone number, real name, ID documents, location or phone contacts</span> - MeshPort never asks for them.</p>
+        <p>There are no advertising or analytics trackers in MeshPort, and we don’t sell or rent data to anyone.</p>
       </Block>
 
-      <Block title="6. Blockchain data is public">
-        <p>Wallet addresses, amounts and transaction times on Arc and other blockchains are visible to anyone, permanently. Linking your username to your address in MeshPort means people you pay can connect the two.</p>
+      <Block title="6. Who else handles data">
+        <p><span className="text-text-primary">Supabase</span> - our database. It stores the profile, payment history and locked messages described above.</p>
+        <p><span className="text-text-primary">Vercel</span> - hosts the app and builds payment-link previews (the name, photo and amount on a link you share).</p>
+        <p><span className="text-text-primary">Circle and blockchain networks</span> - Arc, Circle’s Gateway and CCTP, and public blockchain nodes process your transactions. Like for any blockchain app, nodes see the requests your device sends.</p>
+        <p>Our hosting providers keep short-lived technical logs (such as IP addresses) to deliver the service; we don’t copy them into our database. We may disclose information if the law requires it.</p>
       </Block>
 
-      <Block title="7. Keeping and deleting data">
-        <p>We keep your account data while your account is active and as long as needed for legal obligations or disputes afterwards. You can ask to delete your account through Help & Support. Records already on the blockchain can’t be deleted by anyone.</p>
+      <Block title="7. Blockchain data is public">
+        <p>Wallet addresses, amounts and transaction times on Arc and other blockchains are visible to anyone, permanently. Because your .arc username points to your address, people you pay can connect the two.</p>
       </Block>
 
-      <Block title="8. Your choices">
-        <p>Edit your name and photo in Edit Profile, manage your passcode and fingerprint unlock in Security, turn notifications on or off in your device settings, and contact us to access or delete your data.</p>
+      <Block title="8. Keeping and deleting data">
+        <p>We keep your profile and payment history while your account is active and as long as needed afterwards for legal obligations or disputes. You can ask to delete your account through Help & Support. Records already on the blockchain can’t be deleted by anyone.</p>
       </Block>
 
-      <Block title="9. Children">
-        <p>MeshPort isn’t meant for children, and we don’t knowingly collect data from anyone under the age of digital consent where they live.</p>
+      <Block title="9. Your choices">
+        <p>Add, change or remove your display name and photo in Edit Profile; manage your passcode and Face ID / fingerprint unlock in Security; turn notifications on or off in your device settings; and contact us to see or delete your data.</p>
       </Block>
 
-      <Block title="10. Changes">
+      <Block title="10. Children">
+        <p>MeshPort isn’t meant for children, and we don’t knowingly hold data about anyone under the age of digital consent where they live.</p>
+      </Block>
+
+      <Block title="11. Changes">
         <p>We’ll update this policy as MeshPort changes and show the new date at the bottom.</p>
       </Block>
 
-      <Block title="11. Contact">
+      <Block title="12. Contact">
         <p>Privacy questions can be sent through Help & Support in the app.</p>
       </Block>
     </div>

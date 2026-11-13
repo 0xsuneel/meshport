@@ -52,11 +52,9 @@ export const supabase = createClient(
   {
     auth: {
       persistSession: true, autoRefreshToken: true,
-      // Supabase's own sign-in links, as before - but not Google's answer on
-      // the Circle wallet return page (/wallet/circle-login): that
-      // #access_token is Google's, read there by src/wallet/circle.ts.
-      detectSessionInUrl: (url, params) => url.pathname !== '/wallet/circle-login'
-        && Boolean(params.access_token || params.error || params.error_description || params.error_code),
+      // Supabase's own sign-in links only (a session token in the URL).
+      detectSessionInUrl: (_url, params) =>
+        Boolean(params.access_token || params.error || params.error_description || params.error_code),
     },
     // Run the realtime heartbeat in a Web Worker. Phones throttle a page's
     // timers in the background, so the main-thread heartbeat missed its slot,

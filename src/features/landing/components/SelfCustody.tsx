@@ -1,7 +1,7 @@
 import { Reveal } from './Reveal'
 
-// How a MeshPort wallet stays yours - every sign-in method ends in the same
-// place: a key made on your device that MeshPort never receives.
+// How a MeshPort wallet stays yours: created in the app or imported, the key
+// is made (or kept) on your device and MeshPort never receives it.
 const POINTS = [
   { title: 'Made on your device', desc: 'Your wallet key is generated in your browser. Create a wallet or import yours - the key is never sent to MeshPort.' },
   { title: 'Locked by your passcode', desc: 'Every payment asks for your passcode (or Face ID / fingerprint once you turn it on).' },
@@ -10,7 +10,7 @@ const POINTS = [
 ]
 
 const CHAT = [
-  { title: 'End-to-end encrypted', desc: 'Messages are locked on your phone and only unlocked on theirs. MeshPort relays them but can’t read them.' },
+  { title: 'End-to-end encrypted', desc: 'Messages are locked on your phone and only unlocked on theirs. MeshPort relays them but can’t read them - see how below.' },
   { title: 'Signed by your wallet', desc: 'Each chat key is signed by its wallet, and the app warns you if a contact’s key ever changes.' },
 ]
 

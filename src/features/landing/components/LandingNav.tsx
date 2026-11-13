@@ -8,6 +8,7 @@ import { switchTheme } from '@/lib/themeTransition'
 const LINKS = [
   { label: 'Features', href: '#features' },
   { label: 'Self-Custody', href: '#self-custody' },
+  { label: 'Privacy', href: '#privacy' },
   { label: 'How It Works', href: '#how-it-works' },
   { label: 'Guide', href: '#guide' },
   { label: 'FAQ', href: '#faq' },
