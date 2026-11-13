@@ -79,6 +79,41 @@ export function phrasesFor(amount: number): string[] | null {
   return out
 }
 
+/** Every clip in the voice folder (scripts/gen_voice_clips.py), chime included. */
+export const VOICE_CLIPS: readonly string[] = (() => {
+  const out = ['chime', 'received', 'dollars_and', 'dollars_on', 'one_dollar_and', 'one_dollar_on']
+  for (let n = 1; n < 100; n++) out.push(`t${n}`, `da${n}`, `do${n}`, `c${n}`)
+  for (let n = 1; n < 10; n++) out.push(`h${n}`)
+  return out
+})()
+
+const PACK_KEY = 'meshport_voice_pack'
+let packRun: Promise<void> | null = null
+/**
+ * Downloads the whole voice pack ahead (~4.7 MB, once per device per voice),
+ * like a soundbox's language pack: the service worker keeps every clip, so a
+ * payment alert never waits on the network for its words. Four at a time, in
+ * the background; skipped on Data Saver. A clip that fails is simply fetched
+ * again when a payment needs it.
+ */
+export function prefetchVoicePack(): Promise<void> {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return Promise.resolve()
+  try { if (localStorage.getItem(PACK_KEY) === VOICE_DIR) return Promise.resolve() } catch { /* storage unavailable */ }
+  if ((navigator as unknown as { connection?: { saveData?: boolean } }).connection?.saveData) return Promise.resolve()
+  if (packRun) return packRun
+  packRun = (async () => {
+    const todo = [...VOICE_CLIPS]
+    let failed = 0
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      for (let name = todo.shift(); name; name = todo.shift()) {
+        try { const r = await fetch(`${VOICE_DIR}${name}.mp3`); if (!r.ok) failed++; else await r.arrayBuffer() } catch { failed++ }
+      }
+    }))
+    if (!failed) { try { localStorage.setItem(PACK_KEY, VOICE_DIR) } catch { /* storage unavailable */ } }
+  })().finally(() => { packRun = null })
+  return packRun
+}
+
 /** What the device's own speech says when the clips can't play. */
 export function spokenText(amount: number) {
   const amt = amount.toFixed(2).replace(/\.00$/, '')

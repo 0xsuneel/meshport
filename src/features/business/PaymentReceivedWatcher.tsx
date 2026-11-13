@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/store'
 import { useBusinessTab } from '@/lib/merchant'
 import { listMyPayments, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, subscribeChainReceipts, displayOrderNumber, orderTitle, type MerchantPayment } from '@/lib/merchantPay'
-import { speakPayment } from '@/lib/voiceAlerts'
+import { speakPayment, prefetchVoicePack, useVoiceAlerts } from '@/lib/voiceAlerts'
 import { PaymentReceivedOverlay } from './ui'
 import { chainLabel } from './settlement'
 import { notifyExternalBalanceChanged } from '@/blockchain/BlockchainManager'
@@ -21,11 +21,28 @@ export function PaymentReceivedWatcher() {
   const wallet = useAuthStore(s => s.walletAddress)
   const [shown, setShown] = useState<MerchantPayment | null>(null)
   const seen = useRef<Set<string> | null>(null)
+  // Payments already spoken straight from the live feed (chain:tx), so the
+  // reload that follows shows their card without saying them a second time.
+  const spoken = useRef<Set<string>>(new Set())
+  const voice = useVoiceAlerts()
+
+  // Like a soundbox's language pack: every voice clip downloaded ahead, while
+  // the phone is idle, so an alert never waits on the network.
+  useEffect(() => {
+    if (!business || !voice.enabled) return
+    const w = window as unknown as { requestIdleCallback?: (cb: () => void) => number; cancelIdleCallback?: (n: number) => void }
+    const t = setTimeout(() => {
+      if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(() => { void prefetchVoicePack() })
+      else void prefetchVoicePack()
+    }, 4000)
+    return () => clearTimeout(t)
+  }, [business, voice.enabled])
   const seenReceipts = useRef<Set<string> | null>(null)
 
   useEffect(() => {
     seen.current = null
     seenReceipts.current = null
+    spoken.current = new Set()
     if (!business || !wallet) return
     let live = true
     // One check at a time: a live update landing while the first load is
@@ -61,12 +78,24 @@ export function PaymentReceivedWatcher() {
       const key = (p: MerchantPayment) => `${p.chain}:${p.txHash.toLowerCase()}`
       if (seen.current) {
         const fresh = list.filter(p => !seen.current!.has(key(p)) && Date.now() - Date.parse(p.createdAt) < 10 * 60_000)
-        if (fresh.length) { setShown(fresh[0]); fresh.forEach(p => speakPayment(p.amount)) }
+        if (fresh.length) {
+          setShown(fresh[0])
+          fresh.forEach(p => { if (!spoken.current.has(key(p))) speakPayment(p.amount) })
+        }
       }
       seen.current = new Set(list.map(key))
     }
     void check()
-    const stopOrders = subscribeMerchantPayments(wallet, () => { void check() })
+    // A new payment row: speak at once from the live feed (the reload that
+    // follows shows the card). Only once the first load has run - before that
+    // every row counts as old - and only a payment of the last 10 minutes.
+    const stopOrders = subscribeMerchantPayments(wallet, () => { void check() }, p => {
+      const k = `${p.chain}:${p.txHash.toLowerCase()}`
+      if (!seen.current || seen.current.has(k) || spoken.current.has(k)) return
+      if (!(Date.now() - Date.parse(p.createdAt) < 10 * 60_000)) return
+      spoken.current.add(k)
+      speakPayment(p.amount)
+    })
     const stopReceipts = subscribeChainReceipts(wallet, () => { void check() })
     const stop = () => { stopOrders(); stopReceipts() }
     // A fallback if the live feed drops - look every 20 s.
