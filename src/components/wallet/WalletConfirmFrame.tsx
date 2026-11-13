@@ -7,9 +7,10 @@
 // wallet deployment, no passcode on this device yet, unreachable),
 // `onUnavailable` hands the step back to the app's own keypad.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ConfirmIntent, ConfirmRequest, ConfirmScope, ConfirmSummary } from '@/wallet/protocol'
 import { walletOrigin } from '@/wallet/frameClient'
+import { takeConfirmStandby } from './confirmStandby'
 
 export interface WalletConfirmRequest {
   /** The exact transaction (Pay) - the wallet decodes and binds it. */
@@ -37,6 +38,10 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
   waiting?: boolean
 }) {
   const [src, setSrc] = useState<string | null>(null)
+  // A passcode page loaded ahead (confirmStandby) - taken instead of loading
+  // one now. Moved into `holderRef` (no reload) and handed its slot by message.
+  const [adopted, setAdopted] = useState<HTMLIFrameElement | null>(null)
+  const holderRef = useRef<HTMLDivElement>(null)
   // About the page's height (card + dots + keypad) until it reports its own,
   // so the sheet doesn't jump when it does.
   const short = typeof window !== 'undefined' && !!window.matchMedia?.('(max-height: 700px)').matches
@@ -121,7 +126,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
       // throws away a page that was about to show.
       setTimeout(() => { if (!done && !ready) { oldPage = true; byTicket() } }, 2000)
     }
-    setFailed(null); setShown(false); setHeight(null)
+    setFailed(null); setShown(false); setHeight(null); setAdopted(null)
     const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
     // The wallet's page opens now, by a slot name, before the request exists:
     // it shows the app's summary and takes the passcode while the wallet
@@ -132,7 +137,22 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
     // "Try again" after a failure: a one-off address, so a fresh copy is
     // fetched instead of the page the browser kept (wallet-frame/vercel.json).
     const fresh = attempt > 0 ? `?r=${attempt}-${Date.now().toString(36)}` : ''
-    setSrc(`${walletOrigin()}/confirm.html${fresh}#slot=${slot}${view}&s=${encodeURIComponent(JSON.stringify(request.summary))}`)
+    // A page already loaded and waiting (first try only - "Try again" loads
+    // a new one): nothing to fetch now.
+    const standby = attempt === 0 ? takeConfirmStandby() : null
+    if (standby) {
+      mark('load'); mark('standby')
+      setSrc(null)
+      setAdopted(standby)
+      // Its slot and summary - what the address would have carried - once it
+      // sits in the sheet (the layout effect below moves it there first).
+      queueMicrotask(() => {
+        frameRef.current = standby
+        standby.contentWindow?.postMessage({ type: 'mp-confirm-assign', slot, s: JSON.stringify(request.summary), theme, short }, walletOrigin())
+      })
+    } else {
+      setSrc(`${walletOrigin()}/confirm.html${fresh}#slot=${slot}${view}&s=${encodeURIComponent(JSON.stringify(request.summary))}`)
+    }
 
     const scope = request.scope ?? null
     // The wallet's page says "approved" the moment the passcode is checked:
@@ -208,6 +228,8 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
     }
     window.addEventListener('message', onMessage)
     return () => {
+      // A page taken from the standby served this one payment only.
+      if (standby) { standby.remove(); if (frameRef.current === standby) frameRef.current = null }
       done = true
       if (timer) clearTimeout(timer)
       window.removeEventListener('message', onMessage)
@@ -215,6 +237,19 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt])
+
+  // Move the taken page into place - before the browser draws - and keep its
+  // size and visibility in step, exactly as the <iframe> below is styled.
+  useLayoutEffect(() => {
+    const f = adopted, holder = holderRef.current
+    if (!f || !holder) return
+    if (f.parentElement !== holder) (holder as unknown as { moveBefore(n: Node, c: Node | null): void }).moveBefore(f, null)
+    f.removeAttribute('tabindex')
+    Object.assign(f.style, {
+      position: 'absolute', left: '0', top: '0', display: 'block', width: '100%', border: '0', colorScheme: 'normal',
+      height: height != null ? `${height}px` : '100%', visibility: live ? 'visible' : 'hidden',
+    })
+  }, [adopted, height, live])
 
   if (failed) {
     return (
@@ -238,7 +273,9 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
           passcode is only ever typed in the wallet's page, which loads on top
           of it, pixel for pixel, and replaces it. */}
       {!live && <ConfirmStandIn summary={request.summary} short={short} waiting={waiting} />}
-      {src && (
+      {/* A page from the standby lives in here (moved in, not rendered by React). */}
+      {adopted && <div ref={holderRef} />}
+      {src && !adopted && (
         <iframe
           // A new address is a new page: the slot and ticket addresses differ
           // only after '#', which on its own wouldn't reload it.

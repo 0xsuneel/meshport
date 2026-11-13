@@ -29,6 +29,12 @@ const params = new URLSearchParams(location.hash.slice(1))
 const ticketParam = params.get('t') ?? ''
 const slotParam = params.get('slot') ?? ''
 const summaryParam = params.get('s')
+// Loaded ahead, empty (confirm.html#standby=1): the app keeps one such page
+// ready in the background and, when a payment needs it, moves it into its
+// passcode sheet (no reload) and tells it the slot and summary by message -
+// what it would otherwise have read from this address. So tapping Pay never
+// waits for this page to come over the network.
+const standby = params.get('standby') === '1'
 history.replaceState(null, '', location.pathname)
 document.documentElement.dataset.theme = params.get('theme') === 'light' ? 'light' : 'dark'
 // A short phone (the app's PinKeypad uses shorter keys there too), so the
@@ -446,18 +452,13 @@ function appSummaryFrom(raw: string | null): ConfirmSummary | null {
   } catch { return null }
 }
 
-let channel: BroadcastChannel | null = null
-try { channel = new BroadcastChannel(CONFIRM_CHANNEL) } catch { /* below */ }
-if (!channel) {
-  show(el('p', 'error center', "This browser can't confirm here."))
-} else if (/^[0-9a-f]{32}$/.test(slotParam)) {
-  // Opened at once: the keypad now, the request when the wallet has it.
-  const ch = channel
-  const page = run(ch, null, appSummaryFrom(summaryParam))
+/** Opened by slot (or handed one): the keypad now, the request when the wallet has it. */
+function startBySlot(ch: BroadcastChannel, slot: string, summaryRaw: string | null) {
+  const page = run(ch, null, appSummaryFrom(summaryRaw))
   let done = false
   const onRequest = (e: MessageEvent) => {
     const d = e.data ?? {}
-    if (d.type !== 'request' || d.slot !== slotParam) return
+    if (d.type !== 'request' || d.slot !== slot) return
     done = true
     ch.removeEventListener('message', onRequest)
     if (d.error || typeof d.ticket !== 'string' || (!d.view && !d.summary)) page.failed('This request has expired. Close it and try again.')
@@ -468,10 +469,35 @@ if (!channel) {
   const ask = () => {
     if (done) return
     if (Date.now() - started > 15_000) { page.failed('The wallet is not open. Close this and try again.'); return }
-    ch.postMessage({ type: 'claim', slot: slotParam })
+    ch.postMessage({ type: 'claim', slot })
     setTimeout(ask, 150)
   }
   ask()
+}
+
+let channel: BroadcastChannel | null = null
+try { channel = new BroadcastChannel(CONFIRM_CHANNEL) } catch { /* below */ }
+if (!channel) {
+  show(el('p', 'error center', "This browser can't confirm here."))
+} else if (/^[0-9a-f]{32}$/.test(slotParam)) {
+  startBySlot(channel, slotParam, summaryParam)
+} else if (standby) {
+  // Waits, empty, for the app (only this page's own parent, from an app
+  // origin) to hand it its payment: the same slot and summary the address
+  // would have carried. Once only - a page is never used for two payments.
+  const ch = channel
+  let used = false
+  window.addEventListener('message', (e: MessageEvent) => {
+    if (used || e.source !== parent || parent === window || !PARENTS.includes(e.origin)) return
+    const d = (e.data ?? {}) as { type?: string; slot?: unknown; s?: unknown; theme?: unknown; short?: unknown }
+    if (d.type !== 'mp-confirm-assign' || typeof d.slot !== 'string' || !/^[0-9a-f]{32}$/.test(d.slot)) return
+    used = true
+    document.documentElement.dataset.theme = d.theme === 'light' ? 'light' : 'dark'
+    if (d.short === true) document.documentElement.dataset.short = ''
+    else delete document.documentElement.dataset.short
+    startBySlot(ch, d.slot, typeof d.s === 'string' ? d.s : null)
+  })
+  tellApp({ state: 'standby' })
 } else if (/^0x[0-9a-f]{32}$/.test(ticketParam)) {
   const ch = channel
   const timer = setTimeout(() => show(el('p', 'error center', 'The wallet is not open. Close this and try again.')), 5000)
