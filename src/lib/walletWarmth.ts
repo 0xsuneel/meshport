@@ -15,6 +15,12 @@
 //   - when the app comes back to the front.
 // Idle or in the background it stops: nothing is spent when nobody is using
 // the app. Each warm-up is a small request; nothing is started or signed.
+//
+// Since 12 Nov the browser also KEEPS the wallet's pages for 10 minutes
+// (wallet-frame/vercel.json): while a copy is fresh, the passcode page opens
+// from it without touching the network at all, and these warm-ups are what
+// fetch the next copy in the background when it runs out - so it is the
+// warm-up, not the person at the passcode step, that meets a stale connection.
 
 import { useAuthStore } from '@/store'
 

@@ -206,7 +206,8 @@ describe('approval: value-moving signatures need the passcode, checked by the fr
 
   it('a payment needs the passcode, checked here - from the very first signature', async () => {
     const address = await walletWithPasscode()
-    expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.error.code).toBe('approval-required')
+    // No spend limit in force: said so (the app records why it had to ask).
+    expect((await ask('sign:transaction', { address, transaction: tx(other, 1n) }))!.msg.error).toMatchObject({ code: 'approval-required', reason: 'no-limit' })
     expect(await approveInWallet(address, '000000')).toMatchObject({ ok: false, code: 'bad-passcode' })
     // A passcode typed in the app is only checked: it approves nothing.
     expect((await ask('passcode:check', { address, passcode: '123456' }))!.msg.result).toEqual({ ok: true, set: false })

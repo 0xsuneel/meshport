@@ -795,17 +795,24 @@ export function SwapPage() {
     // AbortController-based timeout had, since aborting that fetch never
     // guaranteed the server-side operation itself stopped either.
     const timeoutMs = action === 'swap' ? 60000 : 20000
+    const { estimateSwapLocal, executeSwapLocal, abandonSwap } = await import('@/lib/swapService')
     const withTimeout = <T,>(p: Promise<T>): Promise<T> => Promise.race([
       p,
-      new Promise<T>((_, reject) => setTimeout(() => reject(Object.assign(
-        new Error(action === 'swap'
-          ? "This is taking longer than expected - it may have already gone through. Check your balance or Activity before retrying."
-          : 'Request timed out.'),
-        { isUncertain: action === 'swap' }
-      )), timeoutMs)),
+      new Promise<T>((_, reject) => setTimeout(() => {
+        if (action !== 'swap') { reject(Object.assign(new Error('Request timed out.'), { isUncertain: false })); return }
+        // Out of time. If the swap transaction never went out, it is switched
+        // off for good (abandonSwap) - definitely nothing was swapped, and it
+        // can't go through later. Only a swap that WAS sent is "couldn't confirm".
+        const sent = abandonSwap() === 'sent'
+        reject(Object.assign(
+          new Error(sent
+            ? "This is taking longer than expected - it may have already gone through. Check your balance or Activity before retrying."
+            : "The swap didn't go through - nothing was swapped. Please try again."),
+          { isUncertain: sent }
+        ))
+      }, timeoutMs)),
     ])
 
-    const { estimateSwapLocal, executeSwapLocal } = await import('@/lib/swapService')
 
     if (action === 'estimate') {
       return withTimeout(estimateSwapLocal({

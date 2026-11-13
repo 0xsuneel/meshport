@@ -217,7 +217,10 @@ export interface WalletResponse {
   v: number
   id: string
   result?: unknown
-  error?: { code: WalletErrorCode; message: string; lockedForMs?: number }
+  /** `reason` (approval-required only): why no spend limit covered it - for
+   *  the app's own records, never shown: no-limit / expired / no-passcode /
+   *  unreadable / over-limit. */
+  error?: { code: WalletErrorCode; message: string; lockedForMs?: number; reason?: string }
 }
 
 /** Reveal page ↔ frame, over a same-origin BroadcastChannel (never the app). */
