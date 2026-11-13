@@ -157,7 +157,16 @@ const REWARM_MS = 45_000
 export function prewarmWalletConfirm(theme: 'dark' | 'light', opts: { refresh?: boolean; force?: boolean } = {}): void {
   // Not "done" until it actually loaded the page: a try before the wallet
   // could confirm there (no passcode yet) is tried again later.
-  if (typeof document === 'undefined' || !walletConfirmAddress() || warming) return
+  if (typeof document === 'undefined' || !walletConfirmAddress()) return
+  // Where the browser can move a loaded page (Chrome 133+): keep one passcode
+  // page loaded and ready (components/wallet/confirmStandby) - the next
+  // payment takes it, so tapping Pay fetches nothing. Called on every warm-up
+  // (start-up, every 45 s in use, back to the front, network changes); a
+  // fresh ready page is left alone, a stale or stuck one replaced.
+  const short = typeof window !== 'undefined' && !!window.matchMedia?.('(max-height: 700px)').matches
+  void import('@/components/wallet/confirmStandby')
+    .then(m => m.ensureConfirmStandby(theme, short, { replaceUnready: !!opts.force })).catch(() => {})
+  if (warming) return
   if (prewarmed && !opts.force && !(opts.refresh && Date.now() - warmedAt > REWARM_MS)) return
   prewarmed = true
   warming = true
