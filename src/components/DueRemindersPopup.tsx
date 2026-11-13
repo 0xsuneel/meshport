@@ -113,7 +113,6 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
   // one measured off-screen), so switching never changes the card's shape.
   const measureRef = useRef<HTMLDivElement>(null)
   const [h, setH] = useState<number | null>(null)
-  const maxH = typeof window !== 'undefined' ? Math.max(320, window.innerHeight - 190) : 600
   const go = (i: number) => {
     if (busy || i === at || i < 0 || i >= list.length) return
     setErr(''); setDir(i > at ? 1 : -1); setAt(i)
@@ -183,7 +182,8 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
           style={{ width: 76, height: 76, marginTop: -38, background: 'var(--surface)', boxShadow: '0 4px 14px rgba(0,0,0,.15)' }}>
           <Avatar name={x.fromName} src={x.fromAvatar} style={{ width: 64, height: 64, fontSize: 26 }} />
         </div>
-        <div className="text-center flex flex-col flex-1" style={{ padding: '12px 22px 14px' }}>
+        {/* The details scroll on a short screen; Pay / Hide below never do. */}
+        <div className="text-center flex flex-col flex-1 min-h-0 [&>*]:shrink-0" style={{ padding: '12px 22px 0', overflowY: fill ? 'auto' : undefined }}>
           <div className="font-bold truncate" style={{ fontSize: 18, color: 'var(--text-primary)' }}>{x.fromName}</div>
           {what && <div className="line-clamp-2" style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginTop: 3 }}>{what}</div>}
           <div className="font-extrabold tabular-nums" style={{ fontSize: 38, letterSpacing: -1, color: 'var(--text-primary)', marginTop: 14 }}>{money(x.due)}</div>
@@ -205,8 +205,9 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
               color: chip.ok ? 'var(--brand-text)' : chip.late ? 'var(--danger-text)' : 'var(--warning-text)',
             }}>{chip.text}</span>
           )}
-          {/* Pay / Hide always at the same place, at the card's foot. */}
-          <div className="mt-auto" style={{ paddingTop: 14 }}>
+        </div>
+          {/* Pay / Hide always at the same place, at the card's foot - always in sight. */}
+          <div className="shrink-0 text-center" style={{ padding: '14px 22px 14px' }}>
             {err && shown && <div style={{ fontSize: 12.5, color: 'var(--danger-text)', marginBottom: 8 }}>{err}</div>}
             <button type="button" onClick={pay} disabled={busy} tabIndex={fill ? undefined : -1}
               className="w-full flex items-center justify-center font-bold text-white active:scale-[0.98] transition-transform disabled:opacity-70"
@@ -218,14 +219,15 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
               Hide reminder
             </button>
           </div>
-        </div>
       </div>
     )
   }
   const cardW = 'min(318px, calc(100vw - 32px))'
   // The page dots sit inside the card, in a strip under its contents.
   const DOTS_H = n > 1 ? 30 : 0
-  const cardH = h == null ? undefined : Math.min(h, maxH) + DOTS_H
+  // Its natural height; on a short screen it shrinks (flex) to the room left
+  // above Close all, and only the details inside scroll.
+  const cardH = h == null ? undefined : h + DOTS_H
 
   return createPortal(
     <AnimatePresence>
@@ -249,8 +251,8 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
             <motion.div
               initial={{ scale: 0.94, y: 12 }} animate={{ scale: 1, y: 0 }}
               transition={{ type: 'spring', stiffness: 420, damping: 38 }}
-              className="relative overflow-hidden shrink-0"
-              style={{ width: cardW, height: cardH, borderRadius: 28, background: 'var(--surface)', boxShadow: '0 30px 60px -20px rgba(0,0,0,.5)' }}>
+              className="relative overflow-hidden"
+              style={{ width: cardW, height: cardH, flex: '0 1 auto', minHeight: 0, borderRadius: 28, background: 'var(--surface)', boxShadow: '0 30px 60px -20px rgba(0,0,0,.5)' }}>
             <div className="absolute left-0 right-0 top-0 overflow-hidden" style={{ bottom: DOTS_H }}>
             <AnimatePresence initial={false} mode="popLayout" custom={dir}>
             <motion.div key={r.code} custom={dir}
@@ -263,7 +265,7 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
                 else if (swipe > 60 && at > 0) go(at - 1)
               }}
               className="absolute inset-0 touch-pan-y"
-              style={{ overflowY: h != null && h > maxH ? 'auto' : 'hidden' }}>
+              style={{ overflow: 'hidden' }}>
               {body(r, at, true)}
             </motion.div>
             </AnimatePresence>
