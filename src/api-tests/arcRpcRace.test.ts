@@ -174,3 +174,55 @@ describe('arc-rpc chain-head freshness', () => {
     expect(mod._ranking.orderEndpoints().length).toBeGreaterThan(0)
   })
 })
+
+// Vercel logs 13 Nov 15:53: wide eth_getLogs scans were refused by the free
+// dRPC / Alchemy plans, and each refusal benched that provider for EVERY
+// request (receipts, nonces) during payments. A plan limit now only skips the
+// provider for that method.
+describe('arc-rpc: a provider plan refusing one method', () => {
+  beforeEach(() => { vi.resetModules(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.unstubAllEnvs() })
+
+  async function setup() {
+    vi.stubEnv('DRPC_KEY', 'k1')
+    vi.stubEnv('ALCHEMY_ARC_KEY', 'k2')
+    vi.stubGlobal('fetch', vi.fn((u: string, init: any) => {
+      const { id, method } = JSON.parse(init.body)
+      if (method === 'eth_getLogs' && u.includes('drpc.live')) {
+        return Promise.resolve(new Response(JSON.stringify({ jsonrpc: '2.0', id, error: { code: 35, message: 'ranges over 10000 blocks are not supported on free plan' } }), { status: 400 }))
+      }
+      if (method === 'eth_getLogs' && u.includes('alchemy')) {
+        return Promise.resolve(new Response(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32600, message: 'Under the Free tier plan, you can make eth_getLogs requests with up to a 10 block range. Upgrade to PAYG for expanded block range.' } }), { status: 400 }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ jsonrpc: '2.0', id, result: method === 'eth_getLogs' ? [] : '0x1' }), { status: 200 }))
+    }))
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const mod: any = await import('../../api/arc-rpc.js')
+    const { ARC_RPCS, orderEndpoints, isQuarantined } = mod._ranking
+    const drpc = ARC_RPCS.find((x: string) => x.includes('drpc.live'))
+    const alchemy = ARC_RPCS.find((x: string) => x.includes('alchemy'))
+    return { mod, errors, orderEndpoints, isQuarantined, drpc, alchemy }
+  }
+
+  it('answers from an endpoint that allows it, and benches no one', async () => {
+    const { mod, errors, isQuarantined, drpc, alchemy } = await setup()
+    const r = await mod.forward({ jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [{ fromBlock: '0x1', toBlock: '0x5000' }] })
+    expect(r.result).toEqual([])
+    await new Promise(res => setTimeout(res, 400)) // past every stagger
+    expect(isQuarantined(drpc)).toBe(false)
+    expect(isQuarantined(alchemy)).toBe(false)
+    expect(errors.mock.calls.some(c => /failed/.test(String(c[0])))).toBe(false)
+  })
+
+  it('skips the limited providers for that method only - they still serve receipts', async () => {
+    const { mod, orderEndpoints, drpc, alchemy } = await setup()
+    await mod.forward({ jsonrpc: '2.0', id: 2, method: 'eth_getLogs', params: [{ fromBlock: '0x1', toBlock: '0x5000' }] })
+    await new Promise(res => setTimeout(res, 400))
+    const forLogs: string[] = orderEndpoints(['eth_getLogs'])
+    expect(forLogs).not.toContain(drpc)
+    expect(forLogs).not.toContain(alchemy)
+    const forReceipts: string[] = orderEndpoints(['eth_getTransactionReceipt'])
+    expect(forReceipts).toContain(drpc)
+    expect(forReceipts).toContain(alchemy)
+  })
+})

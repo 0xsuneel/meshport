@@ -314,12 +314,40 @@ function healthScore(url) {
 const EXPLORE_EVERY = 8
 let orderCalls = 0
 
-function orderEndpoints() {
+// ── A provider's plan refusing one kind of request ─────────────────────────
+// dRPC / Alchemy free plans refuse wide eth_getLogs ranges ("ranges over 10000
+// blocks are not supported on free plan", "Under the Free tier plan, you can
+// make eth_getLogs requests with up to a 10 block range"). That's the plan
+// limiting ONE method, not the node failing: counting it as a failure benched
+// the two keyed providers for every request - receipts, nonces, balances -
+// each time an activity scan ran (Vercel logs 13 Nov 15:53, during payments).
+// Now the provider is only skipped for that method for a while, and stays in
+// use for everything else. If every endpoint is limited for it, all are tried.
+const PLAN_LIMIT = /block range|ranges? over \d+ blocks|not supported on (?:the |your )?free|free tier|free plan|upgrade to|upgrade your plan|payg|exceeds? (?:the |your )?(?:plan|limit)|request limit|quota/i
+const PLAN_LIMIT_MS = 10 * 60_000
+const limitedFor = new Map() // `${url}|${method}` -> until
+function isPlanLimitError(errorObj) {
+  return !!errorObj && PLAN_LIMIT.test(String(errorObj.message || ''))
+}
+function notePlanLimit(url, methods) {
+  const until = Date.now() + PLAN_LIMIT_MS
+  for (const m of methods) limitedFor.set(`${url}|${m}`, until)
+  if (limitedFor.size > 500) limitedFor.delete(limitedFor.keys().next().value)
+}
+function isPlanLimited(url, methods) {
+  const now = Date.now()
+  return methods.some((m) => (limitedFor.get(`${url}|${m}`) ?? 0) > now)
+}
+
+function orderEndpoints(methods = []) {
+  // Not limited by its plan for these methods (unless every one is).
+  const allowed = ARC_RPCS.filter((u) => !isPlanLimited(u, methods))
+  const base = allowed.length ? allowed : ARC_RPCS
   // Current and not quarantined; else not quarantined (a lagging node beats
   // none); else everything (a stale quarantine shouldn't fail every call).
-  const current = ARC_RPCS.filter((u) => !isQuarantined(u) && !isLagging(u))
-  const live = current.length ? current : ARC_RPCS.filter((u) => !isQuarantined(u))
-  const pool = live.length ? live : ARC_RPCS
+  const current = base.filter((u) => !isQuarantined(u) && !isLagging(u))
+  const live = current.length ? current : base.filter((u) => !isQuarantined(u))
+  const pool = live.length ? live : base
   const ranked = [...pool].sort((a, b) => healthScore(b) - healthScore(a))
   if (++orderCalls % EXPLORE_EVERY === 0 && ranked.length > 1) [ranked[0], ranked[1]] = [ranked[1], ranked[0]]
   return ranked
@@ -379,7 +407,7 @@ async function raceOnce(body) {
   // self-generated request volume by roughly 3x, which is what was
   // actually driving the rate limits in the first place.
   const MAX_CONCURRENT_RACES = 3
-  const ordered = orderEndpoints().slice(0, MAX_CONCURRENT_RACES)
+  const ordered = orderEndpoints(usage.methodsOf(body)).slice(0, MAX_CONCURRENT_RACES)
 
   // Once the race is settled the other attempts are cancelled. Left running,
   // they outlived the response: Vercel freezes the function between
@@ -434,6 +462,12 @@ async function raceOnce(body) {
           console.log(`[arc-rpc] ${label(url)} is a block behind the head (-32014, ${latencyMs}ms) - not quarantining`)
           throw Object.assign(new Error(json.error.message || 'block not yet imported'), { headLag: true })
         }
+        if (isPlanLimitError(json.error)) {
+          // The plan refusing this method - not a failure (see PLAN_LIMIT).
+          notePlanLimit(url, methods)
+          console.log(`[arc-rpc] ${label(url)} plan doesn't allow ${methods.join(',')} here - skipping it for that for ${PLAN_LIMIT_MS / 60_000} min (not quarantined)`)
+          throw Object.assign(new Error(json.error.message || 'plan limit'), { planLimit: true })
+        }
         throw Object.assign(new Error(json.error.message || 'RPC error'), { counted: true })
       }
       recordSuccess(url, latencyMs)
@@ -447,7 +481,7 @@ async function raceOnce(body) {
       console.log(`[arc-rpc] served by ${label(url)} (${latencyMs}ms, ${(successRate(s) * 100).toFixed(0)}% success, avg ${avgLatencyMs(s).toFixed(0)}ms)`)
       return json
     } catch (e) {
-      if (e?.headLag || e?.nullResult) throw e
+      if (e?.headLag || e?.nullResult || e?.planLimit) throw e
       if (settled.signal.aborted) {
         // Sent, then dropped because another endpoint won: still a request the provider saw.
         if (!e?.counted) count('cancelled', 0)
@@ -803,6 +837,6 @@ module.exports = async function handler(req, res) {
 // instead of maintaining their own separate, simpler RPC failover.
 module.exports.forward = forward
 // For tests: the ranking and the stats it learns from.
-module.exports._ranking = { healthScore, orderEndpoints, recordSuccess, ARC_RPCS }
+module.exports._ranking = { healthScore, orderEndpoints, recordSuccess, isQuarantined, ARC_RPCS }
 module.exports.sendAndWait = sendAndWait
 module.exports._limits = { allowIp, callWeight, IP_BUDGET_PER_MIN }
