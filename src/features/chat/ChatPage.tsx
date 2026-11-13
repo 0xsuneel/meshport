@@ -55,6 +55,7 @@ import {
   loadMessages,
   ensureConversation,
   persistMessage,
+  persistPaymentCard,
   touchConversation,
   markRead,
   markReadLocal,
@@ -4150,7 +4151,8 @@ export function ChatConversationPage() {
           // for the real saved row once done) is a background reconciliation
           // step, not something that needs to hold up the "delivered"
           // screen. Same fix as PaySendPage.tsx's runProcessing().
-          persistMessage({
+          // Retried while the payment is still confirming (persistPaymentCard).
+          persistPaymentCard({
             conversationId: convId,
             senderId:       user.id,
             content:        payContent,

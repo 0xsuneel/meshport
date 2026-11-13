@@ -9,6 +9,7 @@
 //                claims, MeshPort pays the gas), live progress and history
 //
 // The UI kit in ./ui was designed with Arc Studio.
+import { useUserAvatars } from '@/lib/userAvatars'
 import { useLatched } from '@/hooks/useLatched'
 import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -233,8 +234,11 @@ function OwnerBusinessPage() {
   const history = useSettlementHistory()
   const waitingOn = new Set((chains ?? []).map(c => c.id))
 
+  // Payers' profile photos (MeshPort users), looked up once.
+  const avatars = useUserAvatars(storeRaw.map(p => p.customerUsername))
   // A payment on another chain is "to settle" while that chain still holds USDC.
   const toRow = (p: MerchantPayment): Payment => ({
+    avatar: p.customerUsername ? avatars.get(p.customerUsername.toLowerCase().replace(/\.arc$/, '')) ?? null : null,
     id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain), chainLogo: chainLogoSrc(p.chain),
     time: p.createdAt, order: p.orderNumber ? displayOrderNumber(p.orderNumber) : undefined, wallet: p.from, late: !!p.late, blocked: !!p.screenFlag,
     status: refundedIds.has(p.id) ? 'refunded' as const
@@ -242,10 +246,10 @@ function OwnerBusinessPage() {
     partlyRefunded: !refundedIds.has(p.id) && refundedOf(p.id) > 0 ? money(refundedOf(p.id)) : undefined,
   })
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
-  const payments: Payment[] = useMemo(() => periodRaw.map(toRow), [periodRaw, chains, refundedOf, refundedIds])
+  const payments: Payment[] = useMemo(() => periodRaw.map(toRow), [periodRaw, chains, refundedOf, refundedIds, avatars])
   // Payments screen: every payment, grouped by day (Today, Yesterday… headers).
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
-  const payList: Payment[] = useMemo(() => storeRaw.map(toRow), [storeRaw, chains, refundedOf, refundedIds])
+  const payList: Payment[] = useMemo(() => storeRaw.map(toRow), [storeRaw, chains, refundedOf, refundedIds, avatars])
 
   const today = useMemo(() => {
     const t = netOf(periodRaw)

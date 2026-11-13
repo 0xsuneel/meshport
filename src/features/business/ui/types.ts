@@ -21,6 +21,8 @@ export interface Payment {
   blocked?: boolean
   /** Part of it was refunded (pre-formatted total, e.g. "$5.00"); absent when none or all of it */
   partlyRefunded?: string
+  /** The payer's profile photo (MeshPort users who have one) */
+  avatar?: string | null
 }
 
 export interface Chain {

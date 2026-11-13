@@ -12,6 +12,7 @@ import { SearchField } from '@/components/ui/SearchField'
 import type { Payment } from './types'
 import { groupByDay, formatTime } from './types'
 import { Skeleton, ChainLogo, StatusDot, Divider } from './primitives'
+import { PayerAvatar } from './OverviewView'
 import { ExportButton } from './ExportButton'
 
 export interface PaymentsViewProps {
@@ -41,7 +42,7 @@ function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payme
       onClick={() => onClick(payment)}
       className="w-full flex items-center gap-3 py-3.5 px-1 -mx-1 rounded-xl active:bg-border/20 transition-colors"
     >
-      <ChainLogo src={payment.chainLogo} label={payment.chainLabel} size={38} />
+      <PayerAvatar payment={payment} size={38} />
       <div className="flex-1 min-w-0 text-left">
         <p className="text-sm font-medium text-text-primary truncate">{payment.from}</p>
         <div className="flex items-center gap-1.5 mt-0.5">

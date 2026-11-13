@@ -113,6 +113,10 @@ const PAY_TOKENS: Record<string, { contract: string; decimals: number }> = {
   cirBTC: { contract: '0xf0c4a4ce82a5746abaad9425360ab04fbba432bf', decimals: 8 },
 }
 const pad32 = (a: string) => '0x' + a.toLowerCase().replace(/^0x/, '').padStart(64, '0')
+// MeshPortCheckout on Arc (merchant order payments) and its Paid event:
+// keccak256('Paid(address,address,bytes32,uint256,uint256)').
+const CHECKOUT = String(process.env.MESHPORT_CHECKOUT || process.env.VITE_MESHPORT_CHECKOUT || '').trim().toLowerCase()
+const CHECKOUT_PAID_TOPIC = '0xd56bd66d88b32d3be3ce941b0583d226db715ff80336148925cb9acf8800c34a'
 // B-1 FIX: the previous toUnits used Number.toFixed() which produces
 // floating-point precision artifacts (e.g. (0.1).toFixed(18) is
 // '0.100000000000000005551...') - amounts like 0.1 USDC failed the
@@ -153,9 +157,26 @@ async function verifyPayment(txHash: string, from: string, to: string, token: st
  * token's own contract - the log, emitted by the token contract itself, is
  * the proof, not tx.from.
  */
-export function paymentProof(tx: any, rc: any, from: string, to: string, token: string, amount: number): 'ok' | 'invalid' {
+export function paymentProof(tx: any, rc: any, from: string, to: string, token: string, amount: number, checkout: string = CHECKOUT): 'ok' | 'invalid' {
   const t = PAY_TOKENS[token]
   if (!t || rc?.status !== '0x1') return 'invalid'
+  // An order payment (Shop QR, bill, request) through MeshPortCheckout: the
+  // customer pays the contract, which passes the price minus MeshPort's fee
+  // on to the business in the same transaction - so there is no direct
+  // payer -> business transfer. Its Paid(payer, merchant, ref, price, fee)
+  // event, emitted by the checkout contract itself (its address pinned from
+  // the environment, never taken from the request), is the proof.
+  if (token === 'USDC' && checkout) {
+    for (const log of rc.logs || []) {
+      if (String(log.address || '').toLowerCase() !== checkout) continue
+      const tp = log.topics || []
+      if (String(tp[0] || '').toLowerCase() !== CHECKOUT_PAID_TOPIC) continue
+      if (String(tp[1] || '').toLowerCase() !== pad32(from) || String(tp[2] || '').toLowerCase() !== pad32(to)) continue
+      const data = String(log.data || '').replace(/^0x/, '')
+      if (data.length < 64) continue
+      if (BigInt('0x' + data.slice(0, 64)) >= toUnits(amount, 18)) return 'ok'
+    }
+  }
   if (token === 'USDC' && String(tx?.from || '').toLowerCase() === from.toLowerCase() && String(tx?.to || '').toLowerCase() === to.toLowerCase()) {
     if (BigInt(tx.value || '0x0') >= toUnits(amount, 18)) return 'ok'
   }
