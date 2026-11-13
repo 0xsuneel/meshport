@@ -1,7 +1,7 @@
 import { PUSH_OPEN_MS, PUSH_BACK_MS, PUSH_EASE_CSS, PUSH_PARALLAX, DESKTOP_FADE_KEYFRAMES, DESKTOP_FADE_MS } from '@/lib/motion'
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 import { pushLook } from '@/lib/pushLook'
-import { replaceClonedFrames, replaceClonedImages } from '@/lib/snapshotFrames'
+import { replaceClonedFrames, replaceClonedImages, renameSvgRefs, isSvgRefTarget } from '@/lib/snapshotFrames'
 import { useReducedMotion } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY } from '@/lib/motion'
@@ -36,6 +36,8 @@ function pictureOf(el: HTMLElement): { node: HTMLElement; floats: HTMLElement[] 
   // A copied <img> (token / chain logo, avatar) is blank for the picture's
   // first frame while it decodes again: drawn into canvases instead.
   replaceClonedImages(el, node)
+  // Icons that paint through an SVG mask keep it (renamed): ids are dropped below.
+  renameSvgRefs(node)
   const orig = el.querySelectorAll<HTMLElement>('*')
   const copy = node.querySelectorAll<HTMLElement>('*')
   const drop: HTMLElement[] = []
@@ -47,7 +49,7 @@ function pictureOf(el: HTMLElement): { node: HTMLElement; floats: HTMLElement[] 
     if (o.classList.contains('mp-page-snapshot') || o.hasAttribute('data-push-veil')) drop.push(c)
     else if (getComputedStyle(o).position === 'fixed') (o.hasAttribute('data-amount-keypad-sheet') || o.hasAttribute('data-push-keep') ? floats : drop).push(c)
     if ((o instanceof HTMLInputElement || o instanceof HTMLTextAreaElement) && (c instanceof HTMLInputElement || c instanceof HTMLTextAreaElement)) c.value = o.value
-    if (c.id) c.removeAttribute('id')
+    if (c.id && !isSvgRefTarget(c)) c.removeAttribute('id')
     if (c.hasAttribute('data-amount-keypad-sheet')) c.removeAttribute('data-amount-keypad-sheet')
     if (c.hasAttribute('data-push-keep')) c.removeAttribute('data-push-keep')
   }
