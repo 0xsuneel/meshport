@@ -389,6 +389,22 @@ export async function persistMessage(p: SendParams): Promise<ChatMessage | null>
   return saved
 }
 
+/**
+ * A payment card (payment_sent): the server saves it only once the payment
+ * is on-chain - it checks the chain itself - so on a slow Arc the first try
+ * can come too early. Tries again after 3, 6 and 12 s; the server ignores a
+ * second copy of the same payment, so a retry never doubles it.
+ */
+export async function persistPaymentCard(p: SendParams, waits: number[] = [3_000, 6_000, 12_000]): Promise<ChatMessage | null> {
+  let saved = await persistMessage(p)
+  for (const wait of waits) {
+    if (saved) break
+    await new Promise(r => setTimeout(r, wait))
+    saved = await persistMessage(p)
+  }
+  return saved
+}
+
 async function persistOnServer(p: SendParams): Promise<ChatMessage | null> {
   // PATH 1: Vercel /api/send-message with service role key
   try {

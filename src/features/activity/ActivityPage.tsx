@@ -320,7 +320,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   const title = isClaim && metadata.auto_convert ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
               : isClaim && isMerchantClaim(record as any) ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
               : merchantOrder ? paidOrderTitle(metadata, merchantOrder, isReceive, true)
-              : shopPay && isReceive ? 'Payment Received'
+              : shopPay && isReceive ? 'Shop Payment Received'
               : recoveredTitle ? recoveredTitle
               : refund ? 'Refund from'
               // A rewards claim that didn't go through (lib/rewards.ts).
@@ -612,7 +612,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const orderWord = merchantOrderDetail ? paidOrderTitle(metadata, merchantOrderDetail, type === 'receive') : ''
   const title = isClaim && (metadata as any)?.merchant ? `Payment received · ${chainLabel(sourceChain) || 'External'}`
               : merchantOrderDetail ? orderWord
-              : type === 'receive' && activityOrderKind(metadata) === 'shop' ? 'Payment Received'
+              : type === 'receive' && activityOrderKind(metadata) === 'shop' ? 'Shop Payment Received'
               : recoveredDetail && isClaim ? `${recoveredDetail} · ${chainLabel(sourceChain) || 'External'}`
               : recoveredDetail ? recoveredDetail
               : refundDetail ? `Refund from ${refundDetail.from}`

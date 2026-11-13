@@ -19,6 +19,19 @@ const initials = (name: string) => {
   return ((parts[0]?.[0] ?? '?') + (parts[1]?.[0] ?? parts[0]?.[1] ?? '')).toUpperCase()
 }
 
+/** The payer's profile photo, or their initials; for a payer that isn't a person (own transfer, bridge) the chain's logo. */
+export function PayerAvatar({ payment, size }: { payment: Payment; size: number }) {
+  if (payment.avatar) {
+    return <img decoding="async" src={payment.avatar.split('?')[0]} alt="" className="shrink-0 rounded-full object-cover bg-surface border border-border" style={{ width: size, height: size }} />
+  }
+  if (/^(your transfer|a bridge)$/i.test(payment.from)) return <ChainLogo src={payment.chainLogo} label={payment.chainLabel} size={size} />
+  return (
+    <span className="shrink-0 flex items-center justify-center rounded-full bg-surface border border-border text-xs font-semibold text-text-secondary" style={{ width: size, height: size }}>
+      {initials(payment.from)}
+    </span>
+  )
+}
+
 export function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payment) => void }) {
   const tag = payment.status === 'to_settle' ? ' · to settle' : payment.status === 'refunded' ? ' · refunded' : payment.partlyRefunded ? ` · partly refunded ${payment.partlyRefunded}` : ''
   return (
@@ -28,12 +41,8 @@ export function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p
       onClick={() => onClick(payment)}
       className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-border/20 transition-colors"
     >
-      <span className="relative shrink-0">
-        <span className="flex items-center justify-center size-9 rounded-full bg-surface border border-border text-xs font-semibold text-text-secondary">
-          {initials(payment.from)}
-        </span>
-        <ChainLogo src={payment.chainLogo} label={payment.chainLabel} size={16} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-card rounded-full" />
-      </span>
+      {/* The payer: their photo, else initials (the chain is in the line below). */}
+      <PayerAvatar payment={payment} size={36} />
       <span className="flex-1 min-w-0">
         <span className="block text-sm font-medium text-text-primary truncate">{payment.from}</span>
         <span className="block text-xs text-text-muted truncate">

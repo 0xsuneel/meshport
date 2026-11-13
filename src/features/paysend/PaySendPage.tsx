@@ -1089,7 +1089,7 @@ export function PaySendPage() {
       (async () => {
         try {
           const { ensureAnonSession } = await import('@/lib/supabase')
-          const { ensureConversation, persistMessage, touchConversation } = await import('@/lib/chatService')
+          const { ensureConversation, persistPaymentCard, touchConversation } = await import('@/lib/chatService')
           // Paying an order by link / QR: the chat gets the same payment card
           // as paying the request in chat - with "Bill ORD-… · Paid in full".
           // A Shop QR payment has no number but is still tagged (" · Payment").
@@ -1120,7 +1120,8 @@ export function PaySendPage() {
                 console.error('[PaySend] chat: ensureConversation returned no id - payment card will not be created:', { myId: user.id, otherId: otherUser.id })
               } else {
                 const content = `Sent ${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token} to ${otherUser.username}.arc${orderTag}`
-                const persisted = await persistMessage({ conversationId: convId, senderId: user.id, content, type: 'payment_sent', paymentAmount: numAmount, paymentTxHash: result.txHash, tokenSymbol: token, senderWalletAddress: result.senderAddress, recipientWalletAddress: result.recipientAddress, toUsername: recipient?.isUsername ? recipient.display : `${otherUser.username}.arc` })
+                // Retried while the payment is still confirming (persistPaymentCard).
+                const persisted = await persistPaymentCard({ conversationId: convId, senderId: user.id, content, type: 'payment_sent', paymentAmount: numAmount, paymentTxHash: result.txHash, tokenSymbol: token, senderWalletAddress: result.senderAddress, recipientWalletAddress: result.recipientAddress, toUsername: recipient?.isUsername ? recipient.display : `${otherUser.username}.arc` })
                 if (!persisted) {
                   console.error('[PaySend] chat: persistMessage failed - payment card will not be created:', { convId, txHash: result.txHash })
                 } else {

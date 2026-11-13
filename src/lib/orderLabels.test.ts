@@ -93,24 +93,24 @@ describe('Shop QR payments', () => {
     expect(orderKindOf({ kind: 'request', personal: false, via: 'shop_qr' })).toBe('shop')
     expect(orderKindOf({ kind: 'request', personal: false, via: null })).toBe('merchant_request')
   })
-  it('is titled Payment on both sides, with no order number', () => {
-    expect(orderTitle('shop', 'ORD-100108')).toBe('Payment')
-    expect(orderTitle('shop', 'ORD-100108', { paid: true })).toBe('Payment Paid')
-    expect(orderTitle('shop', 'ORD-100108', { received: true, short: true })).toBe('Payment Received')
-    expect(orderTitle('shop', 'ORD-100108', { paid: true, short: true })).toBe('Payment Paid')
+  it('is titled Shop Payment on both sides, with no order number', () => {
+    expect(orderTitle('shop', 'ORD-100108')).toBe('Shop Payment')
+    expect(orderTitle('shop', 'ORD-100108', { paid: true })).toBe('Shop Payment')
+    expect(orderTitle('shop', 'ORD-100108', { received: true, short: true })).toBe('Shop Payment Received')
+    expect(orderTitle('shop', 'ORD-100108', { paid: true, short: true })).toBe('Shop Payment')
   })
   it('round-trips through the chat payment tag', () => {
     const t = parsePaymentOrderTag('Sent 1 USDC to royal.arc' + paymentOrderTag('shop', 'ORD-100108'))!
     expect(t.kind).toBe('shop')
-    expect(paidTitleFromTag(t, true, true)).toBe('Payment Received')
+    expect(paidTitleFromTag(t, true, true)).toBe('Shop Payment Received')
   })
   it('a Shop QR payment with no number still reads as a shop payment', () => {
     const msg = 'Sent 1 USDC to resort.arc' + paymentOrderTag('shop', null)
     expect(msg).toBe('Sent 1 USDC to resort.arc · Payment')
     const t = parsePaymentOrderTag(msg)!
     expect(t.kind).toBe('shop'); expect(t.number).toBe(''); expect(msg.slice(0, t.index)).toBe('Sent 1 USDC to resort.arc')
-    expect(paidTitleFromTag(t, true, true)).toBe('Payment Received')
-    expect(paidTitleFromTag(t, true)).toBe('Payment Paid')
+    expect(paidTitleFromTag(t, true, true)).toBe('Shop Payment Received')
+    expect(paidTitleFromTag(t, true)).toBe('Shop Payment')
     expect(parsePaymentOrderTag('Sent 1 USDC to resort.arc')).toBeNull()
   })
 })

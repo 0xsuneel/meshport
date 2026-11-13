@@ -36,4 +36,24 @@ describe('chat payment card proof', () => {
     expect(paymentProof({ from: FROM, to: TO, value }, { ...ok, logs: [] }, FROM, TO, 'USDC', 1)).toBe('ok')
     expect(paymentProof({ from: KEY, to: TO, value }, { ...ok, logs: [] }, FROM, TO, 'USDC', 1)).toBe('invalid')
   })
+
+  it('an order payment through MeshPortCheckout: its Paid event (payer, business, price) proves it', () => {
+    const CHECKOUT = '0xda51a32edfc723e3de9aaf0a452fd2f71e6019f1'
+    const PAID = '0xd56bd66d88b32d3be3ce941b0583d226db715ff80336148925cb9acf8800c34a'
+    const word = (n: bigint) => n.toString(16).padStart(64, '0')
+    const paid = (payer: string, merchant: string, price: bigint, address = CHECKOUT) =>
+      ({ address, topics: [PAID, pad(payer), pad(merchant), '0x' + 'ab'.repeat(32)], data: '0x' + word(price) + word(price / 160n) })
+    const tx = { from: FROM, to: CHECKOUT, value: '0x' + (10n ** 18n).toString(16) }
+    const one = 10n ** 18n
+    // The business gets the price minus the fee - the Paid event carries the full price.
+    expect(paymentProof(tx, { ...ok, logs: [paid(FROM, TO, one)] }, FROM, TO, 'USDC', 1, CHECKOUT)).toBe('ok')
+    expect(paymentProof(tx, { ...ok, logs: [paid(FROM, TO, one)] }, FROM, TO, 'USDC', 1.5, CHECKOUT)).toBe('invalid') // not that much
+    expect(paymentProof(tx, { ...ok, logs: [paid(KEY, TO, one)] }, FROM, TO, 'USDC', 1, CHECKOUT)).toBe('invalid')   // someone else paid
+    expect(paymentProof(tx, { ...ok, logs: [paid(FROM, KEY, one)] }, FROM, TO, 'USDC', 1, CHECKOUT)).toBe('invalid')  // another business
+    // The same event from any other contract is not proof (anyone can emit it).
+    expect(paymentProof(tx, { ...ok, logs: [paid(FROM, TO, one, '0x1111111111111111111111111111111111111111')] }, FROM, TO, 'USDC', 1, CHECKOUT)).toBe('invalid')
+    // No checkout configured: not accepted.
+    expect(paymentProof(tx, { ...ok, logs: [paid(FROM, TO, one)] }, FROM, TO, 'USDC', 1, '')).toBe('invalid')
+    expect(paymentProof(tx, { status: '0x0', logs: [paid(FROM, TO, one)] }, FROM, TO, 'USDC', 1, CHECKOUT)).toBe('invalid')
+  })
 })
