@@ -3863,7 +3863,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   rows={[
                     { label: 'You Sent', value: fmtAmount },
                     { label: 'Recipient Received', value: `${fmtTok(successInfo?.receiverGets || 0)} ${tokenSym}`, positive: true },
-                    ...(address ? [{ label: 'Recipient', value: `${address.slice(0, 6)}…${address.slice(-4)}` }] : []),
+                    // Your own wallet reads "Self", as in the history.
+                    ...(address ? [{ label: 'Recipient', value: (chain.sdk === 'Solana_Devnet' ? address === mySolanaAddress : address.toLowerCase() === (senderAddress ?? '').toLowerCase()) ? 'Self' : `${address.slice(0, 6)}…${address.slice(-4)}` }] : []),
                     ...(txHash ? [{ label: 'Transaction Hash', value: shortHash, onCopy: () => copyTransferHash(txHash), copied: hashCopied }] : []),
                     { label: 'Time', value: timeLabel },
                   ]}

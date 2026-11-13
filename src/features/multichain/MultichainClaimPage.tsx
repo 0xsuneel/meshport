@@ -2453,7 +2453,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     // MeshPort's fee in the token paid the gas and Circle's CCTPx fee.
                     { label: 'MeshPort Fee', value: usdc(fees.meshport) },
                     { label: 'Circle Fee', value: 'Paid by MeshPort' },
-                    { label: 'Total Fees', value: usdc(fees.meshport) },
+                    // (No "Total Fees": it is the MeshPort fee again.)
                   ] : [
                     ...(hasFees ? [
                       { label: 'MeshPort Fee', value: usdc(fees.meshport) },

@@ -1222,7 +1222,11 @@ export function recoveredViaLabel(r: { activityType: ActivityType; metadata?: Re
   }
   // "Recovered via …" only once the recovery actually finished.
   if ((m.recovered_via === 'ub' || m.recovered_via === 'cctp') && done) return `Recovered via ${String(m.recovered_via).toUpperCase()}`
-  if (r.activityType === 'withdraw' && m.ub_stuck_transfer) return `Transfer to ${m.destination_label ?? 'chain'} · waiting in Recover`
+  // Who it was going to (the address), not just the chain.
+  if (r.activityType === 'withdraw' && m.ub_stuck_transfer) {
+    const to = typeof m.destination_address === 'string' && m.destination_address.length > 14 ? `${m.destination_address.slice(0, 6)}…${m.destination_address.slice(-4)}` : (m.destination_label ?? 'chain')
+    return `Transfer to ${to} · waiting in Recover`
+  }
   return null
 }
 

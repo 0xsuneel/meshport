@@ -211,8 +211,18 @@ function chainReceiptLabel(item: ActivityItem): string | null {
 const HUB_RECENT = 20
 
 // Row / detail title for Hub Activity.
-function hubItemTitle(item: ActivityItem): string {
+/** Who a transfer went to: "Self" (this wallet), else the short address - never just the chain. */
+function transferWho(item: ActivityItem, own?: string | null): string | null {
+  const to = item.destinationAddress
+  if (!to) return null
+  if (own && to.toLowerCase() === own.toLowerCase()) return 'Self'
+  return to.length > 14 ? `${to.slice(0, 6)}…${to.slice(-4)}` : to
+}
+
+function hubItemTitle(item: ActivityItem, own?: string | null): string {
   const chain = item.chainLabel || item.chain
+  // A transfer names who it went to (the chain is on the line below / in the receipt).
+  const to = transferWho(item, own) ?? chain
   if (item.chainReceipt) return item.ownReceipt ? 'Own payment received' : `Payment received on ${chain}`
   if (item.autoConvert && item.type === 'claim') return item.status === 'pending' ? 'Funds moving to Arc' : 'Cross-chain payment received'
   // A merchant's claim moves other-chain money (already received) to Arc.
@@ -228,9 +238,9 @@ function hubItemTitle(item: ActivityItem): string {
   // "Recovered via …" only once the recovery actually finished.
   if (item.recoveredVia && item.status === 'success') {
     const via = `Recovered via ${item.recoveredVia.toUpperCase()}`
-    return item.type === 'claim' ? `${via} · ${chain}` : `Transfer to ${chain} · ${via}`
+    return item.type === 'claim' ? `${via} · ${chain}` : `Transfer to ${to} · ${via}`
   }
-  return item.type === 'claim' ? `Claim from ${chain}` : `Transfer to ${chain}`
+  return item.type === 'claim' ? `Claim from ${chain}` : `Transfer to ${to}`
 }
 
 // A running move from Activity, in the shape the shared progress page follows.
@@ -1116,10 +1126,13 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                   {/* Details */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', ...oneLine }}>
-                      {hubItemTitle(item)}
+                      {hubItemTitle(item, walletAddress)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, ...oneLine }}>
                       <span style={{ fontSize: 11, color: statusColor, fontWeight: 600, flexShrink: 0 }}>{statusLabel}</span>
+                      {item.type !== 'claim' && !item.isRecovery && transferWho(item, walletAddress) && (item.chainLabel || item.chain) && (
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>· {item.chainLabel || item.chain}</span>
+                      )}
                       <span style={{ fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0 }}>· {timeAgo(new Date(item.timestamp).toISOString())}</span>
                     </div>
                     {/* Why: one line, ellipsis - never runs into the amount column. */}
@@ -1500,7 +1513,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
             title={title}
             subtitle={<>
               <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: status === 'failed' ? 'var(--text-muted)' : isClaimItem ? 'var(--success-text)' : 'var(--text-primary)', marginBottom: 4 }}>{amountText}</span>
-              {hubItemTitle(it)}
+              {hubItemTitle(it, walletAddress)}
             </>}
             // The header shows the amount and "Claim from / Transfer to <chain>",
             // the title the outcome - rows add only what those don't.
@@ -1537,6 +1550,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
               // The summary row above already shows one of these two.
               ...(it.sourceTxHash && !isRecoveredClaim && it.sourceTxHash !== primaryHash ? [hashRow(isClaimItem ? (it.route === 'cctpx' ? 'Source Tx (Send)' : 'Source Tx (Burn)') : 'Source Tx (Arc)', it.sourceTxHash)] : []),
               ...(it.destinationTxHash && it.destinationTxHash !== primaryHash ? [hashRow(isClaimItem ? (it.route === 'cctpx' ? 'Destination Tx (Arc)' : 'Destination Tx (Arc Mint)') : 'Destination Tx (Arrival)', it.destinationTxHash)] : []),
+              ...(it.type === 'transfer' && !it.isRecovery ? [{ label: 'Chain', value: chainName }] : []),
               ...(it.type === 'transfer' && it.destinationAddress ? [hashRow('Sent To', it.destinationAddress)] : []),
             ]}
             links={[
