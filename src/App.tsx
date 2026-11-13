@@ -15,6 +15,7 @@ import { ADMIN_PATH } from './lib/adminPath'
 import { lazyRetry } from './lib/lazyRetry'
 import { RouteErrorPage } from './components/RouteErrorPage'
 import { OfflineBanner } from './components/ui/OfflineBanner'
+import { ArcSlowBanner } from './components/ui/ArcSlowBanner'
 
 // ── Lazy-loaded pages ────────────────────────────────────────────────────────
 // Every page below used to be a static top-level import, meaning the entire
@@ -841,6 +842,7 @@ export default function App() {
         <RouterProvider router={router} future={{ v7_startTransition: true }} />
         <SplashRemover />
         <OfflineBanner />
+        <ArcSlowBanner />
         {/* Passcode for an action the wallet frame refused without one (lib/walletApproval) */}
         <WalletApprovalPrompt />
       </Suspense>
