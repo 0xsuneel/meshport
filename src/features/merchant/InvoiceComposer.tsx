@@ -10,13 +10,14 @@
 // stay put. With the phone keyboard up, the header and footer shrink to one
 // line each and Next walks name → price → next item.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Plus, Receipt, X } from 'lucide-react'
+import { Plus, Receipt, X, ScanBarcode } from 'lucide-react'
 import { formatAmount } from '@/lib/utils'
 import { createPaymentRequest, invoiceBreakdown, type InvoiceItem, type MerchantIntent } from '@/lib/merchantPay'
 import { ActionSheet, SheetPerson, SheetLabel, SheetChips, sheetInputClass, sheetInputStyle } from '@/components/ui/ActionSheet'
 import { DUE_PRESETS, duePresetDate, dueText, isoDay, type DuePresetId } from '@/lib/businessBills'
 import type { SavedItem } from '@/lib/businessItems'
 import { StorePicker, type PickerStore } from './StorePicker'
+import { BarcodeScanner } from './BarcodeScanner'
 
 export const MAX_BILL_ITEMS = 50 // the database's limit
 type Row = { id: number; name: string; qty: string; price: string }
@@ -55,8 +56,10 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
   footerNote: (due: string | null) => string
   submitLabel?: string
   busyLabel?: string
-  /** Saved products (Business): tap to add, Edit to remove. */
-  saved?: { items: SavedItem[]; onRemove: (it: SavedItem) => void; hint?: string }
+  /** Saved products (Business): tap to add, Edit to remove; Scan adds them by barcode. */
+  saved?: { items: SavedItem[]; onRemove: (it: SavedItem) => void; hint?: string
+    /** Saves a scanned product that isn't saved yet (shows the Scan button). */
+    onSaveBarcode?: (name: string, price: number, barcode: string) => Promise<SavedItem> }
   /** More fields after the note (Business: Bill to), kept while typing. */
   extra?: ReactNode
   /** Creates the bill; throws with a message to show. */
@@ -70,6 +73,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
   const [customDue, setCustomDue] = useState('')
   const [typing, setTyping] = useState(false)
   const [editSaved, setEditSaved] = useState(false)
+  const [scanning, setScanning] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const nameRefs = useRef(new Map<number, HTMLInputElement>())
@@ -80,7 +84,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
   // A fresh bill every time the sheet opens.
   useEffect(() => {
     if (!open) return
-    setRows([{ id: 1, name: '', qty: '1', price: '' }]); setEditing(1); setNote(''); setTax(''); setDueId('none'); setCustomDue(''); setError(null); setBusy(false); setTyping(false); setEditSaved(false)
+    setRows([{ id: 1, name: '', qty: '1', price: '' }]); setEditing(1); setNote(''); setTax(''); setDueId('none'); setCustomDue(''); setError(null); setBusy(false); setTyping(false); setEditSaved(false); setScanning(false)
   }, [open])
   // The item being edited stays in view (keyboard opening, Next, Add item).
   useEffect(() => {
@@ -178,14 +182,23 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
 
       {/* Only this scrolls. */}
       <div className="flex-1 min-h-0 overflow-y-auto px-5" data-no-drag>
-        {saved && saved.items.length > 0 && !compact && (
+        {saved && (saved.items.length > 0 || saved.onSaveBarcode) && !compact && (
           <div className="mb-3">
-            <div className="flex items-center justify-between px-0.5 mb-1.5">
-              <span className="text-[12px] font-semibold text-text-muted">{editSaved ? 'Tap to remove' : 'Saved items · tap to add'}</span>
-              <button type="button" onClick={() => setEditSaved(e => !e)} className="text-[13px] font-bold" style={{ color: 'var(--brand-text)', background: 'none', border: 'none', cursor: 'pointer' }}>{editSaved ? 'Done' : 'Edit'}</button>
+            <div className="flex items-center justify-between px-0.5 mb-1.5 gap-3">
+              <span className="text-[12px] font-semibold text-text-muted truncate">{editSaved ? 'Tap to remove' : saved.items.length ? 'Saved items · tap to add' : 'Scan products to add them'}</span>
+              <span className="flex items-center gap-4 shrink-0">
+                {saved.onSaveBarcode && !editSaved && (
+                  <button type="button" onClick={() => setScanning(true)} className="inline-flex items-center gap-1 text-[13px] font-bold" style={{ color: 'var(--brand-text)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                    <ScanBarcode size={15} /> Scan
+                  </button>
+                )}
+                {saved.items.length > 0 && (
+                  <button type="button" onClick={() => setEditSaved(e => !e)} className="text-[13px] font-bold" style={{ color: 'var(--brand-text)', background: 'none', border: 'none', cursor: 'pointer' }}>{editSaved ? 'Done' : 'Edit'}</button>
+                )}
+              </span>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {saved.items.map(it => (
+              {saved.items.slice(0, 100).map(it => (
                 <button key={it.id} type="button" onClick={() => (editSaved ? saved.onRemove(it) : addSaved(it))}
                   aria-label={editSaved ? `Remove ${it.name}` : `Add ${it.name}`}
                   className="inline-flex items-center gap-1.5 px-3 rounded-full text-[13px] font-semibold"
@@ -314,6 +327,10 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
           </button>
         </div>
       </div>
+      {saved?.onSaveBarcode && (
+        <BarcodeScanner open={scanning} items={saved.items} onAdd={addSaved}
+          onSaveNew={saved.onSaveBarcode} onClose={() => setScanning(false)} />
+      )}
     </div>
   )
 }

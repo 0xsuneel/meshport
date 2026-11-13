@@ -31,7 +31,7 @@ import {
   type MerchantIntent, type MerchantPayment, shopFrom, isAskedOrder } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
 import { timeAgo, formatAmount } from '@/lib/utils'
-import { listItems, rememberItems, deleteItem, type SavedItem } from '@/lib/businessItems'
+import { listItems, rememberItems, deleteItem, saveBarcodeItem, type SavedItem } from '@/lib/businessItems'
 import { getShopLimits, setShopLimits } from '@/lib/shop'
 import { SearchField } from '@/components/ui/SearchField'
 import { ActionSheet, SheetPerson, SheetLabel, SheetChips } from '@/components/ui/ActionSheet'
@@ -58,6 +58,7 @@ import { chainLabel } from './settlement'
 import { dueText, canRemindAt, remindBill, remindCustomer } from '@/lib/businessBills'
 import { logBusiness, type ActivityAction } from '@/lib/businessActivity'
 import { khataByCustomer, customerKey, isOutstanding, totalOutstanding } from '@/lib/businessKhata'
+import { sortCustomers, repeatCount, CUSTOMER_SORTS, type CustomerSort } from './customerSort'
 import { Sheet, ShareChannels } from './ui'
 
 /** How Charge / Payment link / Bill create requests: the owner's own
@@ -220,6 +221,13 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
     setCatalog(c => c.filter(x => x.id !== it.id))
     await deleteItem(it.id).catch(() => toast('Could not remove', 'error'))
   }
+  // A scanned product that wasn't saved: saved with its barcode (a barcode
+  // moves off any other item that had it).
+  const saveScanned = async (name: string, price: number, barcode: string) => {
+    const it = await saveBarcodeItem(name, price, barcode)
+    setCatalog(c => [it, ...c.filter(x => x.id !== it.id).map(x => x.barcode === barcode ? { ...x, barcode: null } : x)])
+    return it
+  }
   const [intent, setIntent] = useState<MerchantIntent | null>(null)
   const view = useLiveRequest(intent?.code ?? null)
   const paid = view?.status === 'paid'
@@ -327,7 +335,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
     body = (
       <BillComposer open={open} isDesktop={isDesktop} header={head} submitLabel="Create bill" busyLabel="Creating…"
         footerNote={due => `${who ? `${who}.arc gets it ${chat ? 'in your chat' : 'in their notifications'}` : 'Show the QR or send the link'}${due ? ` · ${due}` : ''}`}
-        saved={savedItems ? { items: catalog, onRemove: removeSaved, hint: 'Items you bill are saved here for next time' } : undefined}
+        saved={savedItems ? { items: catalog, onRemove: removeSaved, hint: 'Items you bill are saved here for next time', onSaveBarcode: saveScanned } : undefined}
         extra={<div className="mt-3 mb-1">{customerInput('Bill to (optional)')}</div>}
         onCreate={async ({ items, total, taxPercent, note, dueDate }) => {
           // Same as a chat bill: open 7 days, or until paid with a due date.
@@ -970,6 +978,10 @@ export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void
 type Customer = {
   key: string; name: string; username: string | null; wallet: string | null; bridge: boolean
   payments: MerchantPayment[]; total: number; last: string; refunded: number
+  /** First payment or bill (customer since) */
+  first: string
+  /** Payments that count (refunded ones don't) */
+  visits: number
 }
 
 const ZERO_WALLET = /^0x0{40}$/i
@@ -993,6 +1005,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [sortBy, setSortBy] = useState<CustomerSort>('owed')
   useEffect(() => { if (!open) { setQuery(''); setSelected(null) } }, [open])
 
   const khata = useMemo(() => khataByCustomer(orders.map(toKhataOrder)), [orders])
@@ -1006,12 +1019,13 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
       const c = m.get(key) ?? {
         key, bridge, username: p.customerUsername ?? null, wallet: p.customerUsername || bridge ? null : p.from,
         name: p.customerUsername ? `${p.customerUsername}.arc` : bridge ? 'Bridge payments' : shortWallet(p.from),
-        payments: [], total: 0, last: p.createdAt, refunded: 0,
+        payments: [], total: 0, last: p.createdAt, refunded: 0, first: p.createdAt, visits: 0,
       }
       c.payments.push(p)
       if (refundedIds.has(p.id)) c.refunded++
-      else c.total += p.amount
+      else { c.total += p.amount; c.visits++ }
       if (Date.parse(p.createdAt) > Date.parse(c.last)) c.last = p.createdAt
+      if (Date.parse(p.createdAt) < Date.parse(c.first)) c.first = p.createdAt
       m.set(key, c)
     }
     // Billed customers who haven't paid yet are customers too.
@@ -1019,11 +1033,14 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
       if (!i.customerUsername || !khata.get(customerKey(i.customerUsername))?.billed) continue
       const key = customerKey(i.customerUsername)
       const c = m.get(key)
-      if (!c) m.set(key, { key, bridge: false, username: i.customerUsername, wallet: null, name: `${i.customerUsername}.arc`, payments: [], total: 0, last: i.createdAt, refunded: 0 })
-      else if (Date.parse(i.createdAt) > Date.parse(c.last)) c.last = i.createdAt
+      if (!c) m.set(key, { key, bridge: false, username: i.customerUsername, wallet: null, name: `${i.customerUsername}.arc`, payments: [], total: 0, last: i.createdAt, refunded: 0, first: i.createdAt, visits: 0 })
+      else {
+        if (Date.parse(i.createdAt) > Date.parse(c.last)) c.last = i.createdAt
+        if (Date.parse(i.createdAt) < Date.parse(c.first)) c.first = i.createdAt
+      }
     }
-    return [...m.values()].sort((a, b) => (khata.get(b.key)?.outstanding ?? 0) - (khata.get(a.key)?.outstanding ?? 0) || b.total - a.total)
-  }, [payments, refundedIds, orders, khata])
+    return sortCustomers([...m.values()], sortBy, k => khata.get(k)?.outstanding ?? 0)
+  }, [payments, refundedIds, orders, khata, sortBy])
   const q = searchTerm(query)
   const shown = q ? customers.filter(c => c.name.toLowerCase().includes(q) || (c.username ?? '').toLowerCase().includes(q) || (c.wallet ?? '').toLowerCase().includes(q)) : customers
   const current = customers.find(c => c.key === selected) ?? null
@@ -1081,7 +1098,9 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             {stat('Total paid', money(current.total))}
-            {stat('Average', money(current.payments.length > current.refunded ? current.total / (current.payments.length - current.refunded) : 0))}
+            {stat('Average', money(current.visits ? current.total / current.visits : 0))}
+            {stat('Payments', String(current.visits))}
+            {stat('Customer since', new Date(current.first).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' }))}
           </div>
           {currentKhata && currentKhata.billed > 0 && (
             <div className="flex flex-col gap-3">
@@ -1150,9 +1169,22 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
         <div className="flex flex-col gap-4 px-5 pt-2 pb-6">
           <SearchField value={query} onChange={setQuery} ariaLabel={`Search ${t.customers.toLowerCase()}`} placeholder={['Search name or wallet', 'Search']} />
           {customers.length > 0 && (
-            <div className="grid grid-cols-2 gap-2.5">
-              {stat(`Paid · ${customers.length} ${(customers.length === 1 ? t.customer : t.customers).toLowerCase()}`, money(customers.reduce((s, c) => s + c.total, 0)))}
+            <div className="grid grid-cols-3 gap-2">
+              {stat(`Paid · ${customers.length}`, money(customers.reduce((s, c) => s + c.total, 0)))}
+              {stat('Repeat', `${repeatCount(customers)} of ${customers.length}`)}
               {stat('Outstanding', money(outstanding), outstanding > 0 ? 'text-warning' : 'text-text-primary')}
+            </div>
+          )}
+          {customers.length > 1 && (
+            <div className="-mx-5 px-5 overflow-x-auto no-scrollbar">
+              <div className="flex gap-2 w-max" role="radiogroup" aria-label={`Sort ${t.customers.toLowerCase()}`}>
+                {CUSTOMER_SORTS.map(o => (
+                  <button key={o.id} type="button" role="radio" aria-checked={sortBy === o.id} onClick={() => setSortBy(o.id)}
+                    className={`rounded-full px-3.5 min-h-[34px] text-xs font-semibold whitespace-nowrap transition-colors ${sortBy === o.id ? 'bg-brand text-white' : 'bg-surface border border-border text-text-secondary'}`}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {shown.length === 0 ? (
