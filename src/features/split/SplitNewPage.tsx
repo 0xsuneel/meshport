@@ -9,7 +9,7 @@ import { readPeople } from '@/lib/peopleCache'
 import { useUserSearch } from '@/hooks/useUserSearch'
 import type { DbUser } from '@/lib/supabase'
 import {
-  renameSplitGroup, equalShares, percentShares, sharesGap, createSplit, mySplits, money, capShareInput, MAX_SPLIT_PEOPLE, type CreatedSplit,
+  equalShares, percentShares, sharesGap, createSplit, mySplits, money, capShareInput, MAX_SPLIT_PEOPLE, type CreatedSplit,
 } from '@/lib/splits'
 import {
   SplitHeader, SplitAvatar, ListCard, ProgressBar, Pill, ActionBar, Btn, Tick,
@@ -23,13 +23,8 @@ type Group = { key: string; title: string; emoji: string | null; people: Person[
 
 export interface SplitNewState {
   total?: number; title?: string; sourceTx?: string
-  /** People already in (Split again with this group). */
+  /** People already in (a new split from a settled one: the same people). */
   with?: Array<string | { username: string; name?: string | null; avatar?: string | null }>
-  /** A new expense in a group: the group it joins (same entry in Chats, same thread)... */
-  group?: string
-  /** ...and the group's current name - shown, and can be changed while adding the expense. */
-  groupName?: string
-  groupEmoji?: string | null
 }
 
 const clean = (u: string) => u.trim().replace(/^@/, '').replace(/\.arc$/i, '').toLowerCase()
@@ -49,8 +44,6 @@ export function SplitNewPage() {
   const [totalText, setTotalText] = useState(init.total ? String(init.total) : '')
   const total = parseAmount(totalText)
   const [title, setTitle] = useState(init.title ?? '')
-  // Adding to a group: its name, shown and editable here (the group page has no rename).
-  const [groupName, setGroupName] = useState(init.groupName ?? '')
   // The expense's category icon: picked from its name until chosen by hand.
   const [emoji, setEmojiState] = useState<string>(() => categoryForTitle(init.title ?? '').emoji)
   const [catByHand, setCatByHand] = useState(false)
@@ -179,15 +172,9 @@ export function SplitNewPage() {
     setBusy(true); setError('')
     try {
       const out = await createSplit({
-        title: title.trim(), emoji, total, myShare: shares[0] ?? 0, sourceTx: init.sourceTx ?? null, group: init.group ?? null,
+        title: title.trim(), emoji, total, myShare: shares[0] ?? 0, sourceTx: init.sourceTx ?? null,
         members: picked.map((p, i) => ({ username: p.username, userId: p.userId, amount: shares[i + 1] })),
       })
-      // The group's name changed here: saved for everyone in the group. The
-      // expense is already made either way - a failed rename only keeps the old name.
-      const gName = groupName.trim()
-      if (init.group && out.splitId && gName && gName !== (init.groupName ?? '').trim()) {
-        await renameSplitGroup(out.splitId, gName, init.groupEmoji ?? null).catch(e => console.warn('[split] group name not saved:', e))
-      }
       setCreated(out)
       setStep('sent')
     } catch (e) {
@@ -215,17 +202,6 @@ export function SplitNewPage() {
               aria-label="Bill total"
               style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', textAlign: 'center', fontSize: 40, fontWeight: 700, letterSpacing: '-1px', color: 'var(--text-primary)', marginTop: 6 }} />
           </div>
-          {init.group && (
-            <div style={card}>
-              <div style={subStyle}>Group name</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                <span aria-hidden style={{ fontSize: 20 }}>{init.groupEmoji || '👥'}</span>
-                <input value={groupName} maxLength={40} onChange={e => setGroupName(e.target.value)} placeholder="e.g. Goa Trip" aria-label="Group name"
-                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 17, fontWeight: 650, color: 'var(--text-primary)', minWidth: 0 }} />
-              </div>
-              <div style={{ ...subStyle, marginTop: 6, fontSize: 12.5 }}>This expense is added to this group. Change the name here for everyone in it.</div>
-            </div>
-          )}
           <TitleCard title={title} setTitle={setTitle} emoji={emoji} onPick={pickCategory} />
         </>)}
 

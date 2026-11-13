@@ -142,7 +142,7 @@ function changed() {
  * payment request card. A card that couldn't be posted doesn't undo the split:
  * the request stands, the tracker shows it, and Remind still reaches them.
  */
-export async function createSplit(p: { title: string; emoji?: string | null; total: number; myShare: number; members: SplitMemberInput[]; sourceTx?: string | null; group?: string | null }): Promise<CreatedSplit> {
+export async function createSplit(p: { title: string; emoji?: string | null; total: number; myShare: number; members: SplitMemberInput[]; sourceTx?: string | null }): Promise<CreatedSplit> {
   const { data, error } = await supabase.rpc('split_create', {
     p_title: p.title.trim(), p_emoji: p.emoji || null, p_total: p.total, p_my_share: p.myShare,
     p_members: p.members.map(m => ({ username: m.username.replace(/^@/, '').replace(/\.arc$/i, ''), amount: m.amount })),
@@ -151,13 +151,6 @@ export async function createSplit(p: { title: string; emoji?: string | null; tot
   fail(error)
   const requests: CreatedSplitRequest[] = ((data as any)?.requests ?? []).map((r: any) => ({ ...r, amount: num(r.amount) }))
   const splitId = String((data as any)?.splitId ?? '')
-  // "Split again with group": the new split joins that group (same entry in
-  // Chats, same thread). The split itself is made either way; if joining
-  // fails it simply stands as its own group.
-  if (p.group && splitId) {
-    const { error: joinErr } = await supabase.rpc('split_join_group', { p_split: splitId, p_group: p.group })
-    if (joinErr) console.warn('[split] could not add to the group:', joinErr.message)
-  }
   const notPosted: string[] = []
   const [{ sendChatText }, { paymentRequestMessage }, { formatAmount }, { markPaymentRequestCreated }] = await Promise.all([
     import('./chatSend'), import('./merchantPay'), import('./utils'), import('./merchantPayBasics'),
@@ -236,14 +229,6 @@ export async function mySplitGroups(): Promise<SplitGroup[]> {
   const { data, error } = await supabase.rpc('my_split_groups')
   fail(error)
   return ((data ?? []) as any[]).map(g => ({ ...g, groupId: String(g.groupId || g.id), groupName: String(g.groupName || g.title || 'Split'), groupEmoji: g.groupName ? (g.groupEmoji ?? null) : (g.emoji ?? null), total: num(g.total), people: num(g.people), paidCount: num(g.paidCount), requests: num(g.requests), lastIsMe: !!g.lastIsMe }))
-}
-
-/** Rename a group (anyone in it); posted in the group's thread. */
-export async function renameSplitGroup(splitId: string, name: string, emoji: string | null): Promise<{ groupName: string; groupEmoji: string | null }> {
-  const { data, error } = await supabase.rpc('split_group_rename', { p_split: splitId, p_name: name.trim(), p_emoji: emoji || null })
-  fail(error)
-  changed()
-  return { groupName: String((data as any)?.groupName ?? name), groupEmoji: (data as any)?.groupEmoji ?? null }
 }
 
 export async function splitMessages(splitId: string): Promise<SplitMessage[]> {
