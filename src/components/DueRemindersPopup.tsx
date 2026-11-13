@@ -101,9 +101,10 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
   // Switching cards slides them (old out, new in - no blank frame between);
   // swipe left / right on the card does the same.
   const [dir, setDir] = useState(1)
-  // The card's height follows the item shown (eased, not snapped).
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [h, setH] = useState<number | 'auto'>('auto')
+  // Every card the same size: the tallest of all the reminders shown (each
+  // one measured off-screen), so switching never changes the card's shape.
+  const measureRef = useRef<HTMLDivElement>(null)
+  const [h, setH] = useState<number | null>(null)
   const maxH = typeof window !== 'undefined' ? Math.max(320, window.innerHeight - 190) : 600
   const go = (i: number) => {
     if (busy || i === at || i < 0 || i >= list.length) return
@@ -111,15 +112,16 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
   }
 
   const r = list[at]
-  const code = open ? r?.code : undefined
+  const listKey = open ? list.map(x => x.code).join(',') + (err ? '|err' : '') : ''
   useLayoutEffect(() => {
-    const el = contentRef.current
-    if (!code || !el) { setH('auto'); return }
-    setH(el.offsetHeight)
-    const ro = new ResizeObserver(() => setH(el.offsetHeight))
-    ro.observe(el)
+    const box = measureRef.current
+    if (!listKey || !box) { setH(null); return }
+    const measure = () => setH(Math.max(0, ...Array.from(box.children, c => (c as HTMLElement).offsetHeight)))
+    measure()
+    const ro = new ResizeObserver(measure)
+    Array.from(box.children).forEach(c => ro.observe(c))
     return () => ro.disconnect()
-  }, [code])
+  }, [listKey])
   const hide = () => { if (!r || busy) return; hideReminder(wallet, r.code); drop(r.code) }
   const pay = async () => {
     if (!r || busy) return
@@ -141,17 +143,76 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
   }
 
   const n = list.length
-  const what = !r ? '' : r.kind === 'split' && r.split
-    ? `${r.split.emoji ? r.split.emoji + ' ' : ''}${r.split.title || 'Split Expense'} · split with ${r.split.people} people`
-    : r.kind === 'bill' ? `Bill ${shortOrderNumber(r.orderNumber) || ''}`.trim()
-    : r.note ? `“${r.note}”` : `Request ${shortOrderNumber(r.orderNumber) || ''}`.trim()
-  const sub = !r ? '' : r.kind === 'split' && r.split
-    ? `Your share of ${money(r.split.total)} · USDC`
-    : `USDC${r.fromUsername ? ' · ' + r.fromUsername : ''}`
-  const chip = !r ? null : r.kind === 'split' && r.split
-    ? { text: `${r.split.paid} of ${r.split.people} already paid`, late: false, ok: true }
-    : (() => { const c = dueChip(r.dueDate); return c ? { ...c, ok: false } : null })()
-  const partly = r && r.due < r.amount - 1e-9
+
+  // One reminder's card contents (shown, and measured off-screen for the
+  // shared height). `fill`: stretched to the card, Pay / Hide at its foot.
+  const body = (x: DueRequest, idx: number, fill: boolean) => {
+    const what = x.kind === 'split' && x.split
+      ? `${x.split.emoji ? x.split.emoji + ' ' : ''}${x.split.title || 'Split Expense'} · split with ${x.split.people} people`
+      : x.kind === 'bill' ? `Bill ${shortOrderNumber(x.orderNumber) || ''}`.trim()
+      : x.note ? `“${x.note}”` : `Request ${shortOrderNumber(x.orderNumber) || ''}`.trim()
+    const sub = x.kind === 'split' && x.split ? `Your share of ${money(x.split.total)} · USDC` : `USDC${x.fromUsername ? ' · ' + x.fromUsername : ''}`
+    const chip = x.kind === 'split' && x.split
+      ? { text: `${x.split.paid} of ${x.split.people} already paid`, late: false, ok: true }
+      : (() => { const c = dueChip(x.dueDate); return c ? { ...c, ok: false } : null })()
+    const partly = x.due < x.amount - 1e-9
+    const shown = idx === at
+    return (
+      <div className="flex flex-col" style={{ height: fill ? '100%' : undefined, background: 'var(--surface)' }}>
+        <div className="relative text-center text-white shrink-0" style={{ padding: '22px 20px 54px', background: BAND[x.kind] }}>
+          {n > 1 && (
+            <span className="absolute font-bold" style={{ top: 14, right: 16, fontSize: 11.5, background: 'rgba(255,255,255,.2)', padding: '3px 8px', borderRadius: 99 }}>
+              {idx + 1} of {n}
+            </span>
+          )}
+          <div className="font-bold" style={{ fontSize: 17 }}>{TITLE[x.kind]}</div>
+          {topLine(x) && <div style={{ fontSize: 13, opacity: 0.9, marginTop: 4 }}>{topLine(x)}</div>}
+        </div>
+        <div className="relative mx-auto flex items-center justify-center rounded-full shrink-0"
+          style={{ width: 76, height: 76, marginTop: -38, background: 'var(--surface)', boxShadow: '0 4px 14px rgba(0,0,0,.15)' }}>
+          <Avatar name={x.fromName} src={x.fromAvatar} style={{ width: 64, height: 64, fontSize: 26 }} />
+        </div>
+        <div className="text-center flex flex-col flex-1" style={{ padding: '12px 22px 14px' }}>
+          <div className="font-bold truncate" style={{ fontSize: 18, color: 'var(--text-primary)' }}>{x.fromName}</div>
+          {what && <div className="line-clamp-2" style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginTop: 3 }}>{what}</div>}
+          <div className="font-extrabold tabular-nums" style={{ fontSize: 38, letterSpacing: -1, color: 'var(--text-primary)', marginTop: 14 }}>{money(x.due)}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 2 }}>
+            {partly ? `${money(x.due)} left of ${money(x.amount)} · USDC` : sub}
+          </div>
+          {x.kind === 'bill' && x.items && x.items.length > 0 && (
+            <div className="grid text-left" style={{ marginTop: 12, fontSize: 12.5, color: 'var(--text-secondary)', borderTop: '1px solid var(--border)', paddingTop: 10, gridTemplateColumns: '1fr auto', gap: '3px 10px' }}>
+              {x.items.slice(0, 3).map((it, k) => (
+                <ItemRow key={k} name={`${it.name} × ${it.qty}`} total={Number(it.total ?? it.qty * it.price)} />
+              ))}
+              {x.items.length > 3 && <span style={{ gridColumn: '1 / -1' }}>+{x.items.length - 3} more</span>}
+            </div>
+          )}
+          {chip && (
+            <span className="self-center font-bold" style={{
+              fontSize: 12, padding: '4px 10px', borderRadius: 99, marginTop: 10,
+              background: chip.ok ? 'rgb(var(--brand-rgb) / 0.12)' : chip.late ? 'rgb(var(--danger-rgb) / 0.12)' : 'rgb(var(--warning-rgb) / 0.16)',
+              color: chip.ok ? 'var(--brand-text)' : chip.late ? 'var(--danger-text)' : 'var(--warning-text)',
+            }}>{chip.text}</span>
+          )}
+          {/* Pay / Hide always at the same place, at the card's foot. */}
+          <div className="mt-auto" style={{ paddingTop: 14 }}>
+            {err && shown && <div style={{ fontSize: 12.5, color: 'var(--danger-text)', marginBottom: 8 }}>{err}</div>}
+            <button type="button" onClick={pay} disabled={busy} tabIndex={fill ? undefined : -1}
+              className="w-full flex items-center justify-center font-bold text-white active:scale-[0.98] transition-transform disabled:opacity-70"
+              style={{ height: 52, borderRadius: 16, background: 'var(--brand)', fontSize: 16 }}>
+              {busy && shown ? 'Opening…' : x.kind === 'bill' ? 'Pay bill' : `Pay ${money(x.due)}`}
+            </button>
+            <button type="button" onClick={hide} disabled={busy} tabIndex={fill ? undefined : -1}
+              className="w-full font-bold disabled:opacity-60" style={{ marginTop: 6, padding: '8px 0', fontSize: 14.5, color: 'var(--danger-text)' }}>
+              Hide reminder
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  const cardW = 'min(318px, calc(100vw - 32px))'
+  const cardH = h == null ? undefined : Math.min(h, maxH)
 
   return createPortal(
     <AnimatePresence>
@@ -161,94 +222,48 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
           exit={{ opacity: 0, transition: { duration: 0.18 } }}
           onKeyDown={e => { if (e.key === 'Escape') closeAll() }}>
           <PopupDim background="rgba(0,0,0,0.5)" />
+          {/* Every reminder laid out off-screen at the card's width: the card
+              takes the tallest one's height (the same shape for all). */}
+          <div ref={measureRef} aria-hidden className="fixed pointer-events-none"
+            style={{ left: -10000, top: 0, width: cardW, visibility: 'hidden' }}>
+            {list.map((x, k) => <div key={x.code}>{body(x, k, false)}</div>)}
+          </div>
           <div className="absolute inset-0 flex flex-col items-center" style={{ padding: 'calc(env(safe-area-inset-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 36px)' }}>
           <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-            {/* The card is solid from its first frame (no fade-in: Home showed
-                through it) and stays solid: only what's inside slides between
-                items (a card that faded let Home show through it), and its
-                height eases to the next item's. Swipe left / right to switch. */}
+            {/* The card itself never moves while swiping: it is solid from its
+                first frame (a fade showed Home through it) and stays put - only
+                its contents follow the finger and slide to the next one. */}
             <motion.div
               initial={{ scale: 0.94, y: 12 }} animate={{ scale: 1, y: 0 }}
               transition={{ type: 'spring', stiffness: 420, damping: 38 }}
-              drag={n > 1 && !busy ? 'x' : false} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.35} dragSnapToOrigin
-              onDragEnd={(_, info) => {
-                const swipe = info.offset.x + info.velocity.x * 0.2
-                if (swipe < -60) go(at + 1)
-                else if (swipe > 60) go(at - 1)
-              }}
-              className="touch-pan-y overflow-hidden"
-              style={{ width: 'min(318px, calc(100vw - 32px))', borderRadius: 28, background: 'var(--surface)', boxShadow: '0 30px 60px -20px rgba(0,0,0,.5)' }}>
-            {/* Height on its own layer: tied to the pop-in it restarted it
-                and blanked the card for a frame. */}
-            <motion.div className="relative" initial={false} animate={{ height: h }}
-              transition={{ type: 'spring', stiffness: 420, damping: 38 }}
-              style={{ overflowX: 'hidden', overflowY: h === 'auto' || h < maxH ? 'hidden' : 'auto', maxHeight: maxH }}>
+              className="relative overflow-hidden"
+              style={{ width: cardW, height: cardH, borderRadius: 28, background: 'var(--surface)', boxShadow: '0 30px 60px -20px rgba(0,0,0,.5)' }}>
             <AnimatePresence initial={false} mode="popLayout" custom={dir}>
-            <motion.div key={r.code} ref={contentRef} custom={dir}
+            <motion.div key={r.code} custom={dir}
               variants={CARD} initial="enter" animate="center" exit="exit"
               transition={SLIDE}
-              style={{ background: 'var(--surface)' }}>
-              <div className="relative text-center text-white" style={{ padding: '22px 20px 54px', background: BAND[r.kind] }}>
-                {n > 1 && (
-                  <span className="absolute font-bold" style={{ top: 14, right: 16, fontSize: 11.5, background: 'rgba(255,255,255,.2)', padding: '3px 8px', borderRadius: 99 }}>
-                    {at + 1} of {n}
-                  </span>
-                )}
-                <div className="font-bold" style={{ fontSize: 17 }}>{TITLE[r.kind]}</div>
-                {topLine(r) && <div style={{ fontSize: 13, opacity: 0.9, marginTop: 4 }}>{topLine(r)}</div>}
-              </div>
-              <div className="relative mx-auto flex items-center justify-center rounded-full"
-                style={{ width: 76, height: 76, marginTop: -38, background: 'var(--surface)', boxShadow: '0 4px 14px rgba(0,0,0,.15)' }}>
-                <Avatar name={r.fromName} src={r.fromAvatar} style={{ width: 64, height: 64, fontSize: 26 }} />
-              </div>
-              <div className="text-center" style={{ padding: '12px 22px 22px' }}>
-                <div className="font-bold truncate" style={{ fontSize: 18, color: 'var(--text-primary)' }}>{r.fromName}</div>
-                {what && <div className="line-clamp-2" style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginTop: 3 }}>{what}</div>}
-                <div className="font-extrabold tabular-nums" style={{ fontSize: 38, letterSpacing: -1, color: 'var(--text-primary)', marginTop: 14 }}>{money(r.due)}</div>
-                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 2 }}>
-                  {partly ? `${money(r.due)} left of ${money(r.amount)} · USDC` : sub}
-                </div>
-                {r.kind === 'bill' && r.items && r.items.length > 0 && (
-                  <div className="grid text-left" style={{ marginTop: 12, fontSize: 12.5, color: 'var(--text-secondary)', borderTop: '1px solid var(--border)', paddingTop: 10, gridTemplateColumns: '1fr auto', gap: '3px 10px' }}>
-                    {r.items.slice(0, 4).map((it, i) => (
-                      <ItemRow key={i} name={`${it.name} × ${it.qty}`} total={Number(it.total ?? it.qty * it.price)} />
-                    ))}
-                    {r.items.length > 4 && <span style={{ gridColumn: '1 / -1' }}>+{r.items.length - 4} more</span>}
-                  </div>
-                )}
-                {chip && (
-                  <span className="inline-block font-bold" style={{
-                    fontSize: 12, padding: '4px 10px', borderRadius: 99, marginTop: 10,
-                    background: chip.ok ? 'rgb(var(--brand-rgb) / 0.12)' : chip.late ? 'rgb(var(--danger-rgb) / 0.12)' : 'rgb(var(--warning-rgb) / 0.16)',
-                    color: chip.ok ? 'var(--brand-text)' : chip.late ? 'var(--danger-text)' : 'var(--warning-text)',
-                  }}>{chip.text}</span>
-                )}
-                {err && <div style={{ fontSize: 12.5, color: 'var(--danger-text)', marginTop: 10 }}>{err}</div>}
-                <button type="button" onClick={pay} disabled={busy}
-                  className="w-full flex items-center justify-center font-bold text-white active:scale-[0.98] transition-transform disabled:opacity-70"
-                  style={{ marginTop: 18, height: 52, borderRadius: 16, background: 'var(--brand)', fontSize: 16 }}>
-                  {busy ? 'Opening…' : r.kind === 'bill' ? 'Pay bill' : `Pay ${money(r.due)}`}
-                </button>
-                <button type="button" onClick={hide} disabled={busy}
-                  className="w-full font-bold disabled:opacity-60" style={{ marginTop: 6, padding: '8px 0', fontSize: 14.5, color: 'var(--danger-text)' }}>
-                  Hide reminder
-                </button>
-                {n > 1 && (
-                  <div className="flex justify-center" style={{ gap: 6, marginTop: 8 }}>
-                    {list.map((x, i) => (
-                      <button key={x.code} type="button" aria-label={`Reminder ${i + 1} of ${n}`} onClick={() => go(i)}
-                        style={{ padding: '6px 0' }}>
-                        <i className="block transition-all" style={{ width: i === at ? 16 : 6, height: 6, borderRadius: 9, background: i === at ? 'var(--brand)' : 'rgba(128,128,128,.4)' }} />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              drag={n > 1 && !busy ? 'x' : false} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.6} dragSnapToOrigin
+              onDragEnd={(_, info) => {
+                const swipe = info.offset.x + info.velocity.x * 0.2
+                if (swipe < -60 && at < n - 1) go(at + 1)
+                else if (swipe > 60 && at > 0) go(at - 1)
+              }}
+              className="absolute inset-0 touch-pan-y"
+              style={{ overflowY: h != null && h > maxH ? 'auto' : 'hidden' }}>
+              {body(r, at, true)}
             </motion.div>
             </AnimatePresence>
             </motion.div>
-            </motion.div>
           </div>
+          {n > 1 && (
+            <div className="flex justify-center shrink-0" style={{ gap: 6, marginTop: 14 }}>
+              {list.map((x, k) => (
+                <button key={x.code} type="button" aria-label={`Reminder ${k + 1} of ${n}`} onClick={() => go(k)} style={{ padding: '6px 0' }}>
+                  <i className="block transition-all" style={{ width: k === at ? 16 : 6, height: 6, borderRadius: 9, background: k === at ? '#fff' : 'rgba(255,255,255,.45)' }} />
+                </button>
+              ))}
+            </div>
+          )}
             <button type="button" onClick={closeAll} disabled={busy} className="shrink-0 text-center text-white" style={{ marginTop: 18 }}>
               <span className="mx-auto flex items-center justify-center rounded-full" style={{ width: 48, height: 48, background: 'rgba(255,255,255,.18)' }}>
                 <X size={22} />
