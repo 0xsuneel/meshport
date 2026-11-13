@@ -296,6 +296,7 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
       trySubmit()
       const w = bioWanted
       if (w && Date.now() < w.until && !busy) { bioWanted = null; const k = bioCell; void runFingerprint(w.biometric, k) }
+      maybeAutoBio()
     }
     paint()
   }
@@ -323,6 +324,7 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
     }
     busy = false
     digits = ''
+    if (bioMode) { bioMode = false; entry.classList.remove('bio') }
     dots.classList.remove('shake'); void dots.offsetWidth; dots.classList.add('shake', 'bad')
     setTimeout(() => { dots.classList.remove('bad'); paint() }, 500)
     if (d.code === 'rate-limited') {
@@ -342,6 +344,7 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
   // the first one (else dropped). Nothing is submitted until it is.
   let earlyTimer: ReturnType<typeof setTimeout> | null = null
   const press = (digit: string) => {
+    if (bioMode) { if (bioRunning) return; leaveBio() }
     if (busy || lockedUntil > Date.now() || digits.length >= LENGTH) return
     if (visKnown && !visible) {
       if (everVisible) return
@@ -412,8 +415,81 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
 
   const entry = el('div', 'entry')
   entry.append(dots, say, pad)
+
+  // ── Fingerprint / Face first ──────────────────────────────────────────────
+  // Biometric on: the page opens on a fingerprint panel, not the keypad, and
+  // the prompt opens by itself once the page is confirmed in view. Cancelled
+  // or failed - or "Use passcode" - and it switches to the keypad (which sits
+  // underneath all along, so the sheet keeps its height). A browser that only
+  // opens the prompt after a tap here (iPhone Safari refuses it at once) keeps
+  // the panel with "Tap to use …": one tap on the big key.
+  const bioFirst = el('div', 'bio-first')
+  const bioBtn = el('button', 'bio-big'); bioBtn.type = 'button'
+  const bioSay = el('p', 'bio-say', '')
+  bioSay.setAttribute('role', 'status')
+  const bioAlt = el('button', 'bio-alt', 'Use passcode'); bioAlt.type = 'button'
+  bioFirst.append(bioBtn, bioSay, bioAlt)
+  entry.append(bioFirst)
+  let bioMode = false
+  let bioRunning = false
+  let bioAutoDone = false
+  let bioOf: ConfirmBiometric | null = null
+  const bioName = (b: ConfirmBiometric) => b.label || 'Fingerprint'
+  const bioWord = (b: ConfirmBiometric) => (/face/i.test(bioName(b)) ? bioName(b) : bioName(b).toLowerCase())
+  function leaveBio(text = '', bad = false) {
+    if (!bioMode) return
+    bioMode = false
+    entry.classList.remove('bio')
+    sayIt(text, bad)
+    paint()
+    tellSize()
+  }
+  const enterBio = (b: ConfirmBiometric) => {
+    if (bioMode || digits || busy || held || lockedUntil > Date.now()) return
+    bioOf = b
+    bioMode = true
+    bioBtn.replaceChildren(fingerprintIcon(b.label))
+    bioBtn.setAttribute('aria-label', `Use ${bioWord(b)}`)
+    bioSay.textContent = `Use ${bioWord(b)} to approve`
+    entry.classList.add('bio')
+    maybeAutoBio()
+  }
+  async function bioAttempt(auto: boolean) {
+    const b = bioOf
+    if (!bioMode || bioRunning || busy || !req || !b || lockedUntil > Date.now()) return
+    // Only on a page confirmed in view (as the keypad): a tap before that waits for it.
+    if (!visKnown || !visible) {
+      if (!auto) { bioWanted = null; bioAutoDone = false; bioSay.textContent = 'One moment…' }
+      return
+    }
+    bioRunning = true
+    bioBtn.classList.add('trying')
+    bioSay.textContent = `Waiting for ${bioWord(b)}…`
+    const started = performance.now()
+    let passcode: string | null = null
+    let err: unknown = null
+    try { passcode = await passcodeFromFingerprint(b) } catch (e) { err = e }
+    bioRunning = false
+    bioBtn.classList.remove('trying')
+    if (!bioMode) return // switched to the passcode meanwhile
+    if (passcode) { bioSay.textContent = 'Checking…'; submit(passcode, 'biometric'); return }
+    const name = err instanceof DOMException ? err.name : ''
+    // Refused at once, with no prompt shown: this browser wants a tap here first.
+    if (auto && name === 'NotAllowedError' && performance.now() - started < 700) { bioSay.textContent = `Tap to use ${bioWord(b)}`; return }
+    const cancelled = name === 'NotAllowedError' || name === 'AbortError'
+    leaveBio(cancelled ? '' : `${bioName(b)} didn't work - enter your passcode`, !cancelled)
+  }
+  function maybeAutoBio() {
+    if (!bioMode || bioAutoDone || !req || !visKnown || !visible) return
+    bioAutoDone = true
+    void bioAttempt(true)
+  }
+  bioBtn.addEventListener('click', () => { void bioAttempt(false) }) // a tap: WebAuthn gets its activation
+  bioAlt.addEventListener('click', () => leaveBio())
+
   show(cardBox, entry)
   visKnown = !watchVisibility(refreshVisibility)
+  if (canFingerprint(req?.biometric ?? null)) enterBio(req!.biometric!)
   paint()
   tellApp({ state: 'ready' })
 
@@ -424,6 +500,8 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
       cardBox.replaceChildren(card(next.view, next.summary ?? appSummary))
       if (canFingerprint(next.biometric)) { const k = fingerprintKey(next.biometric); bioCell.replaceWith(k); bioCell = k }
       tellSize()
+      // Biometric on, nothing typed yet: the fingerprint panel, and its prompt.
+      if (canFingerprint(next.biometric) && !held && !digits) enterBio(next.biometric)
       if (held) {
         const h = held; held = null
         if (agrees(next.view, appSummary)) send(h.passcode, h.via)
