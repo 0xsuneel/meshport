@@ -23,7 +23,7 @@ describe('arc-rpc race', () => {
     // Let the staggered attempts start before the first answers.
     const slowFirst = vi.mocked(fetch)
     slowFirst.mockClear(); calls = 0; signals.length = 0
-    const r = await mod.forward({ jsonrpc: '2.0', id: 7, method: 'eth_blockNumber', params: [] })
+    const r = await mod.forward({ jsonrpc: '2.0', id: 7, method: 'eth_chainId', params: [] })
     expect(r.result).toBe('0x1')
 
     await new Promise(res => setTimeout(res, 400)) // past every stagger
@@ -40,7 +40,7 @@ describe('arc-rpc race', () => {
     }))
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     const mod: any = await import('../../api/arc-rpc.js')
-    const r = await mod.forward({ jsonrpc: '2.0', id: 8, method: 'eth_blockNumber', params: [] })
+    const r = await mod.forward({ jsonrpc: '2.0', id: 8, method: 'eth_chainId', params: [] })
     expect(r.result).toBe('0x2')
     expect(errors.mock.calls.some(c => /failed: HTTP 503/.test(String(c[0])))).toBe(true)
   })
@@ -109,8 +109,68 @@ describe('arc-rpc: a JSON-RPC answer sent with HTTP 400', () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(console, 'log').mockImplementation(() => {})
     const mod: any = await import('../../api/arc-rpc.js')
-    const r = await mod.forward({ jsonrpc: '2.0', id: 10, method: 'eth_blockNumber', params: [] })
+    const r = await mod.forward({ jsonrpc: '2.0', id: 10, method: 'eth_chainId', params: [] })
     expect(r.result).toBe('0x3')
     expect(errors.mock.calls.some(c => /failed: HTTP 400/.test(String(c[0])))).toBe(true)
+  })
+})
+
+// Field 13 Nov: one endpoint answered fastest with a chain head 320 blocks old
+// (13 of 15 calls) - payments waited for receipts it didn't have yet.
+describe('arc-rpc chain-head freshness', () => {
+  beforeEach(() => { vi.resetModules(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks() })
+
+  /** Endpoints by host → their head; the stale one answers first. */
+  function chain(heads: Record<string, number>, seen: string[] = []) {
+    vi.stubGlobal('fetch', vi.fn((url: string, init: any) => {
+      const body = JSON.parse(init.body)
+      const host = new URL(url).host
+      seen.push(`${host} ${body.method}`)
+      const head = heads[host]
+      const delay = head === Math.min(...Object.values(heads)) ? 5 : 60 // the stale one is the fastest
+      const result = body.method === 'eth_blockNumber' ? '0x' + head.toString(16)
+        : body.method === 'eth_getTransactionReceipt' ? (head >= 1000 ? { blockNumber: '0x3e8', status: '0x1' } : null)
+        : '0x1'
+      return new Promise(res => setTimeout(() => res(new Response(JSON.stringify({ jsonrpc: '2.0', id: body.id, result }), { status: 200 })), delay))
+    }))
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  }
+
+  it('eth_blockNumber is the highest head, not the fastest answer - and the stale endpoint is benched', async () => {
+    chain({ 'rpc.testnet.arc.io': 1000, 'rpc.blockdaemon.testnet.arc.io': 1001, 'rpc.drpc.testnet.arc.io': 680, 'rpc.quicknode.testnet.arc.io': 1000 })
+    const mod: any = await import('../../api/arc-rpc.js')
+    const r = await mod.forward({ jsonrpc: '2.0', id: 3, method: 'eth_blockNumber', params: [] })
+    expect(parseInt(r.result, 16)).toBe(1001)
+    const order: string[] = mod._ranking.orderEndpoints().map((u: string) => new URL(u).host)
+    expect(order).not.toContain('rpc.drpc.testnet.arc.io')
+  })
+
+  it('a receipt is then read from a current endpoint, not the stale one', async () => {
+    const seen: string[] = []
+    chain({ 'rpc.testnet.arc.io': 1000, 'rpc.blockdaemon.testnet.arc.io': 1000, 'rpc.drpc.testnet.arc.io': 680, 'rpc.quicknode.testnet.arc.io': 1000 }, seen)
+    const mod: any = await import('../../api/arc-rpc.js')
+    await mod.forward({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] })
+    seen.length = 0
+    const rc = await mod.forward({ jsonrpc: '2.0', id: 2, method: 'eth_getTransactionReceipt', params: ['0x' + 'ab'.repeat(32)] })
+    expect(rc.result).toEqual({ blockNumber: '0x3e8', status: '0x1' })
+    expect(seen.some(s => s.startsWith('rpc.drpc.testnet.arc.io') && s.endsWith('eth_getTransactionReceipt'))).toBe(false)
+  })
+
+  it('a stale endpoint is found even when nothing asks for eth_blockNumber (checked alongside a receipt read)', async () => {
+    chain({ 'rpc.testnet.arc.io': 1000, 'rpc.blockdaemon.testnet.arc.io': 1000, 'rpc.drpc.testnet.arc.io': 680, 'rpc.quicknode.testnet.arc.io': 1000 })
+    const mod: any = await import('../../api/arc-rpc.js')
+    await mod.forward({ jsonrpc: '2.0', id: 2, method: 'eth_getTransactionReceipt', params: ['0x' + 'cd'.repeat(32)] })
+    await new Promise(res => setTimeout(res, 500)) // the background check finishes
+    const order: string[] = mod._ranking.orderEndpoints().map((u: string) => new URL(u).host)
+    expect(order).not.toContain('rpc.drpc.testnet.arc.io')
+  })
+
+  it('every endpoint behind: still answered (a lagging node beats none)', async () => {
+    chain({ 'rpc.testnet.arc.io': 500, 'rpc.blockdaemon.testnet.arc.io': 500, 'rpc.drpc.testnet.arc.io': 500, 'rpc.quicknode.testnet.arc.io': 500 })
+    const mod: any = await import('../../api/arc-rpc.js')
+    const r = await mod.forward({ jsonrpc: '2.0', id: 4, method: 'eth_chainId', params: [] })
+    expect(r.result).toBe('0x1')
+    expect(mod._ranking.orderEndpoints().length).toBeGreaterThan(0)
   })
 })
