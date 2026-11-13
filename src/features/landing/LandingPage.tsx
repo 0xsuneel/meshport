@@ -5,6 +5,7 @@ import { PaymentStory } from './components/PaymentStory'
 import { FeaturesGrid } from './components/FeaturesGrid'
 import { MultichainStory } from './components/MultichainStory'
 import { SelfCustody } from './components/SelfCustody'
+import { PrivacySection } from './components/PrivacySection'
 import { HowItWorks } from './components/HowItWorks'
 import { GuideSection } from './components/GuideSection'
 import { DashboardShowcase } from './components/DashboardShowcase'
@@ -30,6 +31,7 @@ export function LandingPage() {
         <FeaturesGrid />
         <MultichainStory />
         <SelfCustody />
+        <PrivacySection />
         <HowItWorks />
         <GuideSection />
         <DashboardShowcase />

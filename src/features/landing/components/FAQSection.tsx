@@ -19,7 +19,11 @@ const FAQS = [
   },
   {
     q: 'Are my chats private?',
-    a: 'Yes. Messages are end-to-end encrypted: they are locked on your device and only unlocked on the other person’s. Each person’s chat key is signed by their wallet, and MeshPort warns you if a contact’s key ever changes. Messages are deleted from our servers once delivered and live only on your phone - there’s no chat backup, so a new device shows your payment history but not old messages.',
+    a: 'Yes. Every message, photo and file is end-to-end encrypted on your phone with its own 256-bit AES-GCM key, sealed so only your phone and the other person’s can open it (X25519). MeshPort relays it but can’t read it. Each chat key is signed by its wallet, and the app warns you if a contact’s key ever changes. Messages are deleted from our servers once delivered and live only on your phone - there’s no chat backup, so a new device shows your payment history but not old messages.',
+  },
+  {
+    q: 'What data does MeshPort collect?',
+    a: 'Only what a payments app needs: your .arc username and public wallet address, a display name and profile photo if you add them, and your payment history. MeshPort never asks for your email, phone number, real name, ID or location, never reads your chats or phone contacts, never gets your keys, passcode or biometrics, and has no ad or analytics trackers. Business, P2P and support details are kept only if you use those features.',
   },
   {
     q: 'What is Arc?',
