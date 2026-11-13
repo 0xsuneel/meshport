@@ -15,6 +15,7 @@
 import '@fontsource-variable/geist'
 import { CONFIRM_CHANNEL, parseOrigins, type ConfirmBiometric, type ConfirmSummary } from '@/wallet/protocol'
 import type { IntentView } from './intent'
+import { splitAmount, compare, agrees } from './confirmMatch'
 
 const PARENTS = parseOrigins(import.meta.env.VITE_WALLET_PARENT_ORIGINS as string | undefined
   ?? (import.meta.env.DEV ? 'http://localhost:5173,http://127.0.0.1:5173' : ''))
@@ -108,11 +109,6 @@ const shortAddress = (a: string) => {
 const HIDDEN_ROWS = new Set(['Network fee', 'For', 'May also call', 'Network', 'Signing for', 'Data', 'Transfers', 'Size', 'Contract', 'Paid through', 'Order'])
 const MAX_ROWS = 2
 /** "2.1 EURC" → ["2.1", "EURC"]; anything else (several tokens) stays whole. */
-function splitAmount(amount: string, token: string): [string, string] {
-  if (token) return [amount, token]
-  const m = /^([0-9][0-9.,]*) ([A-Za-z]+)$/.exec(amount.trim())
-  return m ? [m[1], m[2]] : [amount, '']
-}
 function summaryCard(o: { label: string; name: string; detail?: string; amount?: string; unit?: string }): HTMLElement {
   const c = el('section', 'card')
   c.append(el('div', 'badge', o.name.trim().charAt(0).toUpperCase() || '?'))
@@ -127,33 +123,6 @@ function summaryCard(o: { label: string; name: string; detail?: string; amount?:
     c.append(end)
   }
   return c
-}
-const num = (s: string | undefined) => { const n = parseFloat(String(s ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? n : NaN }
-/**
- * The wallet's reading next to the app's words: the amount and token the
- * wallet read, and whether the app's figure is that same amount (a spend
- * limit counts as the same when it covers it with up to 10% for fees).
- * Several tokens at once ("2 USDC + 1 EURC") never count as the app's one figure.
- */
-function compare(view: IntentView, summary: ConfirmSummary | null) {
-  const scope = view.to === 'may leave your wallet'
-  const [amount, unit] = splitAmount(view.amount, view.token)
-  const appN = num(summary?.amount), walletN = num(amount)
-  const single = !!unit || !/\+/.test(view.amount)
-  const sameUnit = !summary?.unit || !unit || summary.unit === unit
-  // A spend limit may sit above the amount by the route's fees: up to 10% plus
-  // 1 more (a cross-chain send's fee and margin). Larger than that, the card
-  // shows the wallet's own figure.
-  const same = single && sameUnit && Number.isFinite(appN) && Number.isFinite(walletN)
-    && (scope ? walletN >= appN && walletN <= appN * 1.1 + 1 + 1e-9 : Math.abs(walletN - appN) < 1e-9)
-  // The limit itself, when it is more than the amount: rounded UP to cents, never shown less than it is.
-  const limit = scope && same && walletN > appN + 1e-9 ? `${(Math.ceil(walletN * 100 - 1e-6) / 100).toString()} ${unit}` : null
-  return { scope, amount, unit, same, limit }
-}
-/** A passcode typed before the wallet's reading arrived may go ahead: it is what the card showed. */
-function agrees(view: IntentView | null, appSummary: ConfirmSummary | null): boolean {
-  if (!view) return true // nothing read (an app summary on its own) - as shown
-  return !view.warnings.length && compare(view, appSummary).same
 }
 function card(view: IntentView | null, summary: ConfirmSummary | null): HTMLElement {
   const wrap = el('div')
@@ -432,7 +401,7 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
       if (held) {
         const h = held; held = null
         if (agrees(next.view, appSummary)) send(h.passcode, h.via)
-        else { busy = false; digits = ''; sayIt('Check the details, then enter your passcode', true); paint() }
+        else { busy = false; digits = ''; sayIt('Check who gets paid, then enter your passcode', true); paint() }
       }
       paint()
     },
