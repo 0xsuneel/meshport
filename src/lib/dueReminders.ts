@@ -7,7 +7,9 @@
 //
 // "Hide reminder" hides one item from the popup for good (it stays payable
 // in chat and Activity). "Close all" keeps those items away for 12 hours;
-// something new that arrives meanwhile still shows (on its own).
+// something new that arrives meanwhile still shows (on its own). Nothing else
+// silences them: paying one (the rest show again back on Home), the app lock,
+// or simply opening the app again all leave the others due.
 // Both are this device's choice, per wallet.
 
 import { supabase } from './supabase'
@@ -55,7 +57,7 @@ export function seenCodes(wallet: string): Set<string> {
     return new Set(Array.isArray(v) ? v.filter((c): c is string => typeof c === 'string') : [])
   } catch { return new Set() }
 }
-/** The popup showed (or "Close all"): these items wait 12 h before showing again. */
+/** "Close all": these items wait 12 h before showing again. */
 export function snoozeReminders(wallet: string, codes: string[] = [], now = Date.now()) {
   write(key(wallet, 'closed'), String(now))
   if (!codes.length) return

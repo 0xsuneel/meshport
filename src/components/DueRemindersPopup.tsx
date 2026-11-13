@@ -15,7 +15,7 @@ import { PopupDim } from '@/components/ui/PopupDim'
 import { useBackLayer } from '@/lib/backLayers'
 import { shortOrderNumber } from '@/lib/orderLabels'
 import {
-  fetchDueRequests, hideReminder, snoozeReminders, remindersToShow,
+  fetchDueRequests, hideReminder, snoozeReminders, remindersToShow, visibleReminders, hiddenCodes,
   agoText, dueChip, type DueRequest,
 } from '@/lib/dueReminders'
 
@@ -32,6 +32,9 @@ const BAND = { split: 'var(--brand)', bill: '#B9761F', request: '#2B5C8A' } as c
 const TITLE = { split: 'Split Expense', bill: 'Bill Reminder', request: 'Payment Request' } as const
 /** Checked once per wallet per app session. */
 const checked = new Set<string>()
+// The person left the popup to pay one reminder: back on Home, the others
+// show again (a payment is not "close all"). Per wallet; cleared when shown.
+const resumeAfterPay = new Set<string>()
 
 export function money(n: number): string {
   const r = Math.round(n * 100) / 100
@@ -72,9 +75,13 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
       fetchDueRequests().then(all => {
         // Left Home or locked meanwhile: try again next time Home opens.
         if (stop || !alive.current || useAuthStore.getState().isLocked || window.location.pathname !== '/') { checked.delete(wallet); return }
-        const shown = remindersToShow(all, wallet)
+        // Only Close all starts the 12 h wait (and Hide removes one for good):
+        // being shown alone doesn't - else paying one reminder, or leaving
+        // Home, silenced all the others. Back from paying one: every reminder
+        // still open shows again (the one just paid is no longer due).
+        const resuming = resumeAfterPay.delete(wallet)
+        const shown = resuming ? visibleReminders(all, hiddenCodes(wallet)) : remindersToShow(all, wallet)
         if (!shown.length) return
-        snoozeReminders(wallet, shown.map(x => x.code))
         setList(shown); setAt(0); setOpen(true)
       }).catch(e => { checked.delete(wallet); console.warn('[due reminders]', e) })
     }, SHOW_AFTER_MS)
@@ -88,7 +95,8 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
   }, [busy, wallet, list])
   useBackLayer(open, closeAll)
   // Locked (or left Home) while open: close.
-  useEffect(() => { if (isLocked && open) setOpen(false) }, [isLocked, open])
+  // The app lock coming up isn't "close all" either: after unlocking, Home shows them again.
+  useEffect(() => { if (isLocked && open) { setOpen(false); if (wallet) checked.delete(wallet) } }, [isLocked, open, wallet])
 
   const drop = (code: string) => {
     const next = list.filter(r => r.code !== code)
@@ -132,6 +140,9 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
       if (!alive.current) return
       setBusy(false)
       if (!isOrderPayable(v)) { drop(r.code); return }
+      // Paying one is not closing them all: back on Home, the rest show again.
+      resumeAfterPay.add(wallet)
+      checked.delete(wallet)
       setOpen(false)
       navigate(orderPaySendUrl(v))
     } catch (e) {
