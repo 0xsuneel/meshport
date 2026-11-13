@@ -47,6 +47,14 @@ export const CIRCLE_CONTRACTS = new Map<string, string>([
   ['0x77777777dcc4d5a8b6e418fd04d8997ef11000ee', 'Circle Gateway'],
   ['0x0022222abe238cc2c7bb1f21003f0a260052475b', 'Circle Gateway'],
   ['0x2222222d7164433c4c09b0b0d809a9b52c04c205', 'Circle Gateway'],
+  // Circle Bridge Kit's bridge contract (@circle-fin/bridge-kit chains:
+  // BRIDGE_CONTRACT_EVM_TESTNET / _MAINNET): kit.bridge() burns through it.
+  // It moves USDC only through the approval the person gave it, which the
+  // limit counts. Missing here, a CCTP transfer (Arc -> Solana, 13 Nov) asked
+  // for the passcode a second time mid-burn: "A contract this wallet does
+  // not recognise".
+  ['0xc5567a5e3370d4dbfb0540025078e283e36a363d', 'Circle Bridge Kit'],
+  ['0xb3fa262d0fb521cc93be83d87b322b8a23daf3f0', 'Circle Bridge Kit'],
 ])
 const PERMIT2 = '0x000000000022d473030f116ddee9f6b43ac78ba3'
 /**

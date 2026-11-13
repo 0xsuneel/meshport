@@ -120,4 +120,22 @@ describe('spend limit policy', () => {
     // A nested field named "confirmation" is part of what was confirmed.
     expect(canonical('sign:typed-data', { address: me, typedData: { confirmation: 1 } })).not.toBe(canonical('sign:typed-data', { address: me, typedData: {} }))
   })
+
+  // Arc -> Solana over CCTP (13 Nov): kit.bridge() approves Circle's Bridge Kit
+  // contract and then calls it to burn. Both fit the one spend limit the person
+  // approved - no second passcode mid-burn - while an unknown contract still asks.
+  it("Circle's Bridge Kit contract fits a spend limit; an unknown contract doesn't", () => {
+    const KIT = '0xC5567a5E3370d4DBfB0540025078e283e36A363d'
+    const scope = parseScope({ limits: [{ asset: 'USDC', amount: '1.2' }] })
+    let left = { ...scope.limits }
+    const approve = classify(me, 'sign:transaction', { transaction: tx({ to: ARC_USDC, data: encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [KIT, 1_100_000n] }) }) })
+    const afterApprove = approve.ok ? fits(scope, left, approve) : null
+    expect(afterApprove).not.toBeNull()
+    left = afterApprove!
+    // The burn call itself (its own selector, no value): moves USDC only through the counted approval.
+    const burn = classify(me, 'sign:transaction', { transaction: tx({ to: KIT, data: '0x12345678' + '00'.repeat(64) }) })
+    expect(burn.ok && fits(scope, left, burn)).not.toBeNull()
+    const unknown = classify(me, 'sign:transaction', { transaction: tx({ to: them, data: '0x12345678' + '00'.repeat(64) }) })
+    expect(unknown.ok ? fits(scope, left, unknown) : null).toBeNull()
+  })
 })
