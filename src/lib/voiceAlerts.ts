@@ -1,15 +1,16 @@
 // src/lib/voiceAlerts.ts
 //
 // Merchant voice alerts: the phone plays the MeshPort chime, then says
-// "Received 24 dollars and 50 cents, on Mesport" for every merchant payment,
-// like a shop soundbox. English only. Settings are per device.
+// "Received, twenty four dollars and fifty cents, on Mesport." for every
+// merchant payment, like a shop soundbox. English only. Settings are per device.
 //
-// The voice is our own recording (public/voice/emma/, Kokoro TTS, Apache 2.0):
-// each alert joins short recorded words ("Received" + "twenty four" +
-// "dollars and" + "fifty" + "cents, on Mesport."), so it sounds the same on
-// every phone - 108 small clips instead of one per amount. Only the words a
-// payment needs are fetched, while the chime plays; the service worker keeps
-// them after the first time.
+// The voice is our own recording (public/voice/emma2/, Kokoro v1.0 voice
+// bf_emma, Apache 2.0 - scripts/gen_voice_clips.py): each alert joins a few
+// short recorded phrases ("Received," + "twenty four dollars and" + "fifty
+// cents, on Mesport."), whole phrases rather than single words so each keeps
+// its natural rhythm, and it sounds the same on every phone - 410 small clips
+// instead of one per amount. Only the phrases a payment needs are fetched,
+// while the chime plays; the service worker keeps them after the first time.
 // Amounts the clips don't cover ($100,000+), or a phone where they can't
 // load, fall back to the device's own speech.
 //
@@ -46,14 +47,19 @@ export function useVoiceAlerts(): Settings {
 export const voiceSupported = () => typeof window !== 'undefined' && 'speechSynthesis' in window
 
 // ── Phrases ─────────────────────────────────────────────────────────────────
-const VOICE_DIR = '/voice/emma/'
+// A new folder for each new recording: the service worker keeps clips by URL,
+// so reusing the old names would keep playing the old voice.
+const VOICE_DIR = '/voice/emma2/'
 
 /**
- * The recorded words that say an amount, in order, or null when the clips
- * don't cover it. Clip names: received, n1-n99 ("one" … "ninety nine"),
- * hundred, thousand, dollar(s)_and / dollar(s)_on ("dollars and" / "dollars,
- * on Mesport."), cent(s)_on ("cents, on Mesport.").
- * $1,250.50 → received, n1, thousand, n2, hundred, n50, dollars_and, n50, cents_on
+ * The recorded phrases that say an amount, in order, or null when the clips
+ * don't cover it. Clip names (scripts/gen_voice_clips.py):
+ *   received "Received,"  ·  t1-t99 "… thousand"  ·  h1-h9 "… hundred"
+ *   da1-da99 "… dollars and"  ·  do1-do99 "… dollars, on Mesport."
+ *   one_dollar_and / one_dollar_on (exactly $1)  ·  c1-c99 "… cents, on Mesport."
+ *   dollars_and / dollars_on (after "… hundred" or "… thousand" with no tens)
+ * $24.50 → received, da24, c50
+ * $1,250 → received, t1, h2, do50
  */
 export function phrasesFor(amount: number): string[] | null {
   const cents = Math.round(amount * 100)
@@ -62,14 +68,14 @@ export function phrasesFor(amount: number): string[] | null {
   const c = cents % 100
   if (dollars >= 100_000) return null
   const out = ['received']
-  if (dollars > 0) {
+  if (dollars === 1) out.push(c ? 'one_dollar_and' : 'one_dollar_on')
+  else if (dollars > 0) {
     const k = Math.floor(dollars / 1000), h = Math.floor((dollars % 1000) / 100), t = dollars % 100
-    if (k) out.push(`n${k}`, 'thousand')
-    if (h) out.push(`n${h}`, 'hundred')
-    if (t) out.push(`n${t}`)
-    out.push(dollars === 1 ? (c ? 'dollar_and' : 'dollar_on') : (c ? 'dollars_and' : 'dollars_on'))
+    if (k) out.push(`t${k}`)
+    if (h) out.push(`h${h}`)
+    out.push(t ? `${c ? 'da' : 'do'}${t}` : (c ? 'dollars_and' : 'dollars_on'))
   }
-  if (c) out.push(`n${c}`, c === 1 ? 'cent_on' : 'cents_on')
+  if (c) out.push(`c${c}`)
   return out
 }
 
@@ -100,7 +106,7 @@ function unlock() {
   if (unlocked) return
   unlocked = true
   // Ready the chime and the most common ending before the first payment.
-  if (settings.enabled) { void clip('chime'); void clip('received'); void clip('dollars_on') }
+  if (settings.enabled) { void clip('chime'); void clip('received') }
   if (voiceSupported()) {
     try {
       // A silent utterance started by this tap lets later ones play.
@@ -141,7 +147,8 @@ function clip(name: string): Promise<AudioBuffer | null> {
 }
 
 const CLIP_WAIT_MS = 3000
-const GAP_S = { inner: 0.05, beforeTail: 0.1 }
+// A short breath after "Received,", then the phrases close together (as in the approved sample).
+const GAP_S = { afterReceived: 0.08, inner: 0.03 }
 // When the last queued alert ends (AudioContext time), so the next one waits.
 let queueEnd = 0
 let queue: Promise<unknown> = Promise.resolve()
@@ -170,7 +177,7 @@ async function playClips(names: string[]): Promise<boolean> {
   t = Math.max(t, ctx.currentTime + 0.02)
   bufs.forEach((b, i) => {
     t = play(ctx, b!, t)
-    if (i < bufs.length - 1) t += i === bufs.length - 2 ? GAP_S.beforeTail : GAP_S.inner
+    if (i < bufs.length - 1) t += i === 0 ? GAP_S.afterReceived : GAP_S.inner
   })
   queueEnd = t
   return true
