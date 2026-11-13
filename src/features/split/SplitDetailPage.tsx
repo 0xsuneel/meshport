@@ -7,10 +7,10 @@
 //   events in line ("Rohit paid $8.33").
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Bell, ChevronDown, Send } from 'lucide-react'
+import { Bell, ChevronDown, Pencil, Send } from 'lucide-react'
 import {
   getSplit, paidOf, remindSplitMember, markSplitReceived, isSettled, memberOpen, money, splitMessages, sendSplitMessage,
-  watchSplitMessages, markSplitGroupSeen, SPLITS_CHANGED_EVENT, type SplitSummary, type SplitMember, type SplitMessage, type SplitGroupSplit,
+  watchSplitMessages, markSplitGroupSeen, renameSplitGroup, SPLITS_CHANGED_EVENT, type SplitSummary, type SplitMember, type SplitMessage, type SplitGroupSplit,
 } from '@/lib/splits'
 import { canRemindAt } from '@/lib/businessBills'
 import { useAuthStore, useUIStore } from '@/store'
@@ -43,16 +43,22 @@ export function SplitDetailPage() {
     if (!groupId) return
     setMsgs([])
     splitMessages(groupId).then(setMsgs).catch(() => {})
-    return watchSplitMessages(groupId, m => setMsgs(cur => cur.some(x => x.id === m.id) ? cur : [...cur, m]))
+    markSplitGroupSeen(groupId)
+    const stop = watchSplitMessages(groupId, m => setMsgs(cur => cur.some(x => x.id === m.id) ? cur : [...cur, m]))
+    return () => { stop(); markSplitGroupSeen(groupId) }
   }, [groupId])
+  // Rename the group (anyone in it).
+  const [renaming, setRenaming] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newEmoji, setNewEmoji] = useState('')
+  const [renameBusy, setRenameBusy] = useState(false)
   useEffect(() => {
     void load()
     // Payments show within seconds.
     const t = setInterval(() => { if (document.visibilityState === 'visible') void load() }, 8000)
     const on = () => void load()
     window.addEventListener(SPLITS_CHANGED_EVENT, on)
-    markSplitGroupSeen(id)
-    return () => { clearInterval(t); window.removeEventListener(SPLITS_CHANGED_EVENT, on); markSplitGroupSeen(id) }
+    return () => { clearInterval(t); window.removeEventListener(SPLITS_CHANGED_EVENT, on) }
   }, [id, load])
 
   // Who said what: every person in the group, by user id.
@@ -109,6 +115,18 @@ export function SplitDetailPage() {
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not open the payment', 'error') }
     finally { setBusy(null) }
   }
+  const openRename = () => { if (!s) return; setNewName(s.groupName); setNewEmoji(s.groupEmoji ?? ''); setRenaming(true) }
+  const saveRename = async () => {
+    if (!s || renameBusy) return
+    setRenameBusy(true)
+    try {
+      await renameSplitGroup(s.id, newName, newEmoji.trim() || null)
+      setRenaming(false)
+      await load()
+      splitMessages(s.groupId).then(setMsgs).catch(() => {})
+    } catch (e) { toast(e instanceof Error ? e.message : 'Could not rename', 'error') }
+    finally { setRenameBusy(false) }
+  }
   const send = async () => {
     const text = draft.trim()
     if (!text || sending) return
@@ -144,12 +162,22 @@ export function SplitDetailPage() {
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
-      <SplitHeader title={`${s.emoji ? `${s.emoji} ` : ''}${s.title}`} onBack={back}
-        right={<span style={{ ...subStyle, whiteSpace: 'nowrap' }}>{s.people} people</span>} />
+      {/* The group's own name (it stays when expenses are added); anyone in it can rename it. */}
+      <SplitHeader title={`${s.groupEmoji ? `${s.groupEmoji} ` : ''}${s.groupName}`} onBack={back}
+        right={<button type="button" onClick={openRename} aria-label="Rename group"
+          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+            background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)', flexShrink: 0 }}><Pencil size={13} /> Rename</button>} />
+      <div style={{ ...subStyle, padding: '2px 20px 10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>
+        {s.people} people · {[s.isCreator ? 'You' : (s.creator.name ?? s.creator.username), ...s.members.map(m => m.isMe ? 'You' : (m.name ?? m.username))].filter(Boolean).join(', ')}
+      </div>
 
       {/* The split: progress and your part. */}
       <div style={{ padding: '0 16px 10px', flexShrink: 0, width: '100%', maxWidth: 560, margin: '0 auto' }}>
         <div style={{ ...card, padding: 14 }}>
+          {/* Which expense this is - the group's latest (each keeps its own category). */}
+          <div style={{ ...subStyle, fontSize: 12, fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', marginBottom: 6 }}>
+            {s.groupSplits.some(g => g.createdAt > s.createdAt) ? 'Expense' : 'Latest expense'} · <span style={{ textTransform: 'none', letterSpacing: 0, color: 'var(--text-primary)' }}>{s.emoji ? `${s.emoji} ` : ''}{s.title} · {when(s.createdAt)}</span>
+          </div>
           <div style={rowStyle}>
             <div style={{ flex: 1, minWidth: 0 }}>
               {s.isCreator ? (<>
@@ -241,24 +269,44 @@ export function SplitDetailPage() {
         })())}
       </div>
 
-      {/* Settled: this expense is closed. One clear next step: a new split
-          expense in this same group - the same people already added (they
-          can be changed), and it shows right here, below this one. */}
-      {settled ? (
-        <div style={{ flexShrink: 0, padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 14px)', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
-          <p style={{ ...subStyle, textAlign: 'center', marginBottom: 10 }}>All settled 🎉 Everyone has paid. Have another expense with this group?</p>
-          <Btn style={{ height: 48, fontSize: 15, width: '100%' }} onClick={() => navigate('/splits/new', { state: { with: groupPeople, group: s.groupId } })}>＋ New split expense</Btn>
-        </div>
-      ) : (
+      {/* Message the group, or add an expense to it - any time (as Google Pay /
+          PhonePe): the group's people already added, it joins this group. */}
       <form onSubmit={e => { e.preventDefault(); void send() }}
         style={{ flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px calc(env(safe-area-inset-bottom, 0px) + 10px)', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
         <input value={draft} onChange={e => setDraft(e.target.value)} maxLength={1000} placeholder="Message the group" aria-label="Message the group"
           style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 22, border: '1px solid var(--border)', background: 'var(--bg)', padding: '0 16px', fontSize: 15, color: 'var(--text-primary)', outline: 'none' }} />
-        <button type="submit" aria-label="Send" disabled={!draft.trim() || sending}
-          style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: 'var(--brand)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: !draft.trim() || sending ? 0.5 : 1, flexShrink: 0 }}>
-          <Send size={18} />
-        </button>
+        {draft.trim() ? (
+          <button type="submit" aria-label="Send" disabled={sending}
+            style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: 'var(--brand)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: sending ? 0.5 : 1, flexShrink: 0 }}>
+            <Send size={18} />
+          </button>
+        ) : (
+          <button type="button" onClick={() => navigate('/splits/new', { state: { with: groupPeople, group: s.groupId } })}
+            style={{ height: 44, padding: '0 16px', borderRadius: 22, border: 'none', background: 'var(--brand)', color: '#fff', fontWeight: 700, fontSize: 14.5, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+            ＋ Expense
+          </button>
+        )}
       </form>
+
+      {renaming && (
+        <div role="dialog" aria-modal aria-label="Rename group" onClick={() => !renameBusy && setRenaming(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <form onClick={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); void saveRename() }}
+            style={{ ...card, width: '100%', maxWidth: 380, padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ ...nameStyle, fontSize: 17 }}>Rename group</div>
+            <div style={subStyle}>Everyone in the group sees the new name. Each expense keeps its own category.</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input value={newEmoji} onChange={e => setNewEmoji(Array.from(e.target.value).slice(-2).join(''))} aria-label="Group emoji" placeholder="🙂"
+                style={{ width: 56, height: 48, textAlign: 'center', fontSize: 22, borderRadius: 14, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', outline: 'none' }} />
+              <input autoFocus value={newName} onChange={e => setNewName(e.target.value.slice(0, 40))} aria-label="Group name" placeholder="e.g. Goa Trip"
+                style={{ flex: 1, minWidth: 0, height: 48, fontSize: 16, padding: '0 14px', borderRadius: 14, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', outline: 'none' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <Btn kind="ghost" style={{ height: 46 }} onClick={() => setRenaming(false)} disabled={renameBusy}>Cancel</Btn>
+              <Btn style={{ height: 46 }} onClick={() => void saveRename()} disabled={renameBusy || !newName.trim()}>{renameBusy ? 'Saving…' : 'Save'}</Btn>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   )

@@ -86,6 +86,9 @@ export interface SplitSummary {
   groupId: string
   /** The group's other splits, oldest first ("Split again with group" adds to the same group). */
   groupSplits: SplitGroupSplit[]
+  /** The group's own name and emoji (its first expense's, until someone renames it). */
+  groupName: string
+  groupEmoji: string | null
 }
 export interface SplitGroupSplit {
   id: string; title: string; emoji: string | null; total: number; createdAt: string
@@ -124,6 +127,7 @@ function normSummary(d: any): SplitSummary {
     creator: { userId: d.creator?.userId ?? null, username: d.creator?.username ?? null, name: d.creator?.name ?? null, avatar: d.creator?.avatar ?? null },
     members: (d.members ?? []).map((m: any) => ({ ...m, userId: m.userId ?? null, isMe: !!m.isMe, amount: num(m.amount), received: num(m.received), completedByMe: !!m.completedByMe })),
     groupId: String(d.groupId || d.id),
+    groupName: String(d.groupName || d.title || 'Split'), groupEmoji: d.groupName ? (d.groupEmoji ?? null) : (d.emoji ?? null),
     groupSplits: (d.groupSplits ?? []).map((g: any) => ({ ...g, emoji: g.emoji ?? null, total: num(g.total), isCreator: !!g.isCreator, creatorName: g.creatorName ?? null, requests: num(g.requests), paidCount: num(g.paidCount) })),
   }
 }
@@ -218,7 +222,10 @@ export function money(v: number): string {
 
 // ── Split groups: everyone in a split, with their own message thread ──────
 export interface SplitGroup {
+  /** The group's latest expense (opening the group opens it); title / emoji / total / counts are that expense's. */
   id: string; title: string; emoji: string | null; total: number; isCreator: boolean
+  /** The group itself: its id (first expense) and its own name. */
+  groupId: string; groupName: string; groupEmoji: string | null
   people: number; paidCount: number; requests: number
   lastBody: string | null; lastSender: string | null; lastIsMe: boolean; at: string
 }
@@ -228,7 +235,15 @@ export interface SplitMessage { id: string; split_id: string; sender_user_id: st
 export async function mySplitGroups(): Promise<SplitGroup[]> {
   const { data, error } = await supabase.rpc('my_split_groups')
   fail(error)
-  return ((data ?? []) as any[]).map(g => ({ ...g, total: num(g.total), people: num(g.people), paidCount: num(g.paidCount), requests: num(g.requests), lastIsMe: !!g.lastIsMe }))
+  return ((data ?? []) as any[]).map(g => ({ ...g, groupId: String(g.groupId || g.id), groupName: String(g.groupName || g.title || 'Split'), groupEmoji: g.groupName ? (g.groupEmoji ?? null) : (g.emoji ?? null), total: num(g.total), people: num(g.people), paidCount: num(g.paidCount), requests: num(g.requests), lastIsMe: !!g.lastIsMe }))
+}
+
+/** Rename a group (anyone in it); posted in the group's thread. */
+export async function renameSplitGroup(splitId: string, name: string, emoji: string | null): Promise<{ groupName: string; groupEmoji: string | null }> {
+  const { data, error } = await supabase.rpc('split_group_rename', { p_split: splitId, p_name: name.trim(), p_emoji: emoji || null })
+  fail(error)
+  changed()
+  return { groupName: String((data as any)?.groupName ?? name), groupEmoji: (data as any)?.groupEmoji ?? null }
 }
 
 export async function splitMessages(splitId: string): Promise<SplitMessage[]> {
