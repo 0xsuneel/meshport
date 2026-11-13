@@ -7,10 +7,10 @@
 //   events in line ("Rohit paid $8.33").
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Bell, ChevronDown, Pencil, Send } from 'lucide-react'
+import { Bell, ChevronDown, Send } from 'lucide-react'
 import {
   getSplit, paidOf, remindSplitMember, markSplitReceived, isSettled, memberOpen, money, splitMessages, sendSplitMessage,
-  watchSplitMessages, markSplitGroupSeen, renameSplitGroup, SPLITS_CHANGED_EVENT, type SplitSummary, type SplitMember, type SplitMessage, type SplitGroupSplit,
+  watchSplitMessages, markSplitGroupSeen, SPLITS_CHANGED_EVENT, type SplitSummary, type SplitMember, type SplitMessage, type SplitGroupSplit,
 } from '@/lib/splits'
 import { canRemindAt } from '@/lib/businessBills'
 import { useAuthStore, useUIStore } from '@/store'
@@ -47,11 +47,7 @@ export function SplitDetailPage() {
     const stop = watchSplitMessages(groupId, m => setMsgs(cur => cur.some(x => x.id === m.id) ? cur : [...cur, m]))
     return () => { stop(); markSplitGroupSeen(groupId) }
   }, [groupId])
-  // Rename the group (anyone in it).
-  const [renaming, setRenaming] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newEmoji, setNewEmoji] = useState('')
-  const [renameBusy, setRenameBusy] = useState(false)
+
   useEffect(() => {
     void load()
     // Payments show within seconds.
@@ -115,18 +111,6 @@ export function SplitDetailPage() {
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not open the payment', 'error') }
     finally { setBusy(null) }
   }
-  const openRename = () => { if (!s) return; setNewName(s.groupName); setNewEmoji(s.groupEmoji ?? ''); setRenaming(true) }
-  const saveRename = async () => {
-    if (!s || renameBusy) return
-    setRenameBusy(true)
-    try {
-      await renameSplitGroup(s.id, newName, newEmoji.trim() || null)
-      setRenaming(false)
-      await load()
-      splitMessages(s.groupId).then(setMsgs).catch(() => {})
-    } catch (e) { toast(e instanceof Error ? e.message : 'Could not rename', 'error') }
-    finally { setRenameBusy(false) }
-  }
   const send = async () => {
     const text = draft.trim()
     if (!text || sending) return
@@ -162,11 +146,9 @@ export function SplitDetailPage() {
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
-      {/* The group's own name (it stays when expenses are added); anyone in it can rename it. */}
-      <SplitHeader title={`${s.groupEmoji ? `${s.groupEmoji} ` : ''}${s.groupName}`} onBack={back}
-        right={<button type="button" onClick={openRename} aria-label="Rename group"
-          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
-            background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)', flexShrink: 0 }}><Pencil size={13} /> Rename</button>} />
+      {/* The group's own name (it stays when expenses are added; it can be
+          changed when adding a new expense to the group). */}
+      <SplitHeader title={`${s.groupEmoji ? `${s.groupEmoji} ` : ''}${s.groupName}`} onBack={back} />
       <div style={{ ...subStyle, padding: '2px 20px 10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}>
         {s.people} people · {[s.isCreator ? 'You' : (s.creator.name ?? s.creator.username), ...s.members.map(m => m.isMe ? 'You' : (m.name ?? m.username))].filter(Boolean).join(', ')}
       </div>
@@ -281,33 +263,13 @@ export function SplitDetailPage() {
             <Send size={18} />
           </button>
         ) : (
-          <button type="button" onClick={() => navigate('/splits/new', { state: { with: groupPeople, group: s.groupId } })}
+          <button type="button" onClick={() => navigate('/splits/new', { state: { with: groupPeople, group: s.groupId, groupName: s.groupName, groupEmoji: s.groupEmoji } })}
             style={{ height: 44, padding: '0 16px', borderRadius: 22, border: 'none', background: 'var(--brand)', color: '#fff', fontWeight: 700, fontSize: 14.5, cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
             ＋ Expense
           </button>
         )}
       </form>
 
-      {renaming && (
-        <div role="dialog" aria-modal aria-label="Rename group" onClick={() => !renameBusy && setRenaming(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <form onClick={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); void saveRename() }}
-            style={{ ...card, width: '100%', maxWidth: 380, padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ ...nameStyle, fontSize: 17 }}>Rename group</div>
-            <div style={subStyle}>Everyone in the group sees the new name. Each expense keeps its own category.</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input value={newEmoji} onChange={e => setNewEmoji(Array.from(e.target.value).slice(-2).join(''))} aria-label="Group emoji" placeholder="🙂"
-                style={{ width: 56, height: 48, textAlign: 'center', fontSize: 22, borderRadius: 14, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', outline: 'none' }} />
-              <input autoFocus value={newName} onChange={e => setNewName(e.target.value.slice(0, 40))} aria-label="Group name" placeholder="e.g. Goa Trip"
-                style={{ flex: 1, minWidth: 0, height: 48, fontSize: 16, padding: '0 14px', borderRadius: 14, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-primary)', outline: 'none' }} />
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <Btn kind="ghost" style={{ height: 46 }} onClick={() => setRenaming(false)} disabled={renameBusy}>Cancel</Btn>
-              <Btn style={{ height: 46 }} onClick={() => void saveRename()} disabled={renameBusy || !newName.trim()}>{renameBusy ? 'Saving…' : 'Save'}</Btn>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   )
 }
