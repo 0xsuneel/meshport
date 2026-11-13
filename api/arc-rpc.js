@@ -31,6 +31,10 @@ const DRPC_KEY = process.env.DRPC_KEY ?? ''
 
 // Call counters for the admin System page (public.rpc_usage).
 const usage = require('./_lib/rpcUsage')
+// Background work that must finish after the response (Vercel freezes the
+// function otherwise). Outside Vercel (tests, scripts) it just runs.
+let keepAlive = (p) => { void p }
+try { const { waitUntil } = require('@vercel/functions'); if (typeof waitUntil === 'function') keepAlive = (p) => { try { waitUntil(p) } catch { void p } } } catch { /* not on Vercel */ }
 
 // Optional explicit authenticated RPC URL override - set ARC_RPC_URL (NOT
 // VITE_ARC_RPC_URL) in Vercel if you want to point at a specific
@@ -109,6 +113,8 @@ function newStats() {
     lastFailureAt: null,
     consecutiveFailures: 0,
     quarantinedUntil: 0,
+    head: 0,          // the latest block number it reported
+    laggingUntil: 0,  // benched for being behind the chain head (see noteHead)
   }
 }
 const stats = new Map(ARC_RPCS.map((u) => [u, newStats()]))
@@ -201,6 +207,38 @@ function isQuarantined(url) {
   return getStats(url).quarantinedUntil > Date.now()
 }
 
+// ─── Chain-head freshness ───────────────────────────────────────────────────
+// The race below takes whichever endpoint answers FIRST. An endpoint serving
+// an old chain state answers fastest (a cached reply - ~15 ms) and so won
+// nearly every race: field 13 Nov, 13 of 15 eth_blockNumber answers from this
+// proxy were the same block, 320 behind the chain (~5 min old), while Circle's
+// node moved on. Payments then waited for receipts that this endpoint didn't
+// have yet ("not yet" until another node happened to answer), nonces and
+// balances could be read from that old state.
+// So every endpoint's reported head is tracked; one more than LAG_BLOCKS
+// behind the best head seen is benched for LAG_BENCH_MS - not used while
+// any current endpoint is available.
+const LAG_BLOCKS = 10        // ~5 s of Arc blocks (~0.48 s each)
+const LAG_BENCH_MS = 60_000
+let bestHead = 0
+function isLagging(url) {
+  return getStats(url).laggingUntil > Date.now()
+}
+/** Record `url`'s reported head; bench it if it is behind the best known one. True when it is behind. */
+function noteHead(url, head) {
+  if (!Number.isFinite(head) || head <= 0) return false
+  const s = getStats(url)
+  s.head = head
+  if (head > bestHead) bestHead = head
+  if (bestHead - head > LAG_BLOCKS) {
+    if (!isLagging(url)) console.warn(`[arc-rpc] ${label(url)} is ${bestHead - head} blocks behind the chain head - not used for ${LAG_BENCH_MS / 1000}s`)
+    s.laggingUntil = Date.now() + LAG_BENCH_MS
+    return true
+  }
+  s.laggingUntil = 0
+  return false
+}
+
 function recordSuccess(url, latencyMs) {
   const s = getStats(url)
   s.success += 1
@@ -277,7 +315,10 @@ const EXPLORE_EVERY = 8
 let orderCalls = 0
 
 function orderEndpoints() {
-  const live = ARC_RPCS.filter((u) => !isQuarantined(u))
+  // Current and not quarantined; else not quarantined (a lagging node beats
+  // none); else everything (a stale quarantine shouldn't fail every call).
+  const current = ARC_RPCS.filter((u) => !isQuarantined(u) && !isLagging(u))
+  const live = current.length ? current : ARC_RPCS.filter((u) => !isQuarantined(u))
   const pool = live.length ? live : ARC_RPCS
   const ranked = [...pool].sort((a, b) => healthScore(b) - healthScore(a))
   if (++orderCalls % EXPLORE_EVERY === 0 && ranked.length > 1) [ranked[0], ranked[1]] = [ranked[1], ranked[0]]
@@ -454,7 +495,69 @@ async function raceOnce(body) {
 const HEAD_LAG_RETRIES = 2
 const HEAD_LAG_BACKOFF_MS = 400
 
+// eth_blockNumber is answered with the HIGHEST head among the endpoints that
+// answer within HEAD_SETTLE_MS of the first - never just the fastest one -
+// and every answer is recorded (noteHead), which benches the stale ones.
+const HEAD_SETTLE_MS = 250
+const HEAD_QUERY_TIMEOUT_MS = 2500
+async function headQuery(id = 1) {
+  const pool = ARC_RPCS.filter((u) => !isQuarantined(u))
+  const urls = (pool.length ? pool : ARC_RPCS).slice(0, 4)
+  const answers = []
+  await new Promise((resolve) => {
+    let pending = urls.length, settleTimer = null
+    const done = () => { if (settleTimer) clearTimeout(settleTimer); resolve() }
+    const hardStop = setTimeout(done, HEAD_QUERY_TIMEOUT_MS)
+    for (const url of urls) {
+      const startedAt = Date.now()
+      fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }), signal: AbortSignal.timeout(HEAD_QUERY_TIMEOUT_MS) })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          const head = typeof j?.result === 'string' ? parseInt(j.result, 16) : NaN
+          if (Number.isFinite(head) && head > 0) {
+            answers.push({ url, head })
+            recordSuccess(url, Date.now() - startedAt)
+            usage.note('upstream', label(url), 'eth_blockNumber', 'ok', Date.now() - startedAt)
+            if (!settleTimer) settleTimer = setTimeout(() => { clearTimeout(hardStop); done() }, HEAD_SETTLE_MS)
+          }
+        })
+        .catch(() => {})
+        .finally(() => { if (--pending === 0) { clearTimeout(hardStop); done() } })
+    }
+  })
+  lastHeadCheckAt = Date.now()
+  if (!answers.length) return null
+  const best = Math.max(...answers.map((a) => a.head))
+  if (best > bestHead) bestHead = best
+  for (const a of answers) noteHead(a.url, a.head)
+  return { jsonrpc: '2.0', id, result: '0x' + best.toString(16) }
+}
+
+// Reads that must come from the current chain state. Every HEAD_CHECK_MS
+// (per warm instance) one of them also checks every endpoint's head, at the
+// same time as it is answered, so a stale endpoint is benched even when
+// nothing asks for eth_blockNumber.
+const FRESH_METHODS = new Set(['eth_getTransactionReceipt', 'eth_getTransactionCount', 'eth_getBalance', 'eth_call', 'eth_getTransactionByHash', 'eth_estimateGas'])
+const HEAD_CHECK_MS = 20_000
+let lastHeadCheckAt = 0
+
 async function forward(body) {
+  if (body && !Array.isArray(body) && body.method === 'eth_blockNumber') {
+    const answer = await headQuery(body.id ?? 1)
+    if (answer) return answer
+  }
+  if (Date.now() - lastHeadCheckAt > HEAD_CHECK_MS && [].concat(body).some((r) => FRESH_METHODS.has(r?.method))) {
+    lastHeadCheckAt = Date.now()
+    // Alongside this request, never in its way: the answer goes out as soon
+    // as the race has it; the check finishes in the background (waitUntil
+    // keeps the function alive for it) and benches stale endpoints for the
+    // next requests.
+    keepAlive(headQuery().catch(() => null))
+  }
+  return forwardRaced(body)
+}
+
+async function forwardRaced(body) {
   let lastErr
   for (let attempt = 0; attempt <= HEAD_LAG_RETRIES; attempt++) {
     try {
