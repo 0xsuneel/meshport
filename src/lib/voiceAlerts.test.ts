@@ -67,6 +67,13 @@ describe('phrasesFor', () => {
     }
   })
 
+  it('the voice pack lists exactly the clips in the folder', async () => {
+    const { VOICE_CLIPS } = await load()
+    const { readdirSync } = await import('node:fs')
+    const files = readdirSync('public/voice/emma2').map(f => f.replace(/\.mp3$/, '')).sort()
+    expect([...VOICE_CLIPS].sort()).toEqual(files)
+  })
+
   it('leaves amounts the clips do not cover to device speech', async () => {
     const { phrasesFor } = await load()
     expect(phrasesFor(100_000)).toBeNull()
@@ -116,3 +123,32 @@ describe('speakPayment', () => {
     expect(events).toEqual(expect.arrayContaining(['pointerdown', 'touchend', 'keydown']))
   })
 })
+
+describe('prefetchVoicePack', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+  it('downloads every clip once, then not again on this device', async () => {
+    fakeBrowser([])
+    const store: Record<string, string> = {}
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v } })
+    const fetch = vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(1) }))
+    vi.stubGlobal('fetch', fetch)
+    const v = await load()
+    await v.prefetchVoicePack()
+    expect(fetch).toHaveBeenCalledTimes(v.VOICE_CLIPS.length)
+    expect(new Set(fetch.mock.calls.map((c: unknown[]) => c[0])).size).toBe(v.VOICE_CLIPS.length)
+    await v.prefetchVoicePack()
+    expect(fetch).toHaveBeenCalledTimes(v.VOICE_CLIPS.length)
+  })
+
+  it('a failed clip leaves the pack to be tried again', async () => {
+    fakeBrowser([])
+    const store: Record<string, string> = {}
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v } })
+    let n = 0
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: n++ !== 3, arrayBuffer: async () => new ArrayBuffer(1) })))
+    const v = await load()
+    await v.prefetchVoicePack()
+    expect(store.meshport_voice_pack).toBeUndefined()
+  })
+})
+

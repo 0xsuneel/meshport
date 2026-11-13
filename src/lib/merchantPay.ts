@@ -495,7 +495,15 @@ export async function fetchMerchantFlags(userIds: string[]): Promise<Set<string>
 }
 
 /** Live updates for this merchant's requests and payments. */
-export function subscribeMerchantPayments(merchantWallet: string, onChange: () => void): () => void {
+/** A payment row as the live feed delivers it (merchant_payments INSERT). */
+export type LivePayment = { chain: string; txHash: string; amount: number; createdAt: string }
+
+/**
+ * onNewPayment (optional): called with each NEW payment row the moment the
+ * live feed delivers it - before any reload - so the voice alert can speak at
+ * once. Updates to existing rows don't call it.
+ */
+export function subscribeMerchantPayments(merchantWallet: string, onChange: () => void, onNewPayment?: (p: LivePayment) => void): () => void {
   const w = merchantWallet.toLowerCase()
   // Unique name per subscriber: the app shell and Manage money both subscribe,
   // and a shared name returns the already-joined channel, where adding
@@ -503,7 +511,13 @@ export function subscribeMerchantPayments(merchantWallet: string, onChange: () =
   // and crashed Manage money. Removing one must not remove the other either.
   const ch = supabase.channel(`merchant-pay-${w}-${Math.random().toString(36).slice(2, 10)}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_payment_intents', filter: `merchant_wallet=eq.${w}` }, onChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_payments', filter: `merchant_wallet=eq.${w}` }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_payments', filter: `merchant_wallet=eq.${w}` }, (e: any) => {
+      const r = e?.new
+      if (onNewPayment && e?.eventType === 'INSERT' && r?.tx_hash && r?.source_chain && Number(r.amount) > 0) {
+        try { onNewPayment({ chain: r.source_chain, txHash: r.tx_hash, amount: Number(r.amount), createdAt: r.created_at }) } catch { /* the reload still shows it */ }
+      }
+      onChange()
+    })
     .subscribe()
   return () => { supabase.removeChannel(ch) }
 }
