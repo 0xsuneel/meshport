@@ -55,9 +55,14 @@ export function SplitNewPage() {
   const [emoji, setEmojiState] = useState<string>(() => categoryForTitle(init.title ?? '').emoji)
   const [catByHand, setCatByHand] = useState(false)
   const setEmoji = (e: string) => { setCatByHand(true); setEmojiState(e) }
-  // Tapping a category only picks its emoji: "What for" is left as the person
-  // typed it (it used to fill in the category's name).
-  const pickCategory = (c: { emoji: string; label: string }) => { setEmoji(c.emoji) }
+  // Tapping a category also fills "What for" with its name ("Taxi") when it's
+  // empty or still the name a category filled in - never over words typed by
+  // hand. It's a normal field: edit it or type anything.
+  const autoTitle = useRef('')
+  const pickCategory = (c: { emoji: string; label: string }) => {
+    setEmoji(c.emoji)
+    if (c.label !== 'Other' && (!title.trim() || title === autoTitle.current)) { setTitle(c.label); autoTitle.current = c.label }
+  }
   useEffect(() => { if (!catByHand) setEmojiState(categoryForTitle(title).emoji) }, [title, catByHand])
   const [picked, setPicked] = useState<Person[]>([])
   const [mode, setMode] = useState<Mode>('equal')
