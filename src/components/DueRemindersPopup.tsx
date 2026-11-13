@@ -212,7 +212,9 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
     )
   }
   const cardW = 'min(318px, calc(100vw - 32px))'
-  const cardH = h == null ? undefined : Math.min(h, maxH)
+  // The page dots sit inside the card, in a strip under its contents.
+  const DOTS_H = n > 1 ? 30 : 0
+  const cardH = h == null ? undefined : Math.min(h, maxH) + DOTS_H
 
   return createPortal(
     <AnimatePresence>
@@ -228,16 +230,17 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
             style={{ left: -10000, top: 0, width: cardW, visibility: 'hidden' }}>
             {list.map((x, k) => <div key={x.code}>{body(x, k, false)}</div>)}
           </div>
-          <div className="absolute inset-0 flex flex-col items-center" style={{ padding: 'calc(env(safe-area-inset-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 36px)' }}>
-          <div className="flex-1 min-h-0 w-full flex items-center justify-center">
+          {/* The card and Close all right under it, centred together. */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ padding: 'calc(env(safe-area-inset-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 24px)' }}>
             {/* The card itself never moves while swiping: it is solid from its
                 first frame (a fade showed Home through it) and stays put - only
                 its contents follow the finger and slide to the next one. */}
             <motion.div
               initial={{ scale: 0.94, y: 12 }} animate={{ scale: 1, y: 0 }}
               transition={{ type: 'spring', stiffness: 420, damping: 38 }}
-              className="relative overflow-hidden"
+              className="relative overflow-hidden shrink-0"
               style={{ width: cardW, height: cardH, borderRadius: 28, background: 'var(--surface)', boxShadow: '0 30px 60px -20px rgba(0,0,0,.5)' }}>
+            <div className="absolute left-0 right-0 top-0 overflow-hidden" style={{ bottom: DOTS_H }}>
             <AnimatePresence initial={false} mode="popLayout" custom={dir}>
             <motion.div key={r.code} custom={dir}
               variants={CARD} initial="enter" animate="center" exit="exit"
@@ -253,22 +256,22 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
               {body(r, at, true)}
             </motion.div>
             </AnimatePresence>
-            </motion.div>
-          </div>
-          {n > 1 && (
-            <div className="flex justify-center shrink-0" style={{ gap: 6, marginTop: 14 }}>
-              {list.map((x, k) => (
-                <button key={x.code} type="button" aria-label={`Reminder ${k + 1} of ${n}`} onClick={() => go(k)} style={{ padding: '6px 0' }}>
-                  <i className="block transition-all" style={{ width: k === at ? 16 : 6, height: 6, borderRadius: 9, background: k === at ? '#fff' : 'rgba(255,255,255,.45)' }} />
-                </button>
-              ))}
             </div>
-          )}
-            <button type="button" onClick={closeAll} disabled={busy} className="shrink-0 text-center text-white" style={{ marginTop: 18 }}>
-              <span className="mx-auto flex items-center justify-center rounded-full" style={{ width: 48, height: 48, background: 'rgba(255,255,255,.18)' }}>
-                <X size={22} />
-              </span>
-              <span className="block font-bold" style={{ fontSize: 13, marginTop: 8, letterSpacing: '.04em' }}>{n > 1 ? 'CLOSE ALL' : 'CLOSE'}</span>
+            {n > 1 && (
+              <div className="absolute left-0 right-0 bottom-0 flex items-start justify-center" style={{ height: DOTS_H, gap: 6 }}>
+                {list.map((x, k) => (
+                  <button key={x.code} type="button" aria-label={`Reminder ${k + 1} of ${n}`} onClick={() => go(k)} style={{ padding: '2px 0 10px' }}>
+                    <i className="block transition-all" style={{ width: k === at ? 16 : 6, height: 6, borderRadius: 9, background: k === at ? 'var(--brand)' : 'rgba(128,128,128,.4)' }} />
+                  </button>
+                ))}
+              </div>
+            )}
+            </motion.div>
+            <button type="button" onClick={closeAll} disabled={busy}
+              className="shrink-0 flex items-center gap-2 font-bold text-white active:scale-95 transition-transform"
+              style={{ marginTop: 16, padding: '11px 22px', borderRadius: 99, background: 'rgba(255,255,255,.18)', fontSize: 13.5, letterSpacing: '.04em' }}>
+              <X size={18} strokeWidth={2.6} />
+              {n > 1 ? 'CLOSE ALL' : 'CLOSE'}
             </button>
           </div>
         </motion.div>
