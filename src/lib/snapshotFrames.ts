@@ -62,3 +62,45 @@ export function replaceClonedImages(orig: HTMLElement, copy: HTMLElement): void 
     } catch { /* tainted / not drawable - keep the copied <img> */ }
   })
 }
+
+// ── SVG paint servers in the picture ───────────────────────────────────────
+// The pictures drop every id (no duplicate ids on screen). But an SVG icon
+// that paints through a mask / gradient / clip path finds it BY id
+// (`mask="url(#mpa…)"`): with the id gone - and the live page unmounted a
+// moment later - the browser paints the masked shape whole, and every
+// ActionIcon on the sliding page showed as a solid square (field 13 Nov:
+// Home's Pay / Receive / Swap and Quick Actions, for the whole slide).
+// So in the copy those elements get a fresh id each, and the copy's
+// references point at the new ids. Live ids are never duplicated.
+
+const SVG_REF_TAGS = new Set(['mask', 'clippath', 'lineargradient', 'radialgradient', 'pattern', 'filter', 'marker', 'symbol'])
+const REF_ATTRS = ['mask', 'clip-path', 'fill', 'stroke', 'filter', 'marker-start', 'marker-mid', 'marker-end', 'href', 'xlink:href', 'style']
+let snapSeq = 0
+
+/** An element the copy keeps its (renamed) id for: something SVG paints through. */
+export function isSvgRefTarget(el: Element): boolean {
+  return SVG_REF_TAGS.has(el.tagName.toLowerCase())
+}
+
+/** In `copy`, give every SVG mask / gradient / clip path / pattern / filter /
+ *  marker / symbol a new id and point the copy's own references at it. */
+export function renameSvgRefs(copy: Element): void {
+  const map = new Map<string, string>()
+  const all = [copy, ...Array.from(copy.querySelectorAll('*'))]
+  for (const el of all) {
+    if (!el.id || !isSvgRefTarget(el)) continue
+    const next = `${el.id}-pic${++snapSeq}`
+    map.set(el.id, next)
+    el.id = next
+  }
+  if (!map.size) return
+  const swap = (v: string) => v
+    .replace(/url\(\s*(['"]?)#([^'")\s]+)\1\s*\)/g, (m, q: string, id: string) => (map.has(id) ? `url(${q}#${map.get(id)}${q})` : m))
+    .replace(/^#(.+)$/, (m, id: string) => (map.has(id) ? `#${map.get(id)}` : m))
+  for (const el of all) {
+    for (const a of REF_ATTRS) {
+      const v = el.getAttribute(a)
+      if (v && v.includes('#')) { const n = swap(v); if (n !== v) el.setAttribute(a, n) }
+    }
+  }
+}

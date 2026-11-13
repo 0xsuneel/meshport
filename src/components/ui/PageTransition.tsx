@@ -2,7 +2,7 @@ import { PUSH_OPEN_MS, PUSH_BACK_MS, PUSH_EASE_CSS, PUSH_PARALLAX, DESKTOP_FADE_
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useNavigationType } from 'react-router-dom'
 import { pushLook } from '@/lib/pushLook'
-import { replaceClonedFrames, replaceClonedImages } from '@/lib/snapshotFrames'
+import { replaceClonedFrames, replaceClonedImages, renameSvgRefs, isSvgRefTarget } from '@/lib/snapshotFrames'
 import { useReducedMotion } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useNavDirection } from '@/hooks/useNavDirection'
@@ -48,6 +48,8 @@ function takeSnapshot(page: HTMLElement, key: string): Snapshot {
   replaceClonedFrames(page, node)
   // Avatars / token logos paint at once in the picture instead of blinking out.
   replaceClonedImages(page, node)
+  // Icons that paint through an SVG mask keep it (renamed): ids are dropped below.
+  renameSvgRefs(node)
   const orig = page.querySelectorAll<HTMLElement>('*')
   const copy = node.querySelectorAll<HTMLElement>('*')
   const scrolls: Array<[number, number, number]> = []
@@ -61,7 +63,7 @@ function takeSnapshot(page: HTMLElement, key: string): Snapshot {
       c.value = o.value
     }
     // No duplicate ids / test hooks while the copy is on screen.
-    if (c.id) c.removeAttribute('id')
+    if (c.id && !isSvgRefTarget(c)) c.removeAttribute('id')
     // The picture slides away under the new page: a frosted header in it
     // would be re-blurred every frame of the slide (costly on iPhone) for
     // no visible gain.
@@ -73,7 +75,8 @@ function takeSnapshot(page: HTMLElement, key: string): Snapshot {
   const sr = shell.getBoundingClientRect(), pr = page.getBoundingClientRect()
   const liveNav = shell.querySelector<HTMLElement>('[data-bottom-nav]')
   const nav = liveNav ? (liveNav.cloneNode(true) as HTMLElement) : null
-  nav?.querySelectorAll('[id]').forEach(e => e.removeAttribute('id'))
+  if (nav) renameSvgRefs(nav)
+  nav?.querySelectorAll('[id]').forEach(e => { if (!isSvgRefTarget(e)) e.removeAttribute('id') })
   nav?.querySelectorAll<HTMLElement>('*').forEach(e => { if (e.style.backdropFilter) { e.style.backdropFilter = ''; e.style.setProperty('-webkit-backdrop-filter', '') } })
   return { key, node, scrolls, top: pr.top - sr.top, height: pr.height, nav }
 }
