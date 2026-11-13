@@ -16,14 +16,29 @@ import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+/** A payment this recent is still announced when the app opens or comes back. */
+const FRESH_MS = 10 * 60_000
+const isFresh = (createdAt: string) => Date.now() - Date.parse(createdAt) < FRESH_MS
+
+// Payments already announced on this phone (chain:tx), kept across app
+// restarts: opening the app from a payment notification announces only the
+// ones it hasn't said yet. Newest 200.
+const announcedKey = (wallet: string) => `meshport_announced_${wallet.toLowerCase()}`
+function readAnnounced(wallet: string): Set<string> {
+  try { const a = JSON.parse(localStorage.getItem(announcedKey(wallet)) || '[]'); return new Set(Array.isArray(a) ? a.filter(x => typeof x === 'string') : []) } catch { return new Set() }
+}
+function writeAnnounced(wallet: string, set: Set<string>) {
+  try { localStorage.setItem(announcedKey(wallet), JSON.stringify([...set].slice(-200))) } catch { /* storage unavailable */ }
+}
+
 export function PaymentReceivedWatcher() {
   const business = useBusinessTab()
   const wallet = useAuthStore(s => s.walletAddress)
   const [shown, setShown] = useState<MerchantPayment | null>(null)
   const seen = useRef<Set<string> | null>(null)
-  // Payments already spoken straight from the live feed (chain:tx), so the
-  // reload that follows shows their card without saying them a second time.
-  const spoken = useRef<Set<string>>(new Set())
+  // Payments already announced (chain:tx) - spoken from the live feed or a
+  // reload, on this phone - so none is said twice (lives across restarts).
+  const announced = useRef<Set<string>>(new Set())
   const voice = useVoiceAlerts()
 
   // Like a soundbox's language pack: every voice clip downloaded ahead, while
@@ -42,9 +57,32 @@ export function PaymentReceivedWatcher() {
   useEffect(() => {
     seen.current = null
     seenReceipts.current = null
-    spoken.current = new Set()
     if (!business || !wallet) return
+    announced.current = readAnnounced(wallet)
     let live = true
+    // Payments that arrived while the app was in the background: a hidden
+    // page can't play sound, so they wait and are said when it is back.
+    const waiting = new Map<string, { amount: number; createdAt: string; payment?: MerchantPayment }>()
+    const visible = () => document.visibilityState === 'visible'
+    const announce = (k: string, amount: number, createdAt: string, payment?: MerchantPayment) => {
+      if (announced.current.has(k)) return
+      if (!visible()) { waiting.set(k, { amount, createdAt, payment: payment ?? waiting.get(k)?.payment }); return }
+      announced.current.add(k)
+      writeAnnounced(wallet, announced.current)
+      speakPayment(amount)
+    }
+    const sayWaiting = () => {
+      if (!visible() || !waiting.size) return
+      const list = [...waiting.entries()].sort((a, b) => Date.parse(a[1].createdAt) - Date.parse(b[1].createdAt))
+      waiting.clear()
+      for (const [k, w] of list) {
+        // Back after a long time: too old to say now, still counted as told.
+        if (isFresh(w.createdAt)) announce(k, w.amount, w.createdAt)
+        else { announced.current.add(k); writeAnnounced(wallet, announced.current) }
+      }
+      const last = [...list].reverse().find(([, w]) => w.payment && isFresh(w.createdAt))
+      if (last) setShown(last[1].payment!)
+    }
     // One check at a time: a live update landing while the first load is
     // still out would otherwise count its payment as already seen (silent).
     let running: Promise<void> = Promise.resolve()
@@ -76,12 +114,15 @@ export function PaymentReceivedWatcher() {
       // Keyed by chain + tx (not id): a direct deposit later matched to an
       // order changes id but is still the same payment - no second pop-up.
       const key = (p: MerchantPayment) => `${p.chain}:${p.txHash.toLowerCase()}`
-      if (seen.current) {
-        const fresh = list.filter(p => !seen.current!.has(key(p)) && Date.now() - Date.parse(p.createdAt) < 10 * 60_000)
-        if (fresh.length) {
-          setShown(fresh[0])
-          fresh.forEach(p => { if (!spoken.current.has(key(p))) speakPayment(p.amount) })
-        }
+      // New since the last look - or, on the first look (app just opened, e.g.
+      // from the payment's notification), recent ones this phone hasn't
+      // announced yet.
+      const fresh = list.filter(p => isFresh(p.createdAt) && (seen.current ? !seen.current.has(key(p)) : !announced.current.has(key(p))))
+      if (fresh.length) {
+        if (visible()) setShown(fresh[0])
+        for (const p of [...fresh].reverse()) announce(key(p), p.amount, p.createdAt, p)
+        // Already waiting from the live feed while hidden: its card shows on return.
+        if (!visible()) for (const p of fresh) { const w = waiting.get(key(p)); if (w) w.payment = p }
       }
       seen.current = new Set(list.map(key))
     }
@@ -91,10 +132,8 @@ export function PaymentReceivedWatcher() {
     // every row counts as old - and only a payment of the last 10 minutes.
     const stopOrders = subscribeMerchantPayments(wallet, () => { void check() }, p => {
       const k = `${p.chain}:${p.txHash.toLowerCase()}`
-      if (!seen.current || seen.current.has(k) || spoken.current.has(k)) return
-      if (!(Date.now() - Date.parse(p.createdAt) < 10 * 60_000)) return
-      spoken.current.add(k)
-      speakPayment(p.amount)
+      if (!seen.current || seen.current.has(k) || !isFresh(p.createdAt)) return
+      announce(k, p.amount, p.createdAt)
     })
     const stopReceipts = subscribeChainReceipts(wallet, () => { void check() })
     const stop = () => { stopOrders(); stopReceipts() }
@@ -102,7 +141,7 @@ export function PaymentReceivedWatcher() {
     const t = setInterval(() => { if (document.visibilityState === 'visible') void check() }, 20_000)
     // Back in the app: look at once - the live feed was asleep with the phone,
     // and a payment that landed meanwhile would otherwise wait for the tick.
-    const onVisible = () => { if (document.visibilityState === 'visible') void check() }
+    const onVisible = () => { if (visible()) { sayWaiting(); void check() } }
     document.addEventListener('visibilitychange', onVisible)
     return () => { live = false; stop(); clearInterval(t); document.removeEventListener('visibilitychange', onVisible) }
   }, [business, wallet])

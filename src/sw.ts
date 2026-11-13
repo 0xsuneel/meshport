@@ -158,6 +158,9 @@ self.addEventListener('activate', (event) => {
 })
 
 // ── Web Push ──────────────────────────────────────────────────────────────
+/** Notification types that are money received by a business (see push trigger). */
+const PAYMENT_KINDS = new Set(['merchant_payment_received', 'merchant_payment_partial', 'merchant_chain_payment'])
+
 self.addEventListener('push', (event: PushEvent) => {
   if (!event.data) return
 
@@ -193,6 +196,15 @@ self.addEventListener('push', (event: PushEvent) => {
       const count = (Number(prev?.data?.count) || (prev ? 1 : 0)) + 1
       options.data = { ...data, count }
       if (count > 1 && options.body === 'New message') options.body = `${count} new messages`
+      options.renotify = true
+    }
+    // A payment to the business (the server sends the notification's type
+    // as kind): a longer buzz like a shop speaker, and every payment alerts
+    // on its own. The voice can't play from here - browsers allow no sound
+    // without a page - so opening the app from it says the amount
+    // (PaymentReceivedWatcher announces recent payments it hasn't said yet).
+    if (PAYMENT_KINDS.has(data.kind)) {
+      (options as NotificationOptions & { vibrate?: number[] }).vibrate = [220, 110, 220, 110, 480]
       options.renotify = true
     }
     await self.registration.showNotification(title, options)
