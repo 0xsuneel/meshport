@@ -10,7 +10,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Bell, ChevronDown, Send } from 'lucide-react'
 import {
   getSplit, paidOf, remindSplitMember, markSplitReceived, isSettled, memberOpen, money, splitMessages, sendSplitMessage,
-  watchSplitMessages, markSplitGroupSeen, SPLITS_CHANGED_EVENT, type SplitSummary, type SplitMember, type SplitMessage,
+  watchSplitMessages, markSplitGroupSeen, SPLITS_CHANGED_EVENT, type SplitSummary, type SplitMember, type SplitMessage, type SplitGroupSplit,
 } from '@/lib/splits'
 import { canRemindAt } from '@/lib/businessBills'
 import { useAuthStore, useUIStore } from '@/store'
@@ -18,7 +18,8 @@ import { SplitHeader, SplitAvatar, ProgressBar, Pill, Btn, card, rowStyle, subSt
 
 type Item =
   | { kind: 'msg'; at: string; m: SplitMessage }
-  | { kind: 'event'; at: string; text: string; to?: string }
+  | { kind: 'event'; at: string; text: string }
+  | { kind: 'split'; at: string; g: SplitGroupSplit }
 
 export function SplitDetailPage() {
   const { id = '' } = useParams()
@@ -65,19 +66,16 @@ export function SplitDetailPage() {
   const items = useMemo<Item[]>(() => {
     if (!s) return []
     const creatorName = s.isCreator ? 'You' : (s.creator.name ?? 'Someone')
-    const out: Item[] = [{ kind: 'event', at: s.createdAt, text: `${creatorName} split ${money(s.total)} · ${s.emoji ? `${s.emoji} ` : ''}${s.title}` }]
+    const out: Item[] = [{ kind: 'event', at: s.createdAt, text: `${creatorName} split ${money(s.total)} · ${s.emoji ? `${s.emoji} ` : ''}${s.title} · ${when(s.createdAt)}` }]
     if (s.myShare > 0) out.push({ kind: 'event', at: s.createdAt, text: `${creatorName} paid the bill · ${s.isCreator ? 'your' : 'their'} share ${money(s.myShare)} is paid` })
     for (const m of s.members) {
       if (m.status !== 'paid' || !m.paidAt) continue
       const who = m.isMe ? 'You' : (m.name ?? 'Someone')
       out.push({ kind: 'event', at: m.paidAt, text: m.completedByMe ? `${who}${m.isMe ? 'r' : "'s"} share was marked received · ${money(m.amount)}` : `${who} paid ${money(m.amount)}` })
     }
-    // The group's other splits (Split again with group), in line - tap to open.
-    for (const g of s.groupSplits) {
-      const who = g.isCreator ? 'You' : (g.creatorName ?? 'Someone')
-      const done = g.requests > 0 && g.paidCount >= g.requests ? ' · settled' : ''
-      out.push({ kind: 'event', at: g.createdAt, to: g.id, text: `${who} split ${money(g.total)} · ${g.emoji ? `${g.emoji} ` : ''}${g.title}${done}` })
-    }
+    // The group's other expenses, in time order: a short row each (date and
+    // time) - tap to see who paid.
+    for (const g of s.groupSplits) out.push({ kind: 'split', at: g.createdAt, g })
     for (const m of msgs) out.push({ kind: 'msg', at: m.created_at, m })
     out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
     if (isSettled(s)) out.push({ kind: 'event', at: '', text: 'All settled 🎉' })
@@ -138,7 +136,7 @@ export function SplitDetailPage() {
   const settled = isSettled(s)
   const mine = s.members.find(m => m.isMe) ?? null
   const owedTotal = s.members.reduce((a, m) => a + m.amount, 0)
-  // Everyone else in this group (for "Split again with group").
+  // Everyone else in this group (a new split expense starts with them).
   const groupPeople = [
     ...(!s.isCreator && s.creator.username ? [{ username: s.creator.username, name: s.creator.name, avatar: s.creator.avatar }] : []),
     ...s.members.filter(m => !m.isMe && m.username).map(m => ({ username: m.username!, name: m.name, avatar: m.avatar })),
@@ -221,14 +219,12 @@ export function SplitDetailPage() {
 
       {/* The group's thread. */}
       <div ref={threadRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 16px 12px', display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 560, margin: '0 auto' }}>
-        {items.map((it, k) => it.kind === 'event' ? (it.to ? (
-          // Another split of this group: opens it.
-          <button key={`e${k}`} type="button" onClick={() => navigate(`/splits/${it.to}`)} style={{ alignSelf: 'center', maxWidth: '86%', textAlign: 'center', fontSize: 12.5, fontWeight: 600, color: 'var(--brand-text)',
-            background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: 'none', cursor: 'pointer', borderRadius: 999, padding: '5px 12px' }}>{it.text} ›</button>
-        ) : (
+        {items.map((it, k) => it.kind === 'split' ? (
+          <GroupExpense key={`g${it.g.id}`} g={it.g} />
+        ) : it.kind === 'event' ? (
           <div key={`e${k}`} style={{ alignSelf: 'center', maxWidth: '86%', textAlign: 'center', fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)',
             background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', borderRadius: 999, padding: '5px 12px' }}>{it.text}</div>
-        )) : (() => {
+        ) : (() => {
           const mineMsg = !!myUserId && String(it.m.sender_user_id) === String(myUserId)
           const who = names.get(String(it.m.sender_user_id))
           return (
@@ -245,16 +241,13 @@ export function SplitDetailPage() {
         })())}
       </div>
 
-      {/* Settled: the split is closed (as Google Pay closes a paid bill) - no
-          more messages here; split something new, with the same people or
-          anyone (as PhonePe adds a new expense to a group). */}
+      {/* Settled: this expense is closed. One clear next step: a new split
+          expense in this same group - the same people already added (they
+          can be changed), and it shows right here, below this one. */}
       {settled ? (
         <div style={{ flexShrink: 0, padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 14px)', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
-          <p style={{ ...subStyle, textAlign: 'center', marginBottom: 10 }}>All settled 🎉 · This split is closed</p>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Btn kind="ghost" style={{ height: 48, fontSize: 14.5 }} onClick={() => navigate('/splits/new')}>New split expense</Btn>
-            <Btn style={{ height: 48, fontSize: 14.5 }} onClick={() => navigate('/splits/new', { state: { with: groupPeople, group: s.groupId } })}>Split again with group</Btn>
-          </div>
+          <p style={{ ...subStyle, textAlign: 'center', marginBottom: 10 }}>All settled 🎉 Everyone has paid. Have another expense with this group?</p>
+          <Btn style={{ height: 48, fontSize: 15, width: '100%' }} onClick={() => navigate('/splits/new', { state: { with: groupPeople, group: s.groupId } })}>＋ New split expense</Btn>
         </div>
       ) : (
       <form onSubmit={e => { e.preventDefault(); void send() }}
@@ -266,6 +259,65 @@ export function SplitDetailPage() {
           <Send size={18} />
         </button>
       </form>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Another expense in this group (an earlier one, settled or not): one short
+ * row - what, how much, when, settled or how many paid. Tap: it opens up in
+ * place to show each person and whether they paid (read when first opened).
+ */
+function GroupExpense({ g }: { g: SplitGroupSplit }) {
+  const [open, setOpen] = useState(false)
+  const [full, setFull] = useState<SplitSummary | null>(null)
+  const [err, setErr] = useState('')
+  const toggle = () => {
+    const next = !open
+    setOpen(next)
+    if (next && !full) getSplit(g.id).then(v => { setFull(v); setErr('') }).catch(() => setErr('Could not load - tap to try again'))
+  }
+  const done = isSettled(g)
+  const { paid, of } = paidOf(g)
+  const creatorLabel = full ? (full.isCreator ? 'You' : (full.creator.name ?? full.creator.username ?? 'Someone')) : null
+  return (
+    <div style={{ ...card, alignSelf: 'stretch', padding: 0, overflow: 'hidden' }}>
+      <button type="button" onClick={toggle} aria-expanded={open}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+        <span style={{ fontSize: 20, lineHeight: 1 }}>{g.emoji || '🧾'}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ ...nameStyle, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title} · {money(g.total)}</span>
+          <span style={{ ...subStyle, display: 'block' }}>{when(g.createdAt)}</span>
+        </span>
+        <Pill tone={done ? 'paid' : 'pending'}>{done ? 'Settled' : `${paid} of ${of} paid`}</Pill>
+        <ChevronDown size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+      </button>
+      {open && (
+        <div style={{ borderTop: '1px solid var(--border)', padding: '6px 14px 10px' }}>
+          {err ? <div style={{ ...subStyle, padding: '6px 0' }}>{err}</div>
+            : !full ? <div style={{ ...subStyle, padding: '6px 0' }}>Loading…</div>
+            : (<>
+              <div style={{ ...rowStyle, padding: '6px 0' }}>
+                <SplitAvatar name={full.creator.name} username={full.creator.username} avatar={full.creator.avatar} size={30} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ ...nameStyle, fontSize: 14 }}>{creatorLabel} · paid the bill</div>
+                  {full.myShare > 0 && full.isCreator && <div style={subStyle}>Your share {money(full.myShare)}</div>}
+                </div>
+                <Pill tone="paid">Paid</Pill>
+              </div>
+              {full.members.map(m => (
+                <div key={m.id} style={{ ...rowStyle, padding: '6px 0' }}>
+                  <SplitAvatar name={m.name} username={m.username} avatar={m.avatar} size={30} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ ...nameStyle, fontSize: 14 }}>{m.isMe ? 'You' : (m.name ?? m.username)} · {money(m.amount)}</div>
+                    <div style={subStyle}>{m.status === 'paid' ? (m.completedByMe ? `Marked received · ${when(m.paidAt)}` : `Paid ${when(m.paidAt)}`) : m.status === 'expired' ? 'Expired' : 'Not paid yet'}</div>
+                  </div>
+                  <Pill tone={m.status === 'paid' ? 'paid' : m.status === 'expired' ? 'muted' : 'pending'}>{m.status === 'paid' ? 'Paid' : m.status === 'expired' ? 'Expired' : 'Pending'}</Pill>
+                </div>
+              ))}
+            </>)}
+        </div>
       )}
     </div>
   )
