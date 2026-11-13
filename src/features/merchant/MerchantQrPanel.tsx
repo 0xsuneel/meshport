@@ -5,6 +5,7 @@
 // The deposit watcher links the payment to the order within about a minute;
 // the status below updates live. The network can be switched for the same
 // order (the watcher checks every supported chain).
+import { shortOrderNumber } from '@/lib/orderLabels'
 import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, Clock, Download, Share2, Plus, Copy } from 'lucide-react'
 import { ExpiryChips } from '@/features/receive/RequestQrPanel'
@@ -119,7 +120,7 @@ export function useOrderSolanaUri(order: { code: string; orderNumber?: string | 
   const [ref, setRef] = useState<{ code: string; ref: string } | null>(null)
   useEffect(() => { if (order?.code) solanaReference(order.code).then(r => setRef({ code: order.code, ref: r })).catch(() => setRef(null)) }, [order?.code])
   if (!order || !to || !(amount > 0) || ref?.code !== order.code) return ''
-  return solanaPayUri({ to, amount, reference: ref.ref, label, message: order.orderNumber ? `Order ${order.orderNumber}` : undefined })
+  return solanaPayUri({ to, amount, reference: ref.ref, label, message: order.orderNumber ? `Order ${shortOrderNumber(order.orderNumber)}` : undefined })
 }
 
 export function MerchantQrPanel() {
