@@ -25,6 +25,8 @@ export interface SplitNewState {
   total?: number; title?: string; sourceTx?: string
   /** People already in (Split again with this group). */
   with?: Array<string | { username: string; name?: string | null; avatar?: string | null }>
+  /** Split again with group: the group the new split joins (same entry in Chats, same thread). */
+  group?: string
 }
 
 const clean = (u: string) => u.trim().replace(/^@/, '').replace(/\.arc$/i, '').toLowerCase()
@@ -172,7 +174,7 @@ export function SplitNewPage() {
     setBusy(true); setError('')
     try {
       const out = await createSplit({
-        title: title.trim(), emoji, total, myShare: shares[0] ?? 0, sourceTx: init.sourceTx ?? null,
+        title: title.trim(), emoji, total, myShare: shares[0] ?? 0, sourceTx: init.sourceTx ?? null, group: init.group ?? null,
         members: picked.map((p, i) => ({ username: p.username, userId: p.userId, amount: shares[i + 1] })),
       })
       setCreated(out)

@@ -18,7 +18,7 @@ import { SplitHeader, SplitAvatar, ProgressBar, Pill, Btn, card, rowStyle, subSt
 
 type Item =
   | { kind: 'msg'; at: string; m: SplitMessage }
-  | { kind: 'event'; at: string; text: string }
+  | { kind: 'event'; at: string; text: string; to?: string }
 
 export function SplitDetailPage() {
   const { id = '' } = useParams()
@@ -35,16 +35,23 @@ export function SplitDetailPage() {
   const threadRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(() => getSplit(id).then(v => { setS(v); setError('') }).catch(e => setError(e instanceof Error ? e.message : 'Could not load the split')), [id])
+  // The thread belongs to the group (every split made with "Split again with
+  // group" shares it): keyed by the group's first split.
+  const groupId = s?.id === id ? s.groupId : null
+  useEffect(() => {
+    if (!groupId) return
+    setMsgs([])
+    splitMessages(groupId).then(setMsgs).catch(() => {})
+    return watchSplitMessages(groupId, m => setMsgs(cur => cur.some(x => x.id === m.id) ? cur : [...cur, m]))
+  }, [groupId])
   useEffect(() => {
     void load()
-    splitMessages(id).then(setMsgs).catch(() => {})
-    const stop = watchSplitMessages(id, m => setMsgs(cur => cur.some(x => x.id === m.id) ? cur : [...cur, m]))
     // Payments show within seconds.
     const t = setInterval(() => { if (document.visibilityState === 'visible') void load() }, 8000)
     const on = () => void load()
     window.addEventListener(SPLITS_CHANGED_EVENT, on)
     markSplitGroupSeen(id)
-    return () => { stop(); clearInterval(t); window.removeEventListener(SPLITS_CHANGED_EVENT, on); markSplitGroupSeen(id) }
+    return () => { clearInterval(t); window.removeEventListener(SPLITS_CHANGED_EVENT, on); markSplitGroupSeen(id) }
   }, [id, load])
 
   // Who said what: every person in the group, by user id.
@@ -64,6 +71,12 @@ export function SplitDetailPage() {
       if (m.status !== 'paid' || !m.paidAt) continue
       const who = m.isMe ? 'You' : (m.name ?? 'Someone')
       out.push({ kind: 'event', at: m.paidAt, text: m.completedByMe ? `${who}${m.isMe ? 'r' : "'s"} share was marked received · ${money(m.amount)}` : `${who} paid ${money(m.amount)}` })
+    }
+    // The group's other splits (Split again with group), in line - tap to open.
+    for (const g of s.groupSplits) {
+      const who = g.isCreator ? 'You' : (g.creatorName ?? 'Someone')
+      const done = g.requests > 0 && g.paidCount >= g.requests ? ' · settled' : ''
+      out.push({ kind: 'event', at: g.createdAt, to: g.id, text: `${who} split ${money(g.total)} · ${g.emoji ? `${g.emoji} ` : ''}${g.title}${done}` })
     }
     for (const m of msgs) out.push({ kind: 'msg', at: m.created_at, m })
     out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
@@ -103,7 +116,7 @@ export function SplitDetailPage() {
     if (!text || sending) return
     setSending(true)
     try {
-      const m = await sendSplitMessage(id, text)
+      const m = await sendSplitMessage(s?.groupId ?? id, text)
       setMsgs(cur => cur.some(x => x.id === m.id) ? cur : [...cur, m])
       setDraft('')
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not send', 'error') }
@@ -208,10 +221,14 @@ export function SplitDetailPage() {
 
       {/* The group's thread. */}
       <div ref={threadRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 16px 12px', display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 560, margin: '0 auto' }}>
-        {items.map((it, k) => it.kind === 'event' ? (
+        {items.map((it, k) => it.kind === 'event' ? (it.to ? (
+          // Another split of this group: opens it.
+          <button key={`e${k}`} type="button" onClick={() => navigate(`/splits/${it.to}`)} style={{ alignSelf: 'center', maxWidth: '86%', textAlign: 'center', fontSize: 12.5, fontWeight: 600, color: 'var(--brand-text)',
+            background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: 'none', cursor: 'pointer', borderRadius: 999, padding: '5px 12px' }}>{it.text} ›</button>
+        ) : (
           <div key={`e${k}`} style={{ alignSelf: 'center', maxWidth: '86%', textAlign: 'center', fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)',
             background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', borderRadius: 999, padding: '5px 12px' }}>{it.text}</div>
-        ) : (() => {
+        )) : (() => {
           const mineMsg = !!myUserId && String(it.m.sender_user_id) === String(myUserId)
           const who = names.get(String(it.m.sender_user_id))
           return (
@@ -236,7 +253,7 @@ export function SplitDetailPage() {
           <p style={{ ...subStyle, textAlign: 'center', marginBottom: 10 }}>All settled 🎉 · This split is closed</p>
           <div style={{ display: 'flex', gap: 10 }}>
             <Btn kind="ghost" style={{ height: 48, fontSize: 14.5 }} onClick={() => navigate('/splits/new')}>New split expense</Btn>
-            <Btn style={{ height: 48, fontSize: 14.5 }} onClick={() => navigate('/splits/new', { state: { with: groupPeople } })}>Split again with group</Btn>
+            <Btn style={{ height: 48, fontSize: 14.5 }} onClick={() => navigate('/splits/new', { state: { with: groupPeople, group: s.groupId } })}>Split again with group</Btn>
           </div>
         </div>
       ) : (

@@ -82,6 +82,14 @@ export interface SplitSummary {
   creator: { userId: string | null; username: string | null; name: string | null; avatar: string | null }
   people: number; requests: number; paidCount: number; owedLeft: number
   members: SplitMember[]
+  /** The group this split is in: its first split's id (its own id when it is the first). Its thread is keyed by this. */
+  groupId: string
+  /** The group's other splits, oldest first ("Split again with group" adds to the same group). */
+  groupSplits: SplitGroupSplit[]
+}
+export interface SplitGroupSplit {
+  id: string; title: string; emoji: string | null; total: number; createdAt: string
+  isCreator: boolean; creatorName: string | null; requests: number; paidCount: number
 }
 export interface MySplitMade {
   id: string; title: string; emoji: string | null; total: number; myShare: number; createdAt: string
@@ -115,6 +123,8 @@ function normSummary(d: any): SplitSummary {
     people: num(d.people), requests: num(d.requests), paidCount: num(d.paidCount),
     creator: { userId: d.creator?.userId ?? null, username: d.creator?.username ?? null, name: d.creator?.name ?? null, avatar: d.creator?.avatar ?? null },
     members: (d.members ?? []).map((m: any) => ({ ...m, userId: m.userId ?? null, isMe: !!m.isMe, amount: num(m.amount), received: num(m.received), completedByMe: !!m.completedByMe })),
+    groupId: String(d.groupId || d.id),
+    groupSplits: (d.groupSplits ?? []).map((g: any) => ({ ...g, emoji: g.emoji ?? null, total: num(g.total), isCreator: !!g.isCreator, creatorName: g.creatorName ?? null, requests: num(g.requests), paidCount: num(g.paidCount) })),
   }
 }
 
@@ -128,7 +138,7 @@ function changed() {
  * payment request card. A card that couldn't be posted doesn't undo the split:
  * the request stands, the tracker shows it, and Remind still reaches them.
  */
-export async function createSplit(p: { title: string; emoji?: string | null; total: number; myShare: number; members: SplitMemberInput[]; sourceTx?: string | null }): Promise<CreatedSplit> {
+export async function createSplit(p: { title: string; emoji?: string | null; total: number; myShare: number; members: SplitMemberInput[]; sourceTx?: string | null; group?: string | null }): Promise<CreatedSplit> {
   const { data, error } = await supabase.rpc('split_create', {
     p_title: p.title.trim(), p_emoji: p.emoji || null, p_total: p.total, p_my_share: p.myShare,
     p_members: p.members.map(m => ({ username: m.username.replace(/^@/, '').replace(/\.arc$/i, ''), amount: m.amount })),
@@ -137,6 +147,13 @@ export async function createSplit(p: { title: string; emoji?: string | null; tot
   fail(error)
   const requests: CreatedSplitRequest[] = ((data as any)?.requests ?? []).map((r: any) => ({ ...r, amount: num(r.amount) }))
   const splitId = String((data as any)?.splitId ?? '')
+  // "Split again with group": the new split joins that group (same entry in
+  // Chats, same thread). The split itself is made either way; if joining
+  // fails it simply stands as its own group.
+  if (p.group && splitId) {
+    const { error: joinErr } = await supabase.rpc('split_join_group', { p_split: splitId, p_group: p.group })
+    if (joinErr) console.warn('[split] could not add to the group:', joinErr.message)
+  }
   const notPosted: string[] = []
   const [{ sendChatText }, { paymentRequestMessage }, { formatAmount }, { markPaymentRequestCreated }] = await Promise.all([
     import('./chatSend'), import('./merchantPay'), import('./utils'), import('./merchantPayBasics'),
