@@ -4,6 +4,7 @@
 // amount and USDC filled in. For an order the transfer carries the order's
 // reference, so this page sees the payment land and merchant-pay confirms it
 // (its watcher finds it too, if this page is closed).
+import { shortOrderNumber } from '@/lib/orderLabels'
 import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, Copy, ExternalLink, Loader2 } from 'lucide-react'
 import { useUIStore } from '@/store'
@@ -36,7 +37,9 @@ export function SolanaPayPanel({ to, amount, code, orderNumber, label, onPaid }:
   useEffect(() => { if (code) solanaReference(code).then(setReference).catch(() => setReference(null)) }, [code])
   const uri = code && !reference ? '' : solanaPayUri({
     to, amount: amount ?? undefined, reference: reference ?? undefined,
-    label: label ?? 'MeshPort', message: orderNumber ? `Order ${orderNumber}` : undefined,
+    label: label ?? 'MeshPort', // What the wallet shows: the order as MeshPort names it (#170). Display only -
+    // the payment is matched by `reference`.
+    message: orderNumber ? `Order ${shortOrderNumber(orderNumber)}` : undefined,
   })
 
   useEffect(() => {
