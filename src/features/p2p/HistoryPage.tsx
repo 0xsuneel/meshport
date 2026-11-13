@@ -50,7 +50,8 @@ function matchesCategory(t: P2PTrade, myUserId: string | undefined, category: Ca
     case 'all':       return true
     case 'buy':       return t.buyerId === myUserId
     case 'sell':      return t.sellerId === myUserId
-    case 'completed': return t.status === 'completed' || t.status === 'released'
+    // Completed = released on-chain. 'released' alone is still releasing.
+    case 'completed': return t.status === 'completed'
     case 'cancelled': return t.status === 'expired' || (t.status === 'cancelled' && t.offerType !== 'buy')
     case 'disputed':  return t.disputeStatus === 'open'
     case 'refunded':  return t.status === 'cancelled' && t.offerType === 'buy'
@@ -201,7 +202,7 @@ export function P2PHistoryPage() {
 
   // Desktop summary beside the list (same 65/35 split as Recent / Activity).
   const summary = useMemo(() => {
-    const isDone = (t: P2PTrade) => t.status === 'completed' || t.status === 'released'
+    const isDone = (t: P2PTrade) => t.status === 'completed'
     const done = trades.filter(isDone)
     const usdc = (list: P2PTrade[]) => list.reduce((a, t) => a + (Number(t.amountUsdc) || 0), 0)
     return {
@@ -265,7 +266,7 @@ export function P2PHistoryPage() {
           const meta = badgeMeta(t)
           const cp = counterparties.get(isBuyer ? t.sellerId : t.buyerId)
 
-          const done = t.status === 'completed' || t.status === 'released'
+          const done = t.status === 'completed'
           const tone = t.disputeStatus === 'open' ? 'attention' : done ? (isBuyer ? 'in' : 'out')
             : t.status === 'cancelled' || t.status === 'expired' ? 'muted' : 'pending'
           return (

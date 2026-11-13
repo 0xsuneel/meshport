@@ -118,7 +118,11 @@ export function statusMeta(status: string): { label: string; color: string } {
     case 'awaiting_seller_confirmation': return { label: 'Waiting for seller', color: COLORS.warning }
     case 'waiting_for_buyer': return { label: 'Pending payment', color: COLORS.warning }
     case 'payment_sent':      return { label: 'Paid · awaiting release', color: 'var(--accent-text)' }
-    case 'released':          return { label: 'Released', color: COLORS.success }
+    // 'released' is the seller's claim, written BEFORE the escrow contract
+    // moves anything (p2pService.releaseTrade): in progress, not done. Only
+    // 'completed' - set after the on-chain release is confirmed (or proved
+    // from the contract by the reconciler) - means the buyer has the USDC.
+    case 'released':          return { label: 'Releasing…', color: COLORS.warning }
     case 'completed':         return { label: 'Completed', color: COLORS.success }
     case 'cancelled':         return { label: 'Cancelled', color: COLORS.error }
     case 'expired':           return { label: 'Expired', color: COLORS.muted }
@@ -1565,15 +1569,18 @@ export function P2PTradePage() {
         const sym = currencySymbol(trade.currency)
         const fmtMoney = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         const active = !expired && (trade.status === 'waiting_for_buyer' || trade.status === 'awaiting_seller_confirmation')
-        const done = trade.status === 'completed' || trade.status === 'released'
+        // Released on-chain = completed. 'released' alone is a release still in progress.
+        const done = trade.status === 'completed'
+        const releasing = trade.status === 'released'
         const dead = expired || trade.status === 'cancelled' || trade.status === 'expired'
         const title = done ? 'Order completed'
+          : releasing ? 'Releasing USDC…'
           : dead ? (trade.status === 'cancelled' ? 'Order cancelled' : 'Order expired')
           : trade.status === 'awaiting_seller_confirmation' ? (isBuyer ? 'Waiting for seller' : 'Accept order')
           : trade.status === 'waiting_for_buyer' ? (isBuyer ? 'Pay the seller' : 'Waiting for payment')
           : (isBuyer ? 'Waiting for release' : 'Release USDC')
         const stepNames = isBuyer ? ['Pay', 'Notify seller', 'Receive USDC'] : ['Buyer pays', 'Check payment', 'Release']
-        const stepIdx = done ? 3 : trade.status === 'payment_sent' ? 2 : trade.status === 'waiting_for_buyer' ? 1 : 0
+        const stepIdx = done ? 3 : trade.status === 'payment_sent' || releasing ? 2 : trade.status === 'waiting_for_buyer' ? 1 : 0
         const orderNo = trade.id.replace(/-/g, '').slice(0, 12).toUpperCase().replace(/(.{4})(?=.)/g, '$1-')
         const copy = async (label: string, v: string) => {
           const ok = await copyToClipboard(v)
@@ -2495,7 +2502,7 @@ export function P2PMyTradesPage() {
   // Backup for the live feed (as on a trade's own page): while any trade is
   // still moving, re-read the list every few seconds with the screen on, so
   // the other side's step shows even if the realtime connection dropped.
-  const anyMoving = trades.some(t => !['completed', 'released', 'cancelled', 'expired', 'resolved_buyer', 'resolved_seller'].includes(t.status))
+  const anyMoving = trades.some(t => !['completed', 'cancelled', 'expired', 'resolved_buyer', 'resolved_seller'].includes(t.status))
   useEffect(() => {
     if (!user?.id || !anyMoving) return
     const iv = setInterval(() => { if (document.visibilityState === 'visible') fetchMyTrades(user.id!).then(setTrades).catch(() => {}) }, 6000)
@@ -2519,7 +2526,7 @@ export function P2PMyTradesPage() {
           const isBuyer = t.buyerId === user?.id
           const st = isTradeExpired(t) ? 'expired' : t.status
           const meta = statusMeta(st)
-          const done = st === 'completed' || st === 'released'
+          const done = st === 'completed' // 'released' = still releasing on-chain
           const tone = done ? (isBuyer ? 'in' : 'out') : st === 'cancelled' || st === 'expired' ? 'muted' : 'pending'
           return (
             <HistoryRow key={t.id} flash={t.id === tradesFlash.flashId}

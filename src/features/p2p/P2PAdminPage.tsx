@@ -61,7 +61,7 @@ const TRADE_STATUS: Record<string, string> = {
   awaiting_seller_confirmation: 'Waiting for the seller to accept',
   waiting_for_buyer: 'Waiting for the buyer to pay',
   payment_sent: 'Buyer says they paid - waiting for the seller to release',
-  released: 'Released to the buyer',
+  released: 'Release in progress - not yet confirmed on-chain',
   completed: 'Completed',
   cancelled: 'Cancelled',
   expired: 'Expired',
