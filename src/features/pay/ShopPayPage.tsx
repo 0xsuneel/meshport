@@ -65,6 +65,10 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
       // the order from the server itself and keeps Pay disabled until it has
       // checked it (payable, and paid to this wallet) - it fails closed to the
       // order page otherwise, exactly as when the order is handed over.
+      // Keep the amount on this page's link, so Back from Review shows it again.
+      const here = new URL(window.location.href)
+      here.searchParams.set('amount', String(value))
+      navigate(`${here.pathname}${here.search}`, { replace: true })
       if (useAuthStore.getState().isAuthenticated && wallet && /^0x[0-9a-fA-F]{40}$/.test(wallet)) {
         const to = `${shop.username}|${wallet}|${shop.businessName}|${shop.avatarUrl ?? ''}`
         navigate(`/pay?to=${encodeURIComponent(to)}&amount=${encodeURIComponent(String(value))}&merchantPay=${encodeURIComponent(String(data))}&review=1`)

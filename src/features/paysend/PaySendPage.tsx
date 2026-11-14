@@ -125,6 +125,7 @@ export function PaySendPage() {
     return toParam ? resolveCompound(toParam) : null
   })[0]
   // ?review=1 (a Shop QR amount typed on the shop page): open on Review.
+  const reviewEntry = useState(() => !!initialRecipient && searchParams.get('review') === '1' && !!searchParams.get('merchantPay') && !!searchParams.get('amount'))[0]
   const [screen, setScreen] = useState<Screen>(() => initialRecipient
     ? (searchParams.get('review') === '1' && searchParams.get('merchantPay') && searchParams.get('amount') ? 'review' : 'amount')
     : 'search')
@@ -703,7 +704,12 @@ export function PaySendPage() {
   }
 
   const goBack = () => {
-    if (screen === 'review') { goBack2('amount'); return }
+    if (screen === 'review') {
+      // Shop QR: the amount was typed on the shop's page - Back returns there
+      // (the same step as the phone's Back, below), not to this amount screen.
+      if (reviewExitsPay) { if (pushedStepsRef.current > 0) window.history.back(); else navigate(-1); return }
+      goBack2('amount'); return
+    }
     if (screen === 'amount') {
       if (merchantPayCode) { if (window.history.length > 1) navigate(-1); else navigate('/', { replace: true }); return }
       const rt = locationState.returnTo
@@ -729,6 +735,10 @@ export function PaySendPage() {
   // While a payment is processing the leave guard holds Back first; Leave,
   // or Back on the result, exits Pay instead of returning to the amount.
   const rtNow = locationState.returnTo
+  // Opened on Review from the Shop QR page (?review=1): Back from Review goes
+  // back to that page. Review keeps its history entry, so the leave guard
+  // still holds Back while a payment is processing.
+  const reviewExitsPay = reviewEntry
   const amountExitsPay = !!merchantPayCode || rtNow === '/' || rtNow === 'contacts' || rtNow === '/recent-paid'
     || rtNow === '/payment-link' || (rtNow === 'chat' && !!returnConvId)
   const inPageDepth = screen === 'review' ? (amountExitsPay ? 1 : 2) : screen === 'amount' && !amountExitsPay ? 1 : 0
@@ -764,7 +774,8 @@ export function PaySendPage() {
         navigate(dest, { replace: true })
         return
       }
-      if (cur === 'review') goBack2('amount')
+      if (cur === 'review' && reviewEntry) navigate(-1)
+      else if (cur === 'review') goBack2('amount')
       else if (cur === 'amount') goBack2('search')
     }
     window.addEventListener('popstate', onPop)
