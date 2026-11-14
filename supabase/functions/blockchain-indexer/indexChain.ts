@@ -7,11 +7,20 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 import type { IndexedChain } from './chains.ts'
 import {
-  getCursor, setCursor, markFailure, markSuccess, markReorg,
+  getCursor, setCursor,
   insertEvents, markEventsConfirmed, markEventsReorged,
 } from './cursors.ts'
 import { computeScanWindow, detectReorg, reorgRollbackBlock, partitionByDepth, safeFrontier } from './cursorMath.ts'
 import { getHead, scanRange } from './scanner.ts'
+import type { CursorStore } from './cursorCache.ts'
+
+/** The cursor straight from / to the database (every write at once) - the minute pass. */
+function directStore(supabase: SupabaseClient): CursorStore {
+  return {
+    get: chainId => getCursor(supabase, chainId),
+    set: (chainId, patch) => setCursor(supabase, chainId, patch),
+  }
+}
 
 /**
  * Every wallet address the indexer watches.
@@ -48,28 +57,38 @@ export async function indexChain(
   supabase: SupabaseClient,
   chain: IndexedChain,
   knownWallets: Set<string>,
+  /** indexer-fast passes its in-memory cache (cursorCache.ts); default: the database directly. */
+  store: CursorStore = directStore(supabase),
 ): Promise<Record<string, unknown>> {
   const report: Record<string, unknown> = { chain: chain.id }
+  // A failed pass: the failure is saved at once, the cursor position kept.
+  const fail = async (message: string) => {
+    const current = await store.get(chain.id)
+    await store.set(chain.id, {
+      sync_state: 'error', last_error: message.slice(0, 500),
+      consecutive_failures: (current?.consecutive_failures ?? 0) + 1,
+    }, 'now')
+  }
 
   try {
     // -- 1. Observe the head ------------------------------------------------
     const head = await getHead(chain.rpcs)
     report.head = head
 
-    const cursor = await getCursor(supabase, chain.id)
+    const cursor = await store.get(chain.id)
     const depth = cursor?.confirmation_depth ?? chain.confirmationDepth
 
     // Cold start: begin at the head, NOT at genesis. Backfilling history is a
     // separate, explicitly-triggered concern -- a cold start that silently
     // scanned from block 0 would hammer every endpoint and could run for days.
     if (!cursor) {
-      await setCursor(supabase, chain.id, {
+      await store.set(chain.id, {
         last_indexed_block: head,
         last_indexed_hash: null,
         latest_observed_block: head,
         confirmation_depth: chain.confirmationDepth,
         sync_state: 'idle',
-      })
+      }, 'now')
       report.action = 'cold_start'
       report.startedAt = head
       return report
@@ -92,11 +111,14 @@ export async function indexChain(
         if (blockAtCursor && detectReorg(cursor.last_indexed_hash, blockAtCursor.hash)) {
           const rollback = reorgRollbackBlock(cursor.last_indexed_block, depth)
           await markEventsReorged(supabase, chain.id, rollback + 1)
-          await markReorg(supabase, chain.id, rollback, null)
-          await setCursor(supabase, chain.id, {
+          // The rollback is saved at once, even though the block goes back.
+          await store.set(chain.id, {
+            last_indexed_block: rollback,
+            last_indexed_hash: null,
+            sync_state: 'reorg',
             reorg_count: (cursor.reorg_count ?? 0) + 1,
             last_reorg_at: new Date().toISOString(),
-          })
+          }, 'force')
           report.action = 'reorg_rollback'
           report.rolledBackTo = rollback
           return report   // next pass re-scans from the rolled-back cursor
@@ -112,7 +134,7 @@ export async function indexChain(
     // -- 3. Scan window -----------------------------------------------------
     const win = computeScanWindow(cursor.last_indexed_block, head, chain.maxBlocksPerPass)
     if (win.toBlock <= cursor.last_indexed_block && cursor.last_indexed_block > 0) {
-      await setCursor(supabase, chain.id, { latest_observed_block: head, sync_state: 'idle' })
+      await store.set(chain.id, { latest_observed_block: head, sync_state: 'idle' }, 'lazy')
       report.action = 'up_to_date'
       report.lag = head - cursor.last_indexed_block
       return report
@@ -140,16 +162,20 @@ export async function indexChain(
 
     // -- 7. Advance the cursor -- ONLY to the safe point ---------------------
     if (outcome.safeUpTo >= win.fromBlock) {
-      await markSuccess(supabase, chain.id, {
+      await store.set(chain.id, {
         last_indexed_block: outcome.safeUpTo,
         last_indexed_hash: outcome.safeUpToHash,
         latest_observed_block: head,
-      })
+        sync_state: 'idle',
+        consecutive_failures: 0,
+        last_error: null,
+        last_success_at: new Date().toISOString(),
+      }, 'lazy')
       report.cursorAdvancedTo = outcome.safeUpTo
     } else {
       // Nothing was contiguously processed -- leave the cursor untouched so the
       // whole range is retried. This is the anti-data-loss path.
-      await markFailure(supabase, chain.id, 'no contiguous progress in pass')
+      await fail('no contiguous progress in pass')
       report.action = 'no_progress'
     }
 
@@ -158,7 +184,7 @@ export async function indexChain(
 
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    await markFailure(supabase, chain.id, msg)
+    await fail(msg)
     report.error = msg
     return report
   }
