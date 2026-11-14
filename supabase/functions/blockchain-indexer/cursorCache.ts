@@ -24,7 +24,7 @@
 // If a run dies between saves, the next one starts from the last saved block:
 // at most FLUSH_MS of blocks are scanned again, nothing is missed.
 
-import type { CursorRow } from './cursors.ts'
+import type { CursorRow } from './cursorRow.ts'
 
 export type CursorWrite = 'lazy' | 'now' | 'force'
 

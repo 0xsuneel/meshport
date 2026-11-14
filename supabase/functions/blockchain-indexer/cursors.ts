@@ -14,19 +14,10 @@
 
 import { createClient, SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 
-export interface CursorRow {
-  chain_id:             string
-  last_indexed_block:   number
-  last_indexed_hash:    string | null
-  latest_observed_block: number | null
-  confirmation_depth:   number
-  sync_state:           string
-  consecutive_failures: number
-  reorg_count:          number
-  last_reorg_at:        string | null
-  last_success_at:      string | null
-  last_error:           string | null
-}
+// The row type lives in cursorRow.ts (no imports), so pure code and the app's
+// vitest can use it without loading the Supabase client.
+import type { CursorRow } from './cursorRow.ts'
+export type { CursorRow }
 
 export async function getCursor(supabase: SupabaseClient, chainId: string): Promise<CursorRow | null> {
   const { data, error } = await supabase

@@ -3,7 +3,7 @@
 // reorg rollback, saved at once.
 import { describe, it, expect } from 'vitest'
 import { createCursorCache, type CursorDb } from '../../supabase/functions/blockchain-indexer/cursorCache'
-import type { CursorRow } from '../../supabase/functions/blockchain-indexer/cursors'
+import type { CursorRow } from '../../supabase/functions/blockchain-indexer/cursorRow'
 
 function fakeDb(start: Partial<CursorRow> | null) {
   let row: CursorRow | null = start ? ({ chain_id: 'base-sepolia', ...start } as CursorRow) : null
@@ -61,7 +61,7 @@ describe('cursor cache (indexer-fast)', () => {
     await f.db.write('base-sepolia', { last_indexed_block: 150 }, false)
     await c.set('base-sepolia', { last_indexed_block: 120 }, 'lazy')
     expect(f.row()?.last_indexed_block).toBe(150)
-    expect(f.log.writes.at(-1)?.notBackwards).toBe(true)
+    expect(f.log.writes[f.log.writes.length - 1]?.notBackwards).toBe(true)
     await c.set('base-sepolia', { last_indexed_block: 90, sync_state: 'reorg' }, 'force')
     expect(f.row()?.last_indexed_block).toBe(90)
   })
