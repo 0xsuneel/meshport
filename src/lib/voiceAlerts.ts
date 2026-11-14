@@ -24,15 +24,39 @@
 
 import { useSyncExternalStore } from 'react'
 
-type Settings = { enabled: boolean }
+type Settings = {
+  enabled: boolean
+  /** Buzz with every alert, for a phone on silent. */
+  vibrate: boolean
+  /** Payments below this only chime (0: every payment is said). */
+  minAmount: number
+  /** The "Payment received" card over the app (off: voice and buzz only). */
+  bigCard: boolean
+}
 const KEY = 'meshport_voice_alerts'
-const DEFAULTS: Settings = { enabled: true }
+const DEFAULTS: Settings = { enabled: true, vibrate: true, minAmount: 0, bigCard: true }
+/** The choices offered for "Only say payments above". */
+export const MIN_AMOUNTS = [0, 1, 5, 10] as const
 
 function read(): Settings {
-  try { return { enabled: JSON.parse(localStorage.getItem(KEY) || '{}').enabled ?? DEFAULTS.enabled } } catch { return DEFAULTS }
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY) || '{}')
+    const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d)
+    return {
+      enabled: bool(s.enabled, DEFAULTS.enabled),
+      vibrate: bool(s.vibrate, DEFAULTS.vibrate),
+      minAmount: typeof s.minAmount === 'number' && s.minAmount >= 0 ? s.minAmount : DEFAULTS.minAmount,
+      bigCard: bool(s.bigCard, DEFAULTS.bigCard),
+    }
+  } catch { return DEFAULTS }
 }
 let settings = read()
 const listeners = new Set<() => void>()
+
+/** Whether this payment is said out loud (else it only chimes). */
+export function isSpoken(amount: number): boolean {
+  return settings.enabled && amount >= settings.minAmount
+}
 
 export function setVoiceAlerts(patch: Partial<Settings>) {
   settings = { ...settings, ...patch }
@@ -112,6 +136,41 @@ export function prefetchVoicePack(): Promise<void> {
     if (!failed) { try { localStorage.setItem(PACK_KEY, VOICE_DIR) } catch { /* storage unavailable */ } }
   })().finally(() => { packRun = null })
   return packRun
+}
+
+const ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+  'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen']
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
+const word = (n: number) => n < 20 ? ONES[n] : TENS[Math.floor(n / 10)] + (n % 10 ? ` ${ONES[n % 10]}` : '')
+const ON = 'on MeshPort.'
+/** One clip's words (scripts/gen_voice_clips.py), the brand written as it's spelled. */
+function clipWords(name: string): string {
+  const m = /^(t|h|da|do|c)(\d+)$/.exec(name)
+  if (m) {
+    const n = Number(m[2]), w = word(n)
+    if (m[1] === 't') return `${w} thousand`
+    if (m[1] === 'h') return `${w} hundred`
+    if (m[1] === 'da') return `${w} dollars and`
+    if (m[1] === 'do') return `${w} dollars, ${ON}`
+    return `${w} ${n === 1 ? 'cent' : 'cents'}, ${ON}`
+  }
+  return ({
+    received: 'Received,', dollars_and: 'dollars and', dollars_on: `dollars, ${ON}`,
+    one_dollar_and: 'one dollar and', one_dollar_on: `one dollar, ${ON}`,
+  } as Record<string, string>)[name] ?? ''
+}
+/**
+ * The words the voice says for an amount, written out - shown on the alert
+ * card ("Received, twenty four dollars and fifty cents, on MeshPort.").
+ * Built from the same clip list, so it is exactly what plays.
+ */
+export function spokenLine(amount: number): string {
+  const names = phrasesFor(amount)
+  if (!names) {
+    const amt = amount.toFixed(2).replace(/\.00$/, '')
+    return `Received, ${amt} ${amt === '1' ? 'dollar' : 'dollars'}, ${ON}`
+  }
+  return names.map(clipWords).join(' ')
 }
 
 /** What the device's own speech says when the clips can't play. */
@@ -259,7 +318,12 @@ function say(text: string) {
 export function speakPayment(amount: number, opts: { test?: boolean } = {}) {
   if (typeof window === 'undefined' || (!settings.enabled && !opts.test)) return
   if (opts.test) unlock()
-  try { navigator.vibrate?.([120, 60, 120]) } catch { /* no vibration */ }
+  if (settings.vibrate) { try { navigator.vibrate?.([120, 60, 120]) } catch { /* no vibration */ } }
+  // Below the chosen amount: the chime alone (a test always speaks).
+  if (!opts.test && amount < settings.minAmount) {
+    queue = queue.then(() => playClips([])).catch(() => {})
+    return
+  }
   const names = phrasesFor(amount)
   // One alert is scheduled at a time, so two payments together never overlap.
   queue = queue.then(() => names ? playClips(names) : false).then(ok => {

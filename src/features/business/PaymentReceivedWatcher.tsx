@@ -5,10 +5,11 @@
 // the merchant-pay watcher) show the same way - with or without an order.
 // Plain USDC received on Arc (no order) is not a payment and stays silent.
 import { useEffect, useRef, useState } from 'react'
-import { useAuthStore } from '@/store'
+import { useAuthStore, useUIStore } from '@/store'
 import { useBusinessTab } from '@/lib/merchant'
 import { listMyPayments, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, subscribeChainReceipts, displayOrderNumber, orderTitle, type MerchantPayment } from '@/lib/merchantPay'
-import { speakPayment, prefetchVoicePack, useVoiceAlerts } from '@/lib/voiceAlerts'
+import { speakPayment, prefetchVoicePack, useVoiceAlerts, setVoiceAlerts, spokenLine, isSpoken } from '@/lib/voiceAlerts'
+import { useNavigate } from 'react-router-dom'
 import { PaymentReceivedOverlay } from './ui'
 import { chainLabel } from './settlement'
 import { notifyExternalBalanceChanged } from '@/blockchain/BlockchainManager'
@@ -34,12 +35,26 @@ function writeAnnounced(wallet: string, set: Set<string>) {
 export function PaymentReceivedWatcher() {
   const business = useBusinessTab()
   const wallet = useAuthStore(s => s.walletAddress)
-  const [shown, setShown] = useState<MerchantPayment | null>(null)
+  // Cards waiting to be shown, oldest first: payments landing together each
+  // get their own card, one after the other ("+N more waiting").
+  const [cards, setCards] = useState<MerchantPayment[]>([])
+  const shown = cards[0] ?? null
+  const nextCard = () => setCards(c => c.slice(1))
+  const navigate = useNavigate()
+  const toast = useUIStore(s => s.showToastMessage)
   const seen = useRef<Set<string> | null>(null)
   // Payments already announced (chain:tx) - spoken from the live feed or a
   // reload, on this phone - so none is said twice (lives across restarts).
   const announced = useRef<Set<string>>(new Set())
   const voice = useVoiceAlerts()
+  // The settings as of now, read inside the long-lived effect below.
+  const bigCardRef = useRef(voice.bigCard); bigCardRef.current = voice.bigCard
+  const keyOf = (p: MerchantPayment) => `${p.chain}:${p.txHash.toLowerCase()}`
+  const showCards = (list: MerchantPayment[]) => {
+    if (!bigCardRef.current || !list.length) return
+    const inOrder = [...list].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+    setCards(c => [...c, ...inOrder.filter(p => !c.some(x => keyOf(x) === keyOf(p)))])
+  }
 
   // Like a soundbox's language pack: every voice clip downloaded ahead, while
   // the phone is idle, so an alert never waits on the network.
@@ -57,6 +72,7 @@ export function PaymentReceivedWatcher() {
   useEffect(() => {
     seen.current = null
     seenReceipts.current = null
+    setCards([])
     if (!business || !wallet) return
     announced.current = readAnnounced(wallet)
     let live = true
@@ -80,8 +96,7 @@ export function PaymentReceivedWatcher() {
         if (isFresh(w.createdAt)) announce(k, w.amount, w.createdAt)
         else { announced.current.add(k); writeAnnounced(wallet, announced.current) }
       }
-      const last = [...list].reverse().find(([, w]) => w.payment && isFresh(w.createdAt))
-      if (last) setShown(last[1].payment!)
+      showCards(list.filter(([, w]) => w.payment && isFresh(w.createdAt)).map(([, w]) => w.payment!))
     }
     // One check at a time: a live update landing while the first load is
     // still out would otherwise count its payment as already seen (silent).
@@ -119,7 +134,7 @@ export function PaymentReceivedWatcher() {
       // announced yet.
       const fresh = list.filter(p => isFresh(p.createdAt) && (seen.current ? !seen.current.has(key(p)) : !announced.current.has(key(p))))
       if (fresh.length) {
-        if (visible()) setShown(fresh[0])
+        if (visible()) showCards(fresh)
         for (const p of [...fresh].reverse()) announce(key(p), p.amount, p.createdAt, p)
         // Already waiting from the live feed while hidden: its card shows on return.
         if (!visible()) for (const p of fresh) { const w = waiting.get(key(p)); if (w) w.payment = p }
@@ -146,11 +161,14 @@ export function PaymentReceivedWatcher() {
     return () => { live = false; stop(); clearInterval(t); document.removeEventListener('visibilitychange', onVisible) }
   }, [business, wallet])
 
+  // Each card closes by itself after 8 s; the next one waiting follows.
   useEffect(() => {
     if (!shown) return
-    const t = setTimeout(() => setShown(null), 8000)
+    const t = setTimeout(nextCard, 8000)
     return () => clearTimeout(t)
   }, [shown])
+  // Big alert card turned off: nothing more shows.
+  useEffect(() => { if (!voice.bigCard) setCards([]) }, [voice.bigCard])
 
   // The last payment shown stays drawn while the popup animates away -
   // clearing it with the popup still on screen blanked it mid-close (flicker).
@@ -166,6 +184,13 @@ export function PaymentReceivedWatcher() {
   return (
     <PaymentReceivedOverlay open={!!shown} amount={p ? money(p.amount) : ''}
       from={p ? (p.customerUsername ? `${p.customerUsername}.arc` : (/^0x0{40}$/i.test(p.from) ? 'a bridge' : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`)) : ''}
-      chainLabel={p ? chainLabel(p.chain) : ''} order={order} onDone={() => setShown(null)} />
+      chainLabel={p ? chainLabel(p.chain) : ''} order={order}
+      // What the voice said - shown when this payment was said out loud.
+      spoken={p && isSpoken(p.amount) ? spokenLine(p.amount) : undefined}
+      more={Math.max(0, cards.length - 1)} itemKey={p ? keyOf(p) : undefined}
+      onRepeat={p ? () => speakPayment(p.amount, { test: true }) : undefined}
+      onMute={voice.enabled ? () => { setVoiceAlerts({ enabled: false }); toast('Voice alerts off - turn them on in Business tools → Payment alerts', 'info') } : undefined}
+      onView={p ? () => { setCards([]); navigate(`/business?pay=${encodeURIComponent(p.txHash)}`) } : undefined}
+      onDone={nextCard} />
   )
 }

@@ -25,10 +25,10 @@ import { useAuthStore, useWalletStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLogoSrc } from '@/lib/chainLogos'
-import { listMyPayments, listMyIntents, isAskedOrder, listChainReceipts, subscribeMerchantPayments, subscribeChainReceipts, createPaymentRequest, displayOrderNumber, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
+import { listMyPayments, listMyIntents, isAskedOrder, listChainReceipts, subscribeMerchantPayments, subscribeChainReceipts, createPaymentRequest, displayOrderNumber, orderTitle, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
 import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
 import { StorePicker } from '@/features/merchant/StorePicker'
-import { useVoiceAlerts, setVoiceAlerts, speakPayment } from '@/lib/voiceAlerts'
+import { useVoiceAlerts, setVoiceAlerts, speakPayment, spokenLine, MIN_AMOUNTS } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockSigner } from './settlement'
 import { listMyRefunds, subscribeMyRefunds, refundPayment, chainUsdcBalance, canRefundOnChain, checkRefundableSender, type SenderCheck, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
 import { mergeSales } from '@/lib/businessSales'
@@ -283,7 +283,35 @@ function OwnerBusinessPage() {
 
   // ── Sheets ────────────────────────────────────────────────────────────
   const [detail, setDetail] = useState<Payment | null>(null)
+  // ?pay=<tx hash> (the payment card's "View payment"): open that payment
+  // once the list has it, then drop the parameter. Matched by transaction -
+  // the card and this list name other-chain payments differently.
+  const payParam = query.get('pay')
+  useEffect(() => {
+    if (!payParam || !loaded) return
+    const tx = payParam.toLowerCase()
+    const found = raw.find(p => p.txHash.toLowerCase() === tx)
+    if (found) setDetail(toRow(found))
+    navigate({ pathname: location.pathname, search: '' }, { replace: true, state: location.state })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per link, when the list is in
+  }, [payParam, loaded])
   const [voiceOpen, setVoiceOpen] = useState(false)
+  // Payment alerts → Today: this store's payments since midnight, newest first.
+  const alertsToday = useMemo(() => {
+    const start = new Date(); start.setHours(0, 0, 0, 0)
+    const list = storeRaw.filter(p => p.method !== 'own_transfer' && Date.parse(p.createdAt) >= start.getTime())
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    const where = (p: MerchantPayment) => p.orderKind === 'shop' ? 'Shop QR'
+      : p.orderNumber ? (p.orderKind ? orderTitle(p.orderKind, p.orderNumber, { short: true }) : displayOrderNumber(p.orderNumber))
+      : p.chain !== 'Arc_Testnet' ? `from ${chainLabel(p.chain)}` : 'Payment'
+    return {
+      total: money(list.reduce((t, p) => t + kept(p), 0)),
+      list: list.slice(0, 20).map(p => ({
+        id: p.id, who: who(p), amount: money(kept(p)),
+        detail: `${new Date(p.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${where(p)}`,
+      })),
+    }
+  }, [storeRaw, kept])
   const [progressOpen, setProgressOpen] = useState(false)
   const [historyId, setHistoryId] = useState<string | null>(() => query.get('claim'))
   const [pin, setPin] = useState<{ kind: 'settle'; retry?: string[] } | { kind: 'one'; chainId: string } | { kind: 'refund' } | null>(null)
@@ -718,9 +746,13 @@ function OwnerBusinessPage() {
         value={pinValue} onChange={v => { setPinValue(v); setPinError(undefined) }}
         error={pinError} onComplete={code => { void onPin(code) }} onClose={() => setPin(null)} />
 
-      <VoiceSheet open={voiceOpen} enabled={voice.enabled}
+      <VoiceSheet open={voiceOpen} enabled={voice.enabled} vibrate={voice.vibrate} bigCard={voice.bigCard}
+        minAmount={voice.minAmount} minChoices={MIN_AMOUNTS} testLine={spokenLine(24.5)} today={alertsToday}
         onToggle={() => setVoiceAlerts({ enabled: !voice.enabled })}
-        onTest={() => speakPayment(24, { test: true })} onClose={() => setVoiceOpen(false)} />
+        onVibrate={() => setVoiceAlerts({ vibrate: !voice.vibrate })}
+        onBigCard={() => setVoiceAlerts({ bigCard: !voice.bigCard })}
+        onMinAmount={n => setVoiceAlerts({ minAmount: n })}
+        onTest={() => speakPayment(24.5, { test: true })} onClose={() => setVoiceOpen(false)} />
 
       {level('tools', (
         <ToolsScreen open={stack.includes('tools')} onBack={back}
@@ -738,7 +770,7 @@ function OwnerBusinessPage() {
             ] },
             { title: 'Settings', rows: [
               { id: 'profile', label: 'Business profile', hint: `${headerStatus === 'verified' ? 'Verified' : 'Complete your application'} · name, logo, payment limits` },
-              { id: 'voice', label: 'Voice alerts', hint: voice.enabled ? 'On · speaks each payment' : 'Off' },
+              { id: 'voice', label: 'Payment alerts', hint: voice.enabled ? `Voice on${voice.minAmount ? ` · above $${voice.minAmount}` : ''}${voice.bigCard ? ' · alert card' : ''}` : 'Voice off' },
               { id: 'help', label: 'Help & disputes', hint: 'Customer says they paid' },
             ] },
           ]} />
