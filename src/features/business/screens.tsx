@@ -53,7 +53,8 @@ import { usePrint } from './printArea'
 import { salesByHour, hourLabel, statementRows, rangeLabel, rangeStart, exportPaymentsCsv } from './reports'
 import type { MerchantRefund } from '@/lib/merchantRefunds'
 import { groupRefunds, refundedSum, remainingAfter, isFullyRefunded, extraLeft, MIN_REFUND } from '@/lib/refundTotals'
-import { submitPayment, displayOrderNumber, listUnmatchedDeposits, assignDeposit, type UnmatchedDeposit } from '@/lib/merchantPay'
+import { submitPayment, displayOrderNumber, orderTitle, listUnmatchedDeposits, assignDeposit, type UnmatchedDeposit } from '@/lib/merchantPay'
+import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLabel } from './settlement'
 import { dueText, canRemindAt, remindBill, remindCustomer } from '@/lib/businessBills'
 import { logBusiness, type ActivityAction } from '@/lib/businessActivity'
@@ -870,17 +871,26 @@ export function ReportsScreen({ open, onBack, insights, statement, storePick }: 
 
 // ── Receipt ──────────────────────────────────────────────────────────────
 
-export function ReceiptScreen({ open, onBack, storeName, handle, payment, refunded }: {
+export function ReceiptScreen({ open, onBack, storeName, handle, payment, refunded, avatar, outlet }: {
   open: boolean; onBack: () => void; storeName: string; handle: string; payment: MerchantPayment | null; refunded: boolean
+  /** The business's profile photo */
+  avatar?: string | null
+  /** The store's name, when the business has several */
+  outlet?: string | null
 }) {
   const printer = usePrint()
   const { share } = useShare()
   const terms = useBizTerms()
   if (!payment) return <BusinessScreen open={false} title="Receipt" onBack={onBack}>{null}</BusinessScreen>
   const from = payment.customerUsername ? `${payment.customerUsername}.arc` : `${payment.from.slice(0, 6)}…${payment.from.slice(-4)}`
+  // What it paid: "Bill #170", "Requested #44", a Shop QR payment (no number).
+  const forWhat = payment.orderKind === 'shop' ? 'Shop QR payment'
+    : payment.orderNumber ? (payment.orderKind ? orderTitle(payment.orderKind, payment.orderNumber, { short: true }) : displayOrderNumber(payment.orderNumber))
+    : undefined
   const card = (printable: boolean) => (
-    <ReceiptCard storeName={storeName} handle={handle} amount={money(payment.amount)} from={from} chainLabel={chainLabel(payment.chain)}
-      order={payment.orderNumber ? displayOrderNumber(payment.orderNumber) : undefined} time={payment.createdAt} txHash={payment.txHash} refunded={refunded} printable={printable} />
+    <ReceiptCard storeName={storeName} handle={handle} avatar={avatar} outlet={outlet} amount={money(payment.amount)} from={from}
+      chainLabel={chainLabel(payment.chain)} order={forWhat} time={payment.createdAt} txHash={payment.txHash}
+      explorerUrl={explorerTxUrl(payment.chain, payment.txHash) ?? undefined} refunded={refunded} printable={printable} />
   )
   const text = [`Receipt from ${storeName} (${handle})`, `${money(payment.amount)} USDC${refunded ? ' - refunded' : ''}`,
     payment.orderNumber ? `${cap(terms.order)} ${displayOrderNumber(payment.orderNumber)}` : '', `Paid by ${from} on ${chainLabel(payment.chain)}`,

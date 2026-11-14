@@ -825,7 +825,8 @@ function OwnerBusinessPage() {
             waiting: (chains ?? []).reduce((s, c) => s + c.balance, 0), loading: !loaded }} />
       ))}
       {level('receipt', (
-        <ReceiptScreen open={stack.includes('receipt')} onBack={back} storeName={storeName} handle={handle} payment={receiptFor} refunded={!!(receiptFor && refundedIds.has(receiptFor.id))} />
+        <ReceiptScreen open={stack.includes('receipt')} onBack={back} storeName={storeName} handle={handle} payment={receiptFor} refunded={!!(receiptFor && refundedIds.has(receiptFor.id))}
+          avatar={userAvatar} outlet={stores.length > 1 && receiptFor ? stores.find(st => st.id === storeOf(receiptFor))?.name ?? null : null} />
       ))}
       {level('help', (
         <HelpScreen open={stack.includes('help')} onBack={back} />
