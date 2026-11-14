@@ -722,6 +722,40 @@ const WATCH_PASS_MS = 4_000
 const BUSY_CHAINS = new Set(['Arc_Testnet', 'Ethereum_Sepolia', 'Base_Sepolia', 'Arbitrum_Sepolia', 'Optimism_Sepolia', 'Polygon_Sepolia', 'Avalanche_Fuji', 'Unichain_Sepolia'])
 const WATCH_GROUPS: Array<(chainId: string) => boolean> = [id => BUSY_CHAINS.has(id), id => !BUSY_CHAINS.has(id)]
 
+// Chain positions for one watch loop, kept in memory between its 4-second
+// passes (14 Nov 2026: reading and rewriting merchant_deposit_cursors on every
+// pass of both groups was ~1,800 requests an hour and helped drain the Nano
+// disk IO budget). Read once when the loop starts, saved at most every
+// CURSOR_SAVE_MS and when the loop ends. Only one loop (or nudge) runs at a
+// time (merchant_watch_lock), so nothing else moves these rows meanwhile. If
+// a loop dies between saves, the next one starts from the last saved block:
+// those blocks are read again and every write they lead to is idempotent
+// (recordPayment dedupes, receipts upsert with ignoreDuplicates).
+const CURSOR_SAVE_MS = 30_000
+type WatchCursors = {
+  loaded: Promise<Map<string, number>> | null
+  dirty: Map<string, { chain: string; last_block: number; updated_at: string }>
+  savedAt: number
+}
+const newWatchCursors = (): WatchCursors => ({ loaded: null, dirty: new Map(), savedAt: Date.now() })
+async function saveWatchCursors(mem: WatchCursors) {
+  if (mem.dirty.size === 0) return
+  const rows = [...mem.dirty.values()]
+  mem.dirty.clear()
+  mem.savedAt = Date.now()
+  const { error } = await db.from('merchant_deposit_cursors').upsert(rows)
+  if (error) {
+    console.error('[merchant-pay/watch] cursor save failed:', error.message)
+    // Try again next time, unless a newer position came in meanwhile.
+    for (const r of rows) if (!mem.dirty.has(r.chain)) mem.dirty.set(r.chain, r)
+  }
+}
+const readWatchCursors = async () => {
+  const { data, error } = await db.from('merchant_deposit_cursors').select('chain, last_block')
+  if (error) throw new Error(`cursor read failed: ${error.message}`)
+  return new Map((data ?? []).map((c: any) => [c.chain, Number(c.last_block)]))
+}
+
 /** `pick`: only these chains this pass (default: all). */
 // Solana: each open order whose payee has a Solana address is looked up by
 // its Solana Pay reference (getSignaturesForAddress) - the wallet put that
@@ -763,7 +797,8 @@ async function watchSolana() {
   return { scanned: batch.length, matched }
 }
 
-async function watchDeposits(pick?: (chainId: string) => boolean) {
+/** `mem`: the loop's in-memory positions (none: read and save them right here, e.g. a nudge). */
+async function watchDeposits(pick?: (chainId: string) => boolean, mem?: WatchCursors) {
   const runStart = Date.now()
   // Open orders, plus orders that expired or were cancelled within the last
   // day: a payment for one of those is still recorded against it (late).
@@ -778,10 +813,14 @@ async function watchDeposits(pick?: (chainId: string) => boolean) {
   // payment there (order or not) is recorded and notified ("Payment received
   // on Base"). It stays on that chain until the merchant's auto-convert.
   // Business accounts too (approved or not): their Business tab shows these.
-  const [{ data: apps }, { data: biz }, { data: cursors }] = await Promise.all([
+  if (mem && !mem.loaded) {
+    mem.loaded = readWatchCursors()
+    mem.loaded.catch(() => { mem.loaded = null }) // read again next pass
+  }
+  const [{ data: apps }, { data: biz }, cursorOf] = await Promise.all([
     db.from('merchant_applications').select('wallet_address').eq('status', 'approved'),
     db.from('users').select('wallet_address').eq('account_type', 'business').not('wallet_address', 'is', null),
-    db.from('merchant_deposit_cursors').select('chain, last_block'),
+    mem ? mem.loaded! : readWatchCursors(),
   ])
   const merchantWallets = new Set([...(apps ?? []), ...(biz ?? [])].map((a: any) => String(a.wallet_address ?? '').toLowerCase()).filter(Boolean))
   if (intents.length === 0 && merchantWallets.size === 0) return { scanned: 0, matched: 0, review: 0 }
@@ -794,7 +833,6 @@ async function watchDeposits(pick?: (chainId: string) => boolean) {
     for (const u of us ?? []) if (u.wallet_address) custWallet.set(String(u.id), String(u.wallet_address).toLowerCase())
   }
   const orderWallets = [...new Set(intents.map((i: any) => String(i.merchant_wallet).toLowerCase()))]
-  const cursorOf = new Map((cursors ?? []).map((c: any) => [c.chain, Number(c.last_block)]))
 
   let scanned = 0, matched = 0, review = 0
   // Every chain's new cursor, written in one upsert at the end instead of one
@@ -1058,7 +1096,10 @@ async function watchDeposits(pick?: (chainId: string) => boolean) {
       console.error('[merchant-pay/watch]', chainId, e instanceof Error ? e.message : e)
     }
   }
-  if (cursorRows.length) {
+  if (mem) {
+    for (const r of cursorRows) { cursorOf.set(r.chain, r.last_block); mem.dirty.set(r.chain, r) }
+    if (Date.now() - mem.savedAt >= CURSOR_SAVE_MS) await saveWatchCursors(mem)
+  } else if (cursorRows.length) {
     const { error } = await db.from('merchant_deposit_cursors').upsert(cursorRows)
     if (error) console.error('[merchant-pay/watch] cursor save failed:', error.message)
   }
@@ -1093,12 +1134,13 @@ Deno.serve(async (req: Request) => {
         if (!got) await new Promise(r => setTimeout(r, 1_000))
       }
       if (!got) { console.warn('[merchant-pay/watch] previous loop still running - skipped'); return }
+      const cursors = newWatchCursors()
       try {
         const end = callStart + WATCH_LOOP_MS
         // Each group writes only its own chains' cursors.
         // Solana runs beside them on its own, slower pass (rate-limited RPC).
         const groups: Array<{ run: () => Promise<unknown>; every: number; tag: string }> = [
-          ...WATCH_GROUPS.map(inGroup => ({ run: () => watchDeposits(inGroup), every: WATCH_PASS_MS, tag: 'watch' })),
+          ...WATCH_GROUPS.map(inGroup => ({ run: () => watchDeposits(inGroup, cursors), every: WATCH_PASS_MS, tag: 'watch' })),
           { run: () => watchSolana(), every: SOLANA_PASS_MS, tag: 'watch-solana' },
         ]
         await Promise.all(groups.map(async g => {
@@ -1112,6 +1154,7 @@ Deno.serve(async (req: Request) => {
           }
         }))
       } finally {
+        await saveWatchCursors(cursors).catch(e => console.error('[merchant-pay/watch] cursor flush failed:', e instanceof Error ? e.message : e))
         await db.rpc('merchant_watch_lock_release').then(() => {}, () => {})
       }
     })()
