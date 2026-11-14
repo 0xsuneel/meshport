@@ -152,3 +152,32 @@ describe('prefetchVoicePack', () => {
   })
 })
 
+describe('spokenLine and payment alert settings', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+  it('writes out exactly what the clips say', async () => {
+    fakeBrowser([])
+    const { spokenLine } = await load()
+    expect(spokenLine(24.5)).toBe('Received, twenty four dollars and fifty cents, on MeshPort.')
+    expect(spokenLine(1)).toBe('Received, one dollar, on MeshPort.')
+    expect(spokenLine(1250)).toBe('Received, one thousand two hundred fifty dollars, on MeshPort.')
+    expect(spokenLine(1200.4)).toBe('Received, one thousand two hundred dollars and forty cents, on MeshPort.')
+    expect(spokenLine(0.01)).toBe('Received, one cent, on MeshPort.')
+    expect(spokenLine(150000)).toBe('Received, 150000 dollars, on MeshPort.')
+  })
+  it('vibrate off: no buzz; below the minimum: no words, just the chime; a test always speaks', async () => {
+    const b = fakeBrowser(['en-GB'])
+    const v = await load()
+    v.setVoiceAlerts({ enabled: true, vibrate: false, minAmount: 5 })
+    expect(v.isSpoken(2)).toBe(false)
+    expect(v.isSpoken(5)).toBe(true)
+    v.speakPayment(2)
+    await new Promise(r => setTimeout(r, 0))
+    expect(b.vibrate).not.toHaveBeenCalled()
+    expect(b.spoken).toEqual([])
+    v.speakPayment(5)
+    v.speakPayment(1, { test: true })
+    await new Promise(r => setTimeout(r, 0))
+    expect(b.spoken).toHaveLength(2)
+  })
+})
+
