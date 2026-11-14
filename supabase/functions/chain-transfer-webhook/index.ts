@@ -587,24 +587,45 @@ async function arcRpc(method: string, params: unknown[]): Promise<any> {
 
 const pad32Topic = (a: string) => '0x' + a.toLowerCase().replace(/^0x/, '').padStart(64, '0')
 
-/** One pass: claim the next block range, fetch MeshPort-bound transfers, process them. */
-async function watchPass(supabase: SupabaseClient, wallets: string[]): Promise<number> {
+// The run's position, kept in memory between its 2-second passes (14 Nov
+// 2026: a read plus a compare-and-swap write on every pass was ~60 requests a
+// minute on deposit_scan_cursor and helped drain the Nano disk IO budget).
+// Read once per run, saved at most every WATCH_SAVE_MS and when the run ends,
+// never backwards. Two runs overlap for a second or two at the minute
+// handover, and a run that dies between saves leaves the next one up to
+// WATCH_SAVE_MS behind: both only read blocks again, and a repeat records
+// nothing (recordExternalReceive skips a transfer already recorded).
+const WATCH_SAVE_MS = 30_000
+type WatchPos = { pos: number | null; saved: number | null; savedAt: number }
+
+async function saveWatchPos(supabase: SupabaseClient, st: WatchPos): Promise<void> {
+  if (st.pos == null || st.pos === st.saved) return
+  const to = st.pos
+  st.savedAt = Date.now()
+  const { error } = await supabase.from('deposit_scan_cursor')
+    .update({ last_scanned_block: to, updated_at: new Date().toISOString() })
+    .eq('source', WATCH_CURSOR).lt('last_scanned_block', to)
+  if (error) { console.error('[chain-transfer-webhook] watch cursor save failed:', error.message); return }
+  st.saved = to
+}
+
+/** One pass: the next block range after the run's position, fetch MeshPort-bound transfers, process them. */
+async function watchPass(supabase: SupabaseClient, wallets: string[], st: WatchPos): Promise<number> {
   const latest = parseInt(await arcRpc('eth_blockNumber', []), 16)
-  const { data: cur } = await supabase.from('deposit_scan_cursor')
-    .select('last_scanned_block').eq('source', WATCH_CURSOR).maybeSingle()
-  if (!cur) {
-    await supabase.from('deposit_scan_cursor')
-      .upsert({ source: WATCH_CURSOR, last_scanned_block: latest - WATCH_FIRST_LOOKBACK }, { onConflict: 'source', ignoreDuplicates: true })
-    return 0
+  if (st.pos == null) {
+    const { data: cur, error } = await supabase.from('deposit_scan_cursor')
+      .select('last_scanned_block').eq('source', WATCH_CURSOR).maybeSingle()
+    if (error) throw new Error(`cursor read failed: ${error.message}`)
+    if (!cur) {
+      await supabase.from('deposit_scan_cursor')
+        .upsert({ source: WATCH_CURSOR, last_scanned_block: latest - WATCH_FIRST_LOOKBACK }, { onConflict: 'source', ignoreDuplicates: true })
+      return 0
+    }
+    st.pos = st.saved = Number(cur.last_scanned_block)
   }
-  const from = Number(cur.last_scanned_block)
+  const from = st.pos
   if (from >= latest) return 0
   const to = Math.min(latest, from + WATCH_MAX_RANGE)
-  // Compare-and-swap claim: overlapping runs never scan the same range twice.
-  const { data: claimed } = await supabase.from('deposit_scan_cursor')
-    .update({ last_scanned_block: to, updated_at: new Date().toISOString() })
-    .eq('source', WATCH_CURSOR).eq('last_scanned_block', from).select('source')
-  if (!claimed?.length) return 0
 
   const logs: any[] = []
   try {
@@ -617,12 +638,13 @@ async function watchPass(supabase: SupabaseClient, wallets: string[]): Promise<n
       }]) ?? [])
     }
   } catch (e) {
-    // Hand the range back so the next pass retries it.
-    await supabase.from('deposit_scan_cursor').update({ last_scanned_block: from })
-      .eq('source', WATCH_CURSOR).eq('last_scanned_block', to)
+    // The position stays at `from`, so the next pass retries this range.
     console.error('[chain-transfer-webhook] watch getLogs failed:', e instanceof Error ? e.message : e)
     return 0
   }
+  // Range read: it is this run's now (as the old claim did), saved every WATCH_SAVE_MS.
+  st.pos = to
+  if (Date.now() - st.savedAt >= WATCH_SAVE_MS) await saveWatchPos(supabase, st)
 
   let recorded = 0
   for (const log of logs) {
@@ -651,12 +673,17 @@ async function runWatcher(supabase: SupabaseClient): Promise<{ passes: number; r
   let passes = 0, recorded = 0
   if (!wallets.length) return { passes, recorded }
   const until = Date.now() + WATCH_LOOP_MS
-  while (Date.now() < until) {
-    try { recorded += await watchPass(supabase, wallets) } catch (e) {
-      console.error('[chain-transfer-webhook] watch pass failed:', e instanceof Error ? e.message : e)
+  const st: WatchPos = { pos: null, saved: null, savedAt: Date.now() }
+  try {
+    while (Date.now() < until) {
+      try { recorded += await watchPass(supabase, wallets, st) } catch (e) {
+        console.error('[chain-transfer-webhook] watch pass failed:', e instanceof Error ? e.message : e)
+      }
+      passes++
+      await new Promise(r => setTimeout(r, WATCH_INTERVAL_MS))
     }
-    passes++
-    await new Promise(r => setTimeout(r, WATCH_INTERVAL_MS))
+  } finally {
+    await saveWatchPos(supabase, st).catch(e => console.error('[chain-transfer-webhook] watch cursor flush failed:', e instanceof Error ? e.message : e))
   }
   return { passes, recorded }
 }
