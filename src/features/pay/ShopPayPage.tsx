@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, BadgeCheck, Store } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getShopLimits, type ShopInfo, type ShopLimits } from '@/lib/shop'
-import { useAuthStore, useUIStore } from '@/store'
+import { useAuthStore, useUIStore, useWalletStore } from '@/store'
 import { Avatar } from '@/components/ui/Avatar'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
@@ -18,7 +18,11 @@ const SHOP_MAX = 100000
 
 // The amount as a big centred figure with a small raised $, grey while
 // nothing is typed, shrinking as it grows. Desktop types into it directly.
-function ShopAmount({ value, onType }: { value: string; onType?: (raw: string) => void }) {
+function ShopAmount({ value, onType, balance }: {
+  value: string; onType?: (raw: string) => void
+  /** Signed in: the payer's Arc USDC balance (shown under the amount); null hides it. */
+  balance?: number | null
+}) {
   const shown = value || '0'
   const size = shown.length <= 4 ? 64 : shown.length <= 6 ? 54 : shown.length <= 8 ? 44 : 36
   const color = value ? 'var(--text-primary)' : 'var(--text-muted)'
@@ -39,6 +43,12 @@ function ShopAmount({ value, onType }: { value: string; onType?: (raw: string) =
       <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-surface border border-border px-3 py-1 text-xs font-semibold text-text-secondary">
         <img decoding="async" src="/logos/tokens/usdc.png" alt="" width={16} height={16} className="rounded-full" /> USDC
       </span>
+      {balance != null && (
+        // Rounded down, so it never shows more than can be paid.
+        <p className={`mt-2 text-[13px] ${Number(value) > balance ? 'text-danger font-semibold' : 'text-text-muted'}`}>
+          Available balance {(Math.floor(balance * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+        </p>
+      )}
     </div>
   )
 }
@@ -54,6 +64,8 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const toast = useUIStore(s => s.showToastMessage)
   const signedIn = useAuthStore(s => s.isAuthenticated)
+  // The same Arc USDC balance the pay screen shows (kept per wallet by the store).
+  const balance = useWalletStore(s => s.balance)
   const [amount, setAmount] = useState(() => initialAmount && Number(initialAmount) > 0 ? String(Number(initialAmount)) : '')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -139,7 +151,7 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
         <div className="mx-auto w-full max-w-md flex flex-col gap-5 px-5 pt-6">
           {/* The amount, large and centred: typed straight in on desktop; on
               a phone the keys sit right in the page under it. */}
-          <ShopAmount value={amount} onType={isDesktop ? type : undefined} />
+          <ShopAmount value={amount} onType={isDesktop ? type : undefined} balance={signedIn ? balance : null} />
           <div className="w-full max-w-[280px] mx-auto">
             <input
               type="text"
