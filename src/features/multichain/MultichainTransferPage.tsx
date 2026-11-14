@@ -3679,7 +3679,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       animate={amountFocus ? { height: 'auto', opacity: 1, marginBottom: 0 } : { height: 0, opacity: 0, marginBottom: -18 }}
       transition={{ duration: 0.28, ease: EASE_OUT }} style={{ overflow: 'hidden' }}>
       <p style={{ margin: 0, fontSize: 13, lineHeight: 1.4, color: 'var(--text-secondary)' }}>
-        Sending to {isEVMAddress(address)
+        Transferring to {isEVMAddress(address)
           ? <b style={{ color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'ui-monospace, monospace' }}>{address.slice(0, 6)}…{address.slice(-6)}</b>
           : null}{isEVMAddress(address) ? ' on ' : ''}<b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{chain.testnet}</b>
       </p>
@@ -4271,7 +4271,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         title={desktopInput ? 'Authorize Transfer' : 'Confirm transfer'}
         subtitle={desktopInput ? `To ${chain.name}` : `Authorise ${tokenChar}${fmtTok(numAmount)} ${tokenSym} to ${chain.name}`}
         amountLabel={`${tokenChar}${fmtTok(numAmount)} ${tokenSym}`} placement="panel"
-        card={{ label: 'Sending to', name: chain.name, amount: `${tokenChar}${fmtTok(numAmount)}`, unit: tokenSym }} bioVerb="Transfer"
+        card={{ label: 'Transferring to', name: chain.name, amount: `${tokenChar}${fmtTok(numAmount)}`, unit: tokenSym }} bioVerb="Transfer"
         value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }} error={passError || undefined}
         onComplete={(_, viaBiometric) => { if (!loading) { setPaidViaBiometric(!!viaBiometric); handleConfirm() } }}
         // Right passcode → the processing page comes in over the sheet.

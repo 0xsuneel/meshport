@@ -1734,7 +1734,7 @@ export function PaySendPage() {
                     <ArrowLeft className="w-5 h-5 text-text-primary" />
                   </button>
                 )}
-                <h1 className="text-xl font-bold text-text-primary">{isProcessing ? 'Sending Payment' : 'Review Payment'}</h1>
+                <h1 className="text-xl font-bold text-text-primary">{isProcessing ? 'Paying' : 'Review Payment'}</h1>
               </div>
             )}
 
@@ -1775,7 +1775,7 @@ export function PaySendPage() {
                   <motion.div key="processing" initial={false}
                     className="flex flex-col items-center justify-center flex-1 space-y-6 py-10">
                     <ProcessingRing size={80} />
-                    <p className="text-text-primary" style={{ fontSize: 15, fontWeight: 700 }}>{slowSend && isProcessing ? 'Still sending…' : 'Processing payment…'}</p>
+                    <p className="text-text-primary" style={{ fontSize: 15, fontWeight: 700 }}>{slowSend && isProcessing ? 'Still paying…' : 'Processing payment…'}</p>
                     <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>Do not close this screen</p>
                   </motion.div>
                 )}
@@ -1816,7 +1816,7 @@ export function PaySendPage() {
                   <motion.div key="reviewcard" initial={false} className="space-y-4 flex-1">
                     {/* Amount hero */}
                     <div className="text-center pt-2 pb-1">
-                      <p className="text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>You are sending</p>
+                      <p className="text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>You are paying</p>
                       <p className="font-bold" style={{ fontSize: '40px', color: 'var(--brand-text)', lineHeight: 1 }}>{tokenSymbolChar(token)}{formatAmount(numAmount, tokenDisplayDecimals(token))}</p>
                       <div className="flex items-center justify-center gap-1.5 mt-2">
                         <TokenLogo token={token} size={16} />
