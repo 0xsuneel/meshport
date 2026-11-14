@@ -45,7 +45,7 @@ export interface PinSheetProps {
   bioVerb?: BiometricVerb
   /** Phone: what it's for and how much, as a card under the title (in place
    *  of the subtitle), so it's in view before the fingerprint.
-   *  `label` heads it: "Paying", "Swapping", "Sending to", "Claiming"... */
+   *  `label` heads it: "Paying", "Swapping", "Transferring to", "Claiming"... */
   card?: { label: string; name: string; detail?: string; amount: string; unit?: string }
   /** Inside a panel (the chat) instead of over the whole app. */
   inPanel?: boolean
