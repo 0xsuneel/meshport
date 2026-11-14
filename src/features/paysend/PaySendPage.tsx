@@ -212,7 +212,10 @@ export function PaySendPage() {
   // The order handed over by the shop page (in-app navigation state - a link
   // can't set it), so its kind and checks don't wait on a second fetch.
   const handedView = merchantPayCode && locationState.merchantView?.code === merchantPayCode ? locationState.merchantView : null
-  const [merchantOrderKind, setMerchantOrderKind] = useState<OrderKind>(() => handedView ? orderKindOf(handedView) : 'request')
+  // Until the order loads: ?review=1 comes only from the Shop QR page, so it
+  // is a shop payment (the server's order replaces this before Pay is enabled).
+  const [merchantOrderKind, setMerchantOrderKind] = useState<OrderKind>(() => handedView ? orderKindOf(handedView)
+    : searchParams.get('review') === '1' ? 'shop' : 'request')
   // The order's requester (for the chat card when the recipient came from a
   // link or QR without a username).
   const [merchantUsername, setMerchantUsername] = useState<string | null>(null)

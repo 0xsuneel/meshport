@@ -153,7 +153,7 @@ export function PayPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (shop) return <ShopPayPage shop={shop} initialAmount={requestedAmount} />
+  if (shop) return <ShopPayPage shop={shop} initialAmount={requestedAmount} wallet={recipient?.wallet_address ?? null} />
 
   if (loading || shop === undefined) {
     return (

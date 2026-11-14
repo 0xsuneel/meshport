@@ -19,15 +19,27 @@ const SHOP_MAX = 100000
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-export function ShopPayPage({ shop, initialAmount }: { shop: ShopInfo; initialAmount?: string | null }) {
+export function ShopPayPage({ shop, initialAmount, wallet }: {
+  shop: ShopInfo; initialAmount?: string | null
+  /** The business's wallet (PayPage already looked it up), so Pay can open the pay screen at once. */
+  wallet?: string | null
+}) {
   const navigate = useNavigate()
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const toast = useUIStore(s => s.showToastMessage)
+  const signedIn = useAuthStore(s => s.isAuthenticated)
   const [amount, setAmount] = useState(() => initialAmount && Number(initialAmount) > 0 ? String(Number(initialAmount)) : '')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [limits, setLimits] = useState<ShopLimits>({ min: null, max: null })
   useEffect(() => { getShopLimits(shop.username).then(setLimits).catch(() => {}) }, [shop.username])
+  // While the amount is typed, fetch the pay screen's code, so tapping Pay
+  // opens it at once (it took ~2s on mobile data when fetched after the tap).
+  useEffect(() => {
+    if (!signedIn) return
+    import('@/features/paysend/PaySendPage').catch(() => {})
+    import('@/lib/merchantPay').catch(() => {})
+  }, [signedIn])
 
   // Typed (desktop): same caps as the keys (AmountKeypad's decimals / maxValue).
   const type = (raw: string) => {
@@ -49,6 +61,15 @@ export function ShopPayPage({ shop, initialAmount }: { shop: ShopInfo; initialAm
       // Signed in: straight to the pay screen's Review - the amount was just
       // typed here, so there is nothing to confirm on an order page. The
       // order page stays for paying from another wallet (it picks a network).
+      // With the business's wallet known, go at once: the pay screen loads
+      // the order from the server itself and keeps Pay disabled until it has
+      // checked it (payable, and paid to this wallet) - it fails closed to the
+      // order page otherwise, exactly as when the order is handed over.
+      if (useAuthStore.getState().isAuthenticated && wallet && /^0x[0-9a-fA-F]{40}$/.test(wallet)) {
+        const to = `${shop.username}|${wallet}|${shop.businessName}|${shop.avatarUrl ?? ''}`
+        navigate(`/pay?to=${encodeURIComponent(to)}&amount=${encodeURIComponent(String(value))}&merchantPay=${encodeURIComponent(String(data))}&review=1`)
+        return
+      }
       if (useAuthStore.getState().isAuthenticated) {
         const { getPayment, orderPaySendUrl, isOrderPayable } = await import('@/lib/merchantPay')
         const v = await getPayment(String(data)).catch(() => null)
