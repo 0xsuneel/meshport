@@ -56,6 +56,20 @@ export const CIRCLE_CONTRACTS = new Map<string, string>([
   ['0xc5567a5e3370d4dbfb0540025078e283e36a363d', 'Circle Bridge Kit'],
   ['0xb3fa262d0fb521cc93be83d87b322b8a23daf3f0', 'Circle Bridge Kit'],
 ])
+/**
+ * MeshPort's own contracts on Arc - named on the confirm screen so they never
+ * read as "a contract this wallet does not recognise". Display only: unlike
+ * CIRCLE_CONTRACTS this list never lets a spend limit cover anything more.
+ */
+export const MESHPORT_CONTRACTS = new Map<string, string>([
+  ['0x8921fae7322305011aff1c7409472f5c74eaaf15', 'MeshPort Rewards'],
+  ['0xda51a32edfc723e3de9aaf0a452fd2f71e6019f1', 'MeshPort Checkout'],
+  ['0x3010518f036ee1bf95da787eee3aaffad95a1794', 'MeshPort Router'],
+])
+const REWARDS_ABI = [{
+  type: 'function', name: 'claimRewards', stateMutability: 'nonpayable', outputs: [{ name: 'usdcAmount', type: 'uint256' }],
+  inputs: [{ name: 'points', type: 'uint256' }, { name: 'claimId', type: 'bytes32' }, { name: 'signature', type: 'bytes' }],
+}] as const
 const PERMIT2 = '0x000000000022d473030f116ddee9f6b43ac78ba3'
 /**
  * Circle Gateway's wallet contract (testnet, mainnet). Money deposited there
@@ -221,11 +235,14 @@ const units = (v: bigint, decimals: number) => {
   return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s
 }
 const clean = (v: unknown, max = 80) => String(v ?? '').replace(/[^\x20-\x7E]/g, '').slice(0, max)
-const named = (address: string) => CIRCLE_CONTRACTS.get(address.toLowerCase()) ?? null
+const named = (address: string) => CIRCLE_CONTRACTS.get(address.toLowerCase()) ?? MESHPORT_CONTRACTS.get(address.toLowerCase()) ?? null
 function addrText(a: unknown): string {
   try { const g = getAddress(String(a)); const n = named(g); return n ? `${n} (${g})` : g } catch { return clean(a) }
 }
 
+const REWARDS = '0x8921fae7322305011aff1c7409472f5c74eaaf15'
+/** claimRewards(uint256,bytes32,bytes) */
+const REWARDS_CLAIM = '0x0ed667bc'
 function describeTransaction(tx: Record<string, unknown>): IntentView {
   const chainId = Number(tx.chainId)
   const onArc = chainId === ARC_CHAIN_ID
@@ -259,6 +276,16 @@ function describeTransaction(tx: Record<string, unknown>): IntentView {
       } else if (d.functionName === 'transfer') { action = 'Send'; amount = units(big(a[1]), token.decimals); recipient = addrText(a[0]) }
       else { action = d.functionName; amount = units(big(a[2]), token.decimals); recipient = addrText(a[1]) }
     } catch { warnings.push(`An unrecognised call to the ${token.asset} contract`) }
+  } else if (to === REWARDS && data.startsWith(REWARDS_CLAIM) && big(tx.value) === 0n) {
+    // A rewards claim: MeshPort's rewards contract pays USDC into this wallet
+    // for points - nothing leaves it but the network fee.
+    try {
+      const d = decodeFunctionData({ abi: REWARDS_ABI, data: data as Hex })
+      action = 'Claim rewards'
+      amount = String(d.args[0])
+      symbol = 'points'
+      rows.push({ label: 'You receive', value: 'USDC from the MeshPort rewards treasury' })
+    } catch { warnings.push('An unrecognised call to the MeshPort rewards contract') }
   } else if (data !== '0x') {
     rows.push({ label: 'Data', value: `${(data.length - 2) / 2} bytes` })
     if (!named(to)) warnings.push('A contract this wallet does not recognise - only continue if you started this')

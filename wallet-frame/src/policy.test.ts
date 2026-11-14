@@ -139,3 +139,27 @@ describe('spend limit policy', () => {
     expect(unknown.ok ? fits(scope, left, unknown) : null).toBeNull()
   })
 })
+
+describe('MeshPort rewards claim', () => {
+  const REWARDS = '0x8921FaE7322305011AFF1C7409472F5C74EAAF15'
+  const claim = encodeFunctionData({
+    abi: parseAbi(['function claimRewards(uint256 points, bytes32 claimId, bytes signature) returns (uint256)']),
+    functionName: 'claimRewards', args: [100n, pad('0xbb4a', { size: 32 }), '0x1234'],
+  })
+  it('reads as "Claim rewards · 100 points" from MeshPort Rewards - no unknown-contract warning', () => {
+    const v = describeRequest('sign:transaction', { transaction: tx({ to: REWARDS, data: claim }) })
+    expect(v).toMatchObject({ action: 'Claim rewards', amount: '100', token: 'points' })
+    expect(v.to).toContain('MeshPort Rewards')
+    expect(v.warnings).toEqual([])
+  })
+  it('any other contract still warns', () => {
+    const v = describeRequest('sign:transaction', { transaction: tx({ to: '0x1111111111111111111111111111111111111111', data: claim }) })
+    expect(v.warnings.join(' ')).toMatch(/does not recognise/)
+  })
+  it('naming it never lets a spend limit cover it', () => {
+    const me = '0x2222222222222222222222222222222222222222'
+    const c = classify(me, 'sign:transaction', { transaction: tx({ to: REWARDS, data: claim }) })
+    const scope = parseScope({ limits: [{ asset: 'USDC', amount: '5' }] })
+    expect(c.ok ? fits(scope, { ...scope.limits }, c) : null).toBeNull()
+  })
+})
