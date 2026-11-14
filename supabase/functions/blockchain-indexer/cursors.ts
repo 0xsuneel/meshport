@@ -155,3 +155,31 @@ export async function markEventsReorged(supabase: SupabaseClient, chainId: strin
     .gte('block_number', fromBlock)
   if (error) console.error(`[blockchain-indexer] event reorg mark failed for ${chainId}:`, error.message)
 }
+
+/**
+ * The database side of indexer-fast's cursor cache (cursorCache.ts).
+ * notBackwards: only moves a row forward - another writer (the minute pass)
+ * may already be further on. A missing row is created.
+ */
+export function cursorDb(supabase: SupabaseClient): import('./cursorCache.ts').CursorDb {
+  return {
+    read: chainId => getCursor(supabase, chainId),
+    async write(chainId, row, notBackwards) {
+      const full = { ...row, chain_id: chainId, updated_at: new Date().toISOString() }
+      if (!notBackwards || typeof row.last_indexed_block !== 'number') {
+        const { error } = await supabase.from('chain_cursors').upsert(full, { onConflict: 'chain_id' })
+        if (error) console.error(`[blockchain-indexer] cursor write failed for ${chainId}:`, error.message)
+        return
+      }
+      const { data, error } = await supabase.from('chain_cursors').update(full)
+        .eq('chain_id', chainId).lte('last_indexed_block', row.last_indexed_block).select('chain_id')
+      if (error) { console.error(`[blockchain-indexer] cursor write failed for ${chainId}:`, error.message); return }
+      if (!data?.length) {
+        // No row yet (a first run), or the row is already further on - then
+        // this insert does nothing.
+        const { error: insErr } = await supabase.from('chain_cursors').upsert(full, { onConflict: 'chain_id', ignoreDuplicates: true })
+        if (insErr) console.error(`[blockchain-indexer] cursor insert failed for ${chainId}:`, insErr.message)
+      }
+    },
+  }
+}

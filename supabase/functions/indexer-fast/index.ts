@@ -20,6 +20,8 @@ import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { enabledChains } from '../blockchain-indexer/chains.ts'
 import { indexChain, loadKnownWallets } from '../blockchain-indexer/indexChain.ts'
+import { createCursorCache } from '../blockchain-indexer/cursorCache.ts'
+import { cursorDb } from '../blockchain-indexer/cursors.ts'
 
 // Every external chain (Arc has its own 2s transfer watch in
 // chain-transfer-webhook, and the indexer's Arc pass reads whole blocks).
@@ -66,6 +68,9 @@ Deno.serve(async (req: Request) => {
       if (!got) await new Promise(r => setTimeout(r, 1_000))
     }
     if (!got) { console.warn(`[indexer-fast] ${group}: previous loop still running - skipped`); return }
+    // Cursors kept in memory for this run, saved every 30 s per chain and at
+    // the end (cursorCache.ts) - they were read and written on every 4 s pass.
+    const cursors = createCursorCache(cursorDb(supabase))
     try {
       // Each chain loops on its own: a pass waits on every RPC endpoint of
       // its chain (up to 8s for a slow one), so one slow chain must not hold
@@ -86,7 +91,7 @@ Deno.serve(async (req: Request) => {
           const t0 = Date.now()
           const w = currentWallets()
           if (w.size) {
-            const r = await indexChain(supabase, chain, w)
+            const r = await indexChain(supabase, chain, w, cursors)
             const took = Date.now() - t0
             if (took > 2 * PASS_MS) console.info(`[indexer-fast] ${chain.id} pass ${took}ms`, r.error ?? r.action ?? r.window ?? '')
           }
@@ -96,6 +101,8 @@ Deno.serve(async (req: Request) => {
         }
       }))
     } finally {
+      // Save every cursor before the next run takes over (it reads them first).
+      await cursors.flushAll().catch(e => console.error('[indexer-fast] cursor flush failed:', e instanceof Error ? e.message : e))
       await supabase.rpc('job_lock_release', { p_name: lockName }).then(() => {}, () => {})
     }
   })().catch(e => console.error('[indexer-fast] loop failed:', e instanceof Error ? e.message : e))
