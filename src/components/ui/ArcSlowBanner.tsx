@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { TOAST_MOTION } from '@/lib/motion'
+import { EASE_OUT } from '@/lib/motion'
+
+// Comes in from just above; on × it fades and shrinks where it is. (The
+// shared toast motion slid it up by its own height at full opacity, so on
+// close it dragged across the page header before vanishing.)
+const PILL_MOTION = {
+  initial: { opacity: 0, y: -12, scale: 0.96 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  exit: { opacity: 0, scale: 0.92, transition: { duration: 0.16, ease: EASE_OUT } },
+  transition: { duration: 0.24, ease: EASE_OUT },
+} as const
 import { useAuthStore } from '@/store'
 import { startArcHealth, useArcSlow } from '@/lib/arcHealth'
 
@@ -25,7 +35,7 @@ export function ArcSlowBanner() {
       <AnimatePresence>
         {slow && !hidden && (
           <motion.div key="arc-slow" role="status" aria-live="polite"
-            {...TOAST_MOTION}
+            {...PILL_MOTION}
             style={{
               display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 14px', borderRadius: 999,
               fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'auto',
