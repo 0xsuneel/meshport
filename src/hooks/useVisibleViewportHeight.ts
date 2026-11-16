@@ -60,10 +60,23 @@ export function visibleFrame(): { top: number; height: number } {
   // the frame on the whole layout viewport instead of chasing the zoom.
   if (Math.abs(vv.scale - 1) > 0.01) return { top: 0, height: window.innerHeight }
   const top = Math.max(0, Math.round(vv.offsetTop))
+  // No field focused = no keyboard can be up.
+  const typing = opensKeyboard(document.activeElement)
   // Android with the keyboard drawn over the app (lib/keyboardOverlay): no
-  // viewport shrinks, so take the keyboard's own height off.
-  const inset = keyboardInset()
+  // viewport shrinks, so take the keyboard's own height off - only while a
+  // field has focus: some Android in-app (wallet) browsers keep reporting the
+  // keyboard's rect after it has closed, and the app then stayed short with
+  // the bottom nav floating mid-screen over an empty band (16 Nov).
+  const inset = typing ? keyboardInset() : 0
   if (inset > 0) return { top, height: Math.round(vv.height - inset) }
+  // Chromium (Android, desktop) with no field focused: the layout viewport is
+  // the visible screen - its toolbars never draw over the page (that is
+  // iPhone, which has no virtualKeyboard and keeps the rules below). Some
+  // Android web views leave visualViewport at the keyboard-up height after
+  // it closes, with no event to correct it; the layout viewport is right.
+  if (!typing && top === 0 && virtualKeyboard()) {
+    return { top: 0, height: Math.max(Math.round(vv.height), document.documentElement.clientHeight) }
+  }
   // iOS 26: after the keyboard closes, visualViewport can stay ~24px shorter
   // than the screen for good (Apple FB19889436 / WebKit 297779) - the frame
   // then stopped short of the bottom. With no field focused and nothing
@@ -202,6 +215,9 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     // losing focus, and closed by a blur: either way, look again.
     const onFocusOut = () => recheck()
     document.addEventListener('focusout', onFocusOut)
+    // A field removed while focused (leaving a chat) fires no focusout in
+    // every browser - so any tap looks again too (apply writes only on change).
+    document.addEventListener('pointerup', recheck, { passive: true, capture: true })
     document.addEventListener('focusin', onFocus)
     apply()
     vv?.addEventListener('resize', schedule)
@@ -222,6 +238,7 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
       document.removeEventListener('touchend', onTouchEnd, { capture: true })
       document.removeEventListener('touchcancel', onTouchEnd, { capture: true })
       document.removeEventListener('focusout', onFocusOut)
+      document.removeEventListener('pointerup', recheck, { capture: true })
       document.removeEventListener('focusin', onFocus)
       vv?.removeEventListener('resize', schedule)
       vv?.removeEventListener('scroll', schedule)
