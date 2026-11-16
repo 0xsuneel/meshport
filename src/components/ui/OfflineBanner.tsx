@@ -40,7 +40,7 @@ export function OfflineBanner() {
           {...TOAST_MOTION}
           style={{
             position: 'fixed', zIndex: 10000, left: '50%', translateX: '-50%',
-            top: 'calc(env(safe-area-inset-top, 0px) + 10px)',
+            top: 'calc(var(--safe-top) + 10px)',
             display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 999,
             fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none',
             color: '#fff', background: state === 'offline' || state === 'slow' ? '#2B3137' : '#12665F',

@@ -126,7 +126,7 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
 
   return (
     <div className="h-full flex flex-col bg-bg">
-      <div className="flex items-center justify-between px-5 pb-2" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 20px)' }}>
+      <div className="flex items-center justify-between px-5 pb-2" style={{ paddingTop: 'calc(var(--safe-top) + 20px)' }}>
         {!isDesktop ? <button onClick={() => navigate('/')} className="back-btn" aria-label="Back"><ArrowLeft className="w-5 h-5 text-text-primary" /></button> : <span />}
         <div className="flex items-center gap-2">
           <img decoding="async" src="/favicon.svg" alt="MeshPort" className="w-6 h-6 rounded-lg" />

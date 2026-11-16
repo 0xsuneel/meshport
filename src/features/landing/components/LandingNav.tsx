@@ -61,7 +61,7 @@ export function LandingNav() {
       style={{
         position: 'sticky', top: 0, zIndex: 50,
         // Clear of the status bar where the page draws behind it (0 elsewhere).
-        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingTop: 'var(--safe-top)',
         background: scrolled ? 'color-mix(in srgb, var(--bg) 82%, transparent)' : 'transparent',
         backdropFilter: scrolled ? 'blur(16px)' : 'none', WebkitBackdropFilter: scrolled ? 'blur(16px)' : 'none',
         borderBottom: scrolled ? '1px solid var(--border)' : '1px solid transparent',

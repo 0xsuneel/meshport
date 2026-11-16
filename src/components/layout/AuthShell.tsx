@@ -47,7 +47,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
       padding: isDesktop ? 24 : 0,
       // Phone: clear of the status bar where the page draws behind it (the
       // app's status bar overlay, an installed iPhone web app). 0 elsewhere.
-      ...(isDesktop ? {} : { paddingTop: 'env(safe-area-inset-top, 0px)' }),
+      ...(isDesktop ? {} : { paddingTop: 'var(--safe-top)' }),
     }}>
       <div data-page-shell="" data-no-scroll="" style={{
         width: '100%',

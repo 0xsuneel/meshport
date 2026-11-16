@@ -209,13 +209,13 @@ export function SuccessReceipt({
       // Column so the card can centre itself (margin: auto below).
       height: '100%', overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg)', boxSizing: 'border-box',
       display: 'flex', flexDirection: 'column',
-      padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px)',
+      padding: 'calc(var(--safe-top) + 24px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px)',
       ...style,
     }}>
       <div ref={scrollRef} style={hasActions ? {
         flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box',
         display: 'flex', flexDirection: 'column',
-        padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 16px 16px',
+        padding: 'calc(var(--safe-top) + 24px) 16px 16px',
       } : { display: 'contents' }}>
       <div ref={cardRef} className={fill ? undefined : 'shadow-elevation-1'} style={fill ? {
         // The whole box: grows to fill it (taller when details open, then it scrolls).

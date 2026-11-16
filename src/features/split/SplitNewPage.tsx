@@ -317,7 +317,7 @@ export function SplitNewPage() {
         </>)}
 
         {step === 'sent' && created && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 14, paddingTop: 'calc(env(safe-area-inset-top, 0px) + 40px)' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 14, paddingTop: 'calc(var(--safe-top) + 40px)' }}>
             <Tick />
             <div style={{ fontSize: 20, fontWeight: 700, textAlign: 'center', color: 'var(--text-primary)' }}>Requests sent</div>
             <p style={{ ...subStyle, textAlign: 'center' }}>

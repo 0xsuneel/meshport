@@ -117,7 +117,7 @@ export function HubPage({ open, level = 0, behind = false, leaveUnder = false, h
     <div ref={panel} data-hub-page="" style={{
       ...(isDesktop
         ? { position: 'fixed', top: 0, right: 0, bottom: 0, width: HUB_PANEL_WIDTH, borderLeft: '1px solid var(--border)', boxShadow: '-16px 0 40px -12px rgba(0,0,0,0.35)' }
-        : { position: 'fixed', inset: 0, maxWidth: 430, margin: '0 auto', paddingTop: 'env(safe-area-inset-top, 0px)', boxShadow: look.shadow, willChange: 'transform' }),
+        : { position: 'fixed', inset: 0, maxWidth: 430, margin: '0 auto', paddingTop: 'var(--safe-top)', boxShadow: look.shadow, willChange: 'transform' }),
       zIndex: 30 + level * 2, background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden',
       pointerEvents: open ? undefined : 'none',
     }}>

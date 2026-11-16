@@ -465,7 +465,7 @@
 .pt-header,
 .pt-safe,
 .pt-safe-top {
-  padding-top: calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px));
+  padding-top: calc(var(--safe-top) + var(--header-gap, 22px));
 }
 /* Installed app (home-screen icon): the status bar sits right above the
    page, so headers start closer to it, like native apps. The browser keeps
@@ -969,7 +969,7 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
    the glass runs up behind the status bar too, no plain strip on top. Only
    a page that can't draw there keeps the fade into the bar's colour. 28px
    with no top inset, 0 with one (any inset × 1000 takes it below zero). */
-:root { --mp-top-fade: max(0px, calc(28px - env(safe-area-inset-top, 0px) * 1000)); }
+:root { --mp-top-fade: max(0px, calc(28px - var(--safe-top) * 1000)); }
 /* The nav's glass reads 24px above the bar (cut back to it, as the header
    does above) so text at its top edge blurs too, and runs past the bottom of
    the screen (the app frame clips it) so no line shows along the bottom. */

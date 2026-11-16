@@ -140,7 +140,7 @@ export function BarcodeScanner({ open, items, onAdd, onSaveNew, onClose }: {
             {!camError && <div className="absolute left-3 right-3 top-1/2 h-0.5 bg-red-500/80" />}
           </div>
         </div>
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
+        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4" style={{ paddingTop: 'calc(var(--safe-top) + 12px)' }}>
           <span className="text-white text-[15px] font-semibold">Scan barcodes</span>
           <button type="button" aria-label="Close scanner" onClick={onClose}
             className="size-10 rounded-full grid place-items-center bg-black/50 text-white"><X size={20} /></button>

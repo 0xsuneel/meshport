@@ -121,7 +121,7 @@ export function ClaimAllScreen({ chains, steps, running, onClose, onRetry, onTra
     <div role="dialog" aria-label="Claim All" aria-live="polite"
       style={{ display: 'flex', flexDirection: 'column', height: '100%', background: isDesktop ? 'var(--surface)' : 'var(--bg)', color: 'var(--text-primary)' }}>
       <style>{CSS}</style>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isDesktop ? '18px 18px 4px' : 'calc(env(safe-area-inset-top, 0px) + 14px) 16px 4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isDesktop ? '18px 18px 4px' : 'calc(var(--safe-top) + 14px) 16px 4px' }}>
         <span style={{ width: 34 }} />
         <span style={{ fontSize: 16, fontWeight: 700 }}>Claim All</span>
         <button onClick={onClose} aria-label="Close" style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
