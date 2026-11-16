@@ -141,7 +141,7 @@ export function NewsPage() {
     <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg)', paddingBottom: 'var(--nav-space)' }}>
       <div className="mp-glass-header" style={{
         position: 'sticky', top: 0, zIndex: 20,
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))', paddingLeft: isDesktop ? 28 : 20, paddingRight: isDesktop ? 28 : 20, paddingBottom: 10,
+        paddingTop: 'calc(var(--safe-top) + var(--header-gap, 22px))', paddingLeft: isDesktop ? 28 : 20, paddingRight: isDesktop ? 28 : 20, paddingBottom: 10,
       }}>
         <div style={isDesktop ? { maxWidth: 1240 - 56, margin: '0 auto' } : undefined}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44 }}>

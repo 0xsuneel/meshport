@@ -270,7 +270,7 @@ function showReadyPill(): void {
     el.textContent = 'Update ready · Tap to update'
     Object.assign(el.style, {
       position: 'fixed', left: '50%', transform: 'translateX(-50%)', zIndex: '10000',
-      top: 'calc(env(safe-area-inset-top, 0px) + 10px)', padding: '8px 14px', borderRadius: '999px',
+      top: 'calc(var(--safe-top) + 10px)', padding: '8px 14px', borderRadius: '999px',
       border: 'none', background: 'var(--brand, #12665F)', color: '#fff', cursor: 'pointer',
       font: '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
     })

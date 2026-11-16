@@ -504,7 +504,7 @@ export function InsightsPage() {
     <div className="flex-1 overflow-y-auto lg:max-w-[900px]" style={{ background: 'var(--bg)' }}>
 
       {/* ── Page Header ────────────────────────────────────────────────── */}
-      <div className="mp-glass-header" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))', paddingLeft: 20, paddingRight: 20, paddingBottom: 0, position: 'sticky', top: 0, zIndex: 20 }}>
+      <div className="mp-glass-header" style={{ paddingTop: 'calc(var(--safe-top) + var(--header-gap, 22px))', paddingLeft: 20, paddingRight: 20, paddingBottom: 0, position: 'sticky', top: 0, zIndex: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {!isDesktop && (

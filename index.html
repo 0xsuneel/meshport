@@ -73,6 +73,12 @@
     <title>MeshPort</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
+      /* The top safe area every header pads by: the status bar's height where
+         the app draws under it (installed app, Median), 0 in a browser tab
+         (boot.js marks those) - OKX Wallet's browser reports the status bar
+         there too, which opened every page with an empty band on top. */
+      :root { --safe-top: env(safe-area-inset-top, 0px); }
+      html[data-browser-tab] { --safe-top: 0px; }
       /* html (not just body) is painted first on refresh - without this,
          the browser paints its own light/dark default before any CSS
          loads, producing a flash of the wrong color. The data-theme

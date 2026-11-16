@@ -31,7 +31,7 @@ export function ArcSlowBanner() {
 
   return (
     // Full-width row that centres the pill.
-    <div style={{ position: 'fixed', zIndex: 9999, left: 0, right: 0, top: 'calc(env(safe-area-inset-top, 0px) + 54px)', display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+    <div style={{ position: 'fixed', zIndex: 9999, left: 0, right: 0, top: 'calc(var(--safe-top) + 54px)', display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
       <AnimatePresence>
         {slow && !hidden && (
           <motion.div key="arc-slow" role="status" aria-live="polite"

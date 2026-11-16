@@ -18,6 +18,8 @@
             || window.navigator.standalone === true;
           var shell = /median|gonative/i.test(navigator.userAgent || '') || 'median' in window;
           if (installed || shell) return;
+          // index.html: --safe-top is 0 here, whatever inset the browser reports.
+          document.documentElement.setAttribute('data-browser-tab', '');
           var vp = document.querySelector('meta[name="viewport"]');
           if (vp) vp.setAttribute('content', vp.getAttribute('content').replace(/,\s*viewport-fit=cover/, ''));
         } catch (e) { /* keep the page as it was */ }

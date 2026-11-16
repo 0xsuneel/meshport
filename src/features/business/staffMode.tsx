@@ -58,7 +58,7 @@ export function StaffModePage() {
   if (!list) return <div className="p-5"><Skeleton className="h-40 w-full" /></div>
 
   if (!active) return (
-    <div className={`flex flex-col gap-4 h-full overflow-y-auto bg-bg ${isDesktop ? 'px-10' : 'px-5'}`} style={{ paddingTop: isDesktop ? 20 : 'calc(env(safe-area-inset-top, 0px) + 20px)', paddingBottom: isDesktop ? 24 : 120 }}>
+    <div className={`flex flex-col gap-4 h-full overflow-y-auto bg-bg ${isDesktop ? 'px-10' : 'px-5'}`} style={{ paddingTop: isDesktop ? 20 : 'calc(var(--safe-top) + 20px)', paddingBottom: isDesktop ? 24 : 120 }}>
       <h1 className="text-xl font-bold text-text-primary">Business</h1>
       {list.length === 0 && <p className="text-sm text-text-secondary">Business is for business accounts. If a shop added you as staff, their invite shows here.</p>}
       {list.map(m => (
@@ -93,7 +93,7 @@ export function StaffModePage() {
       phoneMainClassName="flex flex-col h-full min-h-0 bg-bg"
       main={<>
       <div className="flex-1 min-h-0 flex flex-col" style={homeShift}>
-      <div style={{ paddingTop: isDesktop ? 0 : 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
+      <div style={{ paddingTop: isDesktop ? 0 : 'calc(var(--safe-top) + 8px)' }}>
         <StaffModeHeader store={active.storeName ? `${active.ownerName} · ${active.storeName}` : active.ownerName} role={active.role} onExit={() => setActiveId(null)} />
       </div>
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: isDesktop ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>

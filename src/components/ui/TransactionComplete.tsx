@@ -80,7 +80,7 @@ export function TransactionComplete({
         height: '100%', background: 'var(--bg)',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'flex-start',
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 48px)',
+        paddingTop: 'calc(var(--safe-top) + 48px)',
         paddingLeft: 20, paddingRight: 20, paddingBottom: 40,
         boxSizing: 'border-box',
         overflowY: 'auto', overflowX: 'hidden',

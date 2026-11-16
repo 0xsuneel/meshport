@@ -68,7 +68,7 @@ export function NewsArticlePage() {
               : { width: '100%', aspectRatio: '1200 / 630', maxHeight: 320 }} />
           : <div style={{ width: '100%', aspectRatio: '1200 / 630', maxHeight: isDesktop ? undefined : 320, borderRadius: isDesktop ? 18 : 0, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />}
         <button onClick={back} aria-label="Back"
-          style={{ position: 'absolute', top: isDesktop ? 14 : 'calc(env(safe-area-inset-top, 0px) + 14px)', left: 14, width: 38, height: 38, borderRadius: '50%',
+          style={{ position: 'absolute', top: isDesktop ? 14 : 'calc(var(--safe-top) + 14px)', left: 14, width: 38, height: 38, borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
             background: 'rgba(0,0,0,0.42)', border: 'none', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
           {/* Same arrow as every back button; the dark circle keeps it readable over the photo. */}

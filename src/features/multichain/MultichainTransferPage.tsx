@@ -3704,7 +3704,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // Review and the passcode sheet (which both stay underneath until it
         // has arrived - their `leaveUnder`), so it sits above the sheet: the
         // sheet's dim used to fade out on top of it, greying the page.
-        ...(procPage ? { position: 'relative', zIndex: 60, background: 'var(--bg)', paddingTop: 'env(safe-area-inset-top, 0px)', boxShadow: isDesktopMq ? undefined : pushLook().shadow } : {}),
+        ...(procPage ? { position: 'relative', zIndex: 60, background: 'var(--bg)', paddingTop: 'var(--safe-top)', boxShadow: isDesktopMq ? undefined : pushLook().shadow } : {}),
         // Success: this column stops scrolling and hands its full height to
         // the receipt, which scrolls its own details above a pinned
         // View in Hub / Done bar (see SuccessReceipt's `actions`).

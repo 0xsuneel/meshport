@@ -4058,7 +4058,7 @@ export function HomePage() {
         // Frosted like the bottom nav (index.css, "Frosted bars"): the cards
         // that scroll under it turn into a soft blur of colour.
         ['--frost-tint' as string]: 'var(--bg)',
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))',
+        paddingTop: 'calc(var(--safe-top) + var(--home-header-gap, 14px))',
         paddingBottom: 4, paddingLeft: 20, paddingRight: 20,
         boxSizing: 'border-box',
       }}>
