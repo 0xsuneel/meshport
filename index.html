@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <meta charset="UTF-8" />
     <!-- ── Theme bootstrap - MUST run before the <style> block below is
          parsed so `html[data-theme]` is already set for the very first
          paint (no flash of the wrong theme). Mirrors the resolution logic
@@ -8,8 +9,11 @@
          zustand under the same localStorage key) wins; otherwise falls
          back to the OS/browser's prefers-color-scheme. Plain vanilla JS -
          runs long before the React bundle loads. -->
+    <!-- viewport-fit=cover lets the installed app draw under the status bar
+         (every header pads by env(safe-area-inset-top)). Before boot.js, which
+         drops it in a plain browser tab - see "Safe area" there. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <script src="/boot.js"></script>
-    <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- Open the connections the wallet needs while the app itself loads: the
          wallet frame's own host (private-key wallets sign there) and Circle's
@@ -17,7 +21,6 @@
          start used to open each only when first used. -->
     <link rel="preconnect" href="https://wallet.meshport.xyz" />
     <link rel="preconnect" href="https://rpc.testnet.arc.io" crossorigin="anonymous" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <!-- NO static theme-color meta here on purpose. boot.js creates and keeps
          #mp-theme-color up to date (via themeStore) from the RESOLVED in-app
          theme - not the OS preference - so the OS status + navigation bars and
