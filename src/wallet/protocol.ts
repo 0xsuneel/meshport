@@ -82,7 +82,10 @@ export interface WalletRpc {
    * (ConfirmRequest) or, for a transaction, this exact payment
    * (ConfirmIntent). Each is used once. Otherwise 'approval-required'.
    */
-  'sign:message': [{ address: string; message: string | { raw: Hex }; confirmation?: string }, { signature: Hex }]
+  // `p2p`: a P2P order step (the escrow's mark-paid / cancel digest) - the
+  // wallet recomputes the digest from it and names the step on the confirm
+  // screen only when it matches what is signed.
+  'sign:message': [{ address: string; message: string | { raw: Hex }; p2p?: { purpose: 'MARK_PAID' | 'CANCEL'; tradeKey: Hex }; confirmation?: string }, { signature: Hex }]
   'sign:typed-data': [{ address: string; typedData: Record<string, unknown>; confirmation?: string }, { signature: Hex }]
   'sign:transaction': [{ address: string; transaction: FrameTransaction; confirmation?: string }, { serialized: Hex }]
   /**

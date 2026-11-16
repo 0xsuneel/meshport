@@ -8,7 +8,7 @@ import { callWallet, WalletFrameError, walletOrigin } from './frameClient'
 import { walletAccount, type WalletAccount } from './account'
 import type { ConfirmBiometric, ConfirmIntent, ConfirmOutcome, ConfirmRequest, ConfirmScope, ConfirmSummary, PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
 
-export { walletAccount, quoteAccount, isWalletAccount, toEthersSigner, createWalletAdapter, type WalletAccount } from './account'
+export { walletAccount, quoteAccount, isWalletAccount, toEthersSigner, createWalletAdapter, signP2pStep, type WalletAccount } from './account'
 export { WalletFrameError, walletOrigin, walletReady } from './frameClient'
 export type { ConfirmBiometric, ConfirmIntent, ConfirmOutcome, ConfirmSummary, PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
 

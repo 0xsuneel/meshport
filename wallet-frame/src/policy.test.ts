@@ -1,7 +1,7 @@
 // What a spend limit counts, read by the wallet itself (policy.ts).
 import { describe, it, expect } from 'vitest'
-import { encodeFunctionData, erc20Abi, maxUint256, pad, parseAbi } from 'viem'
-import { classify, describeRequest, fits, parseScope, canonical } from './policy'
+import { encodeAbiParameters, encodeFunctionData, erc20Abi, keccak256, maxUint256, pad, parseAbi, toBytes, toHex } from 'viem'
+import { classify, describeRequest, describeScope, fits, parseScope, canonical } from './policy'
 
 const me = '0x1111111111111111111111111111111111111111'
 const them = '0x2222222222222222222222222222222222222222'
@@ -161,5 +161,42 @@ describe('MeshPort rewards claim', () => {
     const c = classify(me, 'sign:transaction', { transaction: tx({ to: REWARDS, data: claim }) })
     const scope = parseScope({ limits: [{ asset: 'USDC', amount: '5' }] })
     expect(c.ok ? fits(scope, { ...scope.limits }, c) : null).toBeNull()
+  })
+})
+
+describe('P2P order steps', () => {
+  const ESCROW = '0x5f88B9EDC2D6805Ea7a6975aEB151CeebB334022'
+  const tradeKey = keccak256(toHex('trade-123'))
+  const digestFor = (purpose: string, escrow = ESCROW, key: `0x${string}` = tradeKey) => keccak256(encodeAbiParameters(
+    [{ type: 'address' }, { type: 'uint256' }, { type: 'bytes32' }, { type: 'bytes32' }],
+    [escrow as `0x${string}`, 5042002n, keccak256(toBytes(`MESHPORT_P2P_${purpose}`)), key]))
+
+  it('names a mark-paid digest it has checked itself, with no warning', () => {
+    const v = describeRequest('sign:message', { message: { raw: digestFor('MARK_PAID') }, p2p: { purpose: 'MARK_PAID', tradeKey } })
+    expect(v).toMatchObject({ action: 'Mark order as paid', to: 'MeshPort P2P Escrow', warnings: [] })
+    expect(describeRequest('sign:message', { message: { raw: digestFor('CANCEL') }, p2p: { purpose: 'CANCEL', tradeKey } }).action).toBe('Cancel order')
+  })
+
+  it('keeps the raw-data warning when the claimed step does not match the digest', () => {
+    const other = keccak256(toHex('trade-999'))
+    for (const [raw, p2p] of [
+      [digestFor('CANCEL'), { purpose: 'MARK_PAID', tradeKey }], // wrong step
+      [digestFor('MARK_PAID', ESCROW, other), { purpose: 'MARK_PAID', tradeKey }], // another order
+      [digestFor('MARK_PAID', '0x1111111111111111111111111111111111111111'), { purpose: 'MARK_PAID', tradeKey }], // another contract
+      [keccak256(toHex('anything')), { purpose: 'MARK_PAID', tradeKey }],
+      [digestFor('MARK_PAID'), { purpose: 'RELEASE', tradeKey }], // unknown step
+      [digestFor('MARK_PAID'), undefined],
+    ] as const) {
+      const v = describeRequest('sign:message', { message: { raw }, p2p })
+      expect(v.action).toBe('Sign raw data')
+      expect(v.warnings.length).toBe(1)
+    }
+  })
+})
+
+describe('spend limit of nothing', () => {
+  it('says no money leaves the wallet instead of a "Nothing" amount', () => {
+    const v = describeScope(parseScope({ limits: [{ asset: 'USDC', amount: '0' }] }))
+    expect(v).toMatchObject({ action: 'No money leaves your wallet', amount: '' })
   })
 })
