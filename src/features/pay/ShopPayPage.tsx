@@ -18,17 +18,20 @@ const SHOP_MAX = 100000
 
 // The amount as a big centred figure with a small raised $, grey while
 // nothing is typed, shrinking as it grows. Desktop types into it directly.
-function ShopAmount({ value, onType, balance }: {
+function ShopAmount({ value, onType, balance, compact = false }: {
   value: string; onType?: (raw: string) => void
   /** Signed in: the payer's Arc USDC balance (shown under the amount); null hides it. */
   balance?: number | null
+  /** A short screen: smaller figure and less room around it. */
+  compact?: boolean
 }) {
   const shown = value || '0'
-  const size = shown.length <= 4 ? 64 : shown.length <= 6 ? 54 : shown.length <= 8 ? 44 : 36
+  const full = shown.length <= 4 ? 64 : shown.length <= 6 ? 54 : shown.length <= 8 ? 44 : 36
+  const size = compact ? Math.round(full * 0.8) : full
   const color = value ? 'var(--text-primary)' : 'var(--text-muted)'
   const digits = { fontSize: size, fontWeight: 700, lineHeight: 1.1, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' as const, color, opacity: value ? 1 : 0.45 }
   return (
-    <div className="flex flex-col items-center py-6">
+    <div className={`flex flex-col items-center ${compact ? 'py-1' : 'py-6'}`}>
       <div className="flex items-start justify-center max-w-full" aria-live="polite">
         <span style={{ fontSize: Math.round(size * 0.45), fontWeight: 600, lineHeight: 1, marginTop: Math.round(size * 0.12), marginRight: 4, color: 'var(--text-muted)' }}>$</span>
         {onType ? (
@@ -40,7 +43,7 @@ function ShopAmount({ value, onType, balance }: {
           <span style={digits} aria-label={`Amount ${shown} USDC`}>{shown}</span>
         )}
       </div>
-      <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-surface border border-border px-3 py-1 text-xs font-semibold text-text-secondary">
+      <span className={`${compact ? 'mt-2' : 'mt-3'} inline-flex items-center gap-1.5 rounded-full bg-surface border border-border px-3 py-1 text-xs font-semibold text-text-secondary`}>
         <img decoding="async" src="/logos/tokens/usdc.png" alt="" width={16} height={16} className="rounded-full" /> USDC
       </span>
       {balance != null && (
@@ -62,6 +65,9 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
 }) {
   const navigate = useNavigate()
   const isDesktop = useMediaQuery('(min-width: 980px)')
+  // A short screen (an in-app browser's bars take ~150px): everything above
+  // the keys tightens so the whole keypad stays above the Pay button.
+  const short = useMediaQuery('(max-height: 780px)') && !isDesktop
   const toast = useUIStore(s => s.showToastMessage)
   const signedIn = useAuthStore(s => s.isAuthenticated)
   // The same Arc USDC balance the pay screen shows (kept per wallet by the store).
@@ -138,8 +144,8 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
       <div className="flex-1 overflow-y-auto">
         {/* Who is being paid: photo, then the name with its badge. */}
         <div className="mx-auto w-full max-w-md flex flex-col items-center text-center px-5 pt-2">
-          <Avatar src={shop.avatarUrl ?? undefined} name={shop.businessName} size="lg" />
-          <h1 className="mt-4 text-[22px] leading-tight font-bold text-text-primary flex items-center justify-center gap-2 max-w-full">
+          <Avatar src={shop.avatarUrl ?? undefined} name={shop.businessName} size={short ? 'md' : 'lg'} />
+          <h1 className={`${short ? 'mt-2 text-[20px]' : 'mt-4 text-[22px]'} leading-tight font-bold text-text-primary flex items-center justify-center gap-2 max-w-full`}>
             <span className="truncate">{shop.businessName}</span>
             {shop.verified && <BadgeCheck className="w-6 h-6 shrink-0 text-brand-text" aria-label="Verified business" />}
           </h1>
@@ -148,10 +154,10 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
             {shop.storeName && <><span aria-hidden>·</span><Store className="w-3.5 h-3.5" /> {shop.storeName}</>}
           </p>
         </div>
-        <div className="mx-auto w-full max-w-md flex flex-col gap-5 px-5 pt-6">
+        <div className={`mx-auto w-full max-w-md flex flex-col px-5 ${short ? 'gap-3 pt-3' : 'gap-5 pt-6'}`}>
           {/* The amount, large and centred: typed straight in on desktop; on
               a phone the keys sit right in the page under it. */}
-          <ShopAmount value={amount} onType={isDesktop ? type : undefined} balance={signedIn ? balance : null} />
+          <ShopAmount value={amount} onType={isDesktop ? type : undefined} balance={signedIn ? balance : null} compact={short} />
           <div className="w-full max-w-[280px] mx-auto">
             <input
               type="text"
