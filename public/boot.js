@@ -2,6 +2,27 @@
 // forbid inline scripts). Loaded synchronously in <head>, before any CSS
 // paints, exactly where the theme script used to run.
 
+// ── Safe area ──
+// index.html asks to draw under the phone's status bar (viewport-fit=cover)
+// so the installed app's headers run up under the clock, padded by
+// env(safe-area-inset-top). In a browser tab the browser's own toolbar is
+// already below the status bar - but some in-app browsers (OKX Wallet's)
+// still report the status bar's height as the top inset, so every page got a
+// band of empty space above its header. In a browser tab (not the home-screen
+// app, not the Median app shell) the page now stays inside the browser's
+// area, so the insets are 0 there.
+      (function () {
+        try {
+          var installed = (typeof window.matchMedia === 'function'
+              && (window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches))
+            || window.navigator.standalone === true;
+          var shell = /median|gonative/i.test(navigator.userAgent || '') || 'median' in window;
+          if (installed || shell) return;
+          var vp = document.querySelector('meta[name="viewport"]');
+          if (vp) vp.setAttribute('content', vp.getAttribute('content').replace(/,\s*viewport-fit=cover/, ''));
+        } catch (e) { /* keep the page as it was */ }
+      })();
+
 // ── Theme bootstrap ──
       (function () {
         try {
