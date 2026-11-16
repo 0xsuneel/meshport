@@ -296,7 +296,8 @@ function englishVoice(): SpeechSynthesisVoice | null {
 // pending one and never say it.
 const speaking = new Set<SpeechSynthesisUtterance>()
 
-function say(text: string) {
+/** Resolves when the utterance has finished (or failed; at most ~10 s). */
+function say(text: string): Promise<void> {
   const s = window.speechSynthesis
   const voice = englishVoice()
   const u = new SpeechSynthesisUtterance(text)
@@ -304,30 +305,49 @@ function say(text: string) {
   if (voice) u.voice = voice
   u.rate = 1
   u.volume = 1
-  const done = () => { speaking.delete(u) }
-  u.onend = done
-  u.onerror = done
-  speaking.add(u)
-  // Chrome sometimes leaves the queue paused (after a tab switch).
-  if (s.paused) s.resume()
-  // Queued, not cancel() + speak(): that drops the first of two payments.
-  s.speak(u)
+  return new Promise<void>(resolve => {
+    const cap = setTimeout(resolve, 10_000)
+    const done = () => { speaking.delete(u); clearTimeout(cap); resolve() }
+    u.onend = done
+    u.onerror = done
+    speaking.add(u)
+    // Chrome sometimes leaves the queue paused (after a tab switch).
+    if (s.paused) s.resume()
+    // Queued, not cancel() + speak(): that drops the first of two payments.
+    s.speak(u)
+  })
 }
 
-/** Announces a received amount if alerts are on (or always, for a test). */
-export function speakPayment(amount: number, opts: { test?: boolean } = {}) {
-  if (typeof window === 'undefined' || (!settings.enabled && !opts.test)) return
+/** Resolves once the audio scheduled up to AudioContext time `t` has played. */
+function untilAudioTime(t: number): Promise<void> {
+  const ctx = audioContext()
+  const ms = ctx ? Math.max(0, (t - ctx.currentTime) * 1000) : 0
+  return new Promise(r => setTimeout(r, ms + 50))
+}
+
+/**
+ * Announces a received amount if alerts are on (or always, for a test).
+ * Resolves when this alert has finished playing (at once when nothing plays),
+ * so the payment card on screen can wait for its own voice.
+ */
+export function speakPayment(amount: number, opts: { test?: boolean } = {}): Promise<void> {
+  if (typeof window === 'undefined' || (!settings.enabled && !opts.test)) return Promise.resolve()
   if (opts.test) unlock()
   if (settings.vibrate) { try { navigator.vibrate?.([120, 60, 120]) } catch { /* no vibration */ } }
   // Below the chosen amount: the chime alone (a test always speaks).
   if (!opts.test && amount < settings.minAmount) {
-    queue = queue.then(() => playClips([])).catch(() => {})
-    return
+    const chimed = queue.then(() => playClips([]))
+    queue = chimed.catch(() => {})
+    return chimed.then(() => untilAudioTime(queueEnd), () => {})
   }
   const names = phrasesFor(amount)
   // One alert is scheduled at a time, so two payments together never overlap.
+  // `queue` moves on once this one is scheduled; `done` once it has played.
+  let done: Promise<void> = Promise.resolve()
   queue = queue.then(() => names ? playClips(names) : false).then(ok => {
-    if (ok || !voiceSupported()) return
-    try { say(spokenText(amount)) } catch { /* speech unavailable */ }
+    if (ok) { done = untilAudioTime(queueEnd); return }
+    if (!voiceSupported()) return
+    try { done = say(spokenText(amount)) } catch { /* speech unavailable */ }
   }, () => {})
+  return queue.then(() => done)
 }

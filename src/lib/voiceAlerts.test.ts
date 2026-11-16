@@ -6,6 +6,7 @@ type Spoken = { text: string; lang: string; voice: unknown; volume: number }
 
 function fakeBrowser(voiceLangs: string[], opts: { speech?: boolean } = {}) {
   const spoken: Spoken[] = []
+  const utterances: Array<{ onend: (() => void) | null }> = []
   const cancel = vi.fn()
   const vibrate = vi.fn()
   const voices = voiceLangs.map(lang => ({ lang, name: lang }))
@@ -13,7 +14,7 @@ function fakeBrowser(voiceLangs: string[], opts: { speech?: boolean } = {}) {
     constructor(t: string) { this.text = t } }
   const synth = {
     paused: false, resume: vi.fn(), cancel, getVoices: () => voices, addEventListener: vi.fn(),
-    speak: (u: Utterance) => { spoken.push({ text: u.text, lang: u.lang, voice: u.voice, volume: u.volume }) },
+    speak: (u: Utterance) => { spoken.push({ text: u.text, lang: u.lang, voice: u.voice, volume: u.volume }); utterances.push(u) },
   }
   // No AudioContext: the clips can't play, so the device speaks instead.
   const win: any = { addEventListener: vi.fn() }
@@ -23,7 +24,7 @@ function fakeBrowser(voiceLangs: string[], opts: { speech?: boolean } = {}) {
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} })
   vi.stubGlobal('navigator', { vibrate })
   vi.stubGlobal('SpeechSynthesisUtterance', Utterance)
-  return { spoken, cancel, vibrate, win }
+  return { spoken, utterances, cancel, vibrate, win }
 }
 
 async function load() {
@@ -114,6 +115,26 @@ describe('speakPayment', () => {
     v.setVoiceAlerts({ enabled: false })
     v.speakPayment(3)
     expect(b.vibrate).toHaveBeenCalledTimes(1)
+  })
+
+  it('resolves when its alert has finished (the card waits for its voice)', async () => {
+    const b = fakeBrowser(['en-GB'])
+    const v = await load()
+    let done = false
+    void v.speakPayment(4).then(() => { done = true })
+    await flush(); await flush()
+    expect(b.spoken.map(s => s.text)).toEqual(['Received 4 dollars on Mesport'])
+    expect(done).toBe(false)
+    b.utterances[0].onend?.()
+    await flush()
+    expect(done).toBe(true)
+  })
+
+  it('resolves at once when alerts are off', async () => {
+    fakeBrowser(['en-GB'])
+    const v = await load()
+    v.setVoiceAlerts({ enabled: false })
+    await expect(v.speakPayment(4)).resolves.toBeUndefined()
   })
 
   it('listens for the first tap to unlock sound', async () => {
