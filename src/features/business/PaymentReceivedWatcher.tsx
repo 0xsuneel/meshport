@@ -40,6 +40,13 @@ export function PaymentReceivedWatcher() {
   const [cards, setCards] = useState<MerchantPayment[]>([])
   const shown = cards[0] ?? null
   const nextCard = () => setCards(c => c.slice(1))
+  const cardsLeft = useRef(0); cardsLeft.current = cards.length
+  // Payments whose voice waits for their card (chain:tx): each is said the
+  // moment its card comes up, so the card on screen and the voice always
+  // match - one after the other, however many arrived while away.
+  const speakOnShow = useRef<Set<string>>(new Set())
+  // The card whose voice has started, and when it ends (said once per card).
+  const voiceFor = useRef<{ key: string; done: Promise<void>; at: number } | null>(null)
   const navigate = useNavigate()
   const toast = useUIStore(s => s.showToastMessage)
   const seen = useRef<Set<string> | null>(null)
@@ -85,6 +92,8 @@ export function PaymentReceivedWatcher() {
       if (!visible()) { waiting.set(k, { amount, createdAt, payment: payment ?? waiting.get(k)?.payment }); return }
       announced.current.add(k)
       writeAnnounced(wallet, announced.current)
+      // It gets a card: said when that card comes up (below), not now.
+      if (payment && bigCardRef.current) { speakOnShow.current.add(k); return }
       speakPayment(amount)
     }
     const sayWaiting = () => {
@@ -93,7 +102,7 @@ export function PaymentReceivedWatcher() {
       waiting.clear()
       for (const [k, w] of list) {
         // Back after a long time: too old to say now, still counted as told.
-        if (isFresh(w.createdAt)) announce(k, w.amount, w.createdAt)
+        if (isFresh(w.createdAt)) announce(k, w.amount, w.createdAt, w.payment)
         else { announced.current.add(k); writeAnnounced(wallet, announced.current) }
       }
       showCards(list.filter(([, w]) => w.payment && isFresh(w.createdAt)).map(([, w]) => w.payment!))
@@ -148,6 +157,9 @@ export function PaymentReceivedWatcher() {
     const stopOrders = subscribeMerchantPayments(wallet, () => { void check() }, p => {
       const k = `${p.chain}:${p.txHash.toLowerCase()}`
       if (!seen.current || seen.current.has(k) || !isFresh(p.createdAt)) return
+      // With the big card on, the reload this row starts shows its card and
+      // says it together; speaking here first put the voice ahead of the card.
+      if (bigCardRef.current) return
       announce(k, p.amount, p.createdAt)
     })
     const stopReceipts = subscribeChainReceipts(wallet, () => { void check() })
@@ -162,13 +174,33 @@ export function PaymentReceivedWatcher() {
   }, [business, wallet])
 
   // Each card closes by itself after 8 s; the next one waiting follows.
+  // A card that speaks: its voice starts as it comes up, and with more
+  // waiting the next follows ~1 s after this voice ends (at least 3 s on
+  // screen), so card and voice move together; the last one stays 8 s.
   useEffect(() => {
     if (!shown) return
-    const t = setTimeout(nextCard, 8000)
-    return () => clearTimeout(t)
+    const k = keyOf(shown)
+    let t: ReturnType<typeof setTimeout> | undefined
+    if (!speakOnShow.current.has(k)) { t = setTimeout(nextCard, 8000); return () => clearTimeout(t) }
+    if (voiceFor.current?.key !== k) voiceFor.current = { key: k, done: speakPayment(shown.amount), at: Date.now() }
+    const v = voiceFor.current
+    let live = true
+    void v.done.then(() => {
+      if (!live) return
+      const spoke = Date.now() - v.at
+      const dwell = cardsLeft.current > 1 ? Math.max(3000, spoke + 1000) : Math.max(8000, spoke + 1000)
+      t = setTimeout(nextCard, Math.max(0, dwell - (Date.now() - v.at)))
+    })
+    // (The mark stays: an announced payment never gets a second card.)
+    return () => { live = false; clearTimeout(t) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- runs per card shown
   }, [shown])
-  // Big alert card turned off: nothing more shows.
-  useEffect(() => { if (!voice.bigCard) setCards([]) }, [voice.bigCard])
+  // Big alert card turned off: nothing more shows (their voices, still due, play now).
+  useEffect(() => {
+    if (voice.bigCard) return
+    setCards(c => { for (const p of c) if (speakOnShow.current.delete(keyOf(p)) && voiceFor.current?.key !== keyOf(p)) void speakPayment(p.amount); return [] })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only on the setting
+  }, [voice.bigCard])
 
   // The last payment shown stays drawn while the popup animates away -
   // clearing it with the popup still on screen blanked it mid-close (flicker).
