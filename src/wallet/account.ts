@@ -85,6 +85,17 @@ export function bindConfirmation(address: string, intent: ConfirmIntent, ticket:
   confirmed.set(txKey(address, intent.chainId, intent.to, intent.value, intent.data), ticket)
 }
 
+/**
+ * A P2P order step's digest (P2PMeshportEscrowV3 markPaidDigest / cancelDigest),
+ * signed like signMessage({ raw }) but with the order and step alongside, so
+ * the wallet can check the digest and show "Mark order as paid" / "Cancel
+ * order" instead of an unreadable "raw data" signature.
+ */
+export async function signP2pStep(account: WalletAccount, purpose: 'MARK_PAID' | 'CANCEL', tradeKey: Hex, digest: Hex): Promise<Hex> {
+  const address = account.address
+  return (await timedFrame('signMessage', () => approvedCall('sign:message', { address, message: { raw: digest }, p2p: { purpose, tradeKey } }))).signature
+}
+
 /** The wallet at `address`, signing through the frame. */
 export function walletAccount(address: string): WalletAccount {
   const key = address.toLowerCase()

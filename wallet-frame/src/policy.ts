@@ -19,7 +19,7 @@
 // Tokens are known by address (USDC on every chain MeshPort uses, Arc's
 // EURC and cirBTC); their decimals come from this bundle, never the app.
 
-import { decodeFunctionData, formatUnits, getAddress, type Hex } from 'viem'
+import { decodeFunctionData, encodeAbiParameters, formatUnits, getAddress, keccak256, toBytes, type Hex } from 'viem'
 import { ARC_TOKENS, EXTERNAL_CHAINS } from '@/blockchain/chains'
 import { ARC_CHAIN_ID, describeIntent, type IntentView } from './intent'
 
@@ -65,7 +65,35 @@ export const MESHPORT_CONTRACTS = new Map<string, string>([
   ['0x8921fae7322305011aff1c7409472f5c74eaaf15', 'MeshPort Rewards'],
   ['0xda51a32edfc723e3de9aaf0a452fd2f71e6019f1', 'MeshPort Checkout'],
   ['0x3010518f036ee1bf95da787eee3aaffad95a1794', 'MeshPort Router'],
+  ['0x5f88b9edc2d6805ea7a6975aeb151ceebb334022', 'MeshPort P2P Escrow'],
 ])
+/**
+ * MeshPort's P2P escrow. A buyer marks an order paid, or cancels one, by
+ * signing a digest the escrow defines (P2PMeshportEscrowV3.markPaidDigest /
+ * cancelDigest): keccak256(abi.encode(escrow, chainId, keccak256(tag),
+ * tradeKey)). The app says which order and step; the wallet recomputes the
+ * digest from that and names the step only when it is exactly what is signed.
+ */
+const P2P_ESCROWS = ['0x5f88b9edc2d6805ea7a6975aeb151ceebb334022']
+const P2P_STEPS: Record<string, string> = { MARK_PAID: 'Mark order as paid', CANCEL: 'Cancel order' }
+function describeP2pDigest(raw: unknown, p2p: unknown): IntentView | null {
+  const q = (p2p ?? {}) as { purpose?: unknown; tradeKey?: unknown }
+  const purpose = typeof q.purpose === 'string' ? q.purpose : ''
+  if (!P2P_STEPS[purpose] || typeof q.tradeKey !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(q.tradeKey)) return null
+  if (typeof raw !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(raw)) return null
+  const tag = keccak256(toBytes(`MESHPORT_P2P_${purpose}`))
+  for (const escrow of P2P_ESCROWS) {
+    const digest = keccak256(encodeAbiParameters(
+      [{ type: 'address' }, { type: 'uint256' }, { type: 'bytes32' }, { type: 'bytes32' }],
+      [getAddress(escrow), BigInt(ARC_CHAIN_ID), tag, q.tradeKey as Hex]))
+    if (digest.toLowerCase() !== raw.toLowerCase()) continue
+    return {
+      action: P2P_STEPS[purpose], amount: '', token: '', to: MESHPORT_CONTRACTS.get(escrow)!,
+      rows: [{ label: 'Moves', value: 'No money - it only records this step on the escrow' }], warnings: [],
+    }
+  }
+  return null
+}
 const REWARDS_ABI = [{
   type: 'function', name: 'claimRewards', stateMutability: 'nonpayable', outputs: [{ name: 'usdcAmount', type: 'uint256' }],
   inputs: [{ name: 'points', type: 'uint256' }, { name: 'claimId', type: 'bytes32' }, { name: 'signature', type: 'bytes' }],
@@ -337,6 +365,9 @@ function describeRequestView(method: string, params: Record<string, unknown>): I
   if (method === 'sign:message') {
     const m = params.message
     if (typeof m === 'string') return { action: 'Sign message', amount: '', token: '', to: '', rows: [{ label: 'Message', value: clean(m.replace(/\n/g, ' '), 300) }], warnings: [] }
+    // A P2P order step whose digest the wallet has checked itself.
+    const p2p = describeP2pDigest((m as { raw?: unknown })?.raw, params.p2p)
+    if (p2p) return p2p
     return { action: 'Sign raw data', amount: '', token: '', to: '', rows: [{ label: 'Data', value: clean((m as { raw?: unknown })?.raw, 70) }], warnings: ['Raw data can authorise anything - only continue if you started this.'] }
   }
   if (method === 'solana:sign') {
@@ -395,7 +426,9 @@ export function describeScope(scope: Scope): IntentView {
   const contracts = [...scope.contracts.entries()].map(([a, l]) => `${l} (${getAddress(a)}, named by MeshPort)`)
   if (contracts.length) rows.push({ label: 'May also call', value: contracts.join(', ') })
   const source = 'Your wallet counts what every signature in that time moves; anything more, or anything it can\'t read, asks you again.'
-  if (!parts.length) return { action: 'Spend limit', amount: 'Nothing', token: '', to: 'leaves your wallet without asking you again', rows, warnings: [], source }
+  // A limit of nothing (a P2P order or release: the money moves from the
+  // escrow, not this wallet) - say so, not a "Nothing" where an amount goes.
+  if (!parts.length) return { action: 'No money leaves your wallet', amount: '', token: '', to: '', rows, warnings: [], source }
   return { action: 'Up to', amount: parts.join(' + '), token: '', to: 'may leave your wallet', rows, warnings: [], source }
 }
 

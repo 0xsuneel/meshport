@@ -1538,7 +1538,9 @@ export async function markTradePaidOnChain(signer: WalletAccount, tradeId: strin
     [{ type: 'address' }, { type: 'uint256' }, { type: 'bytes32' }, { type: 'bytes32' }],
     [CONTRACT_ADDRESS as `0x${string}`, 5042002n, keccak256(toBytes('MESHPORT_P2P_MARK_PAID')), key],
   ))
-  const signature = await signer.signMessage({ message: { raw: digest } })
+  // With the order alongside: the wallet checks the digest and shows "Mark order as paid".
+  const { signP2pStep } = await import('@/wallet')
+  const signature = await signP2pStep(signer, 'MARK_PAID', key, digest)
   const { authApiHeaders } = await import('./supabase')
   const r = await fetch('/api/bridge-relay', {
     method: 'POST', headers: await authApiHeaders(),
@@ -1643,6 +1645,8 @@ export async function cancelTradeAsBuyerOnChain(signer: WalletAccount, tradeId: 
     [{ type: 'address' }, { type: 'uint256' }, { type: 'bytes32' }, { type: 'bytes32' }],
     [CONTRACT_ADDRESS as `0x${string}`, 5042002n, keccak256(toBytes('MESHPORT_P2P_CANCEL')), key],
   ))
-  const signature = await signer.signMessage({ message: { raw: digest } })
+  // With the order alongside: the wallet checks the digest and shows "Cancel order".
+  const { signP2pStep } = await import('@/wallet')
+  const signature = await signP2pStep(signer, 'CANCEL', key, digest)
   return relayEscrowCall(encodeFunctionData({ abi: AUTO_ACCEPT_ABI, functionName: 'cancelTradeFor', args: [key, signature] }), 'Could not cancel the order on-chain')
 }
