@@ -222,6 +222,7 @@ Deno.serve(async (req: Request) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
             body: JSON.stringify({ mode: 'attempt', attemptId: r.attemptId }),
+            signal: AbortSignal.timeout(25_000), // a hung call must not hold the sweep
           })
           ledgerResults.push(await res.json())
         } catch (e) {
@@ -296,6 +297,7 @@ Deno.serve(async (req: Request) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
           body: JSON.stringify({ mode: 'sweep' }),
+          signal: AbortSignal.timeout(25_000), // a hung call must not hold the sweep
         })
         ledgerSweep = await res.json()
       } catch (e) {
