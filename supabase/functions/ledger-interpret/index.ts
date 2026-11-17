@@ -44,6 +44,27 @@ function json(body: unknown, status = 200): Response {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = getServiceRoleKey()
 
+// Which (chain, tx, wallet) already have a ledger row of this type - one
+// query per 100 hashes instead of one per row (17 Nov 2026: the sweep ran
+// ~110 single-row lookups every 3 minutes, re-checking swaps settled long ago).
+// Null on a failed read: the caller skips this sweep rather than re-post.
+const ledgerKey = (chain: unknown, tx: unknown, wallet: unknown) =>
+  `${String(chain ?? '')}|${String(tx ?? '').toLowerCase()}|${String(wallet ?? '').toLowerCase()}`
+async function postedKeys(supabase: ReturnType<typeof createClient>, eventType: string, txHashes: string[]): Promise<Set<string> | null> {
+  const hashes = [...new Set(txHashes.filter(Boolean).map(h => h.toLowerCase()))]
+  const out = new Set<string>()
+  for (let i = 0; i < hashes.length; i += 100) {
+    const { data, error } = await supabase
+      .from('ledger_events')
+      .select('chain_id, tx_hash, wallet_address')
+      .eq('event_type', eventType)
+      .in('tx_hash', hashes.slice(i, i + 100))
+    if (error) { console.error(`[ledger-interpret] ${eventType} lookup failed:`, error.message); return null }
+    for (const r of (data ?? []) as Array<Record<string, unknown>>) out.add(ledgerKey(r.chain_id, r.tx_hash, r.wallet_address))
+  }
+  return out
+}
+
 async function findUninterpretedConfirmedSwapAttempts(supabase: ReturnType<typeof createClient>): Promise<AttemptContext[]> {
   // "Not yet ledger-interpreted" is derived, not stored as its own column:
   // an attempt whose CONFIRMED tx_hash has no ledger_events row at all yet
@@ -59,17 +80,12 @@ async function findUninterpretedConfirmedSwapAttempts(supabase: ReturnType<typeo
     .limit(200)
   if (error) { console.error('[ledger-interpret] findUninterpretedConfirmedSwapAttempts query failed:', error.message); return [] }
 
+  const rows = (attempts ?? []) as Array<Record<string, unknown>>
+  const posted = await postedKeys(supabase, 'SWAP_DEBIT', rows.map(r => r.tx_hash as string))
+  if (!posted) return []
   const out: AttemptContext[] = []
-  for (const r of (attempts ?? []) as Array<Record<string, unknown>>) {
-    const { data: existing } = await supabase
-      .from('ledger_events')
-      .select('id')
-      .eq('chain_id', r.chain_id as string)
-      .eq('tx_hash', (r.tx_hash as string).toLowerCase())
-      .eq('wallet_address', (r.wallet_address as string).toLowerCase())
-      .eq('event_type', 'SWAP_DEBIT')
-      .maybeSingle()
-    if (existing) continue
+  for (const r of rows) {
+    if (posted.has(ledgerKey(r.chain_id, r.tx_hash, r.wallet_address))) continue
     out.push({
       id: r.id as string,
       intent_id: r.intent_id as string,
@@ -106,17 +122,12 @@ async function findUninterpretedConfirmedSwapChainEvents(supabase: ReturnType<ty
     .limit(500)
   if (eventsErr) { console.error('[ledger-interpret] findUninterpretedConfirmedSwapChainEvents events query failed:', eventsErr.message); return [] }
 
+  const rows = (events ?? []) as Array<Record<string, unknown>>
+  const posted = await postedKeys(supabase, 'SWAP_CREDIT', rows.map(e => e.tx_hash as string))
+  if (!posted) return []
   const out: string[] = []
-  for (const e of (events ?? []) as Array<Record<string, unknown>>) {
-    const { data: existing } = await supabase
-      .from('ledger_events')
-      .select('id')
-      .eq('chain_id', e.chain_id as string)
-      .eq('tx_hash', (e.tx_hash as string).toLowerCase())
-      .eq('wallet_address', ((e.wallet_address as string) ?? '').toLowerCase())
-      .eq('event_type', 'SWAP_CREDIT')
-      .maybeSingle()
-    if (existing) continue
+  for (const e of rows) {
+    if (posted.has(ledgerKey(e.chain_id, e.tx_hash, e.wallet_address))) continue
     out.push(String(e.id))
   }
   return out

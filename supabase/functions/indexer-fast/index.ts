@@ -37,6 +37,15 @@ const HANDOVER_WAIT_MS = 20_000
 const PASS_MS = 4_000
 // New sign-ups are watched within this long.
 const WALLETS_REFRESH_MS = 15_000
+// A chain whose endpoints keep failing (a testnet RPC down for hours) is
+// rested instead of retried every 4s: each failed pass also writes its error
+// to chain_cursors at once. 8s after the first failure, doubling to at most
+// 2 minutes; the first good pass clears it. Kept across calls while this
+// worker stays warm. blockchain-indexer's minute pass still reads the chain.
+const BACKOFF_BASE_MS = 8_000
+const BACKOFF_MAX_MS = 120_000
+const chainRest = new Map<string, { fails: number; until: number }>()
+const failedPass = (r: Record<string, unknown>) => !!r.error || r.action === 'no_progress'
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -90,10 +99,17 @@ Deno.serve(async (req: Request) => {
         for (;;) {
           const t0 = Date.now()
           const w = currentWallets()
-          if (w.size) {
+          const rest = chainRest.get(chain.id)
+          if (w.size && !(rest && rest.until > t0)) {
             const r = await indexChain(supabase, chain, w, cursors)
             const took = Date.now() - t0
             if (took > 2 * PASS_MS) console.info(`[indexer-fast] ${chain.id} pass ${took}ms`, r.error ?? r.action ?? r.window ?? '')
+            if (failedPass(r)) {
+              const fails = (rest?.fails ?? 0) + 1
+              const ms = Math.min(BACKOFF_BASE_MS * 2 ** (fails - 1), BACKOFF_MAX_MS)
+              chainRest.set(chain.id, { fails, until: Date.now() + ms })
+              if (fails === 1 || ms === BACKOFF_MAX_MS) console.warn(`[indexer-fast] ${chain.id} failing (${fails}x) - resting ${ms / 1000}s`)
+            } else if (rest) chainRest.delete(chain.id)
           }
           const wait = Math.max(0, PASS_MS - (Date.now() - t0))
           if (Date.now() + wait >= end) break

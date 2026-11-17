@@ -96,6 +96,16 @@ export function refreshBalancesAfterTx(address: string | null | undefined, opts:
   void read()
 }
 
+/** Money or an order changed on the server for this wallet (a push arrived):
+ *  re-read like after a transaction - unless this device's own transaction
+ *  is still settling with its exact figures (a swap's before/after), which
+ *  its own flow re-reads; only the lists reload then. */
+export function refreshBalancesAfterReceive(address: string | null | undefined): void {
+  if (!address) return
+  if (lastTxBalances && Date.now() - lastTxAt < 30_000) { notifyActivityChanged(); return }
+  refreshBalancesAfterTx(address)
+}
+
 // ── Balances after a swap: the chain's own figures, never arithmetic ───────
 // A swap's real effect is not "amount in" and "quoted amount out": Arc pays gas
 // in USDC, the output is whatever the pool really paid, and EURC / cirBTC may

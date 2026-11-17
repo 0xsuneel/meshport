@@ -738,6 +738,66 @@ type WatchCursors = {
   savedAt: number
 }
 const newWatchCursors = (): WatchCursors => ({ loaded: null, dirty: new Map(), savedAt: Date.now() })
+
+// The lists both watch groups need, read once for the two of them (17 Nov
+// 2026: each group read open orders, approved shops, business accounts and
+// order customers on every 4 s pass - ~120 reads a minute, the largest share
+// of the database's traffic). Open orders are shared for ORDERS_SHARE_MS
+// only: enough for the two groups' passes that start together to read once,
+// never stale enough that a payment is matched against an order list from
+// before a new order (it would miss it, or pick an older order with the same
+// amount). Shop and business
+// wallets change only when an account is approved or switched: re-read every
+// MERCHANTS_REFRESH_MS, the same delay as the indexer's new sign-ups. A
+// failed read is not kept, so the next pass reads again.
+const ORDERS_SHARE_MS = 1_500
+const MERCHANTS_REFRESH_MS = 15_000
+type OpenOrders = { intents: any[]; custWallet: Map<string, string> }
+type Shared<T> = { at: number; p: Promise<T> } | null
+const watchShared = new WeakMap<WatchCursors, { orders: Shared<OpenOrders>; merchants: Shared<Set<string>> }>()
+function sharedRead<T>(mem: WatchCursors | undefined, key: 'orders' | 'merchants', maxAge: number, read: () => Promise<T>): Promise<T> {
+  if (!mem) return read()
+  let box = watchShared.get(mem)
+  if (!box) { box = { orders: null, merchants: null }; watchShared.set(mem, box) }
+  const hit = box[key] as Shared<T>
+  if (hit && Date.now() - hit.at < maxAge) return hit.p
+  const entry = { at: Date.now(), p: read() }
+  ;(box as any)[key] = entry
+  entry.p.catch(() => { if ((box as any)[key] === entry) (box as any)[key] = null })
+  return entry.p
+}
+async function readOpenOrders(): Promise<OpenOrders> {
+  // Open orders, plus orders that expired or were cancelled within the last
+  // day: a payment for one of those is still recorded against it (late).
+  const { data: open, error } = await db.from('merchant_payment_intents').select('*')
+    .in('status', ['pending', 'partially_paid', 'expired', 'cancelled'])
+    .gt('created_at', new Date(Date.now() - 30 * 86400_000).toISOString())
+  if (error) throw new Error(`open orders read failed: ${error.message}`)
+  const dayAgo = Date.now() - LATE_WINDOW_MS
+  const intents = (open ?? []).filter((i: any) => i.status === 'cancelled'
+    ? new Date(i.updated_at ?? i.created_at).getTime() > dayAgo
+    : !i.expires_at || new Date(i.expires_at).getTime() > dayAgo)
+  // Customer wallets for orders that name a customer.
+  const custIds = [...new Set(intents.map((i: any) => i.customer_user_id).filter(Boolean))]
+  const custWallet = new Map<string, string>()
+  if (custIds.length) {
+    const { data: us } = await db.from('users').select('id, wallet_address').in('id', custIds)
+    for (const u of us ?? []) if (u.wallet_address) custWallet.set(String(u.id), String(u.wallet_address).toLowerCase())
+  }
+  return { intents, custWallet }
+}
+// Every approved merchant's address is watched on the other chains, so any
+// payment there (order or not) is recorded and notified ("Payment received
+// on Base"). It stays on that chain until the merchant's auto-convert.
+// Business accounts too (approved or not): their Business tab shows these.
+async function readMerchantWallets(): Promise<Set<string>> {
+  const [apps, biz] = await Promise.all([
+    db.from('merchant_applications').select('wallet_address').eq('status', 'approved'),
+    db.from('users').select('wallet_address').eq('account_type', 'business').not('wallet_address', 'is', null),
+  ])
+  if (apps.error || biz.error) throw new Error(`merchant wallets read failed: ${(apps.error ?? biz.error)!.message}`)
+  return new Set([...(apps.data ?? []), ...(biz.data ?? [])].map((a: any) => String(a.wallet_address ?? '').toLowerCase()).filter(Boolean))
+}
 async function saveWatchCursors(mem: WatchCursors) {
   if (mem.dirty.size === 0) return
   const rows = [...mem.dirty.values()]
@@ -800,38 +860,20 @@ async function watchSolana() {
 /** `mem`: the loop's in-memory positions (none: read and save them right here, e.g. a nudge). */
 async function watchDeposits(pick?: (chainId: string) => boolean, mem?: WatchCursors) {
   const runStart = Date.now()
-  // Open orders, plus orders that expired or were cancelled within the last
-  // day: a payment for one of those is still recorded against it (late).
-  const { data: open } = await db.from('merchant_payment_intents').select('*')
-    .in('status', ['pending', 'partially_paid', 'expired', 'cancelled'])
-    .gt('created_at', new Date(Date.now() - 30 * 86400_000).toISOString())
-  const dayAgo = Date.now() - LATE_WINDOW_MS
-  const intents = (open ?? []).filter((i: any) => i.status === 'cancelled'
-    ? new Date(i.updated_at ?? i.created_at).getTime() > dayAgo
-    : !i.expires_at || new Date(i.expires_at).getTime() > dayAgo)
-  // Every approved merchant's address is watched on the other chains, so any
-  // payment there (order or not) is recorded and notified ("Payment received
-  // on Base"). It stays on that chain until the merchant's auto-convert.
-  // Business accounts too (approved or not): their Business tab shows these.
   if (mem && !mem.loaded) {
     mem.loaded = readWatchCursors()
     mem.loaded.catch(() => { mem.loaded = null }) // read again next pass
   }
-  const [{ data: apps }, { data: biz }, cursorOf] = await Promise.all([
-    db.from('merchant_applications').select('wallet_address').eq('status', 'approved'),
-    db.from('users').select('wallet_address').eq('account_type', 'business').not('wallet_address', 'is', null),
+  const [orders, merchantWallets, cursorOf] = await Promise.all([
+    sharedRead(mem, 'orders', ORDERS_SHARE_MS, readOpenOrders),
+    sharedRead(mem, 'merchants', MERCHANTS_REFRESH_MS, readMerchantWallets),
     mem ? mem.loaded! : readWatchCursors(),
   ])
-  const merchantWallets = new Set([...(apps ?? []), ...(biz ?? [])].map((a: any) => String(a.wallet_address ?? '').toLowerCase()).filter(Boolean))
+  // This pass's own copy: an order paid below is refreshed or dropped in it.
+  const intents = [...orders.intents]
+  const custWallet = orders.custWallet
   if (intents.length === 0 && merchantWallets.size === 0) return { scanned: 0, matched: 0, review: 0 }
 
-  // Customer wallets for orders that name a customer.
-  const custIds = [...new Set(intents.map((i: any) => i.customer_user_id).filter(Boolean))]
-  const custWallet = new Map<string, string>()
-  if (custIds.length) {
-    const { data: us } = await db.from('users').select('id, wallet_address').in('id', custIds)
-    for (const u of us ?? []) if (u.wallet_address) custWallet.set(String(u.id), String(u.wallet_address).toLowerCase())
-  }
   const orderWallets = [...new Set(intents.map((i: any) => String(i.merchant_wallet).toLowerCase()))]
 
   let scanned = 0, matched = 0, review = 0
