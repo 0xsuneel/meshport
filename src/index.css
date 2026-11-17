@@ -812,9 +812,15 @@ html.mp-locking #root { visibility: hidden; }
    and a slow, faint band of light sweeps across it ("soft glow", chosen
    17 Nov over the old all-at-once breathing). An overlay, so it works on
    whatever grey a screen uses. */
-:root { --skel-glow: rgba(255, 255, 255, 0.6); }
+/* One fill for every block (17 Nov: each screen had picked its own grey,
+   4-8% of the text colour - next to OKX's placeholders ours almost vanished,
+   on white cards most of all). 10% of the text colour: on the light page
+   #DDDCD8, on a white card #E8E8E9, and on black #1A1A1A - the strength
+   OKX's dark placeholders have. It overrides the screens' own greys
+   (inline styles included), so every loading state reads as one. */
+:root { --skel-fill: color-mix(in srgb, var(--text-primary) 10%, transparent); --skel-glow: rgba(255, 255, 255, 0.6); }
 html[data-theme="dark"] { --skel-glow: rgba(255, 255, 255, 0.07); }
-.mp-skel { position: relative; overflow: hidden; isolation: isolate; }
+.mp-skel { position: relative; overflow: hidden; isolation: isolate; background: var(--skel-fill) !important; border-color: transparent !important; }
 .mp-skel::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(100deg, transparent 20%, var(--skel-glow) 50%, transparent 80%);
