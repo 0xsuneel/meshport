@@ -41,6 +41,8 @@ document.documentElement.dataset.theme = params.get('theme') === 'light' ? 'ligh
 // A short phone (the app's PinKeypad uses shorter keys there too), so the
 // whole step fits in the sheet without scrolling.
 if (params.get('short') === '1') document.documentElement.dataset.short = ''
+// A computer: the passcode is typed on its keyboard (no on-screen keys).
+if (params.get('desk') === '1') document.documentElement.dataset.desk = ''
 const root = document.getElementById('root')!
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string) {
@@ -413,8 +415,23 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
     else if (e.key === 'Backspace') { back(); e.preventDefault() }
   })
 
+  // A computer (data-desk): one line under the dots instead of the keys -
+  // "Type your passcode", or, when the keyboard is with the app around this
+  // page, a click here first (the app hands the keyboard over itself when the
+  // page shows; a click elsewhere takes it back).
+  const deskHint = el('p', 'desk-hint')
+  const paintDesk = () => {
+    const here = document.hasFocus()
+    deskHint.textContent = here ? 'Type your passcode' : 'Click here, then type your passcode'
+    deskHint.classList.toggle('away', !here)
+  }
+  paintDesk()
+  window.addEventListener('focus', paintDesk)
+  window.addEventListener('blur', paintDesk)
+  deskHint.addEventListener('pointerdown', () => window.focus())
+
   const entry = el('div', 'entry')
-  entry.append(dots, say, pad)
+  entry.append(dots, say, deskHint, pad)
 
   // ── Fingerprint / Face first ──────────────────────────────────────────────
   // Biometric on: the page opens on a fingerprint panel, not the keypad, and
@@ -562,12 +579,14 @@ if (!channel) {
   let used = false
   window.addEventListener('message', (e: MessageEvent) => {
     if (used || e.source !== parent || parent === window || !PARENTS.includes(e.origin)) return
-    const d = (e.data ?? {}) as { type?: string; slot?: unknown; s?: unknown; theme?: unknown; short?: unknown }
+    const d = (e.data ?? {}) as { type?: string; slot?: unknown; s?: unknown; theme?: unknown; short?: unknown; desk?: unknown }
     if (d.type !== 'mp-confirm-assign' || typeof d.slot !== 'string' || !/^[0-9a-f]{32}$/.test(d.slot)) return
     used = true
     document.documentElement.dataset.theme = d.theme === 'light' ? 'light' : 'dark'
     if (d.short === true) document.documentElement.dataset.short = ''
     else delete document.documentElement.dataset.short
+    if (d.desk === true) document.documentElement.dataset.desk = ''
+    else delete document.documentElement.dataset.desk
     startBySlot(ch, d.slot, typeof d.s === 'string' ? d.s : null)
   })
   tellApp({ state: 'standby' })
