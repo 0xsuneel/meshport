@@ -309,7 +309,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
       </div>
 
       {/* Total + Send - always on screen. */}
-      <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: compact ? 8 : 10, paddingBottom: compact ? 10 : 'calc(env(safe-area-inset-bottom, 0px) + 18px)' }}>
+      <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: compact ? 8 : 10, paddingBottom: compact ? 10 : 'calc(var(--safe-bottom) + 18px)' }}>
         {error && <p role="alert" className="text-[13px] text-danger mb-2">{error}</p>}
         {/* One row - the total and the button - so the items get the screen. */}
         {!compact && taxPct > 0 && valid.length > 0 && (

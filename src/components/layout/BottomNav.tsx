@@ -205,7 +205,7 @@ export function BottomNav() {
         ['--frost-tint' as string]: 'var(--bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-around',
         height: 65,
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingBottom: 'var(--safe-bottom)',
         position: 'relative',
         overflow: 'visible',
       }}>

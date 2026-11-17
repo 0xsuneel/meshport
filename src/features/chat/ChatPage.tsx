@@ -1408,7 +1408,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     {/* New chat - floats above the bottom navigation */}
     <motion.button whileTap={{ scale: 0.92 }} onClick={() => navigate('/chat/new')} aria-label="New chat"
       className="rounded-full flex items-center justify-center"
-      style={{ position: 'absolute', right: 18, bottom: isDesktopList ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 64px)', zIndex: 25,
+      style={{ position: 'absolute', right: 18, bottom: isDesktopList ? 24 : 'calc(var(--safe-bottom) + 64px)', zIndex: 25,
         width: 58, height: 58, background: 'var(--brand)', border: 'none', cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,0.35)' }}>
       <MessageCirclePlus className="w-[27px] h-[27px]" style={{ color: '#fff' }} strokeWidth={2} />
     </motion.button>
@@ -4592,7 +4592,7 @@ export function ChatConversationPage() {
     const n = parseFloat(payAmount) || 0
     const name = otherUser?.display_name || recipientClean
     return (
-      <div className="h-full flex flex-col px-5" style={{ paddingBottom: 'max(14px, env(safe-area-inset-bottom, 0px))' }}>
+      <div className="h-full flex flex-col px-5" style={{ paddingBottom: 'max(14px, var(--safe-bottom))' }}>
         <div className="pt-1">
           <div className="flex items-center gap-2.5 min-w-0">
             <Avatar name={name} src={otherUser?.avatar_url ?? null} size="sm" />
@@ -5154,7 +5154,7 @@ export function ChatConversationPage() {
       {/* Request / blocked: a bar in place of the message box */}
       {chatGate && (
         <div className="border-t border-border bg-bg flex-shrink-0 px-4 pt-3"
-          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)' }}>
+          style={{ paddingBottom: 'calc(var(--safe-bottom) + 14px)' }}>
           {chatGate === 'request' ? (<>
             <p className="text-[13px] text-text-secondary text-center mb-3">
               {otherHandle} isn't in your contacts. Accept to chat and get payments from them, or block them.
@@ -5188,7 +5188,7 @@ export function ChatConversationPage() {
       {/* Composer - sticky above home indicator */}
       {/* ── Message input bar ───────────────────────────────────────────────── */}
       <div className="border-t border-border bg-bg flex-shrink-0 relative"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', display: chatGate ? 'none' : undefined }}>
+        style={{ paddingBottom: 'var(--safe-bottom)', display: chatGate ? 'none' : undefined }}>
         <AnimatePresence>
           {showJump && (
             <motion.button key="jump" type="button" aria-label={newBelow ? `Scroll to newest, ${newBelow} new` : 'Scroll to newest'}

@@ -163,7 +163,7 @@ export function ChatForwardSheet({ messages, sourceKey, myUserId, walletAddress,
         })}
       </div>
       {picked.length > 0 && (
-        <div className="absolute left-0 right-0 bottom-0 flex items-center gap-3 px-4 pt-3" style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', background: 'var(--surface)', borderTop: '1px solid var(--border)' }}>
+        <div className="absolute left-0 right-0 bottom-0 flex items-center gap-3 px-4 pt-3" style={{ paddingBottom: 'calc(16px + var(--safe-bottom))', background: 'var(--surface)', borderTop: '1px solid var(--border)' }}>
           <p className="flex-1 min-w-0 truncate text-sm" style={{ color: 'var(--text-secondary)' }}>{names.join(', ')}</p>
           <button onClick={send} disabled={sending} aria-label={`Send to ${picked.length} chat${picked.length === 1 ? '' : 's'}`}
             className="flex items-center justify-center rounded-full text-white disabled:opacity-60" style={{ width: 52, height: 52, background: 'var(--brand)' }}>

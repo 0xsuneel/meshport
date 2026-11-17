@@ -89,7 +89,7 @@ export function StorePicker({ stores, value, onChange, label = 'Request for stor
       {/* On top of whatever sheet this row sits in (chat Request / Bill). */}
       {createPortal(
         <Sheet open={open} onClose={() => setOpen(false)} id="store-switch">
-          <div className="px-4 pt-1 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+          <div className="px-4 pt-1 pb-[calc(var(--safe-bottom)+16px)]">
             <p className="text-base font-bold text-text-primary px-1 pb-1">Switch store</p>
             <p className="text-xs text-text-muted px-1 pb-3">{hint}</p>
             <StoreSwitcher

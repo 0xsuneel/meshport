@@ -1182,7 +1182,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   const bringToken: BridgeToken = bringCoins.some(t => t.id === bringCoin) ? bringCoin : 'USDC'
   const sheetTokenBring = tokenBring ?? lastTokenBring.current
   const page = (
-    <div data-flow-scroller className={isDesktop ? undefined : 'lg:max-w-[900px]'} style={{ flex: 1, overflowY: flowFocus === 'processing' ? 'hidden' : 'auto', overscrollBehavior: flowFocus === 'processing' ? 'none' : undefined, background: 'var(--bg)', paddingBottom: isDesktop ? 90 : 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
+    <div data-flow-scroller className={isDesktop ? undefined : 'lg:max-w-[900px]'} style={{ flex: 1, overflowY: flowFocus === 'processing' ? 'hidden' : 'auto', overscrollBehavior: flowFocus === 'processing' ? 'none' : undefined, background: 'var(--bg)', paddingBottom: isDesktop ? 90 : 'calc(var(--safe-bottom) + 24px)' }}>
       {/* Header */}
       {!chainsOnly && <div data-scroll-header className="mp-glass-header" style={{ position: flowFocused ? 'relative' : 'sticky', top: 0, zIndex: 20,
         paddingTop: 'calc(var(--safe-top) + var(--header-gap, 22px))', paddingBottom: 18,

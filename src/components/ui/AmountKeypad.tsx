@@ -430,7 +430,7 @@ export function AmountKeypad({
               borderTop: '1px solid var(--border)',
               // The fill below its edge: pulled up a little, no gap shows.
               boxShadow: 'var(--shadow-3), 0 80px 0 var(--surface)',
-              padding: short ? '8px 20px calc(env(safe-area-inset-bottom, 0px) + 16px)' : '10px 24px 32px',
+              padding: short ? '8px 20px calc(var(--safe-bottom) + 16px)' : '10px 24px 32px',
             }}
           >
             {/* Handle (the same grabber as every sheet) */}

@@ -1598,7 +1598,7 @@ export function PaySendPage() {
             {(isDesktop || !showAmountPad) && (() => {
               const ready = numAmount > 0 && !amountInvalid && !recipientUnverified && !payBlocked
               return (
-                <div className="flex-shrink-0 px-5" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + 16px)', paddingTop: 8 }}>
+                <div className="flex-shrink-0 px-5" style={{ paddingBottom: 'calc(var(--safe-bottom) + 16px)', paddingTop: 8 }}>
                   {payBlocked && (
                     <p role="alert" className="text-[13px] text-center mb-3" style={{ color: 'var(--danger-text)' }}>{payBlockedMessage}</p>
                   )}

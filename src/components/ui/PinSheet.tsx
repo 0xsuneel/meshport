@@ -250,7 +250,7 @@ export function PinSheet(p: PinSheetProps) {
     )
   }
   const body = (
-      <div className="flex flex-col px-6 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] overflow-y-auto">
+      <div className="flex flex-col px-6 pt-2 pb-[max(28px,var(--safe-bottom))] overflow-y-auto">
         {p.header}
         {/* With the wallet's page, its card sits 16px under the title (as the
             card did here) and the page keeps its own space above the dots. */}

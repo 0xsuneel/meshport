@@ -138,7 +138,7 @@ function AccountKindPicker({ mode, onChoose, onSwitchMode }: {
     // browser bars showing): the "I already have an account" link used to sit
     // below the bottom edge there with nothing to scroll, so a returning user
     // couldn't reach sign-in. Short screens also get tighter spacing.
-    <div className="flex flex-col h-full overflow-y-auto overscroll-contain bg-bg px-6 pt-16 short:pt-8 pb-[max(env(safe-area-inset-bottom),2rem)] short:pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+    <div className="flex flex-col h-full overflow-y-auto overscroll-contain bg-bg px-6 pt-16 short:pt-8 pb-[max(var(--safe-bottom),2rem)] short:pb-[max(var(--safe-bottom),1.5rem)]">
       <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
         <div className="text-center mb-10 short:mb-6">
           <MeshPortLogo className="w-20 h-20 mx-auto mb-5 short:w-16 short:h-16 short:mb-3" />

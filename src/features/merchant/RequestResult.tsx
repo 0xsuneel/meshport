@@ -94,7 +94,7 @@ function BillItemsSheet({ open, onClose, items, taxPercent, note, title }: {
   const b = invoiceBreakdown(items, taxPercent)
   return (
     <Sheet open={open} onClose={onClose} id="bill-items">
-      <div className="px-5 pt-1 pb-[calc(env(safe-area-inset-bottom,0px)+18px)]">
+      <div className="px-5 pt-1 pb-[calc(var(--safe-bottom)+18px)]">
         <p className="text-base font-bold text-text-primary">{title}</p>
         {note && <p className="text-[13px] text-text-secondary mt-0.5">{note}</p>}
         <div className="mt-3 flex flex-col gap-2 text-[14px] tabular-nums">
@@ -240,7 +240,7 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
           {open && <ShareRow url={link} text={shareText} subject={`${from}: ${bill ? 'bill' : 'payment'} ${num} for ${money(intent.amount)}`} />}
         </div>
       </div>
-      <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: 10, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 18px)' }}>
+      <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: 10, paddingBottom: 'calc(var(--safe-bottom) + 18px)' }}>
         {paid || ended ? (
           <button type="button" onClick={onNew}
             className="w-full rounded-2xl text-[16px] font-bold text-white active:scale-[0.98] transition-transform" style={{ height: 52, background: 'var(--brand)' }}>
