@@ -11,6 +11,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ConfirmIntent, ConfirmRequest, ConfirmScope, ConfirmSummary } from '@/wallet/protocol'
 import { walletOrigin } from '@/wallet/frameClient'
 import { takeConfirmStandby } from './confirmStandby'
+import { DESKTOP_QUERY } from '@/lib/motion'
 
 export interface WalletConfirmRequest {
   /** The exact transaction (Pay) - the wallet decodes and binds it. */
@@ -45,13 +46,18 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
   // About the page's height (card + dots + keypad) until it reports its own,
   // so the sheet doesn't jump when it does.
   const short = typeof window !== 'undefined' && !!window.matchMedia?.('(max-height: 700px)').matches
+  // A computer (the lock screen's rule, PinKeypad): the passcode is typed on
+  // the keyboard - the wallet's page shows no on-screen keys there (17 Nov:
+  // on a PC its keypad also ran past the dialog's bottom, so the page was
+  // never fully in view and dropped every digit typed).
+  const desk = typeof window !== 'undefined' && !!window.matchMedia?.(DESKTOP_QUERY).matches
   // The page's own height once it reports it; until then the stand-in below
   // sets the height (it is the same layout).
   const [height, setHeight] = useState<number | null>(null)
   // The page's height, known ahead (its layout is the stand-in's): the frame
   // has its final size from the start, so nothing moves when the page reports
   // it - any move would restart Chrome's half second.
-  const estimate = (short ? 357 : 415) - (request.summary.detail ? 0 : 13)
+  const estimate = (desk ? 184 : short ? 357 : 415) - (request.summary.detail ? 0 : 13)
   const [shown, setShown] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -77,6 +83,14 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
   // Usable = drawn, sized, and its place on screen unchanged for SETTLE_MS
   // (counted from when it was laid out - only a later move starts it again).
   const live = shown && height !== null
+  // A computer: the keyboard goes to the wallet's page as soon as it shows,
+  // so typing works at once (the passcode never passes through the app).
+  useEffect(() => {
+    if (!live || !desk) return
+    const f = frameRef.current
+    if (!f) return
+    try { f.focus(); f.contentWindow?.focus() } catch { /* the page asks for a click instead */ }
+  }, [live, desk, adopted])
   const liveRef = useRef(live)
   liveRef.current = live
   if (live) mark('live')
@@ -133,7 +147,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
     // builds the request (it never comes through the app). A short phone
     // gets the app keypad's shorter keys, so the whole step fits.
     const slot = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('')
-    const view = `&theme=${theme}${short ? '&short=1' : ''}`
+    const view = `&theme=${theme}${short ? '&short=1' : ''}${desk ? '&desk=1' : ''}`
     // "Try again" after a failure: a one-off address, so a fresh copy is
     // fetched instead of the page the browser kept (wallet-frame/vercel.json).
     const fresh = attempt > 0 ? `?r=${attempt}-${Date.now().toString(36)}` : ''
@@ -148,7 +162,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
       // sits in the sheet (the layout effect below moves it there first).
       queueMicrotask(() => {
         frameRef.current = standby
-        standby.contentWindow?.postMessage({ type: 'mp-confirm-assign', slot, s: JSON.stringify(request.summary), theme, short }, walletOrigin())
+        standby.contentWindow?.postMessage({ type: 'mp-confirm-assign', slot, s: JSON.stringify(request.summary), theme, short, desk }, walletOrigin())
       })
     } else {
       setSrc(`${walletOrigin()}/confirm.html${fresh}#slot=${slot}${view}&s=${encodeURIComponent(JSON.stringify(request.summary))}`)
@@ -203,7 +217,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
         ticket = started.ticket
         mark('begun')
         if (done) { void import('@/wallet').then(m => m.cancelConfirm(started.ticket)); return }
-        ticketUrl = started.url + (short ? '&short=1' : '')
+        ticketUrl = started.url + (short ? '&short=1' : '') + (desk ? '&desk=1' : '')
         // Only a page that loaded and never said it's ready is an old one.
         // A page still loading is just slow (3G): it used to be swapped for
         // the ticket address after 2.5 s, which threw the half-loaded page
@@ -272,7 +286,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
           draws, so the sheet never opens blank. It takes no input - the
           passcode is only ever typed in the wallet's page, which loads on top
           of it, pixel for pixel, and replaces it. */}
-      {!live && <ConfirmStandIn summary={request.summary} short={short} waiting={waiting} />}
+      {!live && <ConfirmStandIn summary={request.summary} short={short} desk={desk} waiting={waiting} />}
       {/* A page from the standby lives in here (moved in, not rendered by React). */}
       {adopted && <div ref={holderRef} />}
       {src && !adopted && (
@@ -298,7 +312,7 @@ export function WalletConfirmFrame({ request, onApproved, onUnavailable, onUsabl
 // Same sizes as the wallet's page (PinSheet's card, PinKeypad's keys), so the
 // swap to the real page doesn't move anything.
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del']
-export function ConfirmStandIn({ summary, short, waiting }: { summary: ConfirmSummary; short: boolean; waiting?: boolean }) {
+export function ConfirmStandIn({ summary, short, desk = false, waiting }: { summary: ConfirmSummary; short: boolean; desk?: boolean; waiting?: boolean }) {
   const keyH = short ? 48 : 56
   const muted = { fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 } as const
   const clip = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const
@@ -322,14 +336,15 @@ export function ConfirmStandIn({ summary, short, waiting }: { summary: ConfirmSu
           </div>
         )}
       </div>
-      <div style={{ marginTop: short ? 20 : 28, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: 12, height: 14 }}>
-          {Array.from({ length: 6 }, (_, i) => <span key={i} style={{ width: 14, height: 14, borderRadius: '50%', border: '1.5px solid var(--border)', boxSizing: 'border-box' }} />)}
+      <div style={{ marginTop: short && !desk ? 18 : 28, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 13, height: 16 }}>
+          {Array.from({ length: 6 }, (_, i) => <span key={i} style={{ width: 16, height: 16, borderRadius: '50%', border: '1.6px solid var(--border)', boxSizing: 'border-box' }} />)}
         </div>
         {/* Only seen when the sheet had to open before the wallet's page was
             ready (a very slow connection): keys faded, and why. */}
-        <div style={{ minHeight: 18, margin: short ? '1px 0' : '7px 0', fontSize: 13, lineHeight: 1.4, color: 'var(--text-secondary)', textAlign: 'center' }}>{waiting ? 'Opening your wallet…' : ''}</div>
-        <div style={{ width: '100%', maxWidth: 320, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: short ? 8 : 10, opacity: waiting ? 0.4 : 1 }}>
+        <div style={{ minHeight: 18, margin: short && !desk ? '2px 0' : '6px 0', fontSize: 13, lineHeight: 1.4, color: 'var(--text-secondary)', textAlign: 'center' }}>{waiting ? 'Opening your wallet…' : ''}</div>
+        {desk && <p style={{ margin: '4px 0 0', fontSize: 13, lineHeight: 1.4, color: 'var(--text-secondary)' }}>Type your passcode</p>}
+        {!desk && <div style={{ width: '100%', maxWidth: 320, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: short ? 8 : 10, opacity: waiting ? 0.4 : 1 }}>
           {KEYS.map((k, i) => k === '' ? <span key={i} /> : (
             <span key={i} style={{ height: keyH, borderRadius: 14, border: '1px solid var(--border)', background: 'var(--surface)', boxSizing: 'border-box',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 600, lineHeight: 1,
@@ -339,7 +354,7 @@ export function ConfirmStandIn({ summary, short, waiting }: { summary: ConfirmSu
                 : k}
             </span>
           ))}
-        </div>
+        </div>}
       </div>
     </div>
   )

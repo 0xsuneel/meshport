@@ -46,15 +46,16 @@ main { padding: 0; }
 
 /* Passcode - PinKeypad */
 .entry { margin-top: 28px; display: flex; flex-direction: column; align-items: center; }
-:root[data-short] .entry { margin-top: 16px; } /* 20 → 16: the bigger dots' 4px (17 Nov) */
-/* 18px dots (were 14, 17 Nov): the 4px they add comes out of .say's margins
-   (7 → 5), or .entry's top margin on a short screen - the sheet keeps its height. */
-.dots { display: flex; gap: 14px; height: 18px; }
-.dot { width: 18px; height: 18px; border-radius: 50%; border: 1.75px solid var(--border); transition: background-color .15s, border-color .15s; }
+:root[data-short] .entry { margin-top: 18px; }
+/* 16px dots (14 → 18 → 16, 17 Nov: a little smaller). The 2px they add over
+   the old 14 comes out of .say's margins (7 → 6), or .entry's top margin on a
+   short screen - the sheet keeps its height. */
+.dots { display: flex; gap: 13px; height: 16px; }
+.dot { width: 16px; height: 16px; border-radius: 50%; border: 1.6px solid var(--border); transition: background-color .15s, border-color .15s; }
 .dot.on { background: var(--brand); border-color: transparent; }
 .dots.bad .dot.on { background: var(--danger); }
-.say { min-height: 1.4em; /* one line at any text size: showing a message never changes the page's height */ margin: 5px 0 5px; font-size: 13px; text-align: center; color: var(--muted); }
-:root[data-short] .say { margin: 1px 0 1px; }
+.say { min-height: 1.4em; /* one line at any text size: showing a message never changes the page's height */ margin: 6px 0 6px; font-size: 13px; text-align: center; color: var(--muted); }
+:root[data-short] .say { margin: 2px 0 2px; }
 .say.error { color: var(--danger); }
 .say.one { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (prefers-reduced-motion: no-preference) {
@@ -109,3 +110,12 @@ main { padding: 0; }
 @media (prefers-reduced-motion: no-preference) {
   .bio-big.trying svg { animation: bio-pulse 1.1s ease-in-out infinite; }
 }
+
+/* A computer (desk): typed on the keyboard, like the app's lock screen there -
+   no on-screen keys. The line under the dots says so, or asks for a click when
+   this page doesn't have the keyboard. */
+:root[data-desk] .pad { display: none; }
+.desk-hint { display: none; margin: 4px 0 0; font-size: 13px; color: var(--muted); text-align: center; cursor: text; }
+:root[data-desk] .desk-hint { display: block; }
+:root[data-desk] .desk-hint.away { color: var(--brand-text, var(--brand)); font-weight: 600; }
+.entry.ok > .desk-hint, .entry.bio > .desk-hint { visibility: hidden; }
