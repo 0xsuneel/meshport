@@ -337,8 +337,8 @@ export function ConfirmStandIn({ summary, short, desk = false, waiting }: { summ
         )}
       </div>
       <div style={{ marginTop: short && !desk ? 18 : 28, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: 13, height: 16 }}>
-          {Array.from({ length: 6 }, (_, i) => <span key={i} style={{ width: 16, height: 16, borderRadius: '50%', border: '1.6px solid var(--border)', boxSizing: 'border-box' }} />)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13, height: 16 }}>
+          {Array.from({ length: 6 }, (_, i) => <span key={i} style={{ width: 15, height: 15, borderRadius: '50%', border: '1.5px solid var(--border)', boxSizing: 'border-box' }} />)}
         </div>
         {/* Only seen when the sheet had to open before the wallet's page was
             ready (a very slow connection): keys faded, and why. */}
