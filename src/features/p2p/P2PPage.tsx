@@ -6,6 +6,7 @@
 // My ads. USDC moves through the escrow contract on Arc; the fiat payment
 // happens between the two people, outside the app.
 
+import { notifyActivityChanged } from '@/lib/activityChanged'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import { useLatched } from '@/hooks/useLatched'
 import { SendIcon } from '@/components/ui/SendIcon'
@@ -1272,6 +1273,15 @@ export function P2PTradePage() {
   // again every few seconds (screen on), so the other side's step (paid,
   // released) shows even if the realtime connection dropped.
   const tradeStatus = trade?.status
+  // The trade finished while open here (either side): Activity, Home and the
+  // other lists reload now (lib/activityChanged) - the release's rows were
+  // written for both wallets by then.
+  const lastTradeStatus = useRef(tradeStatus)
+  useEffect(() => {
+    const was = lastTradeStatus.current
+    lastTradeStatus.current = tradeStatus
+    if (was && was !== tradeStatus && (tradeStatus === 'completed' || tradeStatus === 'cancelled')) notifyActivityChanged()
+  }, [tradeStatus])
   useEffect(() => {
     if (!tradeId || !tradeStatus || ['completed', 'cancelled', 'expired', 'resolved_buyer', 'resolved_seller'].includes(tradeStatus)) return
     const iv = setInterval(() => {

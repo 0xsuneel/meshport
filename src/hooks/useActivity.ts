@@ -26,6 +26,7 @@
  * - Filter by type, status, search
  */
 
+import { useActivityChangedCount } from '@/lib/activityChanged'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   fetchActivity,
@@ -391,6 +392,17 @@ export function useActivity(walletAddress: string | null, initialFilter?: Activi
       if (myRequestId === requestIdRef.current) setLoading(false)
     }
   }, [walletAddress, filter, search])
+
+  // A transaction made on this device (lib/activityChanged): reload the first
+  // page - shown from the saved list at once, then the fresh rows - so it is
+  // there without waiting for the live database update.
+  const changed = useActivityChangedCount()
+  const firstChange = useRef(true)
+  useEffect(() => {
+    if (firstChange.current) { firstChange.current = false; return }
+    void load(true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only on a change signal
+  }, [changed])
 
   // Reset and reload when filter/search/wallet changes
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
