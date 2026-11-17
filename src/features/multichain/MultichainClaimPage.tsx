@@ -2436,7 +2436,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 // EURC / cirBTC: Circle's forwarder delivers - no Arc transaction of ours to link.
                 const mintPending = !token && chainProgress.some(p => !p.mintTxHash)
                 return (
-                <SuccessReceipt
+                <SuccessReceipt promo="multichain"
                   actions={[
                     { label: 'Done', onClick: () => navigate('/multichain'), primary: true },
                   ]}

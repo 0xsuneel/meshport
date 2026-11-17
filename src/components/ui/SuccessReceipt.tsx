@@ -5,6 +5,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { Check, ChevronDown, Copy, ExternalLink, Zap } from 'lucide-react'
 import { EASE_OUT, SPRING_SOFT, springProgress, stableLayer } from '@/lib/motion'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
+import { SuccessPromo, type PromoFeature } from '@/components/ui/SuccessPromo'
 
 // The receipt card every success flow lands on after SuccessFlash:
 // gradient header holding the check (the traveling checkmark flies into
@@ -26,6 +27,9 @@ export interface ReceiptRow {
 export interface ReceiptLink { title: string; explorer?: string; hash?: string; href: string }
 
 interface SuccessReceiptProps {
+  /** A "From MeshPort" card under the receipt (full-page receipts): `true`,
+   *  or this screen's own feature so it isn't the one shown. */
+  promo?: PromoFeature | true
   title: string
   subtitle: ReactNode
   pill?: string
@@ -145,7 +149,7 @@ function Confetti() {
 export function SuccessReceipt({
   title, subtitle, pill, bubble, rows, steps, detailRows, fullHash, links, linksNote,
   primaryLabel = 'Done', onPrimary, checkRef, revealed, checkContent, style,
-  status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions, reward, fill = false,
+  status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions, reward, fill = false, promo,
 }: SuccessReceiptProps) {
   // The check: handed to the caller (it aims the flying checkmark at it) and
   // kept here for its landing pop.
@@ -222,6 +226,7 @@ export function SuccessReceipt({
   const showFullHash = !!fullHash && !hashInRows
   const hasMore = !!(steps?.length || detailRows?.length || showFullHash || links?.length || linksNote)
   const hasActions = !!actions?.length
+  const promoShown = !!promo && status === 'success' && !fill
   const h5 = { fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', margin: '10px 0 2px' } as const
 
   return (
@@ -254,7 +259,8 @@ export function SuccessReceipt({
         // margin auto: centred top-to-bottom with equal space above and below
         // when it fits; when it's taller than the screen (details open) the
         // auto margins collapse to 0 and it scrolls from the top as before.
-        position: 'relative', maxWidth: 480, margin: 'auto', width: '100%', flexShrink: 0, boxSizing: 'border-box',
+        // With a promo under it the two are centred as one group (no gap between).
+        position: 'relative', maxWidth: 480, margin: promoShown ? 'auto auto 0' : 'auto', width: '100%', flexShrink: 0, boxSizing: 'border-box',
         background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 30, overflow: 'hidden', paddingBottom: 16,
       }}>
         {burst && <Confetti />}
@@ -407,6 +413,7 @@ export function SuccessReceipt({
           )}
         </div>
       </div>
+      {promoShown && <SuccessPromo exclude={promo === true ? undefined : promo} revealed={revealed} />}
       </div>
       {hasActions && (
         <motion.div initial={false} animate={revealed ? { opacity: 1 } : { opacity: 0 }} transition={{ duration: 0.3 }}
