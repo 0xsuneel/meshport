@@ -1078,20 +1078,21 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
 .mp-btn-wait { position: relative; color: transparent !important; pointer-events: none; }
 .mp-btn-wait > * { visibility: hidden; }
 .mp-btn-wait::after {
-  /* 11px dots (were 8, 17 Nov) - still well inside the button. */
-  content: ''; position: absolute; left: 50%; top: 50%; width: 46px; height: 11px; margin: -5.5px 0 0 -23px; visibility: visible;
+  /* 12px dots (8 → 11 → 12, 17 Nov) - drawn over the button (absolute), so
+     the button keeps its size. */
+  content: ''; position: absolute; left: 50%; top: 50%; width: 49px; height: 12px; margin: -6px 0 0 -24.5px; visibility: visible;
   --d: var(--mp-wait-color, #fff);
   background:
-    radial-gradient(circle closest-side, var(--d) 92%, transparent) 0 50% / 11px 11px no-repeat,
-    radial-gradient(circle closest-side, var(--d) 92%, transparent) 50% 50% / 11px 11px no-repeat,
-    radial-gradient(circle closest-side, var(--d) 92%, transparent) 100% 50% / 11px 11px no-repeat;
+    radial-gradient(circle closest-side, var(--d) 92%, transparent) 0 50% / 12px 12px no-repeat,
+    radial-gradient(circle closest-side, var(--d) 92%, transparent) 50% 50% / 12px 12px no-repeat,
+    radial-gradient(circle closest-side, var(--d) 92%, transparent) 100% 50% / 12px 12px no-repeat;
 }
 @media (prefers-reduced-motion: no-preference) {
   .mp-btn-wait::after { animation: mpBtnDots 0.9s linear infinite; }
   @keyframes mpBtnDots {
-    0%, 100% { background-size: 11px 11px, 7px 7px, 7px 7px; opacity: 1; }
-    33% { background-size: 7px 7px, 11px 11px, 7px 7px; }
-    66% { background-size: 7px 7px, 7px 7px, 11px 11px; }
+    0%, 100% { background-size: 12px 12px, 8px 8px, 8px 8px; opacity: 1; }
+    33% { background-size: 8px 8px, 12px 12px, 8px 8px; }
+    66% { background-size: 8px 8px, 8px 8px, 12px 12px; }
   }
 }
 
