@@ -141,9 +141,12 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
         <span className="w-10" />
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      {/* Phone: a column that fills the space above the Pay button - the
+          amount takes whatever room is left (centred in it), so the note and
+          keys sit right above the button with no empty band under them. */}
+      <div className={`flex-1 overflow-y-auto ${isDesktop ? '' : 'flex flex-col'}`}>
         {/* Who is being paid: photo, then the name with its badge. */}
-        <div className="mx-auto w-full max-w-md flex flex-col items-center text-center px-5 pt-2">
+        <div className="shrink-0 mx-auto w-full max-w-md flex flex-col items-center text-center px-5 pt-2">
           <Avatar src={shop.avatarUrl ?? undefined} name={shop.businessName} size={short ? 'md' : 'lg'} />
           <h1 className={`${short ? 'mt-2 text-[20px]' : 'mt-4 text-[22px]'} leading-tight font-bold text-text-primary flex items-center justify-center gap-2 max-w-full`}>
             <span className="truncate">{shop.businessName}</span>
@@ -154,11 +157,13 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
             {shop.storeName && <><span aria-hidden>·</span><Store className="w-3.5 h-3.5" /> {shop.storeName}</>}
           </p>
         </div>
-        <div className={`mx-auto w-full max-w-md flex flex-col px-5 ${short ? 'gap-3 pt-3' : 'gap-5 pt-6'}`}>
+        <div className={`mx-auto w-full max-w-md flex flex-col px-5 ${isDesktop ? '' : 'flex-1'} ${short ? 'gap-3 pt-3' : 'gap-5 pt-6'}`}>
           {/* The amount, large and centred: typed straight in on desktop; on
               a phone the keys sit right in the page under it. */}
-          <ShopAmount value={amount} onType={isDesktop ? type : undefined} balance={signedIn ? balance : null} compact={short} />
-          <div className="w-full max-w-[280px] mx-auto">
+          <div className={isDesktop ? '' : 'flex-1 flex flex-col justify-center'}>
+            <ShopAmount value={amount} onType={isDesktop ? type : undefined} balance={signedIn ? balance : null} compact={short} />
+          </div>
+          <div className="shrink-0 w-full max-w-[280px] mx-auto">
             <input
               type="text"
               value={note}
@@ -170,8 +175,8 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
             />
           </div>
           {!isDesktop && (
-            <AmountKeypad variant="inline" open value={amount} onChange={setAmount} token="USDC"
-              decimals={SHOP_DECIMALS} maxValue={SHOP_MAX} showMax={false} />
+            <div className="shrink-0 pb-2"><AmountKeypad variant="inline" open value={amount} onChange={setAmount} token="USDC"
+              decimals={SHOP_DECIMALS} maxValue={SHOP_MAX} showMax={false} /></div>
           )}
         </div>
       </div>
