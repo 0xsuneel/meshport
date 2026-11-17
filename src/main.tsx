@@ -15,6 +15,7 @@ import App from './App.tsx'
 import '@fontsource-variable/geist'
 import './index.css'
 import { clearLegacyData } from './lib/clearLegacyData'
+import { startContentReveal } from './lib/contentReveal'
 import { recoverFromStaleBuild, markBuildHealthy, onVitePreloadError, isChunkLoadError } from './lib/lazyRetry'
 
 // A file of an older version failing to load (app updated while this tab was
@@ -134,6 +135,9 @@ installGlassHeaders()
 // The wallet's passcode page, warm from the unlock screen on and while the app is in use.
 installWalletWarmth()
 installViewportDebug()
+// Content fades up when it replaces a loading skeleton (lib/contentReveal).
+startContentReveal()
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     {/* Phone set to reduce motion: framer animations drop their movement
