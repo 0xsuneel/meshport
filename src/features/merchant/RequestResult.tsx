@@ -93,7 +93,7 @@ function BillItemsSheet({ open, onClose, items, taxPercent, note, title }: {
 }) {
   const b = invoiceBreakdown(items, taxPercent)
   return (
-    <Sheet open={open} onClose={onClose} id="bill-items">
+    <Sheet open={open} onClose={onClose} id="bill-items" stagger>
       <div className="px-5 pt-1 pb-[calc(var(--safe-bottom)+18px)]">
         <p className="text-base font-bold text-text-primary">{title}</p>
         {note && <p className="text-[13px] text-text-secondary mt-0.5">{note}</p>}

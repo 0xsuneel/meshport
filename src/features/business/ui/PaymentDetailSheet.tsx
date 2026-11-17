@@ -89,7 +89,7 @@ export function PaymentDetailSheet({
   ] : []
 
   return (
-    <Sheet open={!!paymentNow} onClose={onClose}>
+    <Sheet open={!!paymentNow} onClose={onClose} stagger>
       {payment && (
         <div className="flex flex-col gap-5 px-5 pb-6 pt-2 overflow-y-auto max-h-[calc(var(--frame-h,100dvh)*0.88)]">
 

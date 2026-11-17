@@ -1008,7 +1008,7 @@ function CustomizeQuickActionsSheet({ selectedIds, onToggle, onClose, warning }:
     </>
   )
   return (
-    <DesktopDialogFrame onClose={onClose} maxWidth={420}>
+    <DesktopDialogFrame onClose={onClose} maxWidth={420} stagger>
       <div style={{ padding: '24px 20px 28px' }}>{content}</div>
     </DesktopDialogFrame>
   )
@@ -1520,7 +1520,7 @@ function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
   onClose: () => void
 }) {
   return (
-    <DesktopDialogFrame onClose={onClose} bare maxWidth={320} zIndex={9998}>
+    <DesktopDialogFrame onClose={onClose} bare maxWidth={320} zIndex={9998} stagger>
       <div
         style={{
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18,

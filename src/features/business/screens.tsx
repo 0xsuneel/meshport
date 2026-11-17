@@ -87,7 +87,7 @@ const isExpired = (i: { expiresAt: string | null; status: string }) => !!i.expir
 /** Share a payment link: copy, native share, WhatsApp, SMS, email. */
 function ShareSheet({ open, onClose, title, url, text, subject }: { open: boolean; onClose: () => void; title: string; url: string; text: string; subject: string }) {
   return (
-    <Sheet open={open} onClose={onClose}>
+    <Sheet open={open} onClose={onClose} stagger>
       <div className="flex flex-col gap-4 px-5 pt-2 pb-[calc(var(--safe-bottom)+20px)]">
         <p className="text-base font-bold text-text-primary">{title}</p>
         <LinkShare url={url} text={text} subject={subject} />
