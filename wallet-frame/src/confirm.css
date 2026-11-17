@@ -46,12 +46,14 @@ main { padding: 0; }
 
 /* Passcode - PinKeypad */
 .entry { margin-top: 28px; display: flex; flex-direction: column; align-items: center; }
-:root[data-short] .entry { margin-top: 20px; }
-.dots { display: flex; gap: 12px; height: 14px; }
-.dot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--border); transition: background-color .15s, border-color .15s; }
+:root[data-short] .entry { margin-top: 16px; } /* 20 → 16: the bigger dots' 4px (17 Nov) */
+/* 18px dots (were 14, 17 Nov): the 4px they add comes out of .say's margins
+   (7 → 5), or .entry's top margin on a short screen - the sheet keeps its height. */
+.dots { display: flex; gap: 14px; height: 18px; }
+.dot { width: 18px; height: 18px; border-radius: 50%; border: 1.75px solid var(--border); transition: background-color .15s, border-color .15s; }
 .dot.on { background: var(--brand); border-color: transparent; }
 .dots.bad .dot.on { background: var(--danger); }
-.say { min-height: 1.4em; /* one line at any text size: showing a message never changes the page's height */ margin: 7px 0 7px; font-size: 13px; text-align: center; color: var(--muted); }
+.say { min-height: 1.4em; /* one line at any text size: showing a message never changes the page's height */ margin: 5px 0 5px; font-size: 13px; text-align: center; color: var(--muted); }
 :root[data-short] .say { margin: 1px 0 1px; }
 .say.error { color: var(--danger); }
 .say.one { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
