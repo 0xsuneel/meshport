@@ -77,8 +77,10 @@
          the app draws under it (installed app, Median), 0 in a browser tab
          (boot.js marks those) - OKX Wallet's browser reports the status bar
          there too, which opened every page with an empty band on top. */
-      :root { --safe-top: env(safe-area-inset-top, 0px); }
-      html[data-browser-tab] { --safe-top: 0px; }
+      :root { --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px); }
+      /* The same at the bottom: OKX also reports the gesture bar there, which
+         left an empty strip under every page's last button. */
+      html[data-browser-tab] { --safe-top: 0px; --safe-bottom: 0px; }
       /* html (not just body) is painted first on refresh - without this,
          the browser paints its own light/dark default before any CSS
          loads, producing a flash of the wrong color. The data-theme

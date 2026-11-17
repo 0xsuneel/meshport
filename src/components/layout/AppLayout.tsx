@@ -801,17 +801,17 @@ export function AppLayout() {
       }}>
         {/* Home scrolls under the frosted bottom nav (it pads its own end);
             every other page stops above it. */}
-        <div data-no-scroll="" data-nav-pad="" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', paddingBottom: navVisible && !runsUnderNav(location.pathname) ? 'calc(65px + env(safe-area-inset-bottom, 0px))' : 0, minHeight: 0,
+        <div data-no-scroll="" data-nav-pad="" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', paddingBottom: navVisible && !runsUnderNav(location.pathname) ? 'calc(65px + var(--safe-bottom))' : 0, minHeight: 0,
           // How far a page's scroll must end above the bottom nav (the nav
           // pages pad their own scroll box with it, so they scroll under it).
-          ['--nav-space' as string]: navVisible && !navHidden ? 'calc(81px + env(safe-area-inset-bottom, 0px))' : '0px' }}>
+          ['--nav-space' as string]: navVisible && !navHidden ? 'calc(81px + var(--safe-bottom))' : '0px' }}>
           <PageTransition locationKey={location.pathname}>
             <Outlet key={reloadKey} />
           </PageTransition>
         </div>
         {navVisible && !navHidden && <BottomNav />}
         <Toast />
-        <PushPermissionBanner onScreen={location.pathname === '/'} bottom={navVisible && !navHidden ? 'calc(77px + env(safe-area-inset-bottom, 0px))' : 'calc(12px + env(safe-area-inset-bottom, 0px))'} />
+        <PushPermissionBanner onScreen={location.pathname === '/'} bottom={navVisible && !navHidden ? 'calc(77px + var(--safe-bottom))' : 'calc(12px + var(--safe-bottom))'} />
         <DeviceKeyNotice />
         <LeaveGuardHost />
         <Suspense fallback={null}><PaymentReceivedWatcher /></Suspense>

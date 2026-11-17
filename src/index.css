@@ -401,7 +401,7 @@
   align-items: flex-end;
   justify-content: space-around;
   height: 80px;
-  padding-bottom: env(safe-area-inset-bottom, 18px);
+  padding-bottom: var(--safe-bottom);
   z-index: 30;
 }
 .nav-item {
@@ -571,7 +571,7 @@
 }
 
 /* ── Misc ────────────────────────────────────────────────────────────────────── */
-.pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+.pb-safe { padding-bottom: var(--safe-bottom); }
 .divider { height: 1px; background: var(--border); }
 
 /* ── Desktop-only hover polish ─────────────────────────────────────────────────

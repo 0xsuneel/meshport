@@ -65,9 +65,9 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
 }) {
   const navigate = useNavigate()
   const isDesktop = useMediaQuery('(min-width: 980px)')
-  // A short screen (an in-app browser's bars take ~150px): everything above
+  // A short screen (an in-app browser's bars take ~150px; OKX leaves ~790px): everything above
   // the keys tightens so the whole keypad stays above the Pay button.
-  const short = useMediaQuery('(max-height: 780px)') && !isDesktop
+  const short = useMediaQuery('(max-height: 820px)') && !isDesktop
   const toast = useUIStore(s => s.showToastMessage)
   const signedIn = useAuthStore(s => s.isAuthenticated)
   // The same Arc USDC balance the pay screen shows (kept per wallet by the store).
@@ -181,7 +181,7 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-md px-5 pt-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>
+      <div className="mx-auto w-full max-w-md px-5 pt-3" style={{ paddingBottom: 'calc(var(--safe-bottom) + 16px)' }}>
         {(limitError || limitHint) && (
           <p className={`mb-2 text-xs text-center ${limitError ? 'text-danger font-semibold' : 'text-text-muted'}`}>{limitError ?? `Payments here: ${limitHint}`}</p>
         )}

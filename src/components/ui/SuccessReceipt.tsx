@@ -209,7 +209,7 @@ export function SuccessReceipt({
       // Column so the card can centre itself (margin: auto below).
       height: '100%', overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg)', boxSizing: 'border-box',
       display: 'flex', flexDirection: 'column',
-      padding: 'calc(var(--safe-top) + 24px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px)',
+      padding: 'calc(var(--safe-top) + 24px) 16px calc(var(--safe-bottom) + 24px)',
       ...style,
     }}>
       <div ref={scrollRef} style={hasActions ? {
@@ -221,7 +221,7 @@ export function SuccessReceipt({
         // The whole box: grows to fill it (taller when details open, then it scrolls).
         position: 'relative', width: '100%', flex: '1 0 auto', minHeight: '100%', boxSizing: 'border-box',
         display: 'flex', flexDirection: 'column', background: 'var(--surface)', overflow: 'hidden',
-        paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
+        paddingBottom: 'calc(16px + var(--safe-bottom))',
       } : {
         // margin auto: centred top-to-bottom with equal space above and below
         // when it fits; when it's taller than the screen (details open) the
@@ -377,7 +377,7 @@ export function SuccessReceipt({
         <motion.div initial={false} animate={revealed ? { opacity: 1 } : { opacity: 0 }} transition={{ duration: 0.3 }}
           style={{
             flexShrink: 0, display: 'flex', gap: 10,
-            padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 16px)',
+            padding: '12px 16px calc(var(--safe-bottom) + 16px)',
             background: 'var(--bg)', borderTop: '1px solid var(--border)',
           }}>
           {actions!.map(a => (

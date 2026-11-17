@@ -213,7 +213,7 @@ export function MoveProgress({
       <div style={{ flex: 1 }} />
 
       <div style={{
-        position: 'sticky', bottom: 0, margin: '0 -12px -12px', padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 16px)',
+        position: 'sticky', bottom: 0, margin: '0 -12px -12px', padding: '12px 16px calc(var(--safe-bottom) + 16px)',
         background: 'var(--bg)', borderTop: '1px solid var(--border)', display: 'flex', gap: 10,
       }}>
         {safe || !running ? (

@@ -441,7 +441,7 @@ export function P2PHubPage() {
       {/* Orders · My ads · Post ad */}
       <div style={isDesktop
         ? { padding: '16px 16px 4px', display: 'flex', gap: 12 }
-        : { position: 'fixed', bottom: 0, left: 0, right: 0, maxWidth: 480, margin: '0 auto', padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 12px)', background: 'linear-gradient(180deg, transparent, var(--bg) 30%)', display: 'flex', gap: 10 }}>
+        : { position: 'fixed', bottom: 0, left: 0, right: 0, maxWidth: 480, margin: '0 auto', padding: '12px 16px calc(var(--safe-bottom) + 12px)', background: 'linear-gradient(180deg, transparent, var(--bg) 30%)', display: 'flex', gap: 10 }}>
         <button onClick={() => navigate('/p2p/my-trades')} style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           Orders
           {myTradesCount > 0 && (
@@ -1852,7 +1852,7 @@ export function P2PTradePage() {
       </div>
 
       {/* Composer */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '10px 12px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${COLORS.border}`, background: COLORS.bg }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '10px 12px', paddingBottom: 'calc(10px + var(--safe-bottom))', borderTop: `1px solid ${COLORS.border}`, background: COLORS.bg }}>
         <input ref={proofFileInputRef} type="file" accept="image/*" onChange={stageProofFile} style={{ display: 'none' }} />
         <button
           onClick={() => proofFileInputRef.current?.click()}

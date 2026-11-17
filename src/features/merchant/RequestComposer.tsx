@@ -134,7 +134,7 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
 
       {/* Keypad and button stay on screen; the amount, note and options above
           scroll if a phone is too short for all of it. */}
-      <div className="px-5 flex-shrink-0" style={{ paddingTop: 10, paddingBottom: compact ? 12 : 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>
+      <div className="px-5 flex-shrink-0" style={{ paddingTop: 10, paddingBottom: compact ? 12 : 'calc(var(--safe-bottom) + 16px)' }}>
         {!isDesktop && !compact && !more && (
           // The app's amount keypad, right in the form (same decimals cap as
           // typing; keys past the per-request limit are ignored).

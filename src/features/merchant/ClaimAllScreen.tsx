@@ -160,7 +160,7 @@ export function ClaimAllScreen({ chains, steps, running, onClose, onRetry, onTra
         <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '14px 20px 0', lineHeight: 1.45 }}>{note}</p>
       </div>
 
-      <div style={{ padding: isDesktop ? 16 : '12px 16px calc(env(safe-area-inset-bottom, 0px) + 16px)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ padding: isDesktop ? 16 : '12px 16px calc(var(--safe-bottom) + 16px)', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {phase === 'running' && <button disabled style={{ ...secondary, opacity: 0.55, cursor: 'default' }}>Claiming…</button>}
         {phase === 'success' && <>
           <button onClick={onClose} style={primary}>Done</button>

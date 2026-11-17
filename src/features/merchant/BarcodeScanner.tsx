@@ -150,7 +150,7 @@ export function BarcodeScanner({ open, items, onAdd, onSaveNew, onClose }: {
         </p>
       </div>
 
-      <div className="bg-surface rounded-t-3xl px-5 pt-4" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>
+      <div className="bg-surface rounded-t-3xl px-5 pt-4" style={{ paddingBottom: 'calc(var(--safe-bottom) + 16px)' }}>
         {unknown ? (
           <div className="flex flex-col gap-2.5">
             <p className="text-[15px] font-bold text-text-primary">New product</p>

@@ -73,7 +73,7 @@ export function Pill({ tone, children }: { tone: 'paid' | 'pending' | 'muted'; c
 /** Bottom bar with the page's main action(s), above the safe area. */
 export function ActionBar({ children }: { children: ReactNode }) {
   return (
-    <div style={{ position: 'sticky', bottom: 0, display: 'flex', gap: 10, padding: '10px 16px calc(env(safe-area-inset-bottom, 0px) + 16px)',
+    <div style={{ position: 'sticky', bottom: 0, display: 'flex', gap: 10, padding: '10px 16px calc(var(--safe-bottom) + 16px)',
       background: 'linear-gradient(to bottom, transparent, var(--bg) 24%)', marginTop: 'auto' }}>{children}</div>
   )
 }

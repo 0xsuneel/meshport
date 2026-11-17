@@ -257,13 +257,13 @@ export function SplitDetailPage() {
           expense - a new group (the same people already added; they can be
           changed). Open: message the group. */}
       {settled ? (
-        <div style={{ flexShrink: 0, padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 14px)', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+        <div style={{ flexShrink: 0, padding: '12px 16px calc(var(--safe-bottom) + 14px)', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
           <p style={{ ...subStyle, textAlign: 'center', marginBottom: 10 }}>All settled 🎉 This split is closed.</p>
           <Btn style={{ height: 48, fontSize: 15, width: '100%' }} onClick={() => navigate('/splits/new', { state: { with: groupPeople } })}>＋ Create new split expense</Btn>
         </div>
       ) : (
       <form onSubmit={e => { e.preventDefault(); void send() }}
-        style={{ flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px calc(env(safe-area-inset-bottom, 0px) + 10px)', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+        style={{ flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px calc(var(--safe-bottom) + 10px)', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
         <input value={draft} onChange={e => setDraft(e.target.value)} maxLength={1000} placeholder="Message the group" aria-label="Message the group"
           style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 22, border: '1px solid var(--border)', background: 'var(--bg)', padding: '0 16px', fontSize: 15, color: 'var(--text-primary)', outline: 'none' }} />
         <button type="submit" aria-label="Send" disabled={!draft.trim() || sending}

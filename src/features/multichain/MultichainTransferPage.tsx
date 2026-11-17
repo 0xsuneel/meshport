@@ -4147,7 +4147,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       <HubPage open={step === 'review' || step === 'confirm'} level={1} leaveUnder={procPage}>
           {/* Fills the page so Back / Confirm sit at the bottom, like the form's buttons. */}
           <div className={isDesktopMq ? 'px-5 py-4 flex flex-col' : 'px-4 flex flex-col'}
-            style={isDesktopMq ? { flex: '1 0 auto' } : { flex: '1 0 auto', paddingTop: 12, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
+            style={isDesktopMq ? { flex: '1 0 auto' } : { flex: '1 0 auto', paddingTop: 12, paddingBottom: 'calc(var(--safe-bottom) + 20px)' }}>
             <div className="flex items-center gap-3 py-2 mb-1">
               <button onClick={() => { setStep('form'); setFeeChangedNotice('') }} className="back-btn" aria-label="Back to transfer"
                 // This column has 16px side padding (page headers 20px): line the arrow up with them.

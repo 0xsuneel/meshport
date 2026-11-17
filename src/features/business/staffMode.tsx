@@ -96,7 +96,7 @@ export function StaffModePage() {
       <div style={{ paddingTop: isDesktop ? 0 : 'calc(var(--safe-top) + 8px)' }}>
         <StaffModeHeader store={active.storeName ? `${active.ownerName} · ${active.storeName}` : active.ownerName} role={active.role} onExit={() => setActiveId(null)} />
       </div>
-      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: isDesktop ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
+      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: isDesktop ? 24 : 'calc(var(--safe-bottom) + 96px)' }}>
         <OverviewView loading={false} periodLabel="Today" hideRecent={isDesktop}
           collection={{ total: money(total), count: today.length, average: money(today.length ? total / today.length : 0), customers: new Set(today.map(who)).size }}
           toSettle={{ total: '—', chainCount: 0, hidden: true }} refunded={{ total: '—', count: 0 }} recent={payments.slice(0, 4)}

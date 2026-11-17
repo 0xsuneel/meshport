@@ -269,7 +269,7 @@ export function MediaPreview({ items, recipient, onChange, onAddMore, onClose, o
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
         </button>
       </div>
-      <div className="flex items-end gap-2 px-3 pt-1" style={{ paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))' }}>
+      <div className="flex items-end gap-2 px-3 pt-1" style={{ paddingBottom: 'calc(14px + var(--safe-bottom))' }}>
         <label className="flex-1 flex items-center rounded-full px-4" style={{ minHeight: 46, background: '#1d2327' }}>
           <input value={cur.caption} maxLength={1000} placeholder="Add a caption…"
             onChange={e => onChange(items.map(i => i.id === cur.id ? { ...i, caption: e.target.value } : i))}
@@ -480,7 +480,7 @@ export function ChatImageViewer({ items, startId, convKey, onClose, onReply, onF
           {idx < items.length - 1 && <button aria-label="Next photo" onClick={() => { if (!gliding) glideTo(1) }} className="hidden lg:flex absolute right-3 top-1/2 w-11 h-11 rounded-full items-center justify-center" style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff' }}>›</button>}
         </>
       )}
-      <div className="flex justify-around px-3 pt-2" style={{ paddingBottom: 'calc(18px + env(safe-area-inset-bottom, 0px))', background: 'linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0))', position: 'relative', zIndex: 2 }}>
+      <div className="flex justify-around px-3 pt-2" style={{ paddingBottom: 'calc(18px + var(--safe-bottom))', background: 'linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0))', position: 'relative', zIndex: 2 }}>
         {onReply && (
           <button style={ab} onClick={() => { onReply(item.msg); onClose() }} aria-label="Reply">
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14L4 9l5-5" /><path d="M4 9h10a6 6 0 016 6v4" /></svg>Reply

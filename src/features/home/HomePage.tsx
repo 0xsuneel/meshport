@@ -793,7 +793,7 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P, homeTiles, onSaveHo
     <ActionSheet open={open} onClose={onClose} isDesktop={isDesktop} id="home-more" fixed zIndex={9991} desktopMaxWidth={420}>
       <div style={{
         overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain',
-        padding: isDesktop ? '24px 20px 28px' : '6px 20px calc(env(safe-area-inset-bottom, 0px) + 28px)',
+        padding: isDesktop ? '24px 20px 28px' : '6px 20px calc(var(--safe-bottom) + 28px)',
       }}>{content}</div>
     </ActionSheet>,
     document.body,

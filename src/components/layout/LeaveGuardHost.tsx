@@ -163,7 +163,7 @@ export function LeaveGuardHost() {
     ? { left, width, bottom: Math.max(vh - rect!.bottom + 16, 16) }
     : below
       ? { left, width, top: rect!.bottom + 12 }
-      : { left: 16, right: 16, margin: '0 auto', maxWidth: ASK_W, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }
+      : { left: 16, right: 16, margin: '0 auto', maxWidth: ASK_W, bottom: 'calc(var(--safe-bottom) + 16px)' }
 
   const what = label ?? 'Payment'
   return createPortal(

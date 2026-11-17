@@ -244,7 +244,7 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
             {list.map((x, k) => <div key={x.code}>{body(x, k, false)}</div>)}
           </div>
           {/* The card and Close all right under it, centred together. */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ padding: 'calc(var(--safe-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 24px)' }}>
+          <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ padding: 'calc(var(--safe-top) + 24px) 16px calc(var(--safe-bottom) + 24px)' }}>
             {/* The card itself never moves while swiping: it is solid from its
                 first frame (a fade showed Home through it) and stays put - only
                 its contents follow the finger and slide to the next one. */}

@@ -74,7 +74,7 @@ export function BusinessScreen({ open, title, onBack, children, footer, step = '
 
         {/* Sticky footer — safe-area bottom */}
         {footer && (
-          <footer className="shrink-0 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+16px)] bg-bg border-t border-border">
+          <footer className="shrink-0 px-5 pt-3 pb-[calc(var(--safe-bottom)+16px)] bg-bg border-t border-border">
             {footer}
           </footer>
         )}

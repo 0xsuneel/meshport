@@ -124,7 +124,7 @@ export function HubPage({ open, level = 0, behind = false, leaveUnder = false, h
       {c.header}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>{c.children}</div>
       {c.footer && (
-        <div style={{ flexShrink: 0, padding: isDesktop ? '10px 16px 16px' : '10px 16px calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>{c.footer}</div>
+        <div style={{ flexShrink: 0, padding: isDesktop ? '10px 16px 16px' : '10px 16px calc(var(--safe-bottom) + 16px)' }}>{c.footer}</div>
       )}
       {/* Dims this page while another one is open on top of it (phone). */}
       <div ref={veil} aria-hidden style={{ position: 'absolute', inset: 0, background: '#000', opacity: 0, pointerEvents: 'none' }} />
