@@ -810,6 +810,19 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // sits right under the header, above the keys, on any screen height.
   const amountFocus = showAmountPad && !desktopInput
   const keypadLift = useKeypadLift(showAmountPad, amountBoxRef, !amountFocus)
+  // Keypad closed with an amount: bring "How should it travel?" fully into
+  // view. On a short screen it sat half under the Review button, the route
+  // choices hidden until scrolled to (17 Nov). After the folded fields have
+  // come back (0.28 s); 'nearest' only scrolls when it isn't already in view.
+  const routeRef = useRef<HTMLDivElement>(null)
+  const wasAmountFocus = useRef(false)
+  useEffect(() => {
+    const closed = wasAmountFocus.current && !amountFocus
+    wasAmountFocus.current = amountFocus
+    if (!closed || !(numAmountRef.current > 0)) return
+    const t = setTimeout(() => routeRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 320)
+    return () => clearTimeout(t)
+  }, [amountFocus])
   // Leaving the Transfer Funds page (back to the Hub) closes its keypad -
   // it was left open on the Hub screen.
   useEffect(() => { if (sheetMode && formSheet === 0) setShowAmountPad(false) }, [sheetMode, formSheet])
@@ -1106,6 +1119,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }, [step])
 
   const numAmount = parseFloat(amount) || 0
+  const numAmountRef = useRef(numAmount); numAmountRef.current = numAmount
   const settingsMap = useSettingsStore((s) => s.settings)
   const settingsLoaded = useSettingsStore((s) => s.loaded)
   const loadSettings = useSettingsStore((s) => s.load)
@@ -3486,7 +3500,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // how the chosen one works.
   const routeSwitchable = availableMechanisms.length > 1
   const formRoute = (
-    <div>
+    <div ref={routeRef} style={{ scrollMarginBottom: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>How should it travel?</div>
       {routeSwitchable && (
         <div role="radiogroup" aria-label="Route" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4, padding: 4, borderRadius: 16,
