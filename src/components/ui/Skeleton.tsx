@@ -6,12 +6,13 @@ interface SkeletonProps {
   style?: CSSProperties
 }
 
-/** Single placeholder block - a flat bar at the real size that breathes
- * gently (no sweeping gradient); compose into row/card skeletons per screen. */
+/** Single placeholder block - a flat bar at the real size with a slow, faint
+ * band of light sweeping across it (mp-skel, index.css); compose into
+ * row/card skeletons per screen. */
 export function Skeleton({ className, style }: SkeletonProps) {
   return (
     <div
-      className={cn('mp-pulse rounded-xl bg-border/60', className)}
+      className={cn('mp-skel rounded-xl bg-border/60', className)}
       style={style}
       aria-hidden="true"
     />

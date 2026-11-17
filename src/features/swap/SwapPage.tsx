@@ -1764,8 +1764,8 @@ export function SwapPage() {
             ) : (
               // Same line, placeholder bars, while the quote loads.
               <>
-                <span aria-hidden className="mp-pulse" style={{ width: 130, height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
-                <span aria-hidden className="mp-pulse" style={{ width: 70, height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
+                <span aria-hidden className="mp-skel" style={{ width: 130, height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
+                <span aria-hidden className="mp-skel" style={{ width: 70, height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
               </>
             )}
           </div>

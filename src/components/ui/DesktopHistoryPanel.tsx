@@ -53,7 +53,7 @@ export function DesktopHistorySkeleton() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14 }}>
       {[0, 1, 2, 3, 4].map(i => (
-        <div key={i} style={{ height: 44, borderRadius: 12, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }} />
+        <div key={i} className="mp-skel" style={{ height: 44, borderRadius: 12, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }} />
       ))}
     </div>
   )
