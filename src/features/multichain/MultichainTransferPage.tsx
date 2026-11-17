@@ -3865,7 +3865,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
               {successPhase === 'collapsed' && (
               <div style={{ margin: '0 -12px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                <SuccessReceipt
+                <SuccessReceipt promo="multichain"
                   reward="multichain_transfer"
                   style={{ height: 'auto', flex: 1, minHeight: 0 }}
                   actions={[
