@@ -126,9 +126,11 @@ export function AmountKeypad({
   // Desktop users type on a physical keyboard - the tap-grid below is a
   // mobile-only affordance. Same value/onChange contract either way.
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
-  // Short phones (iPhone SE, small Androids with the browser bars showing):
-  // smaller keys so the sheet leaves room for the amount above it.
-  const short = useMediaQuery('(max-height: 700px)')
+  // Short phones (iPhone SE, small Androids with the browser bars showing,
+  // in-app wallet browsers - OKX leaves ~790px): smaller keys (46px, still
+  // over the 44px touch minimum) so the keys and the button under them fit
+  // with the amount above - every page's keypad, inline or in a sheet.
+  const short = useMediaQuery('(max-height: 820px)')
 
   // Opening the keypad closes the phone's own keyboard. On iPhone, tapping
   // the amount box doesn't take focus away from a text field typed in just
