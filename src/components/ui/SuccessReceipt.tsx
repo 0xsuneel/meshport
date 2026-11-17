@@ -219,8 +219,10 @@ export function SuccessReceipt({
       } : { display: 'contents' }}>
       <div ref={cardRef} className={fill ? undefined : 'shadow-elevation-1'} style={fill ? {
         // The whole box: grows to fill it (taller when details open, then it scrolls).
+        // overflow clip (not hidden): clips the same, but isn't a scroll box -
+        // so the button below can stick to the bottom of the real scroller.
         position: 'relative', width: '100%', flex: '1 0 auto', minHeight: '100%', boxSizing: 'border-box',
-        display: 'flex', flexDirection: 'column', background: 'var(--surface)', overflow: 'hidden',
+        display: 'flex', flexDirection: 'column', background: 'var(--surface)', overflow: 'clip',
         paddingBottom: 'calc(16px + var(--safe-bottom))',
       } : {
         // margin auto: centred top-to-bottom with equal space above and below
@@ -360,7 +362,14 @@ export function SuccessReceipt({
           </div>
 
           {!actions?.length && (
-            <Reveal i={rows.length + 4} revealed={revealed} style={fill ? { marginTop: 'auto', paddingTop: 12 } : undefined}>
+            // Filling a sheet: the button stays at the sheet's bottom while
+            // the receipt scrolls under it - with the points line, four rows
+            // and More details it is taller than chat Pay's sheet, and the
+            // button sat cut off below the edge (17 Nov).
+            <Reveal i={rows.length + 4} revealed={revealed} style={fill ? {
+              marginTop: 'auto', paddingTop: 12, paddingBottom: 10,
+              position: 'sticky', bottom: 0, zIndex: 1, background: 'var(--surface)',
+            } : undefined}>
               <motion.button onClick={onPrimary} whileTap={{ scale: 0.98 }}
                 style={{
                   width: '100%', marginTop: 12, padding: 15, border: 0, borderRadius: 999, cursor: 'pointer',
