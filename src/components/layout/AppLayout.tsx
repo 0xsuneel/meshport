@@ -288,6 +288,21 @@ export function AppLayout() {
     return () => window.removeEventListener('meshport:arc-deposit', onDeposit)
   }, [walletAddress])
 
+  // A push arrived (sw.ts 'meshport:pushed'): the server saw money move or an
+  // order, claim or trade change for this account. Reload the balance and
+  // the open lists from it, so the screen updates even if the live database
+  // connection missed the change. Chat messages have their own live list.
+  useEffect(() => {
+    if (!walletAddress || !('serviceWorker' in navigator)) return
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type !== 'meshport:pushed' || e.data.kind === 'chat') return
+      // (Also reloads the lists - lib/activityChanged.)
+      import('@/lib/balanceRefresh').then(m => m.refreshBalancesAfterReceive(walletAddress)).catch(() => {})
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [walletAddress])
+
   // A payment, swap, transfer or deposit anywhere in the app: refresh
   // Activity's saved list in the background (twice - the server writes some
   // rows a few seconds after the transaction), so opening Activity shows the

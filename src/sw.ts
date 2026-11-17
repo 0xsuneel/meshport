@@ -188,6 +188,11 @@ self.addEventListener('push', (event: PushEvent) => {
   // are avoided by tag (lib/systemNotify.ts mirrors with the same tag).
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true }) as WindowClient[]
+    // Tell every open MeshPort window something happened (17 Nov): it reloads
+    // its balance and lists from this, so "you got paid" shows even when the
+    // live database connection dropped (a phone back from the background,
+    // a network change). AppLayout listens for 'meshport:pushed'.
+    for (const w of windows) { try { w.postMessage({ type: 'meshport:pushed', kind: typeof data.kind === 'string' ? data.kind : '' }) } catch { /* window gone */ } }
     if (windows.some(w => w.visibilityState === 'visible')) return
     // A chat: one entry per conversation, counting its new messages, and the
     // phone alerts again for each one.
