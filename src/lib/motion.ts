@@ -30,19 +30,17 @@ export const EASE_OUT: [number, number, number, number] = [0.32, 0.72, 0, 1]
 
 // ── Springs (17 Nov: "premium motion" - things move like objects, not on a
 // fixed curve). Mass 1 throughout.
-/** Things that rise into place (a receipt's rows): settles in ~0.8 s, a hair
- *  of overshoot (~1.6%), no visible bounce. */
-export const SPRING_SOFT: Transition = { type: 'spring', stiffness: 170, damping: 21 }
-/** Things that land (a toast, the payment alert card, the success check): a
- *  little livelier, ~4% past full and back - a small "pop". */
-export const SPRING_POP: Transition = { type: 'spring', stiffness: 260, damping: 22 }
-/** Bottom sheets: a spring's natural slowing, damped just enough (ζ ≈ 1) that
- *  it never overshoots its resting place - see the bottom-sheet note below. */
-export const SPRING_SHEET: Transition = { type: 'spring', stiffness: 170, damping: 26 }
+/** Things that rise into place (a receipt's rows, a sheet's sections): at
+ *  full height in ~0.3 s, ~1% overshoot, no visible bounce. (170/21 from the
+ *  reference felt slow on a phone - 17 Nov.) */
+export const SPRING_SOFT: Transition = { type: 'spring', stiffness: 300, damping: 28 }
+/** Things that land (a toast, a popup, the success check): peaks in ~0.22 s,
+ *  ~4.6% past full and back - a small, quick "pop". */
+export const SPRING_POP: Transition = { type: 'spring', stiffness: 400, damping: 28 }
 
 /** A spring sampled for Web Animations (el.animate): the eased progress at
  *  each frame (0 → 1, may pass 1) and how long it takes to settle. */
-export function springProgress(stiffness = 260, damping = 22): { values: number[]; ms: number } {
+export function springProgress(stiffness = 400, damping = 28): { values: number[]; ms: number } {
   const dt = 1 / 120, values: number[] = []
   let x = 0, v = 0, t = 0
   while (t < 2) {
@@ -71,7 +69,7 @@ export function staggerSheetContents(panel: HTMLElement): void {
   let list = [...panel.children].filter(c => !c.hasAttribute('data-sheet-handle'))
   for (let depth = 0; list.length === 1 && depth < 3; depth++) list = [...list[0].children]
   if (list.length < 2) return
-  const { values, ms } = springProgress(170, 21)
+  const { values, ms } = springProgress(300, 28)
   const frames = values.map((p, i) => ({ opacity: Math.min(1, p * 1.3), translate: `0 ${12 * (1 - p)}px`, offset: i / (values.length - 1) }))
   list.slice(0, 8).forEach((el, i) => {
     if (!(el instanceof HTMLElement) || typeof el.animate !== 'function' || el.getAnimations().length) return
@@ -143,9 +141,11 @@ function byScreen<T extends object>(phone: T, desktop: object): T {
 export const stableLayer = (_: unknown, generated: string): string =>
   generated && generated !== 'none' ? `${generated} translateZ(0)` : 'translateZ(0)'
 
-// 17 Nov: a spring again, but critically damped (SPRING_SHEET) - it slows like
-// a real object and still lands once, with no rubber-band settle.
-export const SHEET_SPRING: Transition = SPRING_SHEET
+// 17 Nov: tried as a critically damped spring (170/26) - it set off from rest
+// and crept into place (~0.5 s), so every sheet and the keypad felt slow. The
+// tween starts at full speed and lands in 0.38 s, like the OS sheets; springs
+// stay for the short pops (toasts, popups, the success check).
+export const SHEET_SPRING: Transition = { duration: 0.38, ease: EASE_OUT }
 /** Sheets leave a little quicker than they arrive (ease-in, like the OS). */
 export const SHEET_EXIT = { y: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } } as const
 export const SHEET_PANEL = {
