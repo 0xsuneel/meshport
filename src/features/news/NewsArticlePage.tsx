@@ -83,9 +83,9 @@ export function NewsArticlePage() {
       <div style={isDesktop ? { paddingTop: 24 } : { padding: '18px 20px 0', maxWidth: 680, margin: '0 auto' }}>
         {state === 'loading' && (
           <div>
-            <div style={{ width: '85%', height: 20, borderRadius: 8, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', marginBottom: 10 }} />
-            <div style={{ width: '55%', height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', marginBottom: 22 }} />
-            {[0, 1, 2].map(i => <div key={i} style={{ width: '100%', height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', marginBottom: 10 }} />)}
+            <div className="mp-skel" style={{ width: '85%', height: 20, borderRadius: 8, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', marginBottom: 10 }} />
+            <div className="mp-skel" style={{ width: '55%', height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', marginBottom: 22 }} />
+            {[0, 1, 2].map(i => <div key={i} className="mp-skel" style={{ width: '100%', height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', marginBottom: 10 }} />)}
           </div>
         )}
 
@@ -170,8 +170,8 @@ export function NewsArticlePage() {
             </div>
             {more === null ? [0, 1, 2, 3].map(i => (
               <div key={i} style={{ display: 'flex', gap: 12, padding: '10px 0' }}>
-                <div style={{ width: 52, height: 52, borderRadius: 12, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
-                <div style={{ flex: 1 }}><div style={{ height: 11, width: '85%', borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} /><div style={{ height: 9, width: '45%', borderRadius: 6, marginTop: 8, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }} /></div>
+                <div className="mp-skel" style={{ width: 52, height: 52, borderRadius: 12, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+                <div style={{ flex: 1 }}><div className="mp-skel" style={{ height: 11, width: '85%', borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} /><div className="mp-skel" style={{ height: 9, width: '45%', borderRadius: 6, marginTop: 8, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }} /></div>
               </div>
             )) : others.length === 0 ? (
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '10px 0 12px', margin: 0 }}>No other updates yet</p>

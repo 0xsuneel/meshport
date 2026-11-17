@@ -4204,7 +4204,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 {(() => {
                   const loading = feeEstimate.loading
                   const bar = (w: number) => (
-                    <span aria-hidden className="mp-pulse" style={{ display: 'inline-block', width: w, height: 12, borderRadius: 6,
+                    <span aria-hidden className="mp-skel" style={{ display: 'inline-block', width: w, height: 12, borderRadius: 6,
                       background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
                   )
                   // The same rows while loading and after: decided by the route,

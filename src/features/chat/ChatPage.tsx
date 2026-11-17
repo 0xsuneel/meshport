@@ -563,10 +563,10 @@ function PersonRowSkeleton({ first }: { first: boolean }) {
   const bar = 'color-mix(in srgb, var(--text-primary) 8%, transparent)'
   return (
     <div className="flex items-center gap-3 px-3.5 py-3" style={{ borderTop: first ? undefined : '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-      <div className="w-[38px] h-[38px] rounded-full mp-pulse" style={{ background: bar }} />
+      <div className="w-[38px] h-[38px] rounded-full mp-skel" style={{ background: bar }} />
       <div className="flex-1 space-y-1.5">
-        <div className="h-3 w-28 rounded mp-pulse" style={{ background: bar }} />
-        <div className="h-2.5 w-20 rounded mp-pulse" style={{ background: bar }} />
+        <div className="h-3 w-28 rounded mp-skel" style={{ background: bar }} />
+        <div className="h-2.5 w-20 rounded mp-skel" style={{ background: bar }} />
       </div>
     </div>
   )
@@ -4891,8 +4891,8 @@ export function ChatConversationPage() {
                 // Not known yet (first open with nothing cached): placeholder
                 // bars, never a bare ".arc" that fills in later.
                 <div className="min-w-0 flex flex-col justify-center gap-1.5" aria-label="Loading">
-                  <span className="block h-3 w-28 rounded mp-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
-                  <span className="block h-2.5 w-20 rounded mp-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }} />
+                  <span className="block h-3 w-28 rounded mp-skel" style={{ background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
+                  <span className="block h-2.5 w-20 rounded mp-skel" style={{ background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }} />
                 </div>
               )}
             </button>

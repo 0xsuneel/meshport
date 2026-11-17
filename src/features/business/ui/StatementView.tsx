@@ -102,8 +102,8 @@ export function StatementView({
           <div className="flex flex-col gap-0">
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className="flex items-center justify-between px-5 py-4 border-b border-border last:border-0">
-                <div className="h-3 w-32 rounded bg-border/60 mp-pulse" />
-                <div className="h-3 w-16 rounded bg-border/60 mp-pulse" />
+                <div className="h-3 w-32 rounded bg-border/60 mp-skel" />
+                <div className="h-3 w-16 rounded bg-border/60 mp-skel" />
               </div>
             ))}
           </div>

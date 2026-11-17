@@ -110,12 +110,12 @@ export function RecentPaidPage() {
             {[0,1,2,3,4,5].map(i => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12,
                 padding: '14px 0', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', flexShrink: 0 }}/>
+                <div className="mp-skel" style={{ width: 48, height: 48, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', flexShrink: 0 }}/>
                 <div style={{ flex: 1 }}>
-                  <div style={{ width: 100, height: 13, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', marginBottom: 8 }}/>
-                  <div style={{ width: 60, height: 10, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }}/>
+                  <div className="mp-skel" style={{ width: 100, height: 13, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', marginBottom: 8 }}/>
+                  <div className="mp-skel" style={{ width: 60, height: 10, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }}/>
                 </div>
-                <div style={{ width: 60, height: 13, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}/>
+                <div className="mp-skel" style={{ width: 60, height: 13, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}/>
               </div>
             ))}
           </div>
@@ -241,7 +241,7 @@ export function RecentPaidPage() {
                 <div key={k} style={{ flex: 1, padding: '14px 16px', borderLeft: i ? '1px solid var(--border)' : 'none' }}>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{k}</div>
                   {loading
-                    ? <div style={{ width: 70, height: 20, borderRadius: 6, marginTop: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+                    ? <div className="mp-skel" style={{ width: 70, height: 20, borderRadius: 6, marginTop: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
                     : <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>{v}</div>}
                 </div>
               ))}

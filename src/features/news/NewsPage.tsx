@@ -207,10 +207,10 @@ export function NewsPage() {
             ))}
             {loading && Array.from({ length: items.length ? 3 : 9 }, (_, i) => (
               <div key={`s${i}`}>
-                <div style={{ width: '100%', aspectRatio: '1200 / 630', borderRadius: 16, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
-                <div style={{ width: '30%', height: 10, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', margin: '16px 0 10px' }} />
-                <div style={{ width: '90%', height: 14, borderRadius: 7, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', marginBottom: 8 }} />
-                <div style={{ width: '60%', height: 14, borderRadius: 7, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+                <div className="mp-skel" style={{ width: '100%', aspectRatio: '1200 / 630', borderRadius: 16, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+                <div className="mp-skel" style={{ width: '30%', height: 10, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', margin: '16px 0 10px' }} />
+                <div className="mp-skel" style={{ width: '90%', height: 14, borderRadius: 7, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', marginBottom: 8 }} />
+                <div className="mp-skel" style={{ width: '60%', height: 14, borderRadius: 7, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
               </div>
             ))}
           </div>
@@ -232,10 +232,10 @@ export function NewsPage() {
 
         {loading && Array.from({ length: items.length ? 2 : 6 }, (_, i) => (
           <div key={`s${i}`} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0' }}>
-            <div style={{ width: 112, aspectRatio: '1200 / 630', borderRadius: 10, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+            <div className="mp-skel" style={{ width: 112, aspectRatio: '1200 / 630', borderRadius: 10, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
             <div style={{ flex: 1 }}>
-              <div style={{ width: '90%', height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', marginBottom: 8 }} />
-              <div style={{ width: '50%', height: 10, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }} />
+              <div className="mp-skel" style={{ width: '90%', height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', marginBottom: 8 }} />
+              <div className="mp-skel" style={{ width: '50%', height: 10, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }} />
             </div>
           </div>
         ))}

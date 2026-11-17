@@ -1408,10 +1408,10 @@ export function PaySendPage() {
                         {[0, 1, 2, 3].map(i => (
                           <div key={i} className="flex items-center gap-3 px-3.5 py-3"
                             style={{ borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : undefined }}>
-                            <div className="w-9 h-9 rounded-full mp-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />
+                            <div className="w-9 h-9 rounded-full mp-skel" style={{ background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />
                             <div className="flex-1 space-y-1.5">
-                              <div className="h-3 w-28 rounded mp-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />
-                              <div className="h-2.5 w-20 rounded mp-pulse" style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+                              <div className="h-3 w-28 rounded mp-skel" style={{ background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />
+                              <div className="h-2.5 w-20 rounded mp-skel" style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
                             </div>
                           </div>
                         ))}
