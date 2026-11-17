@@ -1,3 +1,4 @@
+import { useActivityChangedCount } from '@/lib/activityChanged'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import type { NavigateFunction } from 'react-router-dom'
@@ -107,6 +108,7 @@ function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: bool
   })
   const [loaded, setLoaded] = useState(() => { try { return !!cacheKey && localStorage.getItem(cacheKey) != null } catch { return false } })
   const reconnects = useReconnectCount() // back online → load again
+  const changed = useActivityChangedCount() // paid someone → load again (lib/activityChanged)
 
   useEffect(() => {
     if (!walletAddress) return
@@ -120,7 +122,7 @@ function RecentBox({ navigate, flat }: { navigate: NavigateFunction; flat?: bool
       .catch(e => console.error('RecentBox load error:', e))
       .finally(() => { if (!cancelled) setLoaded(true) })
     return () => { cancelled = true }
-  }, [walletAddress, cacheKey, reconnects])
+  }, [walletAddress, cacheKey, reconnects, changed])
 
   const n = people.length
   // order[slot] = index into people; order[0] is in front.

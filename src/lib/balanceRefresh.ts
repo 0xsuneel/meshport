@@ -16,6 +16,7 @@
 import { useWalletStore } from '@/store'
 import { refreshScope } from '@/blockchain/BlockchainManager'
 import { saveAssetSlot } from './assetSlot'
+import { notifyActivityChanged } from './activityChanged'
 
 export type TxToken = 'USDC' | 'EURC' | 'CIRBTC'
 /** A token's amount before the transaction and the amount it leaves. */
@@ -65,6 +66,8 @@ export function refreshBalancesAfterTx(address: string | null | undefined, opts:
   if (!address) return
   lastTxAt = Date.now()
   lastTxBalances = opts.balances ? { address, balances: opts.balances } : null
+  // The lists showing this wallet's history reload too (lib/activityChanged).
+  notifyActivityChanged()
   const store = useWalletStore.getState()
   const usdc = opts.balances?.USDC
   const before = usdc?.before ?? store.balance
@@ -116,6 +119,7 @@ export async function settleBalancesAfterSwap(address: string, blockNumber: stri
   if (!address) return null
   lastTxAt = Date.now()
   lastTxBalances = null
+  notifyActivityChanged()
   if (blockNumber == null || blockNumber === '') { refreshBalancesAfterTx(address); return null }
   const after = hexBlock(blockNumber)
   let before: string

@@ -1,3 +1,4 @@
+import { useActivityChangedCount } from '@/lib/activityChanged'
 import { useState, useEffect } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -58,6 +59,7 @@ export function RecentPaidPage() {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const [people, setPeople]   = useState<RecentPerson[]>([])
   const [loading, setLoading] = useState(true)
+  const changed = useActivityChangedCount() // paid someone → load again (lib/activityChanged)
 
   useEffect(() => {
     if (!walletAddress) { setLoading(false); return }
@@ -76,7 +78,7 @@ export function RecentPaidPage() {
       }
     }
     load()
-  }, [walletAddress])
+  }, [walletAddress, changed])
 
   const shortName = (p: RecentPerson) => {
     if (p.isSelf) return 'You'

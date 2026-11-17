@@ -77,6 +77,7 @@ import { SkeletonRows, SkeletonChat } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { readChatListCache, writeChatListCache } from '@/lib/chatListCache'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
+import { useActivityChangedCount } from '@/lib/activityChanged'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { SplitGroupRow, useSplitGroups } from '@/features/split/SplitGroupRow'
 import type { SplitGroup } from '@/lib/splits'
@@ -794,6 +795,14 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
       }, i * 150)
     })
   }, [user?.id, chatWalletAddr])
+  // A payment made on this device (lib/activityChanged): the list's latest
+  // payment previews reload at once instead of waiting for a live update.
+  const activityChanged = useActivityChangedCount()
+  useEffect(() => {
+    if (!activityChanged || !user?.id) return
+    invalidateConversationsCache(); loadConversations()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only on a change signal
+  }, [activityChanged])
 
   // This session was just linked to the account - conversations that the
   // database hid before the link are readable now.
