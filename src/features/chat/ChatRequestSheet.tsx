@@ -23,7 +23,7 @@ export function ChatRequestSheet({ open, onClose, isDesktop, name, username, ava
   onRequest: (amount: number, note: string) => Promise<void>
 }) {
   return (
-    <ActionSheet open={open} onClose={onClose} isDesktop={isDesktop} id="chat-request">
+    <ActionSheet open={open} onClose={onClose} isDesktop={isDesktop} id="chat-request" stagger>
       <RequestAmountForm open={open} isDesktop={isDesktop} hint="They pay it right here in chat" onCancel={onClose}
         header={compact => <div className="flex flex-col gap-3">
           <SheetPerson label="Request from" name={name} username={username} avatar={avatar} compact={compact} onClose={isDesktop ? onClose : undefined} />

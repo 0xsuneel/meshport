@@ -14,7 +14,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { PopupOpen } from '@/hooks/usePopupOpen'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { SHEET_PANEL, SHEET_BACKDROP, SHEET_DIM, DESKTOP_QUERY, PUSH_OPEN_MS } from '@/lib/motion'
+import { SHEET_PANEL, SHEET_BACKDROP, SHEET_DIM, DESKTOP_QUERY, PUSH_OPEN_MS, staggerSheetContents } from '@/lib/motion'
 import { sheetDrag, sheetExit } from '@/lib/sheetDrag'
 import { useBackLayer } from '@/lib/backLayers'
 
@@ -26,7 +26,12 @@ const leaveVariant = (own: object | (() => object)) => (under?: boolean): Target
   ? { opacity: 0, transition: { delay: PUSH_OPEN_MS / 1000, duration: 0 } }
   : (typeof own === 'function' ? own() : own) as TargetAndTransition
 
-export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, height = 'auto', backClose = true, desktopMaxWidth = 440, zIndex, leaveUnder = false, inPlace = false, held = false, dimHandoff = false, children }: {
+// Once per opening: the panel mounts when the sheet opens.
+const staggerOnMount = (el: HTMLDivElement | null) => {
+  if (el) requestAnimationFrame(() => staggerSheetContents(el))
+}
+
+export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, height = 'auto', backClose = true, desktopMaxWidth = 440, zIndex, leaveUnder = false, inPlace = false, held = false, dimHandoff = false, stagger = false, children }: {
   open: boolean
   onClose: () => void
   /** Defaults to the screen width (≥980px = desktop). */
@@ -60,6 +65,11 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
    *  fading, so the two dims never stack (a dark pulse) or gap (a flash). */
   dimHandoff?: boolean
   children: ReactNode
+  /** Its contents arrive one after another as it opens. Only where it helps -
+   *  a sheet of several parts (Home's More grid, chat Request, the bill
+   *  composer); quick confirmations and forms open whole. Never for a sheet
+   *  that can show the wallet's page (passcode): nothing may move near it. */
+  stagger?: boolean
 }) {
   const autoId = useId()
   const sid = id ?? `sheet${autoId}`
@@ -98,6 +108,8 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
             {inPlace && <div aria-hidden style={{ position: 'absolute', inset: 0, background: SHEET_DIM, opacity: held ? 0 : 1, transition: dimHandoff ? 'none' : 'opacity 160ms ease-out' }} />}
           </motion.div>,
           <motion.div key={sid} data-push-keep="" {...sheetDrag(sid, onClose)} {...SHEET_PANEL}
+            // Opening (not a hand-over in place): its contents follow, one by one.
+            ref={stagger && !inPlace ? staggerOnMount : undefined}
             // No fade on the panel: the wallet's page takes touches only once it is
             // fully opaque (plus ~0.1 s for the browser to confirm it) - shown at
             // once, that is over before anyone can react; the dim still fades.

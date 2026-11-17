@@ -790,7 +790,7 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P, homeTiles, onSaveHo
   // sheet even when the sheet has a higher local z-index. Portal it to
   // document.body so it participates in the root stacking context.
   return createPortal(
-    <ActionSheet open={open} onClose={onClose} isDesktop={isDesktop} id="home-more" fixed zIndex={9991} desktopMaxWidth={420}>
+    <ActionSheet open={open} onClose={onClose} isDesktop={isDesktop} id="home-more" stagger fixed zIndex={9991} desktopMaxWidth={420}>
       <div style={{
         overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain',
         padding: isDesktop ? '24px 20px 28px' : '6px 20px calc(var(--safe-bottom) + 28px)',
