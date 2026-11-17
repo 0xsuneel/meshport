@@ -137,7 +137,9 @@ export function AmountField({
         )}
       </div>
       {buttons.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        // data-editing: faded out on short screens while the keypad is up
+        // (index.css) - there the keypad sheet reaches this row.
+        <div data-amount-quick="" data-editing={tapMode && editing ? '' : undefined} style={{ display: 'flex', gap: 8, marginTop: 10 }}>
           {buttons.map(b => (
             <button key={b.label} type="button" disabled={b.disabled || readOnly}
               onClick={e => { e.stopPropagation(); b.onClick(); if (!tapMode) inputRef.current?.focus() }}
