@@ -259,8 +259,8 @@ export function PinKeypad({
     <div className="w-full">
       {/* Dot progress indicators */}
       <motion.div
-        // 16px dots (14 → 18 → 16, 17 Nov: a little smaller).
-        className={`flex items-center justify-center gap-3.5 ${short ? 'mb-4' : 'mb-7'}`}
+        // 15px dots (14 → 18 → 16 → 15, 17 Nov) in a 16px row (h-4), so nothing below moves.
+        className={`flex items-center justify-center gap-3.5 h-4 ${short ? 'mb-4' : 'mb-7'}`}
         animate={shake ? { x: [0, -8, 8, -8, 8, 0] } : { x: 0 }}
         transition={{ duration: 0.4 }}
       >
@@ -271,8 +271,8 @@ export function PinKeypad({
               key={i}
               className="rounded-full transition duration-150"
               style={{
-                width: '16px',
-                height: '16px',
+                width: '15px',
+                height: '15px',
                 background: filled
                   ? error
                     ? 'var(--danger)'
