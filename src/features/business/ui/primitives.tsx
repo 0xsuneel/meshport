@@ -125,13 +125,15 @@ interface SheetProps {
   height?: 'half' | 'full'
   /** Unique per sheet, for drag-to-close bookkeeping (generated when left out). */
   id?: string
+  /** Contents arrive one by one (ActionSheet stagger) - details and lists only. */
+  stagger?: boolean
 }
 
 // The business UI's bottom sheet is the app's one sheet (ActionSheet): the
 // same motion, dim, corner radius, handle, drag-to-close and Back as every
 // other sheet; a centred dialog on desktop.
-export function Sheet({ open, onClose, children, height = 'half', id }: SheetProps) {
-  return <ActionSheet open={open} onClose={onClose} id={id} fixed height={height === 'full' ? 'full' : 'auto'}>{children}</ActionSheet>
+export function Sheet({ open, onClose, children, height = 'half', id, stagger }: SheetProps) {
+  return <ActionSheet open={open} onClose={onClose} id={id} fixed height={height === 'full' ? 'full' : 'auto'} stagger={stagger}>{children}</ActionSheet>
 }
 
 // ─── Primary action button ───────────────────────────────────────────────────

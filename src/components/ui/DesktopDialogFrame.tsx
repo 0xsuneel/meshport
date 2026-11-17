@@ -12,7 +12,7 @@
 // flickers.
 import { motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
-import { POPUP_CARD, stableLayer } from '@/lib/motion'
+import { POPUP_CARD, isDesktopNow, stableLayer, staggerSheetContents } from '@/lib/motion'
 import { PopupDim } from './PopupDim'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { useBackLayer } from '@/lib/backLayers'
@@ -20,7 +20,13 @@ import { type ReactNode, useEffect, useRef } from 'react'
 
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 
-export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex = 200, backClose = true, bare = false }: {
+// Once per opening (the card mounts with the popup); desktop popups keep the
+// desktop motion (a quick fade), no stagger.
+const staggerOnPhone = (el: HTMLDivElement | null) => {
+  if (el && !isDesktopNow()) requestAnimationFrame(() => staggerSheetContents(el))
+}
+
+export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex = 200, backClose = true, bare = false, stagger = false }: {
   onClose: () => void
   children: ReactNode
   maxWidth?: number
@@ -30,6 +36,9 @@ export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex =
   backClose?: boolean
   /** No card chrome (.mp-popup): the child draws its own card (receipts). */
   bare?: boolean
+  /** Phone: its contents arrive one by one as it opens (lib/motion
+   *  staggerSheetContents) - for a list or a grid, not a confirmation. */
+  stagger?: boolean
 }) {
   usePopupOpen()
   useBackLayer(backClose, onClose)
@@ -64,6 +73,7 @@ export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex =
         exit={POPUP_CARD.exit}
         transition={POPUP_CARD.transition}
         transformTemplate={stableLayer}
+        ref={stagger ? staggerOnPhone : undefined}
         // Its own compositor layer, so the grow animation never re-rasterizes the list inside.
         style={{ position: 'relative', width: '100%', maxWidth, maxHeight: '100%', overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain', willChange: 'transform, opacity', backfaceVisibility: 'hidden' }}
       >
