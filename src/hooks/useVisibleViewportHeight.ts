@@ -207,7 +207,13 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
       lastH = h
     }
     // Layout viewport, not innerHeight (which iPhone shrinks with the keyboard).
-    const onFocus = () => { apply(); if (visibleFrame().height < document.documentElement.clientHeight - 80) settle() }
+    // Only a field that opens the keyboard: a tapped button takes focus too,
+    // and measuring here (it reads layout) on every button tap landed right
+    // as the sheet it opens began to move.
+    const onFocus = (e: FocusEvent) => {
+      if (!opensKeyboard(e.target as Element | null)) return
+      apply(); if (visibleFrame().height < document.documentElement.clientHeight - 80) settle()
+    }
     document.addEventListener('touchstart', onTouchStart, { passive: true, capture: true })
     document.addEventListener('touchend', onTouchEnd, { passive: true, capture: true })
     document.addEventListener('touchcancel', onTouchEnd, { passive: true, capture: true })
@@ -216,8 +222,12 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     const onFocusOut = () => recheck()
     document.addEventListener('focusout', onFocusOut)
     // A field removed while focused (leaving a chat) fires no focusout in
-    // every browser - so any tap looks again too (apply writes only on change).
-    document.addEventListener('pointerup', recheck, { passive: true, capture: true })
+    // every browser - so a tap looks again too, but ONLY while the frame is
+    // short (keyboard-sized) or marked keyboard-up: apply() reads layout, and
+    // doing it on every tap (17 Nov) forced a layout right as a sheet began to
+    // open and again near its end - sheets opened with two hitches.
+    const onPointerUp = () => { if (kb || (lastHeight !== '' && lastHeight !== '100%')) recheck() }
+    document.addEventListener('pointerup', onPointerUp, { passive: true, capture: true })
     document.addEventListener('focusin', onFocus)
     apply()
     vv?.addEventListener('resize', schedule)
@@ -238,7 +248,7 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
       document.removeEventListener('touchend', onTouchEnd, { capture: true })
       document.removeEventListener('touchcancel', onTouchEnd, { capture: true })
       document.removeEventListener('focusout', onFocusOut)
-      document.removeEventListener('pointerup', recheck, { capture: true })
+      document.removeEventListener('pointerup', onPointerUp, { capture: true })
       document.removeEventListener('focusin', onFocus)
       vv?.removeEventListener('resize', schedule)
       vv?.removeEventListener('scroll', schedule)
