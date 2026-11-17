@@ -748,8 +748,12 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const isIncoming = isClaim || isReceive || isBulkReceived || isP2PCredit
   // Needs recovery reads as in-progress (amber), not as a failure.
   const receiptStatus = isRecovery ? 'pending' : isFailed ? 'failed' : isSuccess ? 'success' : 'pending'
+  // "Payment Received" only for a payment of an order (Shop QR, bill,
+  // request); USDC simply sent to the wallet - personal or business - is
+  // "Received", as the list, the push and the Business tab read it.
+  const forOrder = !!(metadata as any)?.merchantOrder || activityOrderKind(metadata) !== null
   const doneTitle = isClaim ? ((metadata as any)?.merchant ? 'Payment Received' : 'Funds Arrived')
-    : isReceive || isBulkReceived ? 'Payment Received'
+    : isReceive || isBulkReceived ? (forOrder ? 'Payment Received' : 'Received')
     : isSwapType ? 'Swap Successful!'
     : isTransfer ? 'Transfer Complete'
     : type === 'bulk' ? (isPayroll(metadata) ? 'Staff Paid' : 'Bulk Payment Sent')

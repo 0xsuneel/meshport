@@ -1550,7 +1550,9 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
   return (
     <ReceiptPopup
       onClose={onClose}
-      title={sent ? 'Paid Successfully' : 'Payment Received'}
+      // A chat payment for an order (bill / request) is a payment; one
+      // person sending another USDC is simply "Received".
+      title={sent ? 'Paid Successfully' : parsePaymentOrderTag(String(msg.content ?? '')) ? 'Payment Received' : 'Received'}
       subtitle={<>
         <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: sent ? 'var(--text-primary)' : 'var(--success-text)', marginBottom: 4 }}>{sent ? '-' : '+'}{amount}</span>
         {sent ? <>Sent to {peer} in chat</> : <>From {peer} in chat</>}
