@@ -827,6 +827,16 @@ html[data-theme="dark"] { --skel-glow: rgba(255, 255, 255, 0.07); }
   transform: translateX(-100%);
   animation: mp-skel-glow 2.2s cubic-bezier(.4, 0, .2, 1) infinite;
 }
+/* Quick amounts under an amount box (AmountField). On short screens (iPhone
+   SE with Safari's bars, ~520px) the keypad sheet reaches this row even with
+   the box lifted as high as it goes - the chips showed cut in half under it
+   (17 Nov). They can't be tapped while the keypad is up anyway (its dim
+   layer takes the tap), so there they fade out and back as it closes. The
+   row keeps its space: nothing moves. */
+[data-amount-quick] { transition: opacity 0.2s ease; }
+@media (max-height: 820px) {
+  [data-amount-quick][data-editing] { opacity: 0; pointer-events: none; }
+}
 @keyframes mp-skel-glow { to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) {
   .mp-swap-live, .mp-swap-arrow { animation: none; }

@@ -87,6 +87,13 @@ export function visibleFrame(): { top: number; height: number } {
   return { top, height: Math.round(vv.height) }
 }
 
+// iPhone, iPod, or an iPad (which reports itself as a Mac with touch).
+function isAppleTouch(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent || ''
+  return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1)
+}
+
 /**
  * The focused field fully inside the visible area: scrolls the scroll
  * boxes around it (never the page itself). Needed once the frame has
@@ -132,6 +139,7 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     // It clears only when the space comes back, so the nav doesn't pop up
     // above a keyboard that is still closing.
     let fullH = 0, fullW = 0, kb = false
+    const ios = isAppleTouch()
     const apply = () => {
       const { top, height } = visibleFrame()
       if (window.innerWidth !== fullW) { fullW = window.innerWidth; fullH = 0 }
@@ -150,8 +158,14 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
       // keyboard while the layout viewport stays full, so "matches
       // innerHeight" gave the frame 100% = full height with the keyboard up,
       // and Pay's message box / Transfer's routes sat under the keys.
+      //
+      // Never on iPhone / iPad: there 100% of a fixed frame is the LARGE
+      // viewport (Safari's bars hidden) even while clientHeight is the small
+      // one, so with Safari's toolbar showing the frame ran ~80px under it
+      // and the bottom nav was hidden until a scroll collapsed the bars
+      // (iPhone SE, 17 Nov). iPhone keeps the measured pixel height.
       const layoutH = document.documentElement.clientHeight
-      const h = top === 0 && Math.abs(height - layoutH) <= 1 ? '100%' : `${height}px`
+      const h = !ios && top === 0 && Math.abs(height - layoutH) <= 1 ? '100%' : `${height}px`
       if (top !== lastTop) { el.style.top = `${top}px`; lastTop = top }
       if (h !== lastHeight) { el.style.height = h; lastHeight = h }
       // The visible height for sheets inside (ActionSheet etc.): dvh units
