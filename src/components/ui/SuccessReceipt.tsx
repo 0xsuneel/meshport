@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from 'react'
 import { PointsEarnedLine } from '@/components/rewards/PointsEarnedLine'
 import type { RewardActionType } from '@/lib/rewards'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { Check, ChevronDown, Copy, ExternalLink, Zap } from 'lucide-react'
-import { EASE_OUT, stableLayer } from '@/lib/motion'
+import { EASE_OUT, SPRING_SOFT, springProgress, stableLayer } from '@/lib/motion'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 
 // The receipt card every success flow lands on after SuccessFlash:
@@ -115,7 +115,8 @@ function Row({ row, i, revealed }: { row: ReceiptRow; i?: number; revealed?: boo
 function Reveal({ i, revealed, children, style }: { i: number; revealed: boolean; children: ReactNode; style?: CSSProperties }) {
   return (
     <motion.div initial={false} animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
-      transition={{ duration: 0.45, delay: revealed ? i * 0.07 : 0, ease: EASE_OUT }} style={style} transformTemplate={stableLayer}>
+      // Each row rises on a spring, 70 ms after the one above (17 Nov).
+      transition={revealed ? { ...SPRING_SOFT, delay: i * 0.07 } : { duration: 0.2, ease: EASE_OUT }} style={style} transformTemplate={stableLayer}>
       {children}
     </motion.div>
   )
@@ -146,6 +147,31 @@ export function SuccessReceipt({
   primaryLabel = 'Done', onPrimary, checkRef, revealed, checkContent, style,
   status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions, reward, fill = false,
 }: SuccessReceiptProps) {
+  // The check: handed to the caller (it aims the flying checkmark at it) and
+  // kept here for its landing pop.
+  const ownCheck = useRef<HTMLDivElement | null>(null)
+  const setCheck = useCallback((el: HTMLDivElement | null) => {
+    ownCheck.current = el
+    if (typeof checkRef === 'function') checkRef(el)
+    else if (checkRef) (checkRef as { current: HTMLDivElement | null }).current = el
+  }, [checkRef])
+  // Landing (17 Nov "premium motion"): once the receipt is revealed on a
+  // success, the check gives a small spring pop (~4% past full size, via the
+  // separate `scale` property so the flight's transform is untouched). The
+  // sound and buzz already came with the success flash (successFeedback).
+  // Not with reduced motion.
+  const landed = useRef(false)
+  useEffect(() => {
+    if (!revealed) { landed.current = false; return }
+    if (landed.current || status !== 'success') return
+    landed.current = true
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    const el = ownCheck.current
+    if (el && typeof el.animate === 'function') {
+      const { values, ms } = springProgress()
+      el.animate(values.map((p, i) => ({ scale: String(0.86 + 0.14 * p), offset: i / (values.length - 1) })), { duration: ms })
+    }
+  }, [revealed, status])
   // Takes over from the success flash, which switches the page's blurs off
   // while it's up. Holding them off here too means the hand-off doesn't turn
   // them back on for a frame (Android repaints the blurred header - a flash).
@@ -247,7 +273,7 @@ export function SuccessReceipt({
               {stamp}
             </span>
           )}
-          <div ref={checkRef} style={{
+          <div ref={setCheck} style={{
             width: RECEIPT_CHECK, height: RECEIPT_CHECK, borderRadius: '50%', background: '#fff',
             display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: revealed ? 1 : 0,
           }}>

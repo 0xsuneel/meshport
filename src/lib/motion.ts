@@ -28,6 +28,31 @@ export type NavDirection = 'forward' | 'back'
 /** iOS-style deceleration - fast start, long soft landing. */
 export const EASE_OUT: [number, number, number, number] = [0.32, 0.72, 0, 1]
 
+// ── Springs (17 Nov: "premium motion" - things move like objects, not on a
+// fixed curve). Mass 1 throughout.
+/** Things that rise into place (a receipt's rows): settles in ~0.8 s, a hair
+ *  of overshoot (~1.6%), no visible bounce. */
+export const SPRING_SOFT: Transition = { type: 'spring', stiffness: 170, damping: 21 }
+/** Things that land (a toast, the payment alert card, the success check): a
+ *  little livelier, ~4% past full and back - a small "pop". */
+export const SPRING_POP: Transition = { type: 'spring', stiffness: 260, damping: 22 }
+/** Bottom sheets: a spring's natural slowing, damped just enough (ζ ≈ 1) that
+ *  it never overshoots its resting place - see the bottom-sheet note below. */
+export const SPRING_SHEET: Transition = { type: 'spring', stiffness: 170, damping: 26 }
+
+/** A spring sampled for Web Animations (el.animate): the eased progress at
+ *  each frame (0 → 1, may pass 1) and how long it takes to settle. */
+export function springProgress(stiffness = 260, damping = 22): { values: number[]; ms: number } {
+  const dt = 1 / 120, values: number[] = []
+  let x = 0, v = 0, t = 0
+  while (t < 2) {
+    v += (-stiffness * (x - 1) - damping * v) * dt
+    x += v * dt; t += dt; values.push(x)
+    if (t > 0.25 && Math.abs(x - 1) < 0.0008 && Math.abs(v) < 0.001) break
+  }
+  return { values, ms: Math.round(values.length * dt * 1000) }
+}
+
 // ── Pages & steps ───────────────────────────────────────────────────────────
 /** A page / step move's length and curve (framer pushes use it; PUSH_* below
  *  are the same values for Web Animations). */
@@ -92,7 +117,9 @@ function byScreen<T extends object>(phone: T, desktop: object): T {
 export const stableLayer = (_: unknown, generated: string): string =>
   generated && generated !== 'none' ? `${generated} translateZ(0)` : 'translateZ(0)'
 
-export const SHEET_SPRING: Transition = { duration: 0.38, ease: EASE_OUT }
+// 17 Nov: a spring again, but critically damped (SPRING_SHEET) - it slows like
+// a real object and still lands once, with no rubber-band settle.
+export const SHEET_SPRING: Transition = SPRING_SHEET
 /** Sheets leave a little quicker than they arrive (ease-in, like the OS). */
 export const SHEET_EXIT = { y: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } } as const
 export const SHEET_PANEL = {
@@ -154,7 +181,9 @@ export const POPUP_CARD = byScreen({
   // Closing: card and dim leave together on one clock (POPUP_EXIT), like
   // the OS dialogs - the page brightens exactly as the card fades.
   exit: { opacity: 0, scale: 0.97, y: 6, transition: POPUP_EXIT },
-  transition: { duration: 0.36, ease: POPUP_GROW, opacity: POPUP_FADE } as Transition, // no overshoot
+  // Grows in on SPRING_POP (a small pop past full size, 17 Nov); the fade
+  // keeps its own short curve.
+  transition: { ...SPRING_POP, opacity: POPUP_FADE } as Transition
 } as const, DESKTOP_POPUP)
 export const DIALOG_BACKDROP = byScreen({
   ...MAIN_THREAD,
@@ -210,8 +239,9 @@ export const DESKTOP_FADE_KEYFRAMES: Keyframe[] = [{ opacity: 0, transform: `tra
 export const TOAST_MOTION = {
   initial: { opacity: 1, y: '-160%' },
   animate: { opacity: 1, y: 0 },
-  exit: { opacity: 1, y: '-160%' },
-  transition: { duration: 0.24, ease: EASE_OUT },
+  exit: { opacity: 1, y: '-160%', transition: { duration: 0.2, ease: EASE_OUT } },
+  // Drops in and lands with a small pop (SPRING_POP); leaves on a short tween.
+  transition: SPRING_POP,
 } as const
 /** Bottom snackbars (e.g. "Deleted · UNDO"): same, rising from below. */
 export const SNACKBAR_MOTION = {

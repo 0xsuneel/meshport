@@ -8,7 +8,7 @@
 import React from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check } from 'lucide-react'
-import { EASE_OUT } from '@/lib/motion'
+import { EASE_OUT, SPRING_POP, SPRING_SOFT } from '@/lib/motion'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 
 export interface PaymentReceivedOverlayProps {
@@ -65,15 +65,16 @@ export function PaymentReceivedOverlay({
                 {/* Tick, sitting on the band's edge */}
                 <motion.div
                   className="-mt-9 flex items-center justify-center size-[72px] rounded-full bg-surface shadow-md"
+                  // Lands with a small pop (SPRING_POP); the fade keeps its curve.
                   initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                  transition={{ duration: 0.3, ease: EASE_OUT, delay: 0.05 }}>
+                  transition={{ ...SPRING_POP, delay: 0.05, opacity: { duration: 0.2, ease: EASE_OUT, delay: 0.05 } }}>
                   <span className="flex items-center justify-center size-14 rounded-full bg-success text-white">
                     <Check className="size-7" strokeWidth={3} />
                   </span>
                 </motion.div>
 
                 <motion.p className="display mt-3 font-bold tabular-nums text-text-primary leading-none"
-                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12, duration: 0.22 }}>
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SPRING_SOFT, delay: 0.12 }}>
                   <span className="text-[44px] tracking-tight">{whole}{cents != null ? `.${cents}` : ''}</span>
                   <span className="ml-1.5 text-[15px] font-semibold text-text-muted">USDC</span>
                 </motion.p>
