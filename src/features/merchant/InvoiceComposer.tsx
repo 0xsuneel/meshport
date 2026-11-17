@@ -349,7 +349,7 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
 }) {
   const firstName = customer.name || customer.username.replace(/\.arc$/i, '')
   return (
-    <ActionSheet open={open} onClose={onClose} isDesktop={isDesktop} id="chat-bill">
+    <ActionSheet open={open} onClose={onClose} isDesktop={isDesktop} id="chat-bill" stagger>
       <BillComposer open={open} isDesktop={isDesktop}
         header={compact => <div className="flex flex-col gap-3">
           <SheetPerson label="Bill to" name={customer.name} username={customer.username} avatar={customer.avatar}

@@ -53,6 +53,32 @@ export function springProgress(stiffness = 260, damping = 22): { values: number[
   return { values, ms: Math.round(values.length * dt * 1000) }
 }
 
+/**
+ * A sheet's contents arrive one after another as it opens (17 Nov "premium
+ * motion"): its sections fade and rise 12px on SPRING_SOFT, 70 ms apart (up
+ * to 8). Sections = the first level below the panel with more than one
+ * element (sheets usually wrap everything in one box). Uses the separate
+ * `translate` property, so a section's own (framer) transform is untouched,
+ * and leaves alone anything already animating.
+ *
+ * Never on a sheet showing the wallet's page (an iframe): it takes touches
+ * only while fully shown and still, so nothing near it may move. Off with
+ * reduced motion.
+ */
+export function staggerSheetContents(panel: HTMLElement): void {
+  if (typeof window === 'undefined' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+  if (panel.querySelector('iframe')) return
+  let list = [...panel.children].filter(c => !c.hasAttribute('data-sheet-handle'))
+  for (let depth = 0; list.length === 1 && depth < 3; depth++) list = [...list[0].children]
+  if (list.length < 2) return
+  const { values, ms } = springProgress(170, 21)
+  const frames = values.map((p, i) => ({ opacity: Math.min(1, p * 1.3), translate: `0 ${12 * (1 - p)}px`, offset: i / (values.length - 1) }))
+  list.slice(0, 8).forEach((el, i) => {
+    if (!(el instanceof HTMLElement) || typeof el.animate !== 'function' || el.getAnimations().length) return
+    el.animate(frames, { duration: ms, delay: 60 + i * 70, fill: 'backwards' })
+  })
+}
+
 // ── Pages & steps ───────────────────────────────────────────────────────────
 /** A page / step move's length and curve (framer pushes use it; PUSH_* below
  *  are the same values for Web Animations). */
