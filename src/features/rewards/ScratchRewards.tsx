@@ -10,10 +10,11 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeftRight, Gift, Globe, Layers, MessageCircle } from 'lucide-react'
 import {
-  fetchRewardSummary, fetchScratchCards, scratchCard, emitCardCount, fmtUsdcMicro, usdcClaimPoints, fetchRewardToday, type RewardToday,
+  fetchRewardSummary, fetchScratchCards, scratchCard, emitCardCount, fmtUsdcMicro, usdcClaimPoints, fetchRewardToday, type RewardToday, fetchScratchHistory, type ScratchWin,
   MIN_USDC_CLAIM_MICRO, type ScratchPrize,
 } from '@/lib/scratchCards'
 import { useUIStore } from '@/store'
+import { timeAgo } from '@/lib/utils'
 import { ActiveOffers } from './ActiveOffers'
 
 const USDC_BLUE = '#2775CA'
@@ -84,6 +85,8 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
   useEffect(() => { onUsdc?.(usdcMicro) }, [usdcMicro, onUsdc])
   const [usdcLifetime, setUsdcLifetime] = useState(0)
   const [today, setToday] = useState<RewardToday | null>(null)
+  const [wins, setWins] = useState<ScratchWin[] | null>(null)
+  const limitHit = !!today && today.cards >= today.cardsLimit
   useEffect(() => { onUsdcLifetime?.(usdcLifetime) }, [usdcLifetime, onUsdcLifetime])
   const [cards, setCards] = useState<{ id: string; createdAt: string }[] | null>(null)
   const [open, setOpen] = useState<{ id: string; look: number } | null>(null)
@@ -100,6 +103,7 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
       setUsdcMicro(s.usdcMicro)
       setUsdcLifetime(s.usdcLifetimeMicro)
       void fetchRewardToday().then(setToday)
+      void fetchScratchHistory(4).then(setWins).catch(() => setWins([]))
       setCards(list)
       emitCardCount(list.length)
     } catch { /* weak network: keep what's shown */ }
@@ -235,19 +239,60 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
           : 'USDC you win is claimed straight to your MeshPort wallet'}
       </p>
 
-      {/* Cards waiting to be scratched */}
-      <div ref={bandRef} style={{ marginTop: 22, background: BAND, padding: '18px 0 18px', borderRadius: isDesktop ? 18 : 0 }}>
-        <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 800, letterSpacing: '.04em', padding: '0 16px 14px' }}>SCRATCH &amp; CLAIM YOUR REWARDS</h3>
-        <div className="sr-strip" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 16px' }}>
-          {cards === null ? (
-            [0, 1, 2].map(i => <div key={i} style={{ flex: '0 0 140px', height: 210, borderRadius: '10px 10px 0 0', background: 'rgba(255,255,255,.08)' }} />)
-          ) : cards.length === 0 ? (
-            <div style={{ flex: '1 0 100%', height: 130, display: 'grid', placeItems: 'center', color: 'rgba(255,255,255,.75)', fontSize: 14, textAlign: 'center' }}>
-              <span>No cards to scratch right now<br />Every payment wins one</span>
-            </div>
-          ) : cards.map((c, i) => <TallCard key={c.id} look={i % LOOKS.length} onClick={() => setOpen({ id: c.id, look: i % LOOKS.length })} />)}
+      {/* Cards waiting to be scratched. None: the last wins and why (approved
+          preview, 18 Nov 2026) - all 10 won today, or pay to win one; a new
+          user who has never scratched gets a slim strip. */}
+      {cards !== null && cards.length === 0 && wins !== null && wins.length === 0 && !limitHit ? (
+        <div ref={bandRef} style={{ marginTop: 22, background: BAND, padding: '14px 16px', borderRadius: isDesktop ? 18 : 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span aria-hidden style={{ width: 40, height: 40, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'rgba(255,224,138,.15)' }}>
+            <Gift size={20} color="#FFE08A" />
+          </span>
+          <div style={{ flex: 1, minWidth: 0, color: 'rgba(255,255,255,.8)', fontSize: 13.5, lineHeight: 1.35 }}>
+            <b style={{ display: 'block', color: '#fff', fontSize: 14.5 }}>Win scratch cards</b>
+            Every payment wins one - points or real USDC
+          </div>
+          <button type="button" onClick={() => navigate('/pay')} className="mp-press"
+            style={{ flex: 'none', background: '#fff', color: 'var(--brand)', fontWeight: 800, fontSize: 13, padding: '8px 14px', borderRadius: 999, border: 'none', cursor: 'pointer' }}>Pay now</button>
         </div>
+      ) : (
+      <div ref={bandRef} style={{ marginTop: 22, background: BAND, padding: '18px 0 18px', borderRadius: isDesktop ? 18 : 0 }}>
+        <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 800, letterSpacing: '.04em', padding: cards && cards.length === 0 ? '0 16px 6px' : '0 16px 14px' }}>SCRATCH &amp; CLAIM YOUR REWARDS</h3>
+        {cards !== null && cards.length === 0 ? (<>
+          <div style={{ color: 'rgba(255,255,255,.75)', fontSize: 13.5, padding: '0 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            {limitHit
+              ? <span>You've won all <b style={{ color: '#fff' }}>{today?.cardsLimit ?? 10} cards</b> today · new cards after 00:00 UTC</span>
+              : <span>No cards right now · <b style={{ color: '#fff' }}>every payment wins one</b></span>}
+            {!limitHit && (
+              <button type="button" onClick={() => navigate('/pay')} className="mp-press"
+                style={{ flex: 'none', background: '#fff', color: 'var(--brand)', fontWeight: 800, fontSize: 13, padding: '8px 14px', borderRadius: 999, border: 'none', cursor: 'pointer' }}>Pay now</button>
+            )}
+          </div>
+          {!!wins?.length && (<>
+            <div style={{ color: 'rgba(255,255,255,.55)', fontSize: 11.5, fontWeight: 800, letterSpacing: '.06em', padding: '4px 16px 8px' }}>YOUR LAST WINS</div>
+            <div className="sr-strip" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 16px' }}>
+              {wins.map(w => {
+                const usdc = w.kind === 'usdc'
+                return (
+                  <div key={w.id} style={{ flex: '0 0 96px', height: 104, borderRadius: 12, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 4 }}>
+                    <i style={{ width: 30, height: 30, borderRadius: '50%', display: 'grid', placeItems: 'center', fontStyle: 'normal', fontWeight: 900, fontSize: 14,
+                      background: usdc ? USDC_BLUE : '#F5B82E', color: usdc ? '#fff' : '#7A5200' }}>{usdc ? '$' : '★'}</i>
+                    <b style={{ color: '#fff', fontSize: 15, fontWeight: 800 }}>{usdc ? fmtUsdcMicro(w.usdcMicro) : `${w.points} pts`}</b>
+                    <small style={{ color: 'rgba(255,255,255,.55)', fontSize: 11 }}>{usdc ? 'USDC · ' : ''}{timeAgo(w.scratchedAt)}</small>
+                  </div>
+                )
+              })}
+            </div>
+          </>)}
+        </>) : (
+        <div className="sr-strip" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 16px' }}>
+          {cards === null
+            ? [0, 1, 2].map(i => <div key={i} style={{ flex: '0 0 140px', height: 210, borderRadius: '10px 10px 0 0', background: 'rgba(255,255,255,.08)' }} />)
+            : cards.map((c, i) => <TallCard key={c.id} look={i % LOOKS.length} onClick={() => setOpen({ id: c.id, look: i % LOOKS.length })} />)}
+        </div>
+        )}
       </div>
+      )}
 
       {/* Active offers: activate, fill the ring, win a USDC card */}
       <ActiveOffers margin={m} refreshKey={refreshKey + (cards?.length ?? 0)} />
