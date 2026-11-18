@@ -7,15 +7,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/** Money as people read it on a receipt: at least two decimals ("1.00",
- *  "12.50"), more only when the amount has them; tiny amounts (under 0.01)
- *  keep their real digits ("0.000003"). */
-export function formatMoney(amount: number | null | undefined, decimals = 6): string {
-  const n = amount == null || isNaN(Number(amount)) ? 0 : Number(amount)
-  if (n !== 0 && Math.abs(n) < 0.01) return formatAmount(n, decimals)
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: Math.max(2, decimals) })
-}
-
 export function formatAmount(amount: number | null | undefined, decimals = 2): string {
   const n = amount == null || isNaN(Number(amount)) ? 0 : Number(amount)
   // minimumFractionDigits: 0 (not `decimals`) so a whole number renders as
