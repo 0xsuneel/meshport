@@ -17,7 +17,7 @@ import {
   fetchMyTrades, fetchCounterpartyProfiles, currencySymbol,
   type P2PTrade, type CounterpartyProfile,
 } from '@/lib/p2pService'
-import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { TxDetailPage } from '@/components/ui/TxDetailPage'
 import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -79,43 +79,29 @@ function TradeReceipt({ t, isBuyer, label, counterparty, counterpartyWallet, onO
 }) {
   const disputed = t.disputeStatus === 'open'
   const status = disputed ? 'pending' : t.status === 'completed' ? 'success' : t.status === 'cancelled' ? 'failed' : 'pending'
-  const title = status === 'success' ? (isBuyer ? 'USDC Received' : 'USDC Sold')
-    : status === 'failed' ? `Trade ${label}` : `Trade ${label}`
   const hash = t.txHash || null
+  // The same P2P details card as Activity (18 Nov 2026).
   return (
-    <ReceiptPopup
-      onClose={onClose}
-      status={status}
-      title={title}
-      subtitle={<>
-        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: status === 'failed' ? 'var(--danger-text)' : isBuyer ? 'var(--success-text)' : 'var(--text-primary)', marginBottom: 4 }}>
-          {status === 'failed' ? '' : isBuyer ? '+' : '-'}{t.amountUsdc} USDC
-        </span>
-        {isBuyer ? 'Bought from' : 'Sold to'} {counterparty}
-      </>}
-      // The header shows the USDC and who it was with, and the title the
-      // status - rows only add the fiat side and the rest.
-      rows={[
+    <TxDetailPage onClose={onClose} detail={{
+      title: 'P2P details', status, amountLabel: isBuyer ? 'You bought' : 'You sold',
+      amount: `${status === 'failed' ? '' : isBuyer ? '+' : ''}$${t.amountUsdc}`, unit: 'USDC',
+      pill: `🤝 ${label}`,
+      parties: [{ label: isBuyer ? 'From' : 'To', name: counterparty, address: counterpartyWallet || undefined }],
+      steps: [isBuyer ? 'Trade opened' : 'Offer accepted', <>Paid <b>{currencySymbol(t.currency)}{t.amountFiat} {t.currency}</b></>, <>USDC {isBuyer ? 'released to you' : 'released from escrow'}</>],
+      whenLabel: t.completedAt ? 'Completed at' : 'Opened at', when: fmtDate(t.completedAt || t.createdAt),
+      hashes: hash ? [{ label: 'Transaction', hash }] : [],
+      detailsTitle: 'Trade details',
+      details: [
+        { label: 'Status', value: label, tone: status === 'success' ? 'ok' : status === 'failed' ? 'bad' : undefined },
         { label: isBuyer ? 'You paid' : 'You receive', value: `${currencySymbol(t.currency)}${t.amountFiat} ${t.currency}` },
-        ...(hash ? [{ label: 'Transaction Hash', value: `${hash.slice(0, 6)}…${hash.slice(-4)}` }] : []),
-        { label: 'Time', value: fmtDate(t.completedAt || t.createdAt) },
-      ]}
-      detailRows={[
         { label: 'Price', value: `${t.pricePerUsdc} ${t.currency}/USDC` },
         { label: 'Payment method', value: t.paymentMethod },
-        { label: 'Trade ID', value: shortHash(t.id) },
-        { label: 'Offer ID', value: shortHash(t.offerId) },
-        ...(counterpartyWallet ? [{ label: 'Counterparty wallet', value: shortHash(counterpartyWallet) }] : []),
-        { label: 'Created', value: fmtDate(t.createdAt) },
-        ...(t.completedAt ? [{ label: 'Completed', value: fmtDate(t.completedAt) }] : []),
-      ]}
-      detailsTitle="Trade details"
-      fullHash={hash || undefined}
-      links={hash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash, href: arcExplorerTxUrl(hash) }] : undefined}
-      linksNote={hash ? undefined : 'No on-chain transaction yet for this trade.'}
-      primaryLabel="Open Trade"
-      onPrimary={onOpenTrade}
-    />
+        { label: 'Trade', value: shortHash(t.id) },
+        ...(hash ? [{ label: 'Explorer', value: 'View on ArcScan', href: arcExplorerTxUrl(hash) }] : []),
+      ],
+      action: { label: 'Open Trade', onClick: onOpenTrade },
+      promo: 'p2p',
+    }} />
   )
 }
 

@@ -13,7 +13,7 @@ import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { AmountField } from '@/components/ui/AmountField'
 import { TransactionComplete } from '@/components/ui/TransactionComplete'
 import { SuccessReceipt, ReceiptAmount } from '@/components/ui/SuccessReceipt'
-import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { TxDetailPage } from '@/components/ui/TxDetailPage'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { ScreenPush } from '@/components/ui/ScreenPush'
@@ -209,25 +209,30 @@ function HistoryDetail({ r, onClose }: { r: SwapRecord; onClose: () => void }) {
   const ok = r.status === 'success'
   const fmtIn  = `${trimTrailingZeros(amtIn.toFixed(swapTokenDecimals(tIn.id)))} ${tIn.id}`
   const fmtOut = amtOut > 0 ? `${trimTrailingZeros(amtOut.toFixed(swapTokenDecimals(tOut.id)))} ${tOut.id}` : `- ${tOut.id}`
+  // The same Swap details card as Activity (18 Nov 2026).
+  const sym = (t: string) => t === 'USDC' ? '$' : t === 'EURC' ? '€' : ''
+  const aIn = trimTrailingZeros(amtIn.toFixed(swapTokenDecimals(tIn.id)))
+  const aOut = amtOut > 0 ? trimTrailingZeros(amtOut.toFixed(swapTokenDecimals(tOut.id))) : ''
+  const got = ok && !!aOut
+  const whenFull = ((d: Date) => `${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`)(new Date(r.timestamp))
   return (
-    <ReceiptPopup
-      onClose={onClose}
-      status={ok ? 'success' : 'failed'}
-      title={ok ? 'Swap Successful!' : 'Swap Failed'}
-      subtitle={ok ? <>{tIn.id} → {tOut.id} on Arc</> : <>The swap to {tOut.id} did not complete</>}
-      rows={[
-        { label: 'You Paid', value: fmtIn },
-        { label: 'You Received', value: fmtOut, positive: ok },
-        ...(r.txHash ? [{ label: 'Transaction Hash', value: `${r.txHash.slice(0, 6)}…${r.txHash.slice(-4)}` }] : []),
-        { label: 'Time', value: new Date(r.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
-      ]}
-      detailRows={[
-        { label: 'Rate', value: `1 ${r.tokenIn} ≈ ${rate} ${r.tokenOut}` },
-        { label: 'Network', value: 'Arc' },
-      ]}
-      fullHash={r.txHash || undefined}
-      links={r.txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: r.txHash, href: `${ARC_EXPLORER}/tx/${r.txHash}` }] : undefined}
-    />
+    <TxDetailPage onClose={onClose} detail={{
+      title: 'Swap details', status: ok ? 'success' : 'failed', amountLabel: got ? 'You got' : 'You paid',
+      amount: got ? `${sym(tOut.id)}${aOut}` : `${sym(tIn.id)}${aIn}`, unit: got ? tOut.id : tIn.id,
+      exchange: got ? { paid: fmtIn, got: fmtOut } : undefined,
+      pill: '⇄ Swap', reason: ok ? undefined : `The swap to ${tOut.id} did not complete`,
+      steps: ['Swap approved', <>Sent <b>{fmtIn}</b></>, got ? <>Received <b>{fmtOut}</b></> : <>Receive <b>{tOut.id}</b></>],
+      whenLabel: 'Swapped at', when: whenFull,
+      hashes: r.txHash ? [{ label: 'Transaction', hash: r.txHash }] : [],
+      detailsTitle: 'Swap details',
+      details: [
+        { label: 'Status', value: ok ? 'Completed' : 'Failed', tone: ok ? 'ok' : 'bad' },
+        ...(rate !== '-' ? [{ label: 'Rate', value: `1 ${r.tokenIn} ≈ ${rate} ${r.tokenOut}` }] : []),
+        { label: 'Network', value: 'Arc Testnet' },
+        ...(r.txHash ? [{ label: 'Explorer', value: 'View on ArcScan', href: `${ARC_EXPLORER}/tx/${r.txHash}` }] : []),
+      ],
+      promo: 'swap',
+    }} />
   )
 }
 

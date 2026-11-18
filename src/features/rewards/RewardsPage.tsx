@@ -14,7 +14,7 @@ import { timeAgo, formatAmount } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useSingleFlight } from '@/hooks/useSingleFlight'
 import { readRewardsCache, writeRewardsCache } from '@/lib/rewardsCache'
-import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { TxDetailPage } from '@/components/ui/TxDetailPage'
 import { AmountField } from '@/components/ui/AmountField'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
@@ -80,28 +80,30 @@ const taskOf = rewardTaskOf
 function RewardClaimReceipt({ claim, onClose }: { claim: ClaimRecord; onClose: () => void }) {
   const status = claimView(claim.status, claim.created_at)
   const hash = claim.tx_hash
-  const when = new Date(claim.claimed_at || claim.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+  // The same Payment details card as Activity's reward claims (18 Nov 2026).
+  const me = useAuthStore.getState()
+  const myHandle = me.user?.username ? `${String(me.user.username).replace(/\.arc$/i, '')}.arc` : undefined
   return (
-    <ReceiptPopup
-      onClose={onClose}
-      status={status}
-      title={status === 'success' ? 'Reward Claimed' : status === 'failed' ? 'Reward Claim Failed' : 'Processing…'}
-      subtitle={<>
-        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: claimColor(status), marginBottom: 4 }}>{status === 'success' ? '+' : ''}${formatAmount(claim.usdc_received)} USDC</span>
-        {status === 'success' ? 'Paid out by MeshPort Rewards' : status === 'failed' ? 'Claim did not go through - your points were not deducted' : 'Being sent to your wallet…'}
-      </>}
-      rows={[
-        // The header shows the USDC and where it came from; the title the outcome.
+    <TxDetailPage onClose={onClose} detail={{
+      title: 'Payment details', status, amountLabel: 'Amount received', amount: `${status === 'success' ? '+' : ''}$${formatAmount(claim.usdc_received)}`, unit: 'USDC',
+      pill: '🎁 Reward claimed',
+      reason: status === 'failed' ? 'Claim did not go through - your points were not deducted' : undefined,
+      parties: [
+        { label: 'From', name: 'MeshPort Rewards', sub: 'Rewards contract' },
+        { label: 'To', name: 'You', you: true, handle: myHandle, address: me.walletAddress || undefined, sub: 'MeshPort wallet · USDC on Arc' },
+      ],
+      steps: ['Claim approved', <>Paid by <b>MeshPort Rewards</b></>, <>Received by <b>you</b></>],
+      whenLabel: 'Claimed at', when: ((d: Date) => `${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`)(new Date(claim.claimed_at || claim.created_at)),
+      hashes: hash ? [{ label: 'Transaction', hash }] : [],
+      detailsTitle: 'Claim details',
+      details: [
+        { label: 'Status', value: status === 'success' ? 'Completed' : status === 'failed' ? 'Failed' : 'Processing', tone: status === 'success' ? 'ok' : status === 'failed' ? 'bad' : undefined },
         ...(status !== 'failed' ? [{ label: 'Points used', value: `${claim.points_claimed} pts` }] : []),
-        ...(hash ? [{ label: 'Transaction Hash', value: `${hash.slice(0, 6)}…${hash.slice(-4)}` }] : []),
-        { label: 'Time', value: when },
-      ]}
-      detailRows={[
         { label: 'Network', value: 'Arc Testnet' },
-      ]}
-      fullHash={hash || undefined}
-      links={hash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash, href: arcExplorerTxUrl(hash) }] : undefined}
-    />
+        ...(hash ? [{ label: 'Explorer', value: 'View on ArcScan', href: arcExplorerTxUrl(hash) }] : []),
+      ],
+      promo: false,
+    }} />
   )
 }
 
