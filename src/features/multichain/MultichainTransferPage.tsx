@@ -23,8 +23,6 @@ import {
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useWalletStore, useAuthStore, useUIStore } from '@/store'
-import { awardTransactionPoints } from '@/lib/rewards'
-import { notifyRewardMultichain } from '@/lib/notifications'
 import { formatAmount, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -2624,23 +2622,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           notifyExternalBalanceChanged(destChainId, senderAddress)
         } catch {}
 
-        try {
-          const { user: u, walletAddress: wa } = useAuthStore.getState()
-          const uid = u?.id && !u.id.startsWith('usr_') ? u.id : wa ? 'wallet_' + wa.toLowerCase().slice(2, 18) : null
-          // UB spend always goes through Circle's forwarder, so spendHash is
-          // normally empty (same reason the success screen and Activity
-          // record above both fall back to depositHash) - gating the points
-          // award on spendHash alone meant a completed, Activity-recorded UB
-          // transfer silently never got its points, since this was the one
-          // place in this block that didn't apply the same fallback.
-          const rewardTxHash = spendHash || depositHash
-          if (uid && wa && rewardTxHash) {
-            awardTransactionPoints({ userId: uid, walletAddress: wa, txHash: rewardTxHash, actionType: 'multichain_transfer' })
-              .then(r => { if (r.pointsAwarded > 0) notifyRewardMultichain(r.pointsAwarded) })
-              .catch((e: any) => console.error('[MultichainSend] awardTransactionPoints failed:', e?.message))
-          }
-        } catch {}
-
         logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'SUCCESS', data: { spendHash } })
         stopTicker()
         // Transfer fully landed - the deposited funds now have a completed
@@ -3214,24 +3195,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         const destChainId = chain.sdk || chain.name || selectedChain
         refreshScope({ kind: 'external', wallet: senderAddress, chains: [destChainId] })
         notifyExternalBalanceChanged(destChainId, senderAddress)
-      } catch {}
-
-      // Award points - fire-and-forget, same as the Activity.bridge() call
-      // above. This used to `await` the Supabase round-trip right before
-      // setStep('success'), meaning the success screen didn't appear until
-      // reward-point crediting finished - visible as a lag between the
-      // transfer actually completing and the screen showing up, worse
-      // whenever Supabase was briefly slow. Whether points were awarded has
-      // nothing to do with whether the transfer succeeded; it can resolve
-      // in the background and still notify once it does.
-      try {
-        const { user: u, walletAddress: wa } = useAuthStore.getState()
-        const uid = u?.id && !u.id.startsWith('usr_') ? u.id : wa ? 'wallet_' + wa.toLowerCase().slice(2, 18) : null
-        if (uid && wa && finalHash) {
-          awardTransactionPoints({ userId: uid, walletAddress: wa, txHash: finalHash, actionType: 'multichain_transfer' })
-            .then(r => { if (r.pointsAwarded > 0) notifyRewardMultichain(r.pointsAwarded) })
-            .catch((e: any) => console.error('[MultichainSend] awardTransactionPoints failed:', e?.message))
-        }
       } catch {}
 
       logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'SUCCESS', data: { finalHash } })
@@ -3872,7 +3835,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               {successPhase === 'collapsed' && (
               <div style={{ margin: '0 -12px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <SuccessReceipt promo="multichain" page={{ gift: <ScratchGift /> }}
-                  reward="multichain_transfer"
                   style={{ height: 'auto', flex: 1, minHeight: 0 }}
                   actions={[
                     { label: 'Done', onClick: () => navigate('/multichain'), primary: true },

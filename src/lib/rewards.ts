@@ -28,7 +28,6 @@ import type { ActionIconName } from '@/components/ui/ActionIcon'
 import { createPublicClient, createWalletClient } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { supabase } from './supabase'
-import { isBusinessAccountNow } from './merchant'
 import { trimTrailingZeros } from './utils'
 import { ARC_RPCS, arcTransport, arcRpcJson } from './arc'
 
@@ -58,14 +57,6 @@ export const MAX_CLAIM_POINTS    = 1000
 export type RewardActionType = 'multichain_transfer' | 'pay_send' | 'chatpay' | 'bulkpay' | 'swap'
 export const REWARD_ACTION_TYPES: RewardActionType[] = ['multichain_transfer', 'pay_send', 'chatpay', 'bulkpay', 'swap']
 export const MAX_DAILY_EARN_POINTS = REWARD_ACTION_TYPES.length * POINTS_PER_TX // 100
-
-function rewardReasonFor(actionType: RewardActionType): string {
-  // Distinct, stable per action type - this string IS the dedup key (see
-  // awardTransactionPoints below), not just a label. Never rename an
-  // existing value without a data migration, or previously-earned actions
-  // would silently become eligible to earn again the same day.
-  return `tx_reward:${actionType}`
-}
 
 // Rewards contract address (set after deployment)
 const REWARDS_CONTRACT = (import.meta.env.VITE_REWARDS_CONTRACT || '') as `0x${string}`
@@ -117,134 +108,8 @@ export function usdcToPoints(usdc: number): number {
   return (usdc / USDC_PER_1000_PTS) * 1000
 }
 
-// ─── Award points after confirmed transaction ─────────────────────────────────
-// BUG FIX / REDESIGN (2026-09-17, explicit product requirement): this used
-// to award +20 for EVERY confirmed transaction of ANY kind, up to 10
-// transactions / 1000 points per day (MAX_DAILY_TX/MAX_DAILY_POINTS above,
-// now used only for legacy/claim-side bookkeeping - see the file header
-// comment). The new rule is per ACTION TYPE, not per transaction: a user
-// earns +20 the first time they successfully use Multichain Transfer, Pay
-// Send, ChatPay, BulkPay, or Swap on a given day, and NOTHING for repeating
-// that same action again that day, however many more times they use it. Max
-// possible per day is 100 (all 5, once each) - see MAX_DAILY_EARN_POINTS.
-/** A task's points: a random draw from 5 to 20. */
-export function randomTaskPoints(): number {
-  const r = new Uint32Array(1)
-  try { crypto.getRandomValues(r) } catch { r[0] = Math.floor(Math.random() * 2 ** 32) }
-  return MIN_TASK_POINTS + (r[0] % (POINTS_PER_TX - MIN_TASK_POINTS + 1))
-}
-export const MIN_TASK_POINTS = 5
-
-export async function awardTransactionPoints(params: {
-  userId: string
-  walletAddress: string
-  txHash: string
-  actionType: RewardActionType
-}): Promise<{ pointsAwarded: number; error: string | null }> {
-  // Business/merchant accounts don't earn transaction rewards. Gating here
-  // means no points are recorded, so no reward-earned notification fires and
-  // nothing shows under Rewards in their Activity.
-  if (isBusinessAccountNow()) return { pointsAwarded: 0, error: null }
-  const today = new Date().toISOString().split('T')[0]
-  const todayStartIso = `${today}T00:00:00.000Z`
-  const reason = rewardReasonFor(params.actionType)
-  // A random draw, 5-20 points (18 Nov 2026: "random points", never a fixed +20).
-  let pts = randomTaskPoints()
-
-  // 1. Check duplicate tx reward (unchanged - the same on-chain transaction
-  // must never be rewarded twice, regardless of the new per-action rule).
-  const { data: existingTx } = await supabase
-    .from('point_transactions')
-    .select('id')
-    .eq('tx_hash', params.txHash)
-    .maybeSingle()
-  if (existingTx) {
-    return { pointsAwarded: 0, error: null }
-  }
-
-  // 2. Check whether THIS action type already earned its one reward today.
-  // The reason string itself is the dedup key (see rewardReasonFor's own
-  // comment) - a distinct value per action type, so Pay Send earning today
-  // has zero effect on whether Swap can still earn today, and vice versa.
-  const { data: earnedToday } = await supabase
-    .from('point_transactions')
-    .select('id')
-    .eq('user_id', params.userId)
-    .eq('reason', reason)
-    .gte('created_at', todayStartIso)
-    .maybeSingle()
-  if (earnedToday) {
-    return { pointsAwarded: 0, error: null }
-  }
-
-  // 3. Record point transaction - reason encodes the action type, which is
-  // both the audit trail and (per step 2 above) the actual enforcement
-  // mechanism for "once per action type per day."
-  const { data: ptRow, error: ptError } = await supabase.from('point_transactions').insert({
-    user_id: params.userId,
-    wallet_address: params.walletAddress,
-    points: pts,
-    reason,
-    tx_hash: params.txHash,
-  }).select('points').single()
-  // 50 points a day (tasks and scratch cards together): the server trims a
-  // task to what's left, and refuses one once there's nothing left.
-  if (ptError && /Daily points limit/i.test(ptError.message)) return { pointsAwarded: 0, error: null }
-  if (!ptError && ptRow && Number(ptRow.points) > 0) pts = Number(ptRow.points)
-  if (ptError) {
-    console.error('[Rewards] point_transactions insert failed:', ptError.code, ptError.message)
-    return { pointsAwarded: 0, error: `Could not record points: ${ptError.message}` }
-  }
-
-  // 4. Update daily tracking - still one row per user per day (unchanged
-  // shape, so notifications.ts's existing today-so-far query keeps working
-  // unmodified), just incremented at most 5 times a day now (once per
-  // distinct action type) instead of once per transaction.
-  const { data: daily } = await supabase
-    .from('daily_tx_rewards')
-    .select('tx_count, points')
-    .eq('user_id', params.userId)
-    .eq('reward_date', today)
-    .maybeSingle()
-  const { error: dtrError } = await supabase.from('daily_tx_rewards').upsert({
-    user_id: params.userId,
-    reward_date: today,
-    tx_count: (daily?.tx_count || 0) + 1,
-    points: (daily?.points || 0) + pts,
-  }, { onConflict: 'user_id,reward_date' })
-  if (dtrError) {
-    console.error('[Rewards] daily_tx_rewards upsert failed:', dtrError.code, dtrError.message)
-    return { pointsAwarded: 0, error: `Could not update daily tracking: ${dtrError.message}` }
-  }
-
-  // 5. Update user total points - atomic increment via RPC (see
-  // supabase-fix-points-race.sql). Previously this read the current
-  // total_points, added 20 in JS, then wrote it back - two overlapping
-  // calls to this function (e.g. two payments sent close together) could
-  // both read the same starting value and one increment would silently
-  // overwrite the other. No error occurred either time since the write
-  // itself always succeeded; it just wrote a stale number. This function
-  // must exist in the database (run supabase-fix-points-race.sql) - if it
-  // doesn't yet, this call fails loudly below rather than silently
-  // corrupting the balance the old way.
-  const { error: upError } = await supabase.rpc('increment_user_points', {
-    p_user_id: params.userId,
-    p_wallet_address: params.walletAddress,
-    p_amount: pts,
-  })
-  if (upError) {
-    console.error('[Rewards] increment_user_points failed:', upError.code, upError.message)
-    // point_transactions + daily_tx_rewards already succeeded above, so the
-    // points aren't fully lost - but the balance shown to the user won't
-    // reflect them until this is retried. Report it honestly rather than
-    // claiming success.
-    return { pointsAwarded: 0, error: `Points recorded but balance update failed: ${upError.message}` }
-  }
-
-  // The action's success screen and an open Rewards page show it at once.
-  void import('./pointsEarned').then(m => m.announcePointsEarned(params.actionType, pts)).catch(() => {})
-  return { pointsAwarded: pts, error: null }
-}
+// Task points were removed (18 Nov 2026): an action's one reward is its
+// scratch card (points, USDC or better luck), granted on the server.
 
 // ─── Fetch user points ────────────────────────────────────────────────────────
 export async function fetchUserPoints(userId: string): Promise<{

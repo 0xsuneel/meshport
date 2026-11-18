@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { getReadySigner } from '@/lib/paymentReadiness'
-import { POINTS_EARNED_EVENT } from '@/lib/pointsEarned'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
@@ -139,7 +138,7 @@ function HowItWorksMenu({ rect, onClose }: { rect: DOMRect; onClose: () => void 
     <div style={{ position: 'fixed', top: rect.top, left: rect.left, width: rect.width, height: rect.height, zIndex: 60 }}>
       <TokenMenu onClose={onClose} width={300} ariaLabel="How rewards work">
         <div style={{ padding: '8px 10px 4px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-          Once a day each (resets 00:00 UTC)
+          Each one wins a scratch card
         </div>
         {TASKS.map(t => (
           <div key={t.type} className="flex items-center gap-2" style={{ height: 38, padding: '0 12px 0 4px', borderRadius: 999 }}>
@@ -148,15 +147,15 @@ function HowItWorksMenu({ rect, onClose }: { rect: DOMRect; onClose: () => void 
               <ActionIcon name={t.action} size={17} color="var(--brand-text)" />
             </span>
             <span className="text-[15px] font-bold" style={{ flex: 1, minWidth: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.label}</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)' }}>Random pts</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)' }}>Scratch card</span>
           </div>
         ))}
         <div style={{ margin: '4px 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, var(--brand) 10%, transparent)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           <b style={{ color: 'var(--text-primary)' }}>1,000 pts = ${formatAmount(pointsToUSDC(1000))} USDC</b>, sent to your Arc wallet.
-          {' '}From {MIN_CLAIM_POINTS} pts per claim, up to today's limit (shown on the convert page). Each action wins random points once a day.
+          {' '}From {MIN_CLAIM_POINTS} pts per claim, up to today's limit (shown on the convert page).
         </div>
         <div style={{ margin: '0 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, #2775CA 10%, transparent)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-          <b style={{ color: 'var(--text-primary)' }}>Scratch cards:</b> every payment wins one (up to 10 a day) - random points, or real USDC cashback on payments of $1 or more. Claim the USDC to your wallet anytime.
+          <b style={{ color: 'var(--text-primary)' }}>Scratch cards:</b> up to 10 a day. Each card is one reward: random points, or real USDC cashback on payments of $1 or more - never both. Claim the USDC to your wallet anytime.
         </div>
       </TokenMenu>
     </div>,
@@ -363,14 +362,11 @@ export function RewardsPage() {
   }, [userId, walletAddress])
 
   useEffect(() => { load() }, [load])
-  // Live: a task done while this page is open (desktop: Pay / Swap beside
-  // it) ticks off at once; back in the app, re-read for tasks done meanwhile.
+  // Back in the app: re-read for cards won meanwhile.
   useEffect(() => {
-    const onEarned = () => { void load() }
     const onVisible = () => { if (document.visibilityState === 'visible') void load() }
-    window.addEventListener(POINTS_EARNED_EVENT, onEarned)
     document.addEventListener('visibilitychange', onVisible)
-    return () => { window.removeEventListener(POINTS_EARNED_EVENT, onEarned); document.removeEventListener('visibilitychange', onVisible) }
+    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [load])
 
   const dailyRemaining = Math.max(0, dailyLimit - dailyClaimedPoints)

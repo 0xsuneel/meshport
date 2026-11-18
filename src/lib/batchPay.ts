@@ -15,7 +15,6 @@ import { resolveUsernameDb, getUserByWalletAddress } from '@/lib/supabase'
 import { shortenAddress, trimTrailingZeros } from '@/lib/utils'
 import { saveResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
-import { notifyRewardBulk } from '@/lib/notifications'
 
 // ── Multicall3 (canonical deterministic deployment, same address on every EVM chain) ──
 // https://github.com/mds1/multicall - deployed via CREATE2 at this address on 100+ chains.
@@ -276,21 +275,11 @@ export async function sendBatch(resolved: BatchRecipient[], opts: SendBatchOptio
   return { state: 'paid', txHash }
 }
 
-/** After a paid batch: points, the bulk_payments row, and Activity for everyone. Best-effort. */
+/** After a paid batch: the bulk_payments row, and Activity for everyone. Best-effort. */
 async function recordPaid(resolved: BatchRecipient[], txHash: string, opts: SendBatchOptions) {
   const { walletAddress: wa, user: u } = useAuthStore.getState()
   if (!wa) return
   const total = resolved.reduce((s, r) => s + r.amount, 0)
-
-  // Points once for the whole batch.
-  ;(async () => {
-    try {
-      const { awardTransactionPoints } = await import('@/lib/rewards')
-      const pointUserId = u?.id && !u.id.startsWith('usr_') ? u.id : `wallet_${wa.toLowerCase().slice(2, 18)}`
-      const r = await awardTransactionPoints({ userId: pointUserId, walletAddress: wa, txHash, actionType: 'bulkpay' })
-      if (r.pointsAwarded > 0) notifyRewardBulk(r.pointsAwarded)
-    } catch { /* points are a nice-to-have */ }
-  })()
 
   // bulk_payments: recipient count, purpose, the one tx hash.
   ;(async () => {

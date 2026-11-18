@@ -1289,25 +1289,7 @@ export function SwapPage() {
         ).catch(() => {})
       }
 
-      // PERF FIX: fire-and-forget - rewards points are a nice-to-have on top
-      // of an already-confirmed swap; awaiting this server round trip before
-      // showing success only added latency with no correctness benefit.
-      // Internal try/catch still swallows all errors, so this can never
-      // produce an unhandled rejection.
-      if (walletAddress && hash) {
-        const uid = useAuthStore.getState().user?.id
-        if (uid) {
-          (async () => {
-            try {
-              const { awardTransactionPoints } = await import('@/lib/rewards')
-              const { notifyRewardSwap } = await import('@/lib/notifications')
-              const r = await awardTransactionPoints({ userId: uid, walletAddress, txHash: hash, actionType: 'swap' })
-              if (r.pointsAwarded > 0) notifyRewardSwap(r.pointsAwarded)
-            } catch {}
-          })()
-        }
-      }
-      // PERF FIX: fire-and-forget - same reasoning as above. The success
+      // PERF FIX: fire-and-forget. The success
       // screen already knows the swap's real output amount from the swap
       // result itself; re-fetching the on-chain balance display is a
       // background refresh, not a precondition for "done".
@@ -1962,7 +1944,6 @@ export function SwapPage() {
           return (
           <motion.div key="done" initial={false} style={isDesktop ? { margin: '-16px -16px 0' } : { margin: '-16px -16px -32px', flex: 1, display: 'flex', flexDirection: 'column' }}>
             <SuccessReceipt promo="swap" page={{ title: 'Swap successful', gift: <ScratchGift />, noShare: true, hero: { amount: `+${fmtOut}`, line: `Swapped from ${fmtIn} on Arc` } }}
-              reward="swap"
               style={isDesktop ? undefined : { height: 'auto', flex: 1 }}
               title="Swap Successful!"
               subtitle={<>{tokenIn.id} → {tokenOut.id} on Arc</>}

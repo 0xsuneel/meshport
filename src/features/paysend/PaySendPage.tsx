@@ -27,7 +27,6 @@ import { formatAmount, shortenAddress, midShortenAddress, timeAgo, copyToClipboa
 import { sendUSDC, sendEURC, estimateTransferFee, isValidAddress, trackPendingSend } from '@/lib/arcService'
 import { classifyFailure, recordFailure, FAILURE_MESSAGES } from '@/lib/failure'
 import { arcRpcJson } from '@/lib/arc'
-import { notifyRewardSend } from '@/lib/notifications'
 import { getUserByWalletAddress, getUserByUsername, type DbUser } from '@/lib/supabase'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isCoinEnabled } from '@/lib/featureFilters'
@@ -1063,24 +1062,6 @@ export function PaySendPage() {
         }
       }
 
-      // PERF FIX: fire-and-forget - rewards points are a nice-to-have on top
-      // of an already-confirmed payment; awaiting this server round trip
-      // before showing success only added latency with no correctness
-      // benefit (same pattern already used for the balance refresh and chat
-      // message below). Internal try/catch still swallows all errors, so
-      // this can never produce an unhandled rejection.
-      (async () => {
-        try {
-          const { awardTransactionPoints } = await import('@/lib/rewards')
-          const { user: u, walletAddress: wa } = useAuthStore.getState()
-          const pid = u?.id && !u.id.startsWith('usr_') ? u.id : wa ? `wallet_${wa.toLowerCase().slice(2, 18)}` : null
-          if (pid && wa && result.txHash) {
-            const r = await awardTransactionPoints({ userId: pid, walletAddress: wa, txHash: result.txHash, actionType: 'pay_send' })
-            if (r.pointsAwarded > 0) notifyRewardSend(r.pointsAwarded, token)
-          }
-        } catch {}
-      })()
-
       try {
         // Fire-and-forget - deriving the address then fetching the balance
         // is only for refreshing the displayed balance after send; no reason
@@ -1710,7 +1691,6 @@ export function PaySendPage() {
                     ...(txHash ? [{ label: 'Transaction', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, onCopy: copyHash, copied: hashCopied }] : []),
                   ],
                 }}
-                  reward="pay_send"
                   title={payPending ? 'Payment Submitted' : 'Paid Successfully'}
                   subtitle={payPending
                     ? <>Still confirming on Arc. Activity updates when it lands.</>
