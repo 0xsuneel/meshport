@@ -56,6 +56,7 @@ import { MoveProgress } from '@/components/multichain/MoveProgress'
 import { TrackedMove, type TrackedMoveInfo } from '@/components/multichain/TrackedMove'
 import { refreshScope, notifyExternalBalanceChanged } from '@/blockchain/BlockchainManager'
 import { whenIdle } from '@/lib/idle'
+import { ScratchGift } from '@/components/rewards/ScratchGift'
 
 // Derive Arc chain key from env so a mainnet build targets Arc mainnet.
 // All 'Arc_Testnet' literals in this file are replaced with this constant -
@@ -3119,6 +3120,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       const mintHash  = getHash(mintStep) || finalTxHashRef.current || ''
       const burnHash  = getHash(burnStep) || ''
       const finalHash = mintHash || burnHash || getHash(approveStep) || ''
+      // Rewards (18 Nov 2026): the Arc-side transaction (CCTP burn, or the
+      // Gateway deposit) is checked on-chain by the server - then it earns a
+      // scratch card and moves the multichain offer.
+      const arcSideHash = burnHash || getHash(result.steps.find((s: any) => s.name === 'deposit')) || ''
+      if (arcSideHash) void import('@/lib/scratchCards').then(m => m.reportMultichainTransfer(arcSideHash)).catch(() => {})
 
       if (finalHash) setTxHash(finalHash)
 
@@ -3865,7 +3871,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
               {successPhase === 'collapsed' && (
               <div style={{ margin: '0 -12px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                <SuccessReceipt promo="multichain" page={{}}
+                <SuccessReceipt promo="multichain" page={{ gift: <ScratchGift /> }}
                   reward="multichain_transfer"
                   style={{ height: 'auto', flex: 1, minHeight: 0 }}
                   actions={[

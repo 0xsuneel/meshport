@@ -10,7 +10,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeftRight, Gift, Globe, Layers, MessageCircle } from 'lucide-react'
 import {
-  fetchRewardSummary, fetchScratchCards, scratchCard, emitCardCount, fmtUsdcMicro, usdcClaimPoints,
+  fetchRewardSummary, fetchScratchCards, scratchCard, emitCardCount, fmtUsdcMicro, usdcClaimPoints, fetchRewardToday, type RewardToday,
   MIN_USDC_CLAIM_MICRO, type ScratchPrize,
 } from '@/lib/scratchCards'
 import { useUIStore } from '@/store'
@@ -83,6 +83,7 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
   const [usdcMicro, setUsdcMicro] = useState(0)
   useEffect(() => { onUsdc?.(usdcMicro) }, [usdcMicro, onUsdc])
   const [usdcLifetime, setUsdcLifetime] = useState(0)
+  const [today, setToday] = useState<RewardToday | null>(null)
   useEffect(() => { onUsdcLifetime?.(usdcLifetime) }, [usdcLifetime, onUsdcLifetime])
   const [cards, setCards] = useState<{ id: string; createdAt: string }[] | null>(null)
   const [open, setOpen] = useState<{ id: string; look: number } | null>(null)
@@ -98,6 +99,7 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
       const [s, list] = await Promise.all([fetchRewardSummary(), fetchScratchCards()])
       setUsdcMicro(s.usdcMicro)
       setUsdcLifetime(s.usdcLifetimeMicro)
+      void fetchRewardToday().then(setToday)
       setCards(list)
       emitCardCount(list.length)
     } catch { /* weak network: keep what's shown */ }
@@ -114,7 +116,7 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
       emitCardCount(next.length)
       return next
     })
-    if (prize.already) { void load(); return }
+    if (prize.already || prize.kind === 'none') { void load(); return }
     const usdc = prize.kind === 'usdc'
     const target = usdc ? usdcTile.current : ptsTile.current
     const apply = () => {
@@ -214,6 +216,19 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
           <b style={{ display: 'block', fontSize: 19, fontWeight: 800, marginTop: 3, color: 'var(--brand-text)' }}>{(lifetimePoints ?? 0).toLocaleString()}</b>
         </div>
       </div>
+      {today && (
+        <div style={{ margin: `10px ${m}px 0`, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {[
+            ['Today', `${Math.min(today.points, today.pointsLimit)} / ${today.pointsLimit} pts`],
+            ['USDC today', `${fmtUsdcMicro(Math.min(today.usdcMicro, today.usdcLimitMicro))} / ${fmtUsdcMicro(today.usdcLimitMicro)}`],
+            ['Cards today', `${Math.min(today.cards, today.cardsLimit)} / ${today.cardsLimit}`],
+          ].map(([k, v]) => (
+            <span key={k} style={{ fontSize: 12, padding: '6px 10px', borderRadius: 999, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-secondary)' }}>
+              {k} <b style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{v}</b>
+            </span>
+          ))}
+        </div>
+      )}
       <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: `10px ${m + 4}px 0`, textAlign: 'center' }}>
         {usdcMicro > 0 && claimPts === 0
           ? `Claim your USDC to your wallet from ${fmtUsdcMicro(MIN_USDC_CLAIM_MICRO)}`
@@ -405,7 +420,15 @@ function ScratchModal({ id, look, onDone, onClose }: {
       <div className="sr-modal" style={{ position: 'relative', textAlign: 'center', color: '#fff' }}>
         <p style={{ fontSize: 15, fontWeight: 800, marginBottom: 14 }}>Scratch to reveal your reward</p>
         <div style={{ width: 250, height: 250, borderRadius: 24, position: 'relative', overflow: 'hidden', background: 'var(--surface)', boxShadow: '0 20px 50px rgba(0,0,0,.4)', display: 'grid', placeItems: 'center', color: 'var(--text-primary)' }}>
-          {prize && (
+          {prize && prize.kind === 'none' && (
+            <div style={{ padding: '0 18px' }}>
+              <div style={{ width: 64, height: 64, borderRadius: '50%', margin: '0 auto 10px', display: 'grid', placeItems: 'center', fontSize: 32,
+                background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }}>🍀</div>
+              <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.4px', color: 'var(--text-primary)' }}>Better luck next time</div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>No prize on this card</div>
+            </div>
+          )}
+          {prize && prize.kind !== 'none' && (
             <div>
               <div ref={iconRef} style={{ width: 64, height: 64, borderRadius: '50%', margin: '0 auto 10px', display: 'grid', placeItems: 'center', fontWeight: 900, fontSize: 26,
                 background: usdc ? USDC_BLUE : '#F5B82E', color: usdc ? '#fff' : '#7A5200' }}>{usdc ? '$' : '★'}</div>
@@ -418,7 +441,7 @@ function ScratchModal({ id, look, onDone, onClose }: {
           <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none', cursor: 'grab' }} />
         </div>
         <div style={{ marginTop: 14, fontSize: 13.5, opacity: after ? 0.95 : 0, transition: 'opacity .3s', minHeight: 20 }}>
-          {prize && (usdc ? 'Added to your USDC - claim it to your wallet anytime' : 'Added to your points')}
+          {prize && (prize.kind === 'none' ? 'Keep paying with MeshPort to win more cards' : usdc ? 'Added to your USDC - claim it to your wallet anytime' : 'Added to your points')}
         </div>
       </div>
     </div>,

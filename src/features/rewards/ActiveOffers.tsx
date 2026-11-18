@@ -24,7 +24,15 @@ function Ring({ value, steps, label, size = RING }: { value: number; steps: numb
   )
 }
 
+const STEP_WORD: Record<RewardOffer['kind'], string> = { pay: 'Payment', merchant: 'Shop payment', multichain: 'Multichain transfer' }
+const GO: Record<RewardOffer['kind'], { label: string; to: string }> = {
+  pay: { label: 'Pay now', to: '/pay' },
+  merchant: { label: 'Pay at a shop', to: '/scanner' },
+  multichain: { label: 'Send multichain', to: '/multichain' },
+}
+
 function stateLine(o: RewardOffer): { text: string; color: string } {
+  if (o.state === 'running' && o.steppedToday) return { text: `TODAY DONE · NEXT STEP TOMORROW`, color: 'var(--success-text)' }
   if (o.state === 'running') return { text: `IN PROGRESS · ${timeLeft(o.expiresAt).toUpperCase()}`, color: 'var(--success-text)' }
   if (o.state === 'done') return { text: 'COMPLETED · CARD WON', color: 'var(--success-text)' }
   if (o.state === 'expired') return { text: 'ENDED · ACTIVATE AGAIN', color: 'var(--text-secondary)' }
@@ -108,7 +116,7 @@ export function ActiveOffers({ margin, refreshKey }: { margin: number; refreshKe
                         {done && <Check size={14} color="#fff" strokeWidth={3} />}
                       </span>
                       <span style={{ fontSize: 14, color: done ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: done ? 600 : 500 }}>
-                        Payment {i + 1} of ${open.minUsd} or more
+                        {STEP_WORD[open.kind]} {i + 1} of ${open.minUsd} or more
                       </span>
                     </div>
                   )
@@ -122,7 +130,12 @@ export function ActiveOffers({ margin, refreshKey }: { margin: number; refreshKe
               <div style={{ marginTop: 14, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
                 <b style={{ color: 'var(--text-primary)' }}>How it works</b>
                 <ul style={{ margin: '6px 0 0', paddingLeft: 18, listStyle: 'disc' }}>
-                  <li>Activate it, then pay with MeshPort Pay - each payment of ${open.minUsd} or more counts once it's confirmed.</li>
+                  <li>{open.kind === 'merchant'
+                    ? `Activate it, then pay at shops that take MeshPort - each shop payment of $${open.minUsd} or more counts once it's confirmed.`
+                    : open.kind === 'multichain'
+                    ? `Activate it, then send USDC from Arc to another chain - each transfer of $${open.minUsd} or more counts once it's checked on Arc.`
+                    : `Activate it, then pay with MeshPort Pay - each payment of $${open.minUsd} or more counts once it's confirmed.`}</li>
+                  <li>One counts per day - the offer can't be finished in a single day.</li>
                   <li>Finish all {open.steps} within {open.windowDays} days of activating.{running && open.expiresAt ? ` ${timeLeft(open.expiresAt)}.` : ''}</li>
                   <li>Payments to your own wallet don't count. Personal accounts only.</li>
                   <li>The USDC card lands in Scratch &amp; claim - scratch it, then claim the USDC to your wallet.</li>
@@ -131,9 +144,9 @@ export function ActiveOffers({ margin, refreshKey }: { margin: number; refreshKe
               </div>
 
               {running ? (
-                <button type="button" onClick={() => { setOpenId(null); navigate('/pay') }}
+                <button type="button" onClick={() => { setOpenId(null); navigate(GO[open.kind].to) }}
                   style={{ width: '100%', border: 'none', borderRadius: 14, padding: 15, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', marginTop: 16, cursor: 'pointer' }}>
-                  Pay now
+                  {GO[open.kind].label}
                 </button>
               ) : (
                 <button type="button" disabled={busy} onClick={() => { void activate(open) }}

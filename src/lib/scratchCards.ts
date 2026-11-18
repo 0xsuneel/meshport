@@ -16,7 +16,8 @@ export interface RewardSummary {
 }
 
 export interface ScratchPrize {
-  kind: 'points' | 'usdc'
+  /** 'none': better luck next time. */
+  kind: 'points' | 'usdc' | 'none'
   points: number
   usdcMicro: number
   /** Scratched before (nothing credited this time). */
@@ -50,7 +51,7 @@ export async function scratchCard(id: string): Promise<ScratchPrize> {
   if (error) throw error
   const d = (data ?? {}) as Record<string, unknown>
   return {
-    kind: d.kind === 'usdc' ? 'usdc' : 'points',
+    kind: d.kind === 'usdc' ? 'usdc' : d.kind === 'none' ? 'none' : 'points',
     points: Number(d.points) || 0,
     usdcMicro: Number(d.usdc_micro) || 0,
     already: !!d.already,
@@ -78,6 +79,26 @@ export function emitCardCount(n: number) { listeners.forEach(fn => { try { fn(n)
 export interface ScratchWin { id: string; kind: 'points' | 'usdc'; points: number; usdcMicro: number; payAmount: number; scratchedAt: string }
 
 /** Scratched cards with their prizes, newest first (Activity → Rewards). */
+/** Today's limits (UTC day): 50 points, $1.00 USDC, 10 cards. */
+export interface RewardToday { points: number; pointsLimit: number; usdcMicro: number; usdcLimitMicro: number; cards: number; cardsLimit: number }
+export async function fetchRewardToday(): Promise<RewardToday | null> {
+  const { data, error } = await supabase.rpc('my_reward_today')
+  if (error || !data) return null
+  const d = data as Record<string, unknown>
+  return {
+    points: Number(d.points) || 0, pointsLimit: Number(d.points_limit) || 50,
+    usdcMicro: Number(d.usdc_micro) || 0, usdcLimitMicro: Number(d.usdc_limit_micro) || 1_000_000,
+    cards: Number(d.cards) || 0, cardsLimit: Number(d.cards_limit) || 10,
+  }
+}
+
+/** A multichain transfer that left Arc: the server checks it on-chain, then
+ *  it earns a scratch card and moves the multichain offer. Best effort. */
+export function reportMultichainTransfer(arcTxHash: string): void {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(arcTxHash)) return
+  void supabase.functions.invoke('multichain-reward', { body: { txHash: arcTxHash } }).catch(() => {})
+}
+
 export async function fetchScratchHistory(limit = 100): Promise<ScratchWin[]> {
   const { data, error } = await supabase.rpc('my_scratch_history', { p_limit: limit })
   if (error) throw error
@@ -92,6 +113,10 @@ export async function fetchScratchHistory(limit = 100): Promise<ScratchWin[]> {
 // progress on the server; finishing one wins a bonus USDC scratch card.
 export interface RewardOffer {
   id: string; title: string; line: string; steps: number; minUsd: number; windowDays: number
+  /** What counts: Pay payments, shop (merchant) payments, multichain transfers. */
+  kind: 'pay' | 'merchant' | 'multichain'
+  /** A step was already counted today (one a day). */
+  steppedToday: boolean
   activatedAt: string | null; expiresAt: string | null; progress: number; completedAt: string | null
   /** running · done (won its card) · expired (ran out) · idle (not activated) */
   state: 'running' | 'done' | 'expired' | 'idle'
@@ -110,6 +135,8 @@ export async function fetchOffers(): Promise<RewardOffer[]> {
       : completedAt || (expiresAt && Date.parse(expiresAt) <= Date.now()) ? 'expired'
       : 'running'
     return {
+      kind: r.kind === 'merchant' ? 'merchant' : r.kind === 'multichain' ? 'multichain' : 'pay',
+      steppedToday: !!r.last_step_day && String(r.last_step_day) === new Date().toISOString().slice(0, 10),
       id: String(r.id), title: String(r.title), line: String(r.line), steps, minUsd: Number(r.min_usd) || 0, windowDays: Number(r.window_days) || 0,
       activatedAt: r.activated_at ? String(r.activated_at) : null, expiresAt, progress, completedAt, state,
     }
