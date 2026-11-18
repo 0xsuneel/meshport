@@ -23,7 +23,7 @@ import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { useWalletStore, useAuthStore, useUIStore } from '@/store'
-import { formatAmount, shortenAddress, midShortenAddress, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
+import { formatAmount, formatMoney, shortenAddress, midShortenAddress, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { sendUSDC, sendEURC, estimateTransferFee, isValidAddress, trackPendingSend } from '@/lib/arcService'
 import { classifyFailure, recordFailure, FAILURE_MESSAGES } from '@/lib/failure'
 import { arcRpcJson } from '@/lib/arc'
@@ -37,7 +37,7 @@ import { hasAnyActivityForTx } from '@/lib/ActivityService'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
-import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
+import { SuccessReceipt, ReceiptAmount } from '@/components/ui/SuccessReceipt'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
 import { ActivityRow } from '@/features/activity/ActivityPage'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
@@ -1686,9 +1686,10 @@ export function PaySendPage() {
                   title: payPending ? 'Payment submitted' : 'Payment successful',
                   gift: <ScratchGift />,
                   hero: {
-                    amount: <>{tokenSymbolChar(token)}{formatAmount(numAmount, tokenDisplayDecimals(token))}<span style={{ fontSize: 22, fontWeight: 700, opacity: 0.8, marginLeft: 8, letterSpacing: 0 }}>{token}</span></>,
+                    amount: <ReceiptAmount value={`${tokenSymbolChar(token)}${token === 'cirBTC' ? formatAmount(numAmount, tokenDisplayDecimals(token)) : formatMoney(numAmount, tokenDisplayDecimals(token))}`} unit={token} />,
                     line: payPending ? 'Still confirming on Arc. Activity updates when it lands.' : null,
                   },
+                  chip: payPending ? 'On its way' : 'Paid',
                   payee: recipient.isUsername
                     ? { name: recipient.displayName || recipient.display.replace(/\.arc$/i, ''), initial: initialsOf(recipient.displayName || recipient.display),
                         handle: recipient.display, amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))}`, copy: { value: recipient.display, what: 'Username' } }

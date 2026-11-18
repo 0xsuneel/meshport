@@ -29,7 +29,7 @@ import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
-import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
+import { SuccessReceipt, ReceiptAmount } from '@/components/ui/SuccessReceipt'
 import { ChainScanner } from '@/components/ui/ChainScanner'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -42,7 +42,7 @@ import type { WalletAccount } from '@/wallet'
 import { quoteAccount } from '@/wallet/account'
 import { timeQuote } from '@/lib/quoteTiming'
 import { supabase } from '@/lib/supabase'
-import { formatAmount, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
+import { formatAmount, formatMoney, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
   submitClaim,
@@ -2436,7 +2436,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 // EURC / cirBTC: Circle's forwarder delivers - no Arc transaction of ours to link.
                 const mintPending = !token && chainProgress.some(p => !p.mintTxHash)
                 return (
-                <SuccessReceipt promo="multichain" page={{}}
+                <SuccessReceipt promo="multichain" page={{ chip: 'Arrived',
+                  hero: { amount: <ReceiptAmount value={coin === 'cirBTC' ? fmtCoin(displayTotal) : formatMoney(displayTotal)} unit={coin} />, line: <>From {fromLabel}, now in your Arc wallet</> } }}
                   actions={[
                     { label: 'Done', onClick: () => navigate('/multichain'), primary: true },
                   ]}
