@@ -189,7 +189,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                     )}
                     {p.handle && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: muted, marginTop: 5 }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.handle}</span><CopyBtn value={p.handle} what="Name" />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.handle}</span><CopyBtn value={p.handle} what="Username" />
                       </div>
                     )}
                     {p.address && (
