@@ -93,6 +93,8 @@ interface SuccessReceiptProps {
 
 /** Size of the header's white check circle - the traveling checkmark's target. */
 export const RECEIPT_CHECK = 76
+/** The check on the success page's band - smaller, so the amount leads (18 Nov 2026). */
+const BAND_CHECK = 58
 
 const statusColorOf = (s: 'success' | 'pending' | 'failed') => s === 'failed' ? 'var(--danger-text)' : s === 'pending' ? 'var(--warning-text)' : 'var(--success-text)'
 const shortHash = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`
@@ -467,12 +469,12 @@ export function SuccessReceipt({
               {burst && <Confetti />}
               {/* The check, a soft ring, and two slow pulses going out from it
                   (still with reduced motion: one fixed outer ring instead). */}
-              <div style={{ position: 'relative', width: RECEIPT_CHECK, height: RECEIPT_CHECK, margin: '0 auto' }}>
+              <div style={{ position: 'relative', width: BAND_CHECK, height: BAND_CHECK, margin: '0 auto' }}>
               {revealed && <><span aria-hidden className="sr-pulse" /><span aria-hidden className="sr-pulse" style={{ animationDelay: '1.4s' }} /></>}
               <div ref={setCheck} style={{
-                position: 'relative', width: RECEIPT_CHECK, height: RECEIPT_CHECK, borderRadius: '50%', background: '#fff',
+                position: 'relative', width: BAND_CHECK, height: BAND_CHECK, borderRadius: '50%', background: '#fff',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: revealed ? 1 : 0,
-                boxShadow: '0 0 0 10px rgba(255,255,255,.14)',
+                boxShadow: '0 0 0 8px rgba(255,255,255,.14)',
               }}>
                 {checkContent ?? (
                   <svg viewBox="0 0 24 24" width="50%" height="50%" fill="none" stroke={status === 'success' ? 'var(--brand)' : HEADER_ICON_COLOR[status]} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
@@ -484,7 +486,7 @@ export function SuccessReceipt({
               </div>
               </div>
               <Reveal i={0} revealed={shown}>
-                <div style={{ fontSize: 40, fontWeight: 900, letterSpacing: '-1.4px', marginTop: 22, lineHeight: 1.1, overflowWrap: 'anywhere', fontVariantNumeric: 'tabular-nums' }}>{heroAmount}</div>
+                <div style={{ fontSize: 56, fontWeight: 900, letterSpacing: '-2.4px', marginTop: 20, lineHeight: 1.05, overflowWrap: 'anywhere', fontVariantNumeric: 'tabular-nums' }}>{heroAmount}</div>
               </Reveal>
               {heroLine && (
                 <Reveal i={1} revealed={shown}>
