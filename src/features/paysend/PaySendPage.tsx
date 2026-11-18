@@ -1686,7 +1686,7 @@ export function PaySendPage() {
                   title: payPending ? 'Payment submitted' : 'Payment successful',
                   gift: <ScratchGift />,
                   hero: {
-                    amount: <>{tokenSymbolChar(token)}{formatAmount(numAmount, tokenDisplayDecimals(token))}<span style={{ fontSize: 20, fontWeight: 700, opacity: 0.8, marginLeft: 6, letterSpacing: 0 }}>{token}</span></>,
+                    amount: <>{tokenSymbolChar(token)}{formatAmount(numAmount, tokenDisplayDecimals(token))}<span style={{ fontSize: 22, fontWeight: 700, opacity: 0.8, marginLeft: 8, letterSpacing: 0 }}>{token}</span></>,
                     line: payPending ? 'Still confirming on Arc. Activity updates when it lands.' : null,
                   },
                   payee: recipient.isUsername
