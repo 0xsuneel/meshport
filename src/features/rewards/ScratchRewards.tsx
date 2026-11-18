@@ -56,7 +56,7 @@ function CountUp({ value, format }: { value: number; format: (v: number) => stri
   return <>{format(shown)}</>
 }
 
-export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsdc, onClaimPoints, claiming, refreshKey }: {
+export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsdc, onClaimPoints, onOpenPoints, claiming, refreshKey }: {
   isDesktop: boolean
   totalPoints: number
   /** Points credited by a scratched card (the page re-reads its balance). */
@@ -65,6 +65,8 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
   onClaimUsdc: (points: number) => void
   /** Claim points as USDC (the claim sheet); undefined while there aren't enough. */
   onClaimPoints?: () => void
+  /** Tapping the Points tile: the points → USDC page. */
+  onOpenPoints?: () => void
   claiming: boolean
   /** Bumped by the page after a claim: re-read the balances. */
   refreshKey: number
@@ -183,7 +185,7 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
               style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap', fontSize: 11.5, fontWeight: 800, padding: '3px 10px', borderRadius: 7, background: 'var(--brand)', color: '#fff', border: 'none', cursor: 'pointer', opacity: claiming ? 0.6 : 1 }}>
               Claim
             </button>
-          ) : undefined)}
+          ) : undefined, onOpenPoints)}
         {tile(null, cards ? cards.length : '–', 'Scratch cards', 'var(--brand-text)', undefined,
           () => bandRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))}
       </div>

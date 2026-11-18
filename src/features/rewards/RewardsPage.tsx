@@ -28,6 +28,7 @@ import { TokenMenu } from '@/components/ui/TokenMenu'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { ScratchRewards } from './ScratchRewards'
+import { PointsConvertPage } from './PointsConvert'
 import { fetchScratchHistory, fmtUsdcMicro, onCardCount, type ScratchWin } from '@/lib/scratchCards'
 import { ArrowLeft } from 'lucide-react'
 
@@ -393,7 +394,10 @@ export function RewardsPage() {
   // contract points, lib/scratchCards usdcClaimPoints).
   const [scratchRefresh, setScratchRefresh] = useState(0)
   const claimUsdc = (usdcPoints: number) => { void claimOnce(() => runClaim(pendingClaim?.points, usdcPoints)) }
-  const runClaim = async (finishing?: number, usdcPoints?: number) => {
+  // Points → USDC page (Points tile): slide converts all it can at once.
+  const [showConvert, setShowConvert] = useState(false)
+  const convertAll = () => { void claimOnce(() => runClaim(pendingClaim?.points, undefined, maxClaimable)) }
+  const runClaim = async (finishing?: number, usdcPoints?: number, exactPoints?: number) => {
     const usdcRewards = !finishing && !!usdcPoints
     setClaimError(null)
     if (!walletAddress)        { setClaimError('Wallet not connected'); return }
@@ -404,7 +408,7 @@ export function RewardsPage() {
     const activeSigner = await getReadySigner()
     if (!activeSigner) { useAuthStore.getState().lock(); window.location.href = '/auth/lock'; return }
 
-    const pointsToUse = finishing ?? (usdcRewards ? Math.min(usdcPoints!, dailyRemaining, MAX_CLAIM_POINTS) : Math.min(typedPoints, totalPoints, dailyRemaining, MAX_CLAIM_POINTS))
+    const pointsToUse = finishing ?? (usdcRewards ? Math.min(usdcPoints!, dailyRemaining, MAX_CLAIM_POINTS) : Math.min(exactPoints ?? typedPoints, totalPoints, dailyRemaining, MAX_CLAIM_POINTS))
     if (usdcRewards && pointsToUse < MIN_CLAIM_POINTS) {
       setProgress({ points: usdcPoints!, usdc: pointsToUSDC(usdcPoints!), done: [], times: {}, phase: 'failed', usdcRewards,
         error: "You've reached today's claim limit - claim your USDC again after 00:00 UTC." })
@@ -593,11 +597,35 @@ export function RewardsPage() {
 
   const scratch = (
     <ScratchRewards isDesktop={isDesktop} totalPoints={totalPoints} claiming={claiming} refreshKey={scratchRefresh}
-      onPointsWon={() => { void load() }} onClaimUsdc={claimUsdc} onClaimPoints={canOpenClaim ? openClaim : undefined} />
+      onPointsWon={() => { void load() }} onClaimUsdc={claimUsdc} onClaimPoints={canOpenClaim ? () => setShowConvert(true) : undefined} onOpenPoints={() => setShowConvert(true)} />
+  )
+
+  const convertPage = (
+    <AnimatePresence>
+      {showConvert && (
+        <PointsConvertPage key="rw-convert" totalPoints={totalPoints} maxClaimable={maxClaimable} dailyRemaining={dailyRemaining}
+          canConvert={canOpenClaim} claiming={claiming} loading={loading} onConvert={convertAll} onClose={() => setShowConvert(false)}
+          onHistory={() => navigate('/activity?filter=rewards&rewards=earned')}
+          historyCount={pointHistory.filter(p => p.points > 0).length}
+          history={pointHistory.filter(p => p.points > 0).length === 0
+            ? <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '16px' }}>Points you earn will show here.</p>
+            : pointHistory.filter(p => p.points > 0).slice(0, 10).map(p => {
+              const t = taskOf(p.reason)
+              return (
+                <HistoryRow key={p.id}
+                  icon={<HistoryIcon tone="out" icon={t ? t.action : 'rewards'} />}
+                  title={t ? t.done : p.reason === 'scratch_card' ? 'Scratch card won' : 'Points earned'}
+                  meta={<><span style={{ color: 'var(--success-text)', fontWeight: 600 }}>Earned</span> · {timeAgo(p.created_at)}</>}
+                  right={<div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>+{p.points} pts</div>} />
+              )
+            })} />
+      )}
+    </AnimatePresence>
   )
 
   const overlays = (
     <>
+      {convertPage}
       <AnimatePresence>
         {claimReceipt && <RewardClaimReceipt key={claimReceipt.id} claim={claimReceipt} onClose={() => { claimFlash.closed(claimReceipt.id); setClaimReceipt(null) }} />}
       </AnimatePresence>
