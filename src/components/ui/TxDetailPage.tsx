@@ -8,7 +8,7 @@
 import { useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, Check, ChevronDown, Clock, Copy, ExternalLink, Share2, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, Clock, Copy, ExternalLink, Share2, X, Zap } from 'lucide-react'
 import { useBackLayer } from '@/lib/backLayers'
 import { PAGE_TRANSITION, SPRING_SOFT } from '@/lib/motion'
 import { copyToClipboard } from '@/lib/utils'
@@ -78,15 +78,21 @@ function CopyBtn({ value, what }: { value: string; what: string }) {
   )
 }
 
+const BAND = {
+  success: 'linear-gradient(160deg, color-mix(in srgb, var(--brand) 70%, #3FD0B8) 0%, var(--brand) 60%, color-mix(in srgb, var(--brand) 75%, black) 100%)',
+  pending: 'linear-gradient(160deg, color-mix(in srgb, var(--warning) 85%, white) 0%, color-mix(in srgb, var(--warning) 80%, #3A2A00) 100%)',
+  failed: 'linear-gradient(160deg, color-mix(in srgb, var(--danger) 85%, white) 0%, color-mix(in srgb, var(--danger) 85%, black) 100%)',
+} as const
+
 function StatusMark({ status }: { status: TxDetail['status'] }) {
   const reduce = useReducedMotion()
   const bg = status === 'success' ? 'var(--brand)' : status === 'pending' ? 'var(--warning)' : 'var(--danger)'
   return (
     <motion.span aria-label={status === 'success' ? 'Completed' : status === 'pending' ? 'Processing' : 'Failed'}
       initial={reduce ? false : { scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 380, damping: 18, delay: 0.15 }}
-      style={{ position: 'absolute', top: 20, right: 18, width: 60, height: 60, borderRadius: '50%', display: 'grid', placeItems: 'center', background: bg,
-        boxShadow: `0 0 0 9px color-mix(in srgb, ${bg} 13%, transparent)` }}>
-      {status === 'success' ? <Check size={30} color="#fff" strokeWidth={3} /> : status === 'pending' ? <Clock size={28} color="#fff" strokeWidth={2.6} /> : <X size={28} color="#fff" strokeWidth={3} />}
+      style={{ position: 'absolute', top: 20, right: 18, width: 44, height: 44, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#fff',
+        boxShadow: '0 0 0 6px rgba(255,255,255,.14)' }}>
+      {status === 'success' ? <Check size={22} color={bg} strokeWidth={3.2} /> : status === 'pending' ? <Clock size={21} color={bg} strokeWidth={2.6} /> : <X size={21} color={bg} strokeWidth={3.2} />}
     </motion.span>
   )
 }
@@ -152,15 +158,26 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '6px 14px calc(var(--safe-bottom) + 20px)' }}>
         <div style={{ maxWidth: 480, margin: '0 auto' }}>
-          <div style={{ position: 'relative', background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 24, padding: '20px 18px 6px' }}>
+          <div style={{ position: 'relative', background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 24, overflow: 'hidden' }}>
+            {/* Band in the brand / status colour (as the success page): the label, amount, check and pill. */}
+            <div style={{ position: 'relative', padding: '20px 18px 18px', color: '#fff', background: BAND[d.status] }}>
             <StatusMark status={d.status} />
             <Rv i={0}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: muted, paddingRight: 80 }}>{d.amountLabel}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.8, paddingRight: 80 }}>{d.amountLabel}</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6, paddingRight: 80, flexWrap: 'wrap' }}>
               <b style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-1.5px', overflowWrap: 'anywhere' }}>{d.amount}</b>
-              {d.unit && <span style={{ fontSize: 18, fontWeight: 700, color: muted }}>{d.unit}</span>}
+              {d.unit && <span style={{ fontSize: 18, fontWeight: 700, opacity: 0.8 }}>{d.unit}</span>}
             </div>
+            {d.pill && (
+              <div style={{ marginTop: 12 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 999, fontSize: 13.5, fontWeight: 700, background: 'rgba(0,0,0,.18)' }}>
+                  <Zap size={14} color="#FFD25E" fill="#FFD25E" />{d.pill}
+                </span>
+              </div>
+            )}
             </Rv>
+            </div>
+            <div style={{ padding: '0 18px 6px' }}>
             <Rv i={1}>
             {d.exchange && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, marginTop: 14 }}>
@@ -179,18 +196,13 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                 <span style={{ overflowWrap: 'anywhere' }}>“{d.note}”</span>
               </div>
             )}
-            {d.pill && (
-              <div style={{ marginTop: 12 }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 999, fontSize: 13.5, fontWeight: 700,
-                  color: 'var(--success-text)', background: 'color-mix(in srgb, var(--success) 13%, transparent)' }}>{d.pill}</span>
-              </div>
-            )}
             {d.reason && <div style={{ marginTop: 12 }}>{d.reason}</div>}
             </Rv>
 
             {(d.parties ?? []).map((p, k) => (
               <Rv key={p.label} i={2 + k}>
-                {line}
+                {/* Straight under the band: space, not a divider. */}
+                {k === 0 && !d.exchange && !d.note && !d.reason ? <div style={{ height: 18 }} /> : line}
                 <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: muted }}>{p.label}</div>
@@ -291,6 +303,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
             </>)}
             {d.details.length === 0 && d.steps.length === 0 && <div style={{ height: 14 }} />}
             </Rv>
+            </div>
           </div>
 
           <Rv i={4 + (d.parties?.length ?? 0)}>
