@@ -9,7 +9,7 @@ import { ArrowLeft, ChevronsRight, History, Info, Gift } from 'lucide-react'
 import { useBackLayer } from '@/lib/backLayers'
 import { PAGE_TRANSITION } from '@/lib/motion'
 import { formatAmount } from '@/lib/utils'
-import { pointsToUSDC, MIN_CLAIM_POINTS, MAX_CLAIM_POINTS, MAX_DAILY_POINTS } from '@/lib/rewards'
+import { pointsToUSDC, MIN_CLAIM_POINTS, MAX_DAILY_POINTS } from '@/lib/rewards'
 
 const GOLD = '#A87B17'
 
@@ -69,7 +69,7 @@ function SlideToConfirm({ label, disabled, busy, onConfirm }: { label: string; d
 }
 
 export function PointsConvertPage({
-  totalPoints, maxClaimable, dailyRemaining, canConvert, claiming, loading, onConvert, onClose, onHistory, historyCount, history, usdcMicro, lifetime,
+  totalPoints, maxClaimable, dailyRemaining, canConvert, claiming, loading, onConvert, onClose, onHistory, historyCount, history, usdcMicro, lifetime, dailyLimit = MAX_DAILY_POINTS,
 }: {
   totalPoints: number
   /** What one slide converts: all of it, within the per-claim and daily limits. */
@@ -82,6 +82,8 @@ export function PointsConvertPage({
   onClose: () => void
   onHistory: () => void
   historyCount: number
+  /** The live contract's daily limit in points (one claim may use all of it). */
+  dailyLimit?: number
   /** "Lifetime earned …" under the slider. */
   lifetime?: string
   /** The latest points earned (rows from the Rewards page). */
@@ -178,13 +180,13 @@ export function PointsConvertPage({
           <div ref={info} style={{ margin: '0 16px', background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 24, padding: '6px 16px' }}>
             {(U ? [
               ['Minimum', `${usd(MIN_CLAIM_POINTS)} at a time`],
-              ['Per move', `Up to ${usd(MAX_CLAIM_POINTS)}`],
-              ['Daily limit', `${usd(MAX_DAILY_POINTS)} a day, shared with points · ${usd(dailyRemaining)} left today`],
+              ['Per move', `Up to ${usd(dailyLimit)}`],
+              ['Daily limit', `${usd(dailyLimit)} a day, shared with points · ${usd(dailyRemaining)} left today`],
               ['Win USDC', 'Random USDC in scratch cards on payments of $1 or more, and in cards from completed offers'],
             ] : [
               ['Rate', `1,000 pts = $${formatAmount(pointsToUSDC(1000))} USDC`],
-              ['Per conversion', `${MIN_CLAIM_POINTS} – ${MAX_CLAIM_POINTS.toLocaleString()} pts`],
-              ['Daily limit', `${MAX_DAILY_POINTS.toLocaleString()} pts · ${dailyRemaining.toLocaleString()} left today`],
+              ['Per conversion', `${MIN_CLAIM_POINTS} – ${dailyLimit.toLocaleString()} pts`],
+              ['Daily limit', `${dailyLimit.toLocaleString()} pts (${usd(dailyLimit)}) · ${dailyRemaining.toLocaleString()} left today`],
               ['Earn points', 'Random points for each payment, swap, chat pay, multichain and bulk pay - once a day each, plus scratch cards'],
             ]).map(([k, v], i) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '12px 0', borderTop: i ? '1px solid var(--border)' : 'none', fontSize: 14 }}>

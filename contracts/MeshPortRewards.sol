@@ -55,7 +55,8 @@ contract MeshPortRewards {
 
     // Daily limits: user => day => points claimed
     mapping(address => mapping(uint256 => uint256)) public dailyClaimed;
-    uint256 public constant MAX_DAILY_POINTS = 1000;
+    // 10,000 points = 5 USDC a day per wallet at the default rate (18 Nov 2026; was 1,000 = 0.5 USDC).
+    uint256 public constant MAX_DAILY_POINTS = 10_000;
 
     // ── Events ───────────────────────────────────────────────────────────────
     event RewardClaimed(

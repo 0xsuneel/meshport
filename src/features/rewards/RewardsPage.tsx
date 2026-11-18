@@ -9,7 +9,7 @@ import { Info, Check, X } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import {
   fetchUserPoints, claimPointsAsUSDC, fetchPendingClaim, fetchClaimsHistory, fetchPointHistory,
-  fetchDailyClaimedPoints, getDailyClaimedOnChain, rewardsUserId, REWARD_TASKS, rewardTaskOf, pointsToUSDC, MIN_CLAIM_POINTS, MAX_CLAIM_POINTS, MAX_DAILY_POINTS,
+  fetchDailyClaimedPoints, getDailyClaimedOnChain, getDailyLimit, rewardsUserId, REWARD_TASKS, rewardTaskOf, pointsToUSDC, MIN_CLAIM_POINTS, MAX_DAILY_POINTS,
 } from '@/lib/rewards'
 import { timeAgo, formatAmount } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -153,7 +153,7 @@ function HowItWorksMenu({ rect, onClose }: { rect: DOMRect; onClose: () => void 
         ))}
         <div style={{ margin: '4px 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, var(--brand) 10%, transparent)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           <b style={{ color: 'var(--text-primary)' }}>1,000 pts = ${formatAmount(pointsToUSDC(1000))} USDC</b>, sent to your Arc wallet.
-          {' '}{MIN_CLAIM_POINTS}–{MAX_CLAIM_POINTS.toLocaleString()} pts per claim, up to {MAX_DAILY_POINTS.toLocaleString()} a day. Each action wins random points once a day.
+          {' '}From {MIN_CLAIM_POINTS} pts per claim, up to today's limit (shown on the convert page). Each action wins random points once a day.
         </div>
         <div style={{ margin: '0 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, #2775CA 10%, transparent)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           <b style={{ color: 'var(--text-primary)' }}>Scratch cards:</b> every payment wins one (up to 10 a day) - random points, or real USDC cashback on payments of $1 or more. Claim the USDC to your wallet anytime.
@@ -288,6 +288,9 @@ export function RewardsPage() {
   // loading placeholders until every read answers.
   const [cached] = useState(() => (userId ? readRewardsCache(userId) : null))
   const [totalPoints, setTotalPoints]       = useState(cached?.totalPoints ?? 0)
+  // The live contract's daily limit (lib/rewards getDailyLimit); one claim may use all of it.
+  const [dailyLimit, setDailyLimit] = useState(MAX_DAILY_POINTS)
+  useEffect(() => { void getDailyLimit().then(setDailyLimit) }, [])
   const [lifetimePoints, setLifetimePoints] = useState(cached?.lifetimePoints ?? 0)
   const [usdcLifetime, setUsdcLifetime] = useState(0)
   const [claimsHistory, setClaimsHistory]   = useState<ClaimRecord[]>((cached?.claims as ClaimRecord[]) ?? [])
@@ -349,8 +352,10 @@ export function RewardsPage() {
     // Cap to what's both available AND within daily limit AND the per-claim
     // ceiling (MAX_CLAIM_POINTS - a single claim transaction can never redeem
     // more than this, independent of balance or daily limit).
-    const dailyRemaining = Math.max(0, MAX_DAILY_POINTS - dailyClaimed)
-    const maxClaimable = Math.min(pts.totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
+    const limit = await getDailyLimit()
+    setDailyLimit(limit)
+    const dailyRemaining = Math.max(0, limit - dailyClaimed)
+    const maxClaimable = Math.min(pts.totalPoints, dailyRemaining, limit)
     setClaimPoints(maxClaimable >= MIN_CLAIM_POINTS ? maxClaimable : MIN_CLAIM_POINTS)
     writeRewardsCache(userId, { totalPoints: pts.totalPoints, lifetimePoints: pts.lifetimePoints, claims, history, dailyClaimed })
     setFresh(true)
@@ -368,8 +373,8 @@ export function RewardsPage() {
     return () => { window.removeEventListener(POINTS_EARNED_EVENT, onEarned); document.removeEventListener('visibilitychange', onVisible) }
   }, [load])
 
-  const dailyRemaining = Math.max(0, MAX_DAILY_POINTS - dailyClaimedPoints)
-  const maxClaimable = Math.min(totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
+  const dailyRemaining = Math.max(0, dailyLimit - dailyClaimedPoints)
+  const maxClaimable = Math.min(totalPoints, dailyRemaining, dailyLimit)
   const canOpenClaim = !!userId && !!walletAddress && maxClaimable >= MIN_CLAIM_POINTS && !loading && fresh
   const typedPoints = parseInt(claimInput || '0', 10) || 0
   const claimOk = typedPoints >= MIN_CLAIM_POINTS && typedPoints <= maxClaimable
@@ -417,7 +422,7 @@ export function RewardsPage() {
     const activeSigner = await getReadySigner()
     if (!activeSigner) { useAuthStore.getState().lock(); window.location.href = '/auth/lock'; return }
 
-    const pointsToUse = finishing ?? (usdcRewards ? Math.min(usdcPoints!, dailyRemaining, MAX_CLAIM_POINTS) : Math.min(exactPoints ?? typedPoints, totalPoints, dailyRemaining, MAX_CLAIM_POINTS))
+    const pointsToUse = finishing ?? (usdcRewards ? Math.min(usdcPoints!, dailyRemaining, dailyLimit) : Math.min(exactPoints ?? typedPoints, totalPoints, dailyRemaining, dailyLimit))
     if (usdcRewards && pointsToUse < MIN_CLAIM_POINTS) {
       setProgress({ points: usdcPoints!, usdc: pointsToUSDC(usdcPoints!), done: [], times: {}, phase: 'failed', usdcRewards,
         error: "You've reached today's claim limit - claim your USDC again after 00:00 UTC." })
@@ -580,7 +585,7 @@ export function RewardsPage() {
       <div style={{ marginTop: 8 }}>
         <Line k="Rate" v={`1,000 pts = $${formatAmount(pointsToUSDC(1000))}`} />
         <Line k="Left to claim today" v={`${dailyRemaining.toLocaleString()} pts`} />
-        <Line k="Per claim" v={`${MIN_CLAIM_POINTS} – ${MAX_CLAIM_POINTS.toLocaleString()} pts`} />
+        <Line k="Per claim" v={`${MIN_CLAIM_POINTS} – ${dailyLimit.toLocaleString()} pts`} />
         <Line k="Sent to" v="Your Arc wallet" />
       </div>
       {claimInput !== '' && !claimOk && (
@@ -613,14 +618,14 @@ export function RewardsPage() {
   // USDC won on scratch cards → the wallet (USDC tile): the same page, its
   // USDC version. Amounts in contract points (1 pt = 500 micro-USDC).
   const usdcPts = Math.floor(usdcMicro / MICRO_PER_POINT)
-  const usdcMax = Math.min(usdcPts, dailyRemaining, MAX_CLAIM_POINTS)
+  const usdcMax = Math.min(usdcPts, dailyRemaining, dailyLimit)
   const usdcWins = scratchWins.filter(w => w.kind === 'usdc')
   const usdcPage = (
     <AnimatePresence>
       {showUsdc && (
         <PointsConvertPage key="rw-usdc" usdcMicro={usdcMicro} lifetime={`${fmtUsdcMicro(usdcLifetime)} USDC`} totalPoints={usdcPts} maxClaimable={usdcMax} dailyRemaining={dailyRemaining}
           canConvert={!!userId && !!walletAddress && fresh && usdcMax >= MIN_CLAIM_POINTS} claiming={claiming} loading={loading}
-          onConvert={() => claimUsdc(usdcClaimPoints(usdcMicro))} onClose={() => setShowUsdc(false)}
+          onConvert={() => claimUsdc(usdcClaimPoints(usdcMicro, dailyLimit))} dailyLimit={dailyLimit} onClose={() => setShowUsdc(false)}
           onHistory={() => navigate('/activity?filter=rewards&rewards=earned')}
           historyCount={usdcWins.length}
           history={usdcWins.length === 0
@@ -639,7 +644,7 @@ export function RewardsPage() {
   const convertPage = (
     <AnimatePresence>
       {showConvert && (
-        <PointsConvertPage key="rw-convert" lifetime={`${lifetimePoints.toLocaleString()} pts · $${pointsToUSDC(lifetimePoints).toFixed(2)}`} totalPoints={totalPoints} maxClaimable={maxClaimable} dailyRemaining={dailyRemaining}
+        <PointsConvertPage key="rw-convert" dailyLimit={dailyLimit} lifetime={`${lifetimePoints.toLocaleString()} pts · $${pointsToUSDC(lifetimePoints).toFixed(2)}`} totalPoints={totalPoints} maxClaimable={maxClaimable} dailyRemaining={dailyRemaining}
           canConvert={canOpenClaim} claiming={claiming} loading={loading} onConvert={convertAll} onClose={() => setShowConvert(false)}
           onHistory={() => navigate('/activity?filter=rewards&rewards=earned')}
           historyCount={pointHistory.filter(p => p.points > 0).length}
