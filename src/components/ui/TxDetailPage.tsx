@@ -230,18 +230,6 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
               ))}
             </>)}
 
-            {d.steps.length > 0 && (<>
-              {line}
-              <div style={{ position: 'relative' }}>
-                <span aria-hidden style={{ position: 'absolute', left: 11, top: 14, bottom: 14, width: 2, background: 'color-mix(in srgb, var(--success) 35%, transparent)' }} />
-                {d.steps.map((s, i) => (
-                  <div key={i} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '7px 0', fontSize: 14 }}>
-                    {stepMark(i)}<span style={{ minWidth: 0 }}>{s}</span>
-                  </div>
-                ))}
-              </div>
-            </>)}
-
             {line}
             <div style={{ fontSize: 14, lineHeight: 1.9 }}>
               <div><span style={{ color: muted }}>{d.whenLabel}</span> {d.when}</div>
@@ -252,13 +240,24 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
               ))}
             </div>
 
-            {d.details.length > 0 && (<>
+            {(d.details.length > 0 || d.steps.length > 0) && (<>
               <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--brand-text)', fontWeight: 700, fontSize: 14.5, padding: '14px 0 12px', background: 'none', border: 0, cursor: 'pointer', fontFamily: 'inherit' }}>
                 {d.detailsTitle} <ChevronDown size={16} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
               </button>
               {open && (
                 <div style={{ borderTop: '1px solid var(--border)', padding: '6px 0 10px' }}>
+                  {/* The steps it went through (18 Nov 2026: inside the details). */}
+                  {d.steps.length > 0 && (
+                    <div style={{ position: 'relative', padding: '6px 0 8px', marginBottom: 6, borderBottom: '1px solid var(--border)' }}>
+                      <span aria-hidden style={{ position: 'absolute', left: 11, top: 20, bottom: 22, width: 2, background: 'color-mix(in srgb, var(--success) 35%, transparent)' }} />
+                      {d.steps.map((st, i) => (
+                        <div key={i} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '7px 0', fontSize: 14 }}>
+                          {stepMark(i)}<span style={{ minWidth: 0 }}>{st}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {d.details.map(r => (
                     <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 14, fontSize: 14, padding: '8px 0' }}>
                       <span style={{ color: muted, flexShrink: 0 }}>{r.label}</span>
@@ -270,7 +269,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                 </div>
               )}
             </>)}
-            {d.details.length === 0 && <div style={{ height: 14 }} />}
+            {d.details.length === 0 && d.steps.length === 0 && <div style={{ height: 14 }} />}
           </div>
 
           {d.action && (

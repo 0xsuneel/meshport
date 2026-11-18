@@ -1059,6 +1059,35 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       details: [statusDetail, ...(metadata.purpose ? [{ label: 'Purpose', value: String(metadata.purpose) }] : []), networkDetail, ...arcExplorer],
     }
   }
+  if (!txDetail && (isP2PSellOrder || isP2PRefund || isP2PPurchase)) {
+    const md = metadata as any
+    const kind = String(md?.kind ?? '')
+    const ref = String(md?.tradeId || md?.offerId || '')
+    const escrow: TxParty = { label: isP2PSellOrder ? 'To' : 'From', name: 'P2P escrow',
+      sub: isP2PPurchase ? 'Released by the seller' : isP2PRefund ? 'Returned to you' : 'Held until a buyer pays',
+      address: counterparty || undefined,
+      actions: [{ label: 'Open P2P', onClick: () => { onClose(); navigate('/p2p') } }] }
+    const topUp = kind === 'offer_topped_up'
+    txDetail = {
+      title: 'P2P details', status: receiptStatus,
+      amountLabel: isP2PSellOrder ? (topUp ? 'Added to escrow' : 'Locked in escrow') : isP2PRefund ? 'Returned to you' : 'USDC bought',
+      amount: `${isP2PSellOrder ? '' : '+'}${amtOf(amount, tokenSymbol)}`, unit: tokenSymbol || 'USDC',
+      pill: isP2PSellOrder ? (topUp ? '➕ Escrow top-up' : '🔒 Sell order created')
+        : isP2PRefund ? (kind === 'admin_cancelled_offer' ? '↩️ Cancelled by admin' : '↩️ Sell order cancelled') : '🛒 P2P purchase',
+      reason: reasonNote ?? undefined,
+      parties: isP2PSellOrder ? [escrow, youParty('From')] : [escrow, youParty('To')],
+      steps: isP2PSellOrder
+        ? [topUp ? 'Top-up approved' : 'Sell order created', <>USDC locked in <b>escrow</b></>, 'Waiting for buyers']
+        : isP2PRefund
+        ? ['Sell order cancelled', <>USDC released from <b>escrow</b></>, <>Received by <b>you</b></>]
+        : [<>Payment sent to the <b>seller</b></>, 'Seller confirmed', <>USDC released to <b>you</b></>],
+      whenLabel: isP2PSellOrder ? 'Locked at' : isP2PRefund ? 'Returned at' : 'Bought at', when: whenFull,
+      hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
+      detailsTitle: 'P2P details',
+      details: [statusDetail, ...(ref ? [{ label: md?.tradeId ? 'Trade' : 'Order', value: `#${ref.slice(0, 8)}` }] : []), networkDetail, ...arcExplorer],
+      promo: 'p2p',
+    }
+  }
   if (txDetail && !isDeskView) return <TxDetailPage detail={txDetail} onClose={onClose} />
 
   return (
