@@ -86,3 +86,48 @@ export async function fetchScratchHistory(limit = 100): Promise<ScratchWin[]> {
     usdcMicro: Number(r.usdc_micro) || 0, payAmount: Number(r.pay_amount) || 0, scratchedAt: String(r.scratched_at),
   }))
 }
+
+// ── Active offers (supabase/migrations/20261118110000_reward_offers.sql) ──
+// Activated by the person; each confirmed qualifying payment moves the
+// progress on the server; finishing one wins a bonus USDC scratch card.
+export interface RewardOffer {
+  id: string; title: string; line: string; steps: number; minUsd: number; windowDays: number
+  activatedAt: string | null; expiresAt: string | null; progress: number; completedAt: string | null
+  /** running · done (won its card) · expired (ran out) · idle (not activated) */
+  state: 'running' | 'done' | 'expired' | 'idle'
+}
+
+export async function fetchOffers(): Promise<RewardOffer[]> {
+  const { data, error } = await supabase.rpc('my_offers')
+  if (error) throw error
+  return ((data ?? []) as Record<string, unknown>[]).map(r => {
+    const steps = Number(r.steps) || 1
+    const progress = Number(r.progress) || 0
+    const expiresAt = r.expires_at ? String(r.expires_at) : null
+    const completedAt = r.completed_at ? String(r.completed_at) : null
+    const state: RewardOffer['state'] = !r.activated_at ? 'idle'
+      : progress >= steps ? 'done'
+      : completedAt || (expiresAt && Date.parse(expiresAt) <= Date.now()) ? 'expired'
+      : 'running'
+    return {
+      id: String(r.id), title: String(r.title), line: String(r.line), steps, minUsd: Number(r.min_usd) || 0, windowDays: Number(r.window_days) || 0,
+      activatedAt: r.activated_at ? String(r.activated_at) : null, expiresAt, progress, completedAt, state,
+    }
+  })
+}
+
+export async function activateOffer(id: string): Promise<void> {
+  const { error } = await supabase.rpc('activate_offer', { p_offer: id })
+  if (error) throw error
+}
+
+/** "3 days left" / "5 hours left" / "Ends soon". */
+export function timeLeft(iso: string | null): string {
+  if (!iso) return ''
+  const ms = Date.parse(iso) - Date.now()
+  if (ms <= 0) return 'Ended'
+  const h = Math.floor(ms / 3_600_000)
+  if (h >= 48) return `${Math.ceil(ms / 86_400_000)} days left`
+  if (h >= 1) return `${h} hour${h === 1 ? '' : 's'} left`
+  return 'Ends soon'
+}
