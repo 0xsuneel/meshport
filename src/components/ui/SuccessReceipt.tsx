@@ -441,7 +441,7 @@ export function SuccessReceipt({
       return (
         <div ref={rootRef} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden', color: 'var(--text-primary)', ...style }}>
           {/* On the band: the header's icons (and the gift's) are white. */}
-          <style>{`.sr-band .back-btn{width:38px;height:38px;margin:0;padding:0;border-radius:50%;background:rgba(255,255,255,.16)}.sr-band .back-btn svg{color:#fff!important}`}</style>
+          <style>{`.sr-pulse{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.22);animation:srPulse 2.8s cubic-bezier(.2,.6,.3,1) infinite;pointer-events:none}@keyframes srPulse{from{transform:scale(1);opacity:.9}to{transform:scale(1.75);opacity:0}}@media (prefers-reduced-motion: reduce){.sr-pulse{animation:none;transform:scale(1.58);opacity:.35}.sr-pulse+.sr-pulse{display:none}}.sr-band .back-btn{width:38px;height:38px;margin:0;padding:0;border-radius:50%;background:rgba(255,255,255,.16)}.sr-band .back-btn svg{color:#fff!important}`}</style>
           {hasHead && (
             <div className="sr-band header-row flex-shrink-0 gap-3 px-4 pt-header pb-header" style={{ position: 'relative', zIndex: 2, background: top }}>
               {page.onBack && (
@@ -461,14 +461,18 @@ export function SuccessReceipt({
             </div>
           )}
           <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
-            <div className="sr-band" style={{ position: 'relative', background: band, color: '#fff', textAlign: 'center', padding: `${hasHead ? 14 : 26}px 20px 64px` }}>
+            <div className="sr-band" style={{ position: 'relative', background: band, color: '#fff', textAlign: 'center', padding: `${hasHead ? 34 : 40}px 20px 64px` }}>
               {/* No page header (a page inside the Hub): the gift at the band's corner. */}
               {!hasHead && giftNode && <div style={{ position: 'absolute', top: 14, right: 16, zIndex: 2 }}>{giftNode}</div>}
               {burst && <Confetti />}
+              {/* The check, a soft ring, and two slow pulses going out from it
+                  (still with reduced motion: one fixed outer ring instead). */}
+              <div style={{ position: 'relative', width: RECEIPT_CHECK, height: RECEIPT_CHECK, margin: '0 auto' }}>
+              {revealed && <><span aria-hidden className="sr-pulse" /><span aria-hidden className="sr-pulse" style={{ animationDelay: '1.4s' }} /></>}
               <div ref={setCheck} style={{
-                width: RECEIPT_CHECK, height: RECEIPT_CHECK, borderRadius: '50%', margin: '0 auto', background: '#fff',
+                position: 'relative', width: RECEIPT_CHECK, height: RECEIPT_CHECK, borderRadius: '50%', background: '#fff',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: revealed ? 1 : 0,
-                boxShadow: '0 0 0 10px rgba(255,255,255,.12), 0 0 0 22px rgba(255,255,255,.06)',
+                boxShadow: '0 0 0 10px rgba(255,255,255,.14)',
               }}>
                 {checkContent ?? (
                   <svg viewBox="0 0 24 24" width="50%" height="50%" fill="none" stroke={status === 'success' ? 'var(--brand)' : HEADER_ICON_COLOR[status]} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
@@ -477,6 +481,7 @@ export function SuccessReceipt({
                       : <polyline points="20 6 9 17 4 12" />}
                   </svg>
                 )}
+              </div>
               </div>
               <Reveal i={0} revealed={shown}>
                 <div style={{ fontSize: 40, fontWeight: 900, letterSpacing: '-1.4px', marginTop: 22, lineHeight: 1.1, overflowWrap: 'anywhere', fontVariantNumeric: 'tabular-nums' }}>{heroAmount}</div>
