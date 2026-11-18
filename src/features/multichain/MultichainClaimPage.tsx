@@ -42,7 +42,7 @@ import type { WalletAccount } from '@/wallet'
 import { quoteAccount } from '@/wallet/account'
 import { timeQuote } from '@/lib/quoteTiming'
 import { supabase } from '@/lib/supabase'
-import { formatAmount, formatMoney, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
+import { formatAmount, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
   submitClaim,
@@ -2437,7 +2437,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 const mintPending = !token && chainProgress.some(p => !p.mintTxHash)
                 return (
                 <SuccessReceipt promo="multichain" page={{ chip: 'Arrived',
-                  hero: { amount: <ReceiptAmount value={coin === 'cirBTC' ? fmtCoin(displayTotal) : formatMoney(displayTotal)} unit={coin} />, line: <>From {fromLabel}, now in your Arc wallet</> } }}
+                  hero: { amount: <ReceiptAmount value={fmtCoin(displayTotal)} unit={coin} />, line: <>From {fromLabel}, now in your Arc wallet</> } }}
                   actions={[
                     { label: 'Done', onClick: () => navigate('/multichain'), primary: true },
                   ]}

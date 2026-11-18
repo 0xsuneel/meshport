@@ -29,7 +29,7 @@ import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isCoinEnabled } from '@/lib/featureFilters'
 import { estimateTransferFee } from '@/lib/arcService'
-import { formatAmount, formatMoney, cn, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
+import { formatAmount, cn, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { hasAnyActivityForTx } from '@/lib/ActivityService'
 import { amountFontSize } from '@/lib/amountFontSize'
@@ -1944,7 +1944,7 @@ export function SwapPage() {
           return (
           <motion.div key="done" initial={false} style={isDesktop ? { margin: '-16px -16px 0' } : { margin: '-16px -16px -32px', flex: 1, display: 'flex', flexDirection: 'column' }}>
             <SuccessReceipt promo="swap" page={{ title: 'Swap successful', gift: <ScratchGift />, noShare: true, chip: 'Swapped',
-              hero: { amount: <ReceiptAmount value={`+${tokenOut.id === 'cirBTC' ? trimTrailingZeros(outNum.toFixed(8)) : formatMoney(outNum, swapTokenDecimals(tokenOut.id))}`} unit={tokenOut.id} />, line: `Swapped from ${fmtIn} on Arc` } }}
+              hero: { amount: <ReceiptAmount value={`+${trimTrailingZeros(outNum.toFixed(swapTokenDecimals(tokenOut.id)))}`} unit={tokenOut.id} />, line: `Swapped from ${fmtIn} on Arc` } }}
               style={isDesktop ? undefined : { height: 'auto', flex: 1 }}
               title="Swap Successful!"
               subtitle={<>{tokenIn.id} → {tokenOut.id} on Arc</>}
