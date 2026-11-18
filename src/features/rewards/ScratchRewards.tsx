@@ -55,13 +55,15 @@ function CountUp({ value, format }: { value: number; format: (v: number) => stri
   return <>{format(shown)}</>
 }
 
-export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsdc, claiming, refreshKey }: {
+export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsdc, onClaimPoints, claiming, refreshKey }: {
   isDesktop: boolean
   totalPoints: number
   /** Points credited by a scratched card (the page re-reads its balance). */
   onPointsWon: (points: number) => void
   /** Claim the USDC won to the wallet (contract points value). */
   onClaimUsdc: (points: number) => void
+  /** Claim points as USDC (the claim sheet); undefined while there aren't enough. */
+  onClaimPoints?: () => void
   claiming: boolean
   /** Bumped by the page after a claim: re-read the balances. */
   refreshKey: number
@@ -174,7 +176,13 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
               {claiming ? 'Claiming…' : 'Claim'}
             </button>
           ) : undefined)}
-        {tile(ptsTile, <CountUp value={ptsHold ?? totalPoints} format={v => Math.round(v).toLocaleString()} />, 'Points', 'var(--brand-text)')}
+        {tile(ptsTile, <CountUp value={ptsHold ?? totalPoints} format={v => Math.round(v).toLocaleString()} />, 'Points', 'var(--brand-text)',
+          onClaimPoints ? (
+            <button type="button" disabled={claiming} onClick={e => { e.stopPropagation(); onClaimPoints() }}
+              style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap', fontSize: 11.5, fontWeight: 800, padding: '3px 10px', borderRadius: 7, background: 'var(--brand)', color: '#fff', border: 'none', cursor: 'pointer', opacity: claiming ? 0.6 : 1 }}>
+              Claim
+            </button>
+          ) : undefined)}
         {tile(null, cards ? cards.length : '–', 'Scratch cards', 'var(--brand-text)', undefined,
           () => bandRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))}
       </div>
@@ -283,15 +291,21 @@ function ScratchModal({ id, look, onDone, onClose }: {
   const iconRef = useRef<HTMLDivElement>(null)
   const prizeRef = useRef<ScratchPrize | null>(null)
   const finished = useRef(false)
-
-  useEffect(() => {
-    let live = true
-    scratchCard(id).then(p => { if (live) { prizeRef.current = p; setPrize(p) } }).catch(() => {
-      if (!live) return
+  // The card is only opened (prize revealed and credited by the server) once
+  // the person starts rubbing it - tapping it, or closing it unscratched,
+  // leaves it waiting.
+  const asked = useRef(false)
+  const live = useRef(true)
+  useEffect(() => () => { live.current = false }, [])
+  const reveal = useCallback(() => {
+    if (asked.current) return
+    asked.current = true
+    scratchCard(id).then(p => { if (live.current) { prizeRef.current = p; setPrize(p) } }).catch(() => {
+      if (!live.current) return
       useUIStore.getState().showToastMessage("Couldn't open this card - try again", 'error')
+      finished.current = true
       onClose(null)
     })
-    return () => { live = false }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -307,10 +321,11 @@ function ScratchModal({ id, look, onDone, onClose }: {
   useEffect(() => {
     const cv = canvasRef.current
     if (!cv) return
-    const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1
-    cv.width = r.width * dpr; cv.height = r.height * dpr
+    // Layout size (offsetWidth ignores the pop-in's scale transform).
+    const r = { width: cv.offsetWidth || 250, height: cv.offsetHeight || 250 }, dpr = window.devicePixelRatio || 1
+    cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr)
     const c = cv.getContext('2d', { willReadFrequently: true })
-    if (!c) { setCleared(true); return }
+    if (!c) return
     c.scale(dpr, dpr)
     const [a, b] = LOOKS[look].coat
     const g = c.createLinearGradient(0, 0, r.width, r.height); g.addColorStop(0, a); g.addColorStop(1, b)
@@ -321,23 +336,40 @@ function ScratchModal({ id, look, onDone, onClose }: {
     c.strokeStyle = 'rgba(255,255,255,.6)'; c.setLineDash([2, 5]); c.lineWidth = 2; c.strokeRect(10, 10, r.width - 20, r.height - 20); c.setLineDash([])
     c.fillStyle = '#FFE08A'; c.font = 'italic 900 26px system-ui, sans-serif'; c.textAlign = 'center'
     c.fillText('SCRATCH', r.width / 2, r.height / 2 - 2); c.fillText('HERE', r.width / 2, r.height / 2 + 28)
-    c.globalCompositeOperation = 'destination-out'
-    let down = false, done = false
+    c.globalCompositeOperation = 'destination-out'; c.strokeStyle = '#000'; c.fillStyle = '#000'
+    // Only the person's own rubbing clears it: a finger (or mouse button)
+    // held down and moved. The tap that opened the card is ignored.
+    const opened = performance.now()
+    let down = false, done = false, last: { x: number; y: number } | null = null, rubbed = 0
     const scratch = (e: PointerEvent) => {
       if (!down || done) return
       const bb = cv.getBoundingClientRect()
-      c.beginPath(); c.arc(e.clientX - bb.left, e.clientY - bb.top, 22, 0, Math.PI * 2); c.fill()
+      const k = r.width / (bb.width || r.width)
+      const x = (e.clientX - bb.left) * k, y = (e.clientY - bb.top) * k
+      if (last) {
+        rubbed += Math.hypot(x - last.x, y - last.y)
+        c.lineWidth = 36; c.lineCap = 'round'
+        c.beginPath(); c.moveTo(last.x, last.y); c.lineTo(x, y); c.stroke()
+      }
+      last = { x, y }
+      if (rubbed < 12) return
+      reveal()
       const px = c.getImageData(0, 0, cv.width, cv.height).data
       let clear = 0
       for (let i = 3; i < px.length; i += 64) if (px[i] === 0) clear++
-      if (clear / (px.length / 64) > 0.5) {
+      if (clear / (px.length / 64) > 0.55) {
         done = true
         cv.style.transition = 'opacity .3s'; cv.style.opacity = '0'
         setCleared(true)
       }
     }
-    const onDown = (e: PointerEvent) => { down = true; try { cv.setPointerCapture(e.pointerId) } catch { /* fine */ } scratch(e) }
-    const onUp = () => { down = false }
+    const onDown = (e: PointerEvent) => {
+      if (performance.now() - opened < 300) return
+      down = true; last = null
+      try { cv.setPointerCapture(e.pointerId) } catch { /* fine */ }
+      scratch(e)
+    }
+    const onUp = () => { down = false; last = null }
     cv.addEventListener('pointerdown', onDown)
     cv.addEventListener('pointermove', scratch)
     cv.addEventListener('pointerup', onUp)
@@ -348,7 +380,7 @@ function ScratchModal({ id, look, onDone, onClose }: {
       cv.removeEventListener('pointerup', onUp)
       cv.removeEventListener('pointercancel', onUp)
     }
-  }, [look])
+  }, [look, reveal])
 
   const usdc = prize?.kind === 'usdc'
   return createPortal(

@@ -9,7 +9,7 @@ import { Info, Check, X } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import {
   fetchUserPoints, claimPointsAsUSDC, fetchPendingClaim, fetchClaimsHistory, fetchPointHistory,
-  fetchDailyClaimedPoints, getDailyClaimedOnChain, rewardsUserId, REWARD_TASKS, rewardTaskOf, pointsToUSDC, MIN_CLAIM_POINTS, MAX_CLAIM_POINTS, POINTS_PER_TX, MAX_DAILY_POINTS, MAX_DAILY_EARN_POINTS,
+  fetchDailyClaimedPoints, getDailyClaimedOnChain, rewardsUserId, REWARD_TASKS, rewardTaskOf, pointsToUSDC, MIN_CLAIM_POINTS, MAX_CLAIM_POINTS, MAX_DAILY_POINTS,
 } from '@/lib/rewards'
 import { timeAgo, formatAmount } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -26,7 +26,7 @@ import { P2PSheet } from '@/features/p2p/p2pUi'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { useLeaveGuard } from '@/lib/leaveGuard'
-import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
+import { SkeletonRows } from '@/components/ui/Skeleton'
 import { ScratchRewards } from './ScratchRewards'
 import { fetchScratchHistory, fmtUsdcMicro, onCardCount, type ScratchWin } from '@/lib/scratchCards'
 import { ArrowLeft } from 'lucide-react'
@@ -147,12 +147,12 @@ function HowItWorksMenu({ rect, onClose }: { rect: DOMRect; onClose: () => void 
               <ActionIcon name={t.action} size={17} color="var(--brand-text)" />
             </span>
             <span className="text-[15px] font-bold" style={{ flex: 1, minWidth: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.label}</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)' }}>+{POINTS_PER_TX}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)' }}>Random pts</span>
           </div>
         ))}
         <div style={{ margin: '4px 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, var(--brand) 10%, transparent)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           <b style={{ color: 'var(--text-primary)' }}>1,000 pts = ${formatAmount(pointsToUSDC(1000))} USDC</b>, sent to your Arc wallet.
-          {' '}{MIN_CLAIM_POINTS}–{MAX_CLAIM_POINTS.toLocaleString()} pts per claim, up to {MAX_DAILY_POINTS.toLocaleString()} a day. Earn up to {MAX_DAILY_EARN_POINTS} pts a day.
+          {' '}{MIN_CLAIM_POINTS}–{MAX_CLAIM_POINTS.toLocaleString()} pts per claim, up to {MAX_DAILY_POINTS.toLocaleString()} a day. Each action wins random points once a day.
         </div>
         <div style={{ margin: '0 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, #2775CA 10%, transparent)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           <b style={{ color: 'var(--text-primary)' }}>Scratch cards:</b> every payment wins one (up to 10 a day) - random points, or real USDC cashback on payments of $1 or more. Claim the USDC to your wallet anytime.
@@ -283,7 +283,6 @@ export function RewardsPage() {
   // loading placeholders until every read answers.
   const [cached] = useState(() => (userId ? readRewardsCache(userId) : null))
   const [totalPoints, setTotalPoints]       = useState(cached?.totalPoints ?? 0)
-  const [lifetimePoints, setLifetimePoints] = useState(cached?.lifetimePoints ?? 0)
   const [claimsHistory, setClaimsHistory]   = useState<ClaimRecord[]>((cached?.claims as ClaimRecord[]) ?? [])
   // Tapping a claimed reward opens its receipt.
   const [claimReceipt, setClaimReceipt] = useState<ClaimRecord | null>(null)
@@ -306,14 +305,6 @@ export function RewardsPage() {
   // The claim is signing and sending on-chain: hold Back / sidebar until it lands.
   useLeaveGuard(progress?.phase === 'running', 'Reward claim')
   const [historyTab, setHistoryTab]         = useState<'earned' | 'claimed'>('earned')
-
-  // Which card this person had last time (first-claim progress or the Claim
-  // card), so the page opens on the right one. Before, it always opened on
-  // the Claim card while loading and then switched to the first-claim card.
-  const firstClaimKey = userId ? `mp-rewards-first-claim:${userId}` : ''
-  const [rememberedNewUser] = useState<boolean | null>(() => {
-    try { const v = firstClaimKey ? localStorage.getItem(firstClaimKey) : null; return v === null ? null : v === '1' } catch { return null }
-  })
 
   const load = useCallback(async () => {
     if (!userId) { setLoading(false); return }
@@ -344,7 +335,6 @@ export function RewardsPage() {
     // of both means the UI never promises something the contract will reject.
     const dailyClaimed = Math.max(dailyClaimedOffChain, dailyClaimedChain)
     setTotalPoints(pts.totalPoints)
-    setLifetimePoints(pts.lifetimePoints)
     setClaimsHistory(claims as ClaimRecord[])
     setPointHistory(history as PointRecord[])
     setDailyClaimedPoints(dailyClaimed)
@@ -372,7 +362,6 @@ export function RewardsPage() {
 
   const dailyRemaining = Math.max(0, MAX_DAILY_POINTS - dailyClaimedPoints)
   const maxClaimable = Math.min(totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
-  const dailyCapHit = totalPoints >= MIN_CLAIM_POINTS && dailyRemaining < MIN_CLAIM_POINTS && dailyClaimedPoints > 0
   const canOpenClaim = !!userId && !!walletAddress && maxClaimable >= MIN_CLAIM_POINTS && !loading && fresh
   const typedPoints = parseInt(claimInput || '0', 10) || 0
   const claimOk = typedPoints >= MIN_CLAIM_POINTS && typedPoints <= maxClaimable
@@ -465,10 +454,6 @@ export function RewardsPage() {
     setClaiming(false)
   }
 
-  // Today's tasks (UTC day - the same boundary rewards.ts uses for earning).
-  const todayUtc = new Date().toISOString().slice(0, 10)
-  const doneToday = new Set(pointHistory.filter(p => p.points > 0 && p.created_at.slice(0, 10) === todayUtc).map(p => p.reason))
-  const earnedToday = TASKS.filter(t => doneToday.has(`tx_reward:${t.type}`)).length * POINTS_PER_TX
   // Earned: task points plus scratch cards won (their points row shows as the card).
   const [scratchWins, setScratchWins] = useState<ScratchWin[]>([])
   const [cardsLeft, setCardsLeft] = useState(-1)
@@ -478,108 +463,17 @@ export function RewardsPage() {
     ...pointHistory.filter(p => p.points > 0 && p.reason !== 'scratch_card'),
     ...scratchWins.map(w => ({ id: `sc_${w.id}`, points: w.points, usdcMicro: w.kind === 'usdc' ? w.usdcMicro : undefined, reason: 'scratch_card', tx_hash: null, created_at: w.scratchedAt })),
   ].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
-  const loadedNewUser = totalPoints < MIN_CLAIM_POINTS && claimsHistory.length === 0
-  // While loading: the remembered card, else the first-claim one (most people).
-  const newUser = loading ? rememberedNewUser ?? true : loadedNewUser
-  useEffect(() => {
-    if (loading || !firstClaimKey) return
-    try { localStorage.setItem(firstClaimKey, loadedNewUser ? '1' : '0') } catch { /* storage full / blocked */ }
-  }, [loading, firstClaimKey, loadedNewUser])
-
-  // ── Pieces ─────────────────────────────────────────────────────────────
-  const hero = newUser ? (
-    // First claim not reached yet: a teal card - your points and how many
-    // are left to the first claim, with the progress to 100 pts under them.
-    <div style={{ margin: isDesktop ? 0 : '0 16px' }}>
-      <div style={{ borderRadius: 22, padding: '16px 16px 14px', color: '#fff', background: 'var(--glass-sheen), var(--brand)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-          <div>
-            <div style={{ fontSize: 12.5, opacity: 0.75 }}>Your points</div>
-            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{loading ? <Skeleton className="inline-block align-middle w-10 h-7 rounded-lg bg-white/20" /> : totalPoints}<span style={{ fontSize: 13, fontWeight: 600, opacity: 0.7 }}> / {MIN_CLAIM_POINTS}</span></div>
-          </div>
-          <div style={{ borderLeft: '1px solid rgba(255,255,255,0.16)', paddingLeft: 14 }}>
-            <div style={{ fontSize: 12.5, opacity: 0.75 }}>To first claim</div>
-            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{loading ? <Skeleton className="inline-block align-middle w-12 h-7 rounded-lg bg-white/20" /> : MIN_CLAIM_POINTS - totalPoints}<span style={{ fontSize: 13, fontWeight: 600, opacity: 0.7 }}> pts</span></div>
-          </div>
-        </div>
-        <div style={{ height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.16)', marginTop: 14, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${loading ? 0 : Math.min(100, (totalPoints / MIN_CLAIM_POINTS) * 100)}%`, background: '#fff', borderRadius: 3, transition: 'width .4s' }} />
-        </div>
+  // The old points card and daily-task list are gone (18 Nov 2026: the
+  // scratch-card page above). What's left of them: a claim that didn't
+  // finish holds its points - a note to finish it.
+  const hero = pendingClaim && !claiming ? (
+    <div role="status" style={{ margin: isDesktop ? 0 : '18px 14px 0', padding: '12px 14px', borderRadius: 18, background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: 1.4, color: 'var(--text-secondary)' }}>
+        A claim of <b style={{ color: 'var(--text-primary)' }}>${formatAmount(pointsToUSDC(pendingClaim.points))} USDC</b> didn't finish - it's safe. Finish it to get it in your wallet.
       </div>
-      <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '10px 4px 0' }}>
-        Each task below earns +{POINTS_PER_TX} pts once a day · <span style={{ whiteSpace: 'nowrap' }}>{MIN_CLAIM_POINTS} pts = ${formatAmount(pointsToUSDC(MIN_CLAIM_POINTS))}</span>
-      </p>
+      <button onClick={finishPending} className="mp-press" style={{ flexShrink: 0, padding: '8px 14px', borderRadius: 999, border: 'none', background: 'var(--brand)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Finish</button>
     </div>
-  ) : (
-    <div style={{ margin: isDesktop ? 0 : '0 16px', borderRadius: 22, padding: 18, color: '#fff', position: 'relative', overflow: 'hidden',
-      background: '#12665F' }}>
-      <div aria-hidden style={{ position: 'absolute', right: -12, top: -18, width: 86, height: 86, borderRadius: '50%',
-        background: '#F5A524', opacity: 0.9, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 34, fontWeight: 900, color: '#7a4b06', boxShadow: 'inset -6px -8px 0 rgba(0,0,0,.12)' }}>P</div>
-      <div style={{ fontSize: 13, opacity: 0.85 }}>Points balance</div>
-      <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', marginTop: 2 }}>
-        {loading ? <Skeleton className="inline-block align-middle w-24 h-8 rounded-lg bg-white/20" /> : totalPoints.toLocaleString()} <span style={{ fontSize: 15, fontWeight: 600, opacity: 0.85 }}>pts</span>
-      </div>
-      <div style={{ fontSize: 13, opacity: 0.9, marginTop: 2 }}>
-        ≈ ${formatAmount(pointsToUSDC(totalPoints))} USDC{lifetimePoints > 0 ? ` · ${lifetimePoints.toLocaleString()} earned all-time` : ''}
-      </div>
-      <button onClick={openClaim} disabled={!canOpenClaim || claiming}
-        style={{ width: '100%', marginTop: 14, padding: '11px 0', borderRadius: 12, border: 'none', background: '#fff', color: '#0B3F3B', fontSize: 15, fontWeight: 800,
-          cursor: canOpenClaim ? 'pointer' : 'default', opacity: canOpenClaim && !claiming ? 1 : 0.6 }}>
-        {claiming ? 'Claiming…' : dailyCapHit ? 'Daily claim limit reached' : 'Claim USDC'}
-      </button>
-      {pendingClaim && !claiming && (
-        // Points held by a claim that didn't finish - not lost, waiting to be paid.
-        <div role="status" style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 1.35 }}>
-            <b>{pendingClaim.points.toLocaleString()} pts</b> are held for a claim that didn't finish - they're safe. Finish it to get ${formatAmount(pointsToUSDC(pendingClaim.points))} USDC.
-          </div>
-          <button onClick={finishPending} style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 10, border: 'none', background: '#fff', color: '#0B3F3B', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Finish claim</button>
-        </div>
-      )}
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.85, marginTop: 10, gap: 8 }}>
-        <span>Claimed today {dailyClaimedPoints.toLocaleString()} / {MAX_DAILY_POINTS.toLocaleString()} pts</span>
-        <span>1,000 pts = ${formatAmount(pointsToUSDC(1000))}</span>
-      </div>
-    </div>
-  )
-
-  const tasks = (
-    <div>
-      <div style={{ padding: isDesktop ? '0 2px 6px' : '18px 18px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <b style={{ fontSize: 15, color: 'var(--text-primary)' }}>Today's tasks</b>
-        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{earnedToday} / {MAX_DAILY_EARN_POINTS} pts</span>
-      </div>
-      <div style={{ margin: isDesktop ? '4px 2px 8px' : '4px 18px 8px', height: 6, borderRadius: 999, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${(earnedToday / MAX_DAILY_EARN_POINTS) * 100}%`, background: 'var(--success)', borderRadius: 999, transition: 'width .4s' }} />
-      </div>
-      {/* One white card; each task's icon on a pastel square. */}
-      <div style={{ margin: isDesktop ? '8px 0 0' : '8px 16px 0', background: 'var(--surface)', borderRadius: 18, boxShadow: 'var(--card-soft)', padding: '2px 12px' }}>
-      {TASKS.map((t, i) => {
-        const done = doneToday.has(`tx_reward:${t.type}`)
-        const tone = (['mint', 'peach', 'butter'] as const)[i % 3]
-        return (
-          <div key={t.type} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}>
-            <span style={{ width: 36, height: 36, borderRadius: 11, flexShrink: 0, display: 'grid', placeItems: 'center',
-              background: `var(--tile-${tone})`, color: `var(--tile-${tone}-ink)` }}>
-              <ActionIcon name={t.action} size={18} color={`var(--tile-${tone}-ink)`} />
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <b style={{ display: 'block', fontSize: 14, color: 'var(--text-primary)', fontWeight: 600 }}>{t.label}</b>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>+{POINTS_PER_TX} pts</span>
-            </div>
-            {done ? (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700, color: 'var(--success-text)' }}><Check size={14} strokeWidth={2.5} aria-hidden />Done</span>
-            ) : (
-              <button onClick={() => navigate(t.path)} className="mp-press" style={{ fontSize: 13, fontWeight: 700, padding: '7px 16px', borderRadius: 999, border: 'none', cursor: 'pointer',
-                background: 'var(--tile-mint)', color: 'var(--tile-mint-ink)' }}>Go</button>
-            )}
-          </div>
-        )
-      })}
-      </div>
-    </div>
-  )
+  ) : null
 
   const historyRows = historyTab === 'earned' ? (
     earnedRows.length === 0 ? (
@@ -699,7 +593,7 @@ export function RewardsPage() {
 
   const scratch = (
     <ScratchRewards isDesktop={isDesktop} totalPoints={totalPoints} claiming={claiming} refreshKey={scratchRefresh}
-      onPointsWon={() => { void load() }} onClaimUsdc={claimUsdc} />
+      onPointsWon={() => { void load() }} onClaimUsdc={claimUsdc} onClaimPoints={canOpenClaim ? openClaim : undefined} />
   )
 
   const overlays = (
@@ -750,8 +644,7 @@ export function RewardsPage() {
               height (flex items would otherwise shrink and cut off Claim USDC). */}
           <div style={{ flex: '1 1 0%', minWidth: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 18, padding: 2, margin: -2 }}>
             <div style={{ flexShrink: 0 }}>{scratch}</div>
-            <div style={{ flexShrink: 0 }}>{hero}</div>
-            <div style={{ flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 18, padding: '14px 14px 6px' }}>{tasks}</div>
+            {hero && <div style={{ flexShrink: 0 }}>{hero}</div>}
           </div>
           <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0 }}>{history}</div>
         </div>
@@ -767,9 +660,8 @@ export function RewardsPage() {
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'var(--nav-space)' }}>
         {header}
         {scratch}
-        <div style={{ height: 22 }} />
         {hero}
-        {tasks}
+        <div style={{ height: 22 }} />
         {history}
       </div>
     </div>
