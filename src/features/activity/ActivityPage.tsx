@@ -5,7 +5,7 @@ import { AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
 import {useLocation, useNavigate, useSearchParams} from 'react-router-dom'
-import { RefreshCw, Loader2, X } from 'lucide-react'
+import { RefreshCw, Loader2, X, Copy } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useActivity } from '@/hooks/useActivity'
 import { ActivityRecord, ActivityType, recoveredViaLabel, merchantRefundInfo } from '@/lib/ActivityService'
@@ -542,6 +542,7 @@ export function ActivityRow({ record, onSelect, flash, inPanel }: {
 export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClose: () => void }) {
   const { showToastMessage } = useUIStore()
   const navigate = useNavigate()
+  const myUsername = useAuthStore(s => s.user?.username) as string | undefined
   const isRecovery = needsRecovery(record)
   const failReason = record.status === 'failed' ? (failureReason(record) ?? (record.activityType === 'swap' ? SWAP_FAILED_FALLBACK : null)) : null
   const [rowCopied, setRowCopied] = useState<string | null>(null)
@@ -819,9 +820,64 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     ...(destinationHref && destinationTxHash ? [{ title: destinationLinkLabel.replace(/ ↗$/, ''), explorer: isClaim ? 'ArcScan' : (chainLabel(destinationChain) || 'Explorer'), hash: destinationTxHash, href: destinationHref }] : []),
   ]
 
+  // The phone page's To / From (18 Nov): who the money went to or came
+  // from, and you - only for a plain send / receive with another person
+  // (not yourself, not a system account like the faucet or rewards).
+  const shortAddr = (a: string) => a.length > 16 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a
+  const personal = (type === 'send' || type === 'receive') && !isSelfTransferDetail && !refundDetail
+    && !!(cpUsername || counterparty) && !(cpUsername && SYSTEM_LABELS[cpUsername])
+  const cpName = cpUsername ? cpUsername.replace(/\.arc$/i, '') : ''
+  const cardStyle = { background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 16, padding: '12px 14px' } as const
+  const sectionLabel = (t: string) => <p className="text-xs font-bold text-text-secondary" style={{ margin: '20px 4px 8px' }}>{t}</p>
+  const person = (name: string, sub: string, copy?: string, you?: boolean) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800,
+        color: you ? 'var(--text-secondary)' : 'var(--brand-text)', background: you ? 'color-mix(in srgb, var(--text-primary) 8%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)' }}>
+        {((you && myUsername ? String(myUsername) : name).trim().charAt(0) || '?').toUpperCase()}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</span>
+          {copy && (
+            <button type="button" onClick={copyRow(you ? 'Your address' : 'Address', copy)} aria-label="Copy address"
+              style={{ border: 0, background: 'none', padding: 0, display: 'flex', cursor: 'pointer', color: 'var(--brand-text)', flexShrink: 0 }}>
+              <Copy size={13} />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+  const them = personal ? (
+    <div style={cardStyle}>
+      {person(cpName || shortAddr(counterparty), [cpName ? `${cpName}.arc` : '', counterparty ? shortAddr(counterparty) : ''].filter(Boolean).join(' · '), counterparty || undefined)}
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button type="button" onClick={() => { onClose(); navigate(`/pay?to=${encodeURIComponent(cpName || counterparty)}`) }}
+          style={{ padding: '7px 14px', borderRadius: 999, border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--brand-text)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+          {type === 'send' ? 'Pay again' : 'Send money'}
+        </button>
+      </div>
+    </div>
+  ) : null
+  const me = personal ? (
+    <div style={cardStyle}>
+      {person('You', [myUsername ? `${String(myUsername).replace(/\.arc$/i, '')}.arc` : '', record.walletAddress ? shortAddr(String(record.walletAddress)) : '', `${tokenSymbol || 'USDC'} on ${chain || 'Arc'}`].filter(Boolean).join(' · '), record.walletAddress ? String(record.walletAddress) : undefined, true)}
+    </div>
+  ) : null
+  const pageSections = personal ? (
+    <>
+      {sectionLabel(type === 'send' ? 'To' : 'From')}{them}
+      {sectionLabel(type === 'send' ? 'From' : 'To')}{me}
+    </>
+  ) : undefined
+  const pageTitle = type === 'send' || type === 'receive' ? 'Payment details' : isSwapType ? 'Swap details' : 'Transaction details'
+
   return (
     <ReceiptPopup
       onClose={onClose}
+      pageTitle={pageTitle}
+      sections={pageSections}
       status={receiptStatus}
       title={receiptTitle}
       subtitle={<>
