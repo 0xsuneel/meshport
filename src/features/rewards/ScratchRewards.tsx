@@ -56,7 +56,7 @@ function CountUp({ value, format }: { value: number; format: (v: number) => stri
   return <>{format(shown)}</>
 }
 
-export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsdc, onClaimPoints, onOpenPoints, claiming, refreshKey }: {
+export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsdc, onClaimPoints, onOpenPoints, onOpenUsdc, onUsdc, claiming, refreshKey }: {
   isDesktop: boolean
   totalPoints: number
   /** Points credited by a scratched card (the page re-reads its balance). */
@@ -67,12 +67,17 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
   onClaimPoints?: () => void
   /** Tapping the Points tile: the points → USDC page. */
   onOpenPoints?: () => void
+  /** Tapping the USDC tile: the USDC → wallet page. */
+  onOpenUsdc?: () => void
+  /** The USDC won, each time it changes (the USDC page shows it live). */
+  onUsdc?: (micro: number) => void
   claiming: boolean
   /** Bumped by the page after a claim: re-read the balances. */
   refreshKey: number
 }) {
   const navigate = useNavigate()
   const [usdcMicro, setUsdcMicro] = useState(0)
+  useEffect(() => { onUsdc?.(usdcMicro) }, [usdcMicro, onUsdc])
   const [cards, setCards] = useState<{ id: string; createdAt: string }[] | null>(null)
   const [open, setOpen] = useState<{ id: string; look: number } | null>(null)
   const usdcTile = useRef<HTMLDivElement>(null)
@@ -174,11 +179,11 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, margin: `26px ${m}px 0` }}>
         {tile(usdcTile, <CountUp value={usdcMicro} format={v => fmtUsdcMicro(Math.round(v))} />, 'USDC won', USDC_BLUE,
           claimPts > 0 ? (
-            <button type="button" disabled={claiming} onClick={e => { e.stopPropagation(); onClaimUsdc(claimPts) }}
+            <button type="button" disabled={claiming} onClick={e => { e.stopPropagation(); if (onOpenUsdc) onOpenUsdc(); else onClaimUsdc(claimPts) }}
               style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap', fontSize: 11.5, fontWeight: 800, padding: '3px 10px', borderRadius: 7, background: USDC_BLUE, color: '#fff', border: 'none', cursor: 'pointer', opacity: claiming ? 0.6 : 1 }}>
               {claiming ? 'Claiming…' : 'Claim'}
             </button>
-          ) : undefined)}
+          ) : undefined, onOpenUsdc)}
         {tile(ptsTile, <CountUp value={ptsHold ?? totalPoints} format={v => Math.round(v).toLocaleString()} />, 'Points', 'var(--brand-text)',
           onClaimPoints ? (
             <button type="button" disabled={claiming} onClick={e => { e.stopPropagation(); onClaimPoints() }}
