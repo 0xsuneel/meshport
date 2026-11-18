@@ -1694,13 +1694,26 @@ export function PaySendPage() {
               const senderLabel = user?.username || (senderStoredAddress ? midShortenAddress(senderStoredAddress) : 'You')
               const amountLabel = `${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token}`
               return (
-                <SuccessReceipt promo page={{ title: payPending ? 'Payment submitted' : 'Payment successful' }}
+                <SuccessReceipt promo page={{
+                  title: payPending ? 'Payment submitted' : 'Payment successful',
+                  hero: {
+                    amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))} ${payPending ? 'on its way' : 'sent'}`,
+                    line: payPending ? 'Still confirming on Arc. Activity updates when it lands.'
+                      : recipient.isUsername ? `to ${recipient.displayName || recipient.display.replace(/\.arc$/i, '')} · ${recipient.display}` : `to ${midShortenAddress(recipient.walletAddress)}`,
+                  },
+                  rows: [
+                    { label: 'Network', value: 'Arc Testnet' },
+                    { label: 'Fee', value: estimatedFee > 0 ? `~${formatAmount(estimatedFee, 4)} USDC` : 'Free' },
+                    { label: 'Time', value: timeLabel },
+                    ...(txHash ? [{ label: 'Transaction', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, onCopy: copyHash, copied: hashCopied }] : []),
+                  ],
+                }}
                   reward="pay_send"
                   title={payPending ? 'Payment Submitted' : 'Paid Successfully'}
                   subtitle={payPending
                     ? <>Still confirming on Arc. Activity updates when it lands.</>
                     : <>Delivered on Arc</>}
-                  pill={payPending ? undefined : `Completed in ${elapsedSeconds} Seconds`}
+                  pill={payPending ? undefined : isDesktop ? `Completed in ${elapsedSeconds} Seconds` : `Settled in ${elapsedSeconds}s on Arc`}
                   rows={[
                     { label: 'Amount', value: amountLabel },
                     { label: 'To', value: recipientLabel, positive: true },
@@ -1721,7 +1734,7 @@ export function PaySendPage() {
                     // Mounted fresh here (not earlier, just hidden) so its
                     // internal toggle timer starts exactly when this becomes
                     // visible.
-                    ? <FlashAuthIcon key="landing-toggle" viaBiometric loop size={34} color="var(--success)" />
+                    ? <FlashAuthIcon key="landing-toggle" viaBiometric loop size={34} color={isDesktop ? 'var(--success)' : '#fff'} />
                     : undefined}
                 />
               )

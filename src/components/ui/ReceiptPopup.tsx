@@ -26,7 +26,7 @@ const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 // headers, cards, the bottom nav…) is switched off - see usePopupOpen.
 // The popup's dim covers the page, so nothing visible is lost.
 
-export function ReceiptPopup({ onClose, onPrimary, pageTitle = 'Transaction details', sections, ...receipt }: Omit<ReceiptProps, 'onPrimary' | 'revealed'> & {
+export function ReceiptPopup({ onClose, onPrimary, pageTitle = 'Transaction details', sections, pagePerson, pageRows, ...receipt }: Omit<ReceiptProps, 'onPrimary' | 'revealed'> & {
   onClose: () => void
   /** Main button action; defaults to closing (Done). */
   onPrimary?: () => void
@@ -34,9 +34,13 @@ export function ReceiptPopup({ onClose, onPrimary, pageTitle = 'Transaction deta
   pageTitle?: string
   /** Extra sections on the phone page, under the amount (To / From). */
   sections?: ReactNode
+  /** The phone page's top for a record with a person (their initial + tick). */
+  pagePerson?: NonNullable<ReceiptProps['page']>['person']
+  /** The phone page's Details rows (default: the receipt's rows). */
+  pageRows?: NonNullable<ReceiptProps['page']>['rows']
 }) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
-  if (!desktop) return <ReceiptPage onClose={onClose} onPrimary={onPrimary} pageTitle={pageTitle} sections={sections} receipt={receipt} />
+  if (!desktop) return <ReceiptPage onClose={onClose} onPrimary={onPrimary} pageTitle={pageTitle} sections={sections} person={pagePerson} rows={pageRows} receipt={receipt} />
   // The app's one centred popup (Esc, Back, tap outside), with the receipt
   // drawing its own card.
   return (
@@ -56,11 +60,13 @@ export function ReceiptPopup({ onClose, onPrimary, pageTitle = 'Transaction deta
   )
 }
 
-function ReceiptPage({ onClose, onPrimary, pageTitle, sections, receipt }: {
+function ReceiptPage({ onClose, onPrimary, pageTitle, sections, person, rows, receipt }: {
   onClose: () => void
   onPrimary?: () => void
   pageTitle: string
   sections?: ReactNode
+  person?: NonNullable<ReceiptProps['page']>['person']
+  rows?: NonNullable<ReceiptProps['page']>['rows']
   receipt: Omit<ReceiptProps, 'onPrimary' | 'revealed'>
 }) {
   // The phone's Back closes the page, like the popup it replaces.
@@ -68,6 +74,7 @@ function ReceiptPage({ onClose, onPrimary, pageTitle, sections, receipt }: {
   // A button only when there's something to do (e.g. "Open Recover") -
   // otherwise the back arrow is the way out.
   const hasAction = !!onPrimary && !!receipt.primaryLabel
+  const actions = hasAction ? [{ label: receipt.primaryLabel!, onClick: onPrimary!, primary: true }] : undefined
   return createPortal(
     <motion.div
       role="dialog" aria-modal="true" aria-label={pageTitle}
@@ -76,10 +83,12 @@ function ReceiptPage({ onClose, onPrimary, pageTitle, sections, receipt }: {
       style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)', display: 'flex', flexDirection: 'column', willChange: 'transform' }}>
       <SuccessReceipt
         celebrate={false}
+        promo
         {...receipt}
         revealed
         onPrimary={onPrimary ?? onClose}
-        page={{ title: pageTitle, onBack: onClose, sections, noDone: !hasAction }}
+        actions={actions}
+        page={{ title: pageTitle, onBack: onClose, sections, noDone: !hasAction, person, rows }}
         style={{ flex: 1, minHeight: 0, height: 'auto', ...receipt.style }}
       />
     </motion.div>,
