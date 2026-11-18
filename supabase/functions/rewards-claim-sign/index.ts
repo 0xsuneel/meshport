@@ -42,12 +42,15 @@ const ARC_TESTNET_CHAIN_ID = 5042002n
 
 // Claim bounds - must mirror MIN_CLAIM_POINTS / MAX_CLAIM_POINTS in rewards.ts
 const MIN_CLAIM_POINTS = 100
+// Fallback only: the live contract's MAX_DAILY_POINTS is read below (1,000 on
+// the first MeshPortRewards, 10,000 = 5 USDC after the 18 Nov 2026 redeploy).
 const MAX_CLAIM_POINTS = 1000
 // A reservation of points, or of scratch-card USDC (18 Nov) - claimed as
 // points at the contract's rate: 1000 points = 0.5 USDC, so 1 point = 500
 // micro-USDC.
 const RESERVED = ['claim_reserved', 'claim_reserved_usdc']
 const MICRO_PER_POINT = 500
+const MAX_DAILY_SELECTOR = 'c0d0f1ad' // MAX_DAILY_POINTS()
 
 Deno.serve(async (req: Request) => {
   const preflight = handleOptions(req)
@@ -85,10 +88,11 @@ Deno.serve(async (req: Request) => {
   if (!claimId) {
     return json({ success: false, error: 'claimId is required' }, 400)
   }
-  if (!Number.isInteger(points) || points < MIN_CLAIM_POINTS || points > MAX_CLAIM_POINTS) {
+  const limit = await dailyLimit()
+  if (!Number.isInteger(points) || points < MIN_CLAIM_POINTS || points > limit) {
     return json({
       success: false,
-      error: `points must be between ${MIN_CLAIM_POINTS} and ${MAX_CLAIM_POINTS}`,
+      error: `points must be between ${MIN_CLAIM_POINTS} and ${limit}`,
     }, 400)
   }
   // claimId must be 0x + 64 hex chars (bytes32)
@@ -143,8 +147,8 @@ Deno.serve(async (req: Request) => {
     const { data: today } = await supabase.from('point_transactions')
       .select('points').eq('user_id', userId).in('reason', RESERVED).gte('created_at', dayStart.toISOString())
     const usedToday = (today ?? []).reduce((n: number, r: any) => n + Math.abs(Number(r.points) || 0), 0)
-    if (usedToday + points > MAX_CLAIM_POINTS) {
-      return json({ success: false, error: `Daily limit reached - ${Math.max(0, MAX_CLAIM_POINTS - usedToday)} points left today` }, 400)
+    if (usedToday + points > limit) {
+      return json({ success: false, error: `Daily limit reached - ${Math.max(0, limit - usedToday)} points left today` }, 400)
     }
 
     if (source === 'usdc') {
@@ -229,6 +233,23 @@ Deno.serve(async (req: Request) => {
 
 // ── Unfinished reservations ─────────────────────────────────────────────────
 const ARC_RPC = (Deno.env.get('ARC_RPC_URL') ?? 'https://rpc.testnet.arc.io').trim()
+
+/** The contract's own daily limit in points (MAX_DAILY_POINTS), cached 10 minutes. */
+let limitCache: { v: number; at: number } | null = null
+async function dailyLimit(): Promise<number> {
+  if (limitCache && Date.now() - limitCache.at < 10 * 60_000) return limitCache.v
+  try {
+    const r = await fetch(ARC_RPC, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(6000),
+      // MAX_DAILY_POINTS() selector
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: REWARDS_CONTRACT, data: '0x' + MAX_DAILY_SELECTOR }, 'latest'] }),
+    })
+    const j = await r.json()
+    const v = typeof j?.result === 'string' && j.result !== '0x' ? Number(BigInt(j.result)) : 0
+    if (v >= MIN_CLAIM_POINTS && v <= 1_000_000) { limitCache = { v, at: Date.now() }; return v }
+  } catch { /* fall back */ }
+  return MAX_CLAIM_POINTS
+}
 
 /** Has the contract already paid this voucher? null when the chain can't be asked. */
 async function claimUsed(claimId: string): Promise<boolean | null> {

@@ -283,6 +283,25 @@ export async function getTreasuryBalance(): Promise<number> {
   } catch { return 0 }
 }
 
+// ─── The live contract's daily limit ─────────────────────────────────────────
+// Read from the contract itself (MAX_DAILY_POINTS), so the app follows
+// whichever MeshPortRewards is configured: 1,000 (0.5 USDC) on the first one,
+// 10,000 (5 USDC) after the 18 Nov 2026 redeploy. One claim may use all of it.
+// Falls back to MAX_DAILY_POINTS when the chain can't be asked.
+let dailyLimitCache: { value: number; at: number } | null = null
+export async function getDailyLimit(): Promise<number> {
+  if (dailyLimitCache && Date.now() - dailyLimitCache.at < 10 * 60_000) return dailyLimitCache.value
+  if (!REWARDS_CONTRACT) return MAX_DAILY_POINTS
+  try {
+    const { encodeFunctionData } = await import('@/lib/viemLazy')
+    const data = encodeFunctionData({ abi: [{ name: 'MAX_DAILY_POINTS', type: 'function' as const, stateMutability: 'view' as const, inputs: [], outputs: [{ name: '', type: 'uint256' as const }] }], functionName: 'MAX_DAILY_POINTS' })
+    const json = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: REWARDS_CONTRACT, data }, 'latest'] })
+    const v = json.result && json.result !== '0x' ? Number(BigInt(json.result)) : 0
+    if (v >= MIN_CLAIM_POINTS && v <= 1_000_000) { dailyLimitCache = { value: v, at: Date.now() }; return v }
+  } catch { /* fall back */ }
+  return MAX_DAILY_POINTS
+}
+
 // ─── Get today's on-chain claimed points for a wallet ──────────────────────────
 // The contract's own dailyClaimed[wallet][day] mapping is the real source of
 // truth for the 1000-point/day cap - it's independent of (and can drift from)
@@ -349,8 +368,9 @@ export async function claimPointsAsUSDC(params: {
   if (points < MIN_CLAIM_POINTS) {
     return { txHash: null, usdcReceived: 0, error: `Minimum ${MIN_CLAIM_POINTS} points required to claim` }
   }
-  if (points > MAX_CLAIM_POINTS) {
-    return { txHash: null, usdcReceived: 0, error: `Maximum ${MAX_CLAIM_POINTS} points per claim - claim in multiple transactions for more` }
+  const claimMax = await getDailyLimit()
+  if (points > claimMax) {
+    return { txHash: null, usdcReceived: 0, error: `Maximum ${claimMax} points per claim - claim in multiple transactions for more` }
   }
 
   // 1. Check user actually has enough points - try userId first, then wallet address fallback

@@ -58,8 +58,8 @@ export async function scratchCard(id: string): Promise<ScratchPrize> {
 }
 
 /** Contract points a USDC-rewards claim asks for: all of it, within one claim's limits (0 = not enough yet). */
-export function usdcClaimPoints(usdcMicro: number): number {
-  const pts = Math.min(MAX_CLAIM_POINTS, Math.floor(usdcMicro / MICRO_PER_POINT))
+export function usdcClaimPoints(usdcMicro: number, limit = MAX_CLAIM_POINTS): number {
+  const pts = Math.min(limit, Math.floor(usdcMicro / MICRO_PER_POINT))
   return pts >= MIN_CLAIM_POINTS ? pts : 0
 }
 
