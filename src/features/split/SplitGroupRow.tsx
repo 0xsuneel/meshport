@@ -3,23 +3,39 @@
 // a message, or the latest expense and how many have paid it.
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '@/store'
 import { mySplitGroups, splitGroupSeenAt, money, SPLITS_CHANGED_EVENT, type SplitGroup } from '@/lib/splits'
 
-let cached: SplitGroup[] = []
+// Kept on the device per account (18 Nov 2026): the chats list is shown from
+// its saved copy at once, and the groups used to arrive only once the server
+// answered - on a slow connection they popped in late. Now they show with
+// the chats, from the last copy, and refresh in the background.
+let cached: { uid: string | undefined; groups: SplitGroup[] } | null = null
+const storeKey = (uid: string) => `mp-split-groups:${uid}`
+function readSaved(uid: string | undefined): SplitGroup[] {
+  if (!uid) return []
+  try { const v = JSON.parse(localStorage.getItem(storeKey(uid)) || '[]'); return Array.isArray(v) ? v as SplitGroup[] : [] } catch { return [] }
+}
+function save(uid: string | undefined, g: SplitGroup[]) {
+  if (!uid) return
+  try { localStorage.setItem(storeKey(uid), JSON.stringify(g)) } catch { /* storage full / private mode */ }
+}
 
 /** The split groups you're in (kept fresh while the list is on screen). */
 export function useSplitGroups(enabled: boolean): SplitGroup[] {
-  const [groups, setGroups] = useState<SplitGroup[]>(cached)
+  const uid = useAuthStore(s => s.user?.id)
+  const [groups, setGroups] = useState<SplitGroup[]>(() => cached?.uid === uid ? cached.groups : readSaved(uid))
   useEffect(() => {
     if (!enabled) return
     let live = true
-    const load = () => mySplitGroups().then(g => { cached = g; if (live) setGroups(g) }).catch(() => {})
+    if (cached?.uid !== uid) setGroups(readSaved(uid))
+    const load = () => mySplitGroups().then(g => { cached = { uid, groups: g }; save(uid, g); if (live) setGroups(g) }).catch(() => {})
     load()
     const t = setInterval(() => { if (document.visibilityState === 'visible') load() }, 20_000)
     window.addEventListener(SPLITS_CHANGED_EVENT, load)
     window.addEventListener('focus', load)
     return () => { live = false; clearInterval(t); window.removeEventListener(SPLITS_CHANGED_EVENT, load); window.removeEventListener('focus', load) }
-  }, [enabled])
+  }, [enabled, uid])
   return groups
 }
 
