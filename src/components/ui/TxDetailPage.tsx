@@ -85,11 +85,9 @@ const BAND = {
 } as const
 
 function StatusMark({ status }: { status: TxDetail['status'] }) {
-  const reduce = useReducedMotion()
   const bg = status === 'success' ? 'var(--brand)' : status === 'pending' ? 'var(--warning)' : 'var(--danger)'
   return (
     <motion.span aria-label={status === 'success' ? 'Completed' : status === 'pending' ? 'Processing' : 'Failed'}
-      initial={reduce ? false : { scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 380, damping: 18, delay: 0.15 }}
       style={{ position: 'absolute', top: 20, right: 18, width: 44, height: 44, borderRadius: '50%', display: 'grid', placeItems: 'center', background: '#fff',
         boxShadow: '0 0 0 6px rgba(255,255,255,.14)' }}>
       {status === 'success' ? <Check size={22} color={bg} strokeWidth={3.2} /> : status === 'pending' ? <Clock size={21} color={bg} strokeWidth={2.6} /> : <X size={21} color={bg} strokeWidth={3.2} />}
@@ -97,13 +95,15 @@ function StatusMark({ status }: { status: TxDetail['status'] }) {
   )
 }
 
-// Staggered reveal (as the success screen): each part fades and slides up in
-// turn, 0.07 s apart, just after the page has slid in. Off with reduce motion.
+// Staggered reveal: the parts under the band fade and rise in turn, 0.05 s
+// apart, while the page slides in - not after it (18 Nov 2026: waiting for
+// the slide left the card blank, then a second animation). The band's own
+// content (amount, check, pill) comes in with the page. Off with reduce motion.
 function Rv({ i, children }: { i: number; children: ReactNode }) {
   const reduce = useReducedMotion()
   return (
     <motion.div initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ ...SPRING_SOFT, delay: 0.18 + i * 0.07 }}>
+      transition={{ ...SPRING_SOFT, delay: Math.max(0, i - 1) * 0.05 }}>
       {children}
     </motion.div>
   )
@@ -162,7 +162,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
             {/* Band in the brand / status colour (as the success page): the label, amount, check and pill. */}
             <div style={{ position: 'relative', padding: '20px 18px 18px', color: '#fff', background: BAND[d.status] }}>
             <StatusMark status={d.status} />
-            <Rv i={0}>
+            <div>
             <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.8, paddingRight: 80 }}>{d.amountLabel}</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6, paddingRight: 80, flexWrap: 'wrap' }}>
               <b style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-1.5px', overflowWrap: 'anywhere' }}>{d.amount}</b>
@@ -175,7 +175,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                 </span>
               </div>
             )}
-            </Rv>
+            </div>
             </div>
             <div style={{ padding: '0 18px 6px' }}>
             <Rv i={1}>
