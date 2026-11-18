@@ -1,3 +1,4 @@
+import { ScratchGift } from '@/components/rewards/ScratchGift'
 import { backLayerPop } from '@/lib/backLayers'
 import { formatLocale } from '@/lib/localeFormat'
 import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
@@ -4501,6 +4502,7 @@ export function ChatConversationPage() {
                 return (
                 <SuccessReceipt
                   reward="chatpay"
+                  gift={<ScratchGift light />}
                   // Phone: fills the pay sheet edge to edge (desktop: the card in the drawer).
                   fill={!isDesktop}
                   style={{ flex: 1, minHeight: 0, height: 'auto', padding: 0, background: 'transparent' }}

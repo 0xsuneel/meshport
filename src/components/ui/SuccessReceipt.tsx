@@ -35,6 +35,8 @@ interface SuccessReceiptProps {
     title?: string; onBack?: () => void; onShare?: () => void; sections?: ReactNode; noDone?: boolean
     /** Beside Share in the header (the payment page's scratch-card gift); replaces the "+20 points" line. */
     gift?: ReactNode
+    /** No Share in the header (a receipt nobody needs to send - a swap). */
+    noShare?: boolean
     /** The big line and the line under it (default: title / subtitle). */
     hero?: { amount: ReactNode; line: ReactNode }
     /** A record with a person: their initial with a tick instead of the check. */
@@ -81,6 +83,9 @@ interface SuccessReceiptProps {
   actions?: Array<{ label: string; onClick: () => void; primary?: boolean }>
   /** The daily reward task this action counts for: "+20 points · …" once it pays out. */
   reward?: RewardActionType
+  /** The scratch-card gift (rewards/ScratchGift) at the card's top-right corner -
+   *  flows whose transaction wins a card. Replaces the points line. */
+  gift?: ReactNode
   /** Fills its box edge to edge (a sheet holding it, chat Pay): no card
    *  frame or margin around it, the header from the very top, the button at
    *  the foot - instead of a card floating in white space. */
@@ -161,10 +166,42 @@ function Confetti() {
   )
 }
 
+// What Share sends (18 Nov 2026): the receipt as text - amount, who, status,
+// every detail row, the full transaction hash and EVERY explorer link (a
+// transfer has two: the source chain's and the destination chain's).
+const plain = (n: ReactNode): string => {
+  if (n == null || typeof n === 'boolean') return ''
+  if (typeof n === 'string' || typeof n === 'number') return String(n)
+  if (Array.isArray(n)) return n.map(plain).join('')
+  const kids = (n as { props?: { children?: ReactNode } }).props?.children
+  return kids !== undefined ? plain(kids) : ''
+}
+export function receiptText({ amount, line, fallbackTitle, status, when, rows, fullHash, links }: {
+  amount: ReactNode; line: ReactNode; fallbackTitle: ReactNode; status: string; when?: string
+  rows: ReceiptRow[]; fullHash?: string; links?: ReceiptLink[]
+}): string {
+  const out: string[] = ['MeshPort receipt', '']
+  const a = plain(amount) || plain(fallbackTitle)
+  if (a) out.push(a)
+  const l = plain(line)
+  if (l) out.push(l)
+  out.push(`Status: ${status === 'success' ? 'Successful' : status === 'pending' ? 'Processing' : 'Failed'}`)
+  if (when) out.push(`Time: ${when}`)
+  for (const r of rows) {
+    // The short hash row gives way to the full hash below.
+    if (fullHash && /hash|transaction/i.test(r.label)) continue
+    const v = plain(r.value).trim()
+    if (v) out.push(`${r.label}: ${v}`)
+  }
+  if (fullHash) out.push(`Transaction: ${fullHash}`)
+  for (const k of links ?? []) out.push('', `${k.title}:`, k.href)
+  return out.join('\n')
+}
+
 export function SuccessReceipt({
   title, subtitle, pill, bubble, rows, steps, detailRows, fullHash, links, linksNote,
   primaryLabel = 'Done', onPrimary, checkRef, revealed, checkContent, style,
-  status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions, reward, fill = false, promo, page,
+  status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions, reward, fill = false, promo, page, gift,
 }: SuccessReceiptProps) {
   // The check: handed to the caller (it aims the flying checkmark at it) and
   // kept here for its landing pop.
@@ -272,7 +309,7 @@ export function SuccessReceipt({
               </div>
             </Reveal>
           )}
-          {reward && revealed && <div style={{ marginTop: 8 }}><PointsEarnedLine type={reward} /></div>}
+          {reward && revealed && !gift && <div style={{ marginTop: 8 }}><PointsEarnedLine type={reward} /></div>}
   </>)
   const rowsBlock = (<>
             {rows.map((r, i) => <Row key={r.label} row={r} i={i + 3} revealed={revealed} />)}
@@ -355,7 +392,12 @@ export function SuccessReceipt({
     const heroAmount = page.hero?.amount ?? title
     const heroLine = page.hero?.line ?? subtitle
     const share = page.onShare ?? (async () => {
-      const text = [typeof heroAmount === 'string' ? heroAmount : title, typeof heroLine === 'string' ? heroLine : '', links?.[0]?.href ?? ''].filter(Boolean).join('\n')
+      const text = receiptText({
+        amount: page.person ? `${page.person.amount}${page.person.unit ? ` ${page.person.unit}` : ''}` : heroAmount,
+        line: page.person ? page.person.line : heroLine,
+        fallbackTitle: title, status, when: page.person?.when,
+        rows: page.rows ?? [...rows, ...(detailRows ?? [])], fullHash, links,
+      })
       try {
         if (navigator.share) { await navigator.share({ title: page.title || title, text }); return }
         await navigator.clipboard.writeText(text)
@@ -385,10 +427,12 @@ export function SuccessReceipt({
             <div style={{ flex: 1, minWidth: 0 }}>
               <h1 className="text-xl font-bold text-text-primary" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.title}</h1>
             </div>
-            {page.gift}
-            <button type="button" onClick={() => { void share() }} className="back-btn" aria-label="Share">
-              <Share2 className="w-5 h-5 text-text-primary" />
-            </button>
+            {page.gift ?? gift}
+            {!page.noShare && (
+              <button type="button" onClick={() => { void share() }} className="back-btn" aria-label="Share">
+                <Share2 className="w-5 h-5 text-text-primary" />
+              </button>
+            )}
           </div>
         )}
         <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '6px 16px 20px', boxSizing: 'border-box' }}>
@@ -436,7 +480,7 @@ export function SuccessReceipt({
                     </div>
                   </Reveal>
                 )}
-                {reward && revealed && !page.gift && <div style={{ marginTop: 10 }}><PointsEarnedLine type={reward} /></div>}
+                {reward && revealed && !page.gift && !gift && <div style={{ marginTop: 10 }}><PointsEarnedLine type={reward} /></div>}
               </div>
             )}
             {page.sections}
@@ -528,6 +572,7 @@ export function SuccessReceipt({
       }}>
         {burst && <Confetti />}
         <div style={{ position: 'relative', height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', background: HEADER_BG[status] }}>
+          {gift && !stamp && <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 3 }}>{gift}</div>}
           {stamp && (
             <span aria-label={stamp} style={{
               position: 'absolute', top: 16, right: 16, transform: 'rotate(-8deg)',
