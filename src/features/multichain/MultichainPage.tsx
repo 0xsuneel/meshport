@@ -47,6 +47,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSharedKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { TxDetailPage, type TxDetail, type TxParty } from '@/components/ui/TxDetailPage'
 import { ChainScanner } from '@/components/ui/ChainScanner'
 import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpinner'
 import { DesktopHistoryPanel } from '@/components/ui/DesktopHistoryPanel'
@@ -1505,6 +1506,57 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
         const hashRow = (label: string, hash: string) => ({ label, value: `${hash.slice(0, 6)}…${hash.slice(-4)}`, onCopy: copyRow(label, hash), copied: rowCopied === label })
         const primaryHash = isClaimItem ? (it.destinationTxHash || it.sourceTxHash) : (it.sourceTxHash || it.destinationTxHash)
         const amountText = `${status === 'failed' ? '' : isClaimItem ? '+' : '-'}${itemMoneyUnit(it, it.amount)}`
+
+        // Transfers and brings open the same Payment details card as the main
+        // Activity (18 Nov 2026): a page on a phone, the centred popup on a
+        // computer. A merchant's own receipts keep their receipt below.
+        if (!it.merchant && !it.chainReceipt && !it.isRecovery) {
+          const out = !isClaimItem
+          const sym = it.tokenSymbol || 'USDC'
+          const isCctpx = it.route === 'cctpx'
+          const me = useAuthStore.getState()
+          const myHandle = me.user?.username ? `${String(me.user.username).replace(/\.arc$/i, '')}.arc` : undefined
+          const you = (label: 'From' | 'To'): TxParty => ({ label, name: 'You', you: true, handle: myHandle, address: walletAddress || undefined, chain: 'Arc', sub: `MeshPort wallet · ${sym} on Arc` })
+          const sentTo = it.destinationAddress
+          const toSelf = !!sentTo && !!walletAddress && sentTo.toLowerCase() === walletAddress.toLowerCase()
+          const when = new Date(it.timestamp)
+          const whenFull = `${when.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, ${when.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+          const money = (n: number) => itemMoneyUnit(it, n)
+          const detail: TxDetail = {
+            title: out ? 'Transfer details' : 'Bridge details', status,
+            amountLabel: out ? 'Amount sent' : 'Amount received',
+            amount: `${out || status === 'failed' ? '' : '+'}${itemMoney(it, it.amount)}`, unit: sym === 'cirBTC' ? undefined : sym,
+            pill: out ? '🌐 Multichain transfer' : '⤵ Bridged to Arc',
+            reason: it.error && status === 'failed' ? it.error : undefined,
+            parties: out
+              ? [{ label: 'To', name: toSelf ? 'Your wallet' : sentTo ? `${sentTo.slice(0, 6)}…${sentTo.slice(-4)}` : chainName, address: sentTo || undefined, chain: chainName }, you('From')]
+              : [{ label: 'From', name: 'Your wallet', chain: chainName }, you('To')],
+            steps: out
+              ? ['Transfer approved', <>{isCctpx ? 'Sent' : 'Burned'} on <b>Arc</b></>, <>Confirmed by <b>Circle</b></>, <>Delivered on <b>{chainName}</b></>]
+              : ['Bridge approved', <>{isCctpx ? 'Sent' : 'Burned'} on <b>{chainName}</b></>, <>Confirmed by <b>Circle</b></>, <>{isCctpx ? 'Delivered' : 'Minted'} on <b>Arc</b></>],
+            whenLabel: out ? 'Sent at' : 'Bridged at', when: whenFull,
+            hashes: [
+              ...(it.sourceTxHash && !isRecoveredClaim ? [{ label: `Sent on ${out ? 'Arc' : chainName}`, hash: it.sourceTxHash }] : []),
+              ...(it.destinationTxHash ? [{ label: `Received on ${out ? chainName : 'Arc'}`, hash: it.destinationTxHash }] : []),
+            ],
+            detailsTitle: out ? 'Transfer details' : 'Bridge details',
+            details: [
+              { label: 'Status', value: status === 'success' ? 'Completed' : status === 'failed' ? 'Failed' : 'Processing', tone: status === 'success' ? 'ok' : status === 'failed' ? 'bad' : undefined },
+              ...(move ? [
+                { label: moveLbl.sent, value: money(move.sent) },
+                { label: moveLbl.received, value: money(move.received) },
+                ...(move.meshportFee > 0 ? [{ label: 'MeshPort fee', value: money(move.meshportFee) }] : []),
+                ...(move.fees > 0 ? [{ label: isCctpx ? 'Fees paid' : netFeeLabel, value: money(isCctpx ? move.fees : move.networkFee) }] : []),
+              ] : []),
+              ...(it.route ? [{ label: 'Route', value: it.route === 'ub' ? 'Unified Balance' : isCctpx ? 'Circle CCTPx' : 'CCTP' }] : []),
+              ...(it.recoveredVia ? [{ label: 'Recovered', value: `Via ${it.recoveredVia.toUpperCase()}` }] : []),
+              ...(sourceHref && it.sourceTxHash ? [{ label: out ? 'Arc explorer' : 'Source explorer', value: out ? 'View on ArcScan' : `View on ${chainName}`, href: sourceHref }] : []),
+              ...(destinationHref && it.destinationTxHash ? [{ label: out ? 'Destination explorer' : 'Arc explorer', value: out ? `View on ${chainName}` : 'View on ArcScan', href: destinationHref }] : []),
+            ],
+            promo: out ? 'multichain' : true,
+          }
+          return <TxDetailPage key="hub-detail" detail={detail} onClose={() => { setFlashId(it.id); setSelectedItem(null) }} />
+        }
 
         return (
           <ReceiptPopup
