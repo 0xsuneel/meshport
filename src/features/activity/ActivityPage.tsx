@@ -16,6 +16,7 @@ import { backfillP2PActivity } from '@/lib/p2pService'
 import { cn, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { TxDetailPage, type TxDetail, type TxParty } from '@/components/ui/TxDetailPage'
 import { SearchField } from '@/components/ui/SearchField'
 import { useMerchant, isMerchantClaim } from '@/lib/merchant'
 import { orderTitle, displayOrderNumber, shortOrderNumber, type OrderKind } from '@/lib/merchantPay'
@@ -936,6 +937,129 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     ...(feeRow ? [{ label: 'Fee', value: feeRow.value }] : []),
     ...(txHash ? [toReceiptRow({ label: 'Transaction', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, copy: txHash })] : []),
   ] : undefined
+
+  // ── The phone's transaction page (approved preview, 18 Nov 2026) ─────────
+  // Payments, swaps, multichain transfers, bridges in, reward claims and bulk
+  // payments open TxDetailPage; anything else keeps the receipt page below.
+  const isDeskView = useMediaQuery(DESKTOP_QUERY)
+  const symOf = (t?: string) => (t || 'USDC') === 'USDC' ? '$' : t === 'EURC' ? '€' : ''
+  const amtOf = (n: number, t?: string) => `${symOf(t)}${formatAmt(n, t)}`
+  const myHandle = myUsername ? `${String(myUsername).replace(/\.arc$/i, '')}.arc` : undefined
+  const myAddr = record.walletAddress ? String(record.walletAddress) : undefined
+  const youParty = (label: 'From' | 'To', onChain?: string): TxParty => ({
+    label, name: 'You', you: true, handle: myHandle, address: myAddr,
+    ...(onChain ? { chain: onChain } : { sub: `MeshPort wallet · ${tokenSymbol || 'USDC'} on Arc` }),
+  })
+  const whenFull = `${created.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, ${created.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+  const statusDetail = { label: 'Status', value: isRecovery ? 'Needs recovery' : isFailed ? 'Failed' : isSuccess ? 'Completed' : 'Processing', tone: isSuccess ? 'ok' as const : isFailed ? 'bad' as const : undefined }
+  const networkDetail = { label: 'Network', value: 'Arc Testnet' }
+  const arcExplorer = txHash && !isRecoveredClaim ? [{ label: 'Explorer', value: 'View on ArcScan', href: arcExplorerTxUrl(txHash) }] : []
+  const anyFee = (rows as { label: string; value: string }[]).find(r => /fee/i.test(r.label) && r.value)
+  const moveDetails = (rows as { label: string; value: string }[]).filter(r => move && [moveLbl.sent, moveLbl.received, 'Fees paid', 'MeshPort fee', networkFeeLabel(record)].includes(r.label))
+  const recoverAction = isRecovery ? { label: 'Open Recover', onClick: () => { onClose(); navigate('/multichain', { state: { tab: 'recovery' } }) } } : undefined
+  const isRewardClaim = isReceive && ((metadata as any)?.receiveKind === 'reward_claim' || !!SYSTEM_LABELS[cpUsername])
+  const noteText = typeof (metadata as any)?.note === 'string' && !(metadata as any)?.merchantOrder ? String((metadata as any).note).trim() : ''
+  let txDetail: TxDetail | null = null
+  if (isRewardClaim) {
+    txDetail = {
+      title: 'Payment details', status: receiptStatus, amountLabel: 'Amount received', amount: `+${amtOf(amount, tokenSymbol)}`, unit: tokenSymbol || 'USDC',
+      pill: '🎁 Reward claimed', reason: reasonNote ?? undefined,
+      parties: [
+        { label: 'From', name: 'MeshPort Rewards', sub: 'Rewards contract', address: counterparty || undefined,
+          actions: [{ label: 'Open Rewards', onClick: () => { onClose(); navigate('/rewards') } }] },
+        youParty('To'),
+      ],
+      steps: ['Claim approved', <>Paid by <b>MeshPort Rewards</b></>, <>Received by <b>you</b></>],
+      whenLabel: 'Claimed at', when: whenFull,
+      hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
+      detailsTitle: 'Claim details',
+      details: [statusDetail, ...(noteText ? [{ label: 'Paid for', value: noteText.replace(/ claimed$/i, '') }] : []), networkDetail, ...arcExplorer],
+    }
+  } else if (personal) {
+    const shop = activityOrderKind(metadata) === 'shop'
+    const theirHandle = cpName ? `${cpName}.arc` : undefined
+    const theirLabel = theirHandle || shortAddr(counterparty)
+    const them: TxParty = {
+      label: type === 'send' ? 'To' : 'From', name: cpName ? cpName.charAt(0).toUpperCase() + cpName.slice(1) : shortAddr(counterparty),
+      handle: theirHandle, address: counterparty || undefined, tag: shop ? 'SHOP' : undefined,
+      actions: [
+        { label: type === 'send' ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(`/pay?to=${encodeURIComponent(cpName || counterparty)}`) } },
+        ...(cpName ? [{ label: 'Chat', onClick: () => { void openChatWith(cpName) }, busy: openingChat }] : []),
+      ],
+    }
+    txDetail = {
+      title: 'Payment details', status: receiptStatus, amountLabel: 'Amount', amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC',
+      note: noteText || undefined, pill: shop ? '🛍️ Shop payment' : merchantOrderDetail ? `🧾 ${orderWord}` : undefined, reason: reasonNote ?? undefined,
+      parties: type === 'send' ? [them, youParty('From')] : [them, youParty('To')],
+      steps: ['Payment approved',
+        <>Payment made by <b>{type === 'send' ? 'you' : theirLabel}</b></>,
+        <>Payment received by <b>{type === 'send' ? theirLabel : 'you'}</b></>],
+      whenLabel: type === 'send' ? 'Paid at' : 'Received at', when: whenFull,
+      hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
+      detailsTitle: 'Payment details',
+      details: [statusDetail, networkDetail, ...(anyFee ? [{ label: 'Network fee', value: anyFee.value }] : []),
+        ...(merchantOrderDetail ? [{ label: 'Order', value: displayOrderNumber(merchantOrderDetail) }] : []), ...arcExplorer],
+    }
+  } else if (isSwapType) {
+    const tIn = String(metadata.tokenIn || tokenSymbol || 'USDC'), tOut = String(metadata.tokenOut || '')
+    const aIn = String(metadata.amountIn || formatAmt(amount)), aOut = metadata.amountOut ? formatAmt(metadata.amountOut, tOut) : ''
+    const got = !isFailed && aOut && tOut
+    const rate = got && Number(metadata.amountIn) > 0 ? Number(metadata.amountOut) / Number(metadata.amountIn) : 0
+    txDetail = {
+      title: 'Swap details', status: receiptStatus, amountLabel: got ? 'You got' : 'You paid',
+      amount: got ? `${symOf(tOut)}${aOut}` : `${symOf(tIn)}${aIn}`, unit: got ? tOut : tIn,
+      exchange: got ? { paid: `${aIn} ${tIn}`, got: `${aOut} ${tOut}` } : undefined,
+      pill: '⇄ Swap', reason: reasonNote ?? undefined,
+      steps: ['Swap approved', <>Sent <b>{aIn} {tIn}</b></>, got ? <>Received <b>{aOut} {tOut}</b></> : <>Receive <b>{tOut || 'the other coin'}</b></>],
+      whenLabel: 'Swapped at', when: whenFull,
+      hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
+      detailsTitle: 'Swap details',
+      details: [statusDetail, ...(rate > 0 ? [{ label: 'Rate', value: `1 ${tIn} = ${rate.toFixed(4).replace(/\.?0+$/, '')} ${tOut}` }] : []), networkDetail, ...arcExplorer],
+      promo: 'swap',
+    }
+  } else if (isTransfer || (isClaim && !(metadata as any)?.merchant)) {
+    const out = isTransfer
+    const other = chainLabel(out ? destinationChain : sourceChain) || 'the other chain'
+    const toName = out ? (isSelfTransferDetail ? 'Your wallet' : transferCpName || shortAddr(transferCp)) : ''
+    txDetail = {
+      title: out ? 'Transfer details' : 'Bridge details', status: receiptStatus,
+      amountLabel: out ? 'Amount sent' : 'Amount received', amount: `${out ? '' : '+'}${amtOf(amount, tokenSymbol)}`, unit: tokenSymbol || 'USDC',
+      pill: out ? '🌐 Multichain transfer' : '⤵ Bridged to Arc', reason: reasonNote ?? undefined,
+      parties: out
+        ? [{ label: 'To', name: toName, handle: transferCpName || undefined, address: transferCp || undefined, chain: other }, youParty('From', 'Arc')]
+        : [{ label: 'From', name: 'Your wallet', address: counterparty || undefined, chain: other }, youParty('To', 'Arc')],
+      steps: out
+        ? ['Transfer approved', <>{isCctpx ? 'Sent' : 'Burned'} on <b>Arc</b></>, <>Confirmed by <b>Circle</b></>, <>Delivered on <b>{other}</b></>]
+        : ['Bridge approved', <>{isCctpx ? 'Sent' : 'Burned'} on <b>{other}</b></>, <>Confirmed by <b>Circle</b></>, <>{isCctpx ? 'Delivered' : 'Minted'} on <b>Arc</b></>],
+      whenLabel: out ? 'Sent at' : 'Bridged at', when: whenFull,
+      hashes: [
+        ...(txHash && !isRecoveredClaim ? [{ label: out ? 'Arc' : other, hash: txHash }] : []),
+        ...(destinationTxHash ? [{ label: out ? other : 'Arc', hash: destinationTxHash }] : []),
+      ],
+      detailsTitle: out ? 'Transfer details' : 'Bridge details',
+      details: [statusDetail, ...moveDetails,
+        ...(sourceHref && txHash ? [{ label: out ? 'Arc explorer' : 'Source explorer', value: sourceLinkLabel.replace(/ ↗$/, ''), href: sourceHref }] : []),
+        ...(destinationHref && destinationTxHash ? [{ label: out ? 'Destination explorer' : 'Arc explorer', value: destinationLinkLabel.replace(/ ↗$/, ''), href: destinationHref }] : []),
+      ],
+      action: recoverAction,
+      promo: out ? 'multichain' : true,
+    }
+  } else if (type === 'bulk' && !isBulkReceived) {
+    const list = Array.isArray(metadata.recipients) ? metadata.recipients as { label?: string; amount?: number }[] : []
+    const n = Number(metadata.recipientCount) || list.length
+    txDetail = {
+      title: 'Payment details', status: receiptStatus, amountLabel: `Total paid${n ? ` · ${n} ${n === 1 ? 'person' : 'people'}` : ''}`,
+      amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC',
+      pill: isPayroll(metadata) ? '👥 Staff payment' : '👥 Bulk payment', reason: reasonNote ?? undefined,
+      recipients: list.map((r, i) => ({ name: r.label?.startsWith('0x') ? shortAddr(r.label) : (r.label || `Recipient ${i + 1}`), amount: `$${formatAmt(Number(r.amount) || 0)}` })),
+      steps: ['Payout approved', <>Paid in <b>one transaction</b></>, <>Received by <b>{n ? `${isSuccess ? n : 0} of ${n}` : 'everyone'}</b></>],
+      whenLabel: 'Paid at', when: whenFull,
+      hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
+      detailsTitle: 'Payment details',
+      details: [statusDetail, ...(metadata.purpose ? [{ label: 'Purpose', value: String(metadata.purpose) }] : []), networkDetail, ...arcExplorer],
+    }
+  }
+  if (txDetail && !isDeskView) return <TxDetailPage detail={txDetail} onClose={onClose} />
 
   return (
     <ReceiptPopup
