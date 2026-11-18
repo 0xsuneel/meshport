@@ -7,10 +7,10 @@
 // chat's payment cards - so a payment looks the same from everywhere.
 import { useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, Check, ChevronDown, Clock, Copy, ExternalLink, Share2, X } from 'lucide-react'
 import { useBackLayer } from '@/lib/backLayers'
-import { PAGE_TRANSITION } from '@/lib/motion'
+import { PAGE_TRANSITION, SPRING_SOFT } from '@/lib/motion'
 import { copyToClipboard } from '@/lib/utils'
 import { useUIStore } from '@/store'
 import { SuccessPromo, type PromoFeature } from './SuccessPromo'
@@ -79,13 +79,27 @@ function CopyBtn({ value, what }: { value: string; what: string }) {
 }
 
 function StatusMark({ status }: { status: TxDetail['status'] }) {
+  const reduce = useReducedMotion()
   const bg = status === 'success' ? 'var(--brand)' : status === 'pending' ? 'var(--warning)' : 'var(--danger)'
   return (
-    <span aria-label={status === 'success' ? 'Completed' : status === 'pending' ? 'Processing' : 'Failed'}
+    <motion.span aria-label={status === 'success' ? 'Completed' : status === 'pending' ? 'Processing' : 'Failed'}
+      initial={reduce ? false : { scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 380, damping: 18, delay: 0.15 }}
       style={{ position: 'absolute', top: 20, right: 18, width: 60, height: 60, borderRadius: '50%', display: 'grid', placeItems: 'center', background: bg,
         boxShadow: `0 0 0 9px color-mix(in srgb, ${bg} 13%, transparent)` }}>
       {status === 'success' ? <Check size={30} color="#fff" strokeWidth={3} /> : status === 'pending' ? <Clock size={28} color="#fff" strokeWidth={2.6} /> : <X size={28} color="#fff" strokeWidth={3} />}
-    </span>
+    </motion.span>
+  )
+}
+
+// Staggered reveal (as the success screen): each part fades and slides up in
+// turn, 0.07 s apart, just after the page has slid in. Off with reduce motion.
+function Rv({ i, children }: { i: number; children: ReactNode }) {
+  const reduce = useReducedMotion()
+  return (
+    <motion.div initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ ...SPRING_SOFT, delay: 0.18 + i * 0.07 }}>
+      {children}
+    </motion.div>
   )
 }
 
@@ -140,11 +154,14 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
         <div style={{ maxWidth: 480, margin: '0 auto' }}>
           <div style={{ position: 'relative', background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 24, padding: '20px 18px 6px' }}>
             <StatusMark status={d.status} />
+            <Rv i={0}>
             <div style={{ fontSize: 13, fontWeight: 700, color: muted, paddingRight: 80 }}>{d.amountLabel}</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6, paddingRight: 80, flexWrap: 'wrap' }}>
               <b style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-1.5px', overflowWrap: 'anywhere' }}>{d.amount}</b>
               {d.unit && <span style={{ fontSize: 18, fontWeight: 700, color: muted }}>{d.unit}</span>}
             </div>
+            </Rv>
+            <Rv i={1}>
             {d.exchange && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 8, marginTop: 14 }}>
                 {[['You paid', d.exchange.paid], ['You got', d.exchange.got]].map(([k, v], i) => (
@@ -169,9 +186,10 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
               </div>
             )}
             {d.reason && <div style={{ marginTop: 12 }}>{d.reason}</div>}
+            </Rv>
 
-            {(d.parties ?? []).map(p => (
-              <div key={p.label}>
+            {(d.parties ?? []).map((p, k) => (
+              <Rv key={p.label} i={2 + k}>
                 {line}
                 <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -214,10 +232,10 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                     {initials(p.handle || p.name)}
                   </span>
                 </div>
-              </div>
+              </Rv>
             ))}
 
-            {!!d.recipients?.length && (<>
+            {!!d.recipients?.length && (<Rv i={2}>
               {line}
               <div style={{ fontSize: 13, fontWeight: 700, color: muted, marginBottom: 2 }}>To</div>
               {d.recipients.map((r, i) => (
@@ -228,8 +246,9 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                   <b style={{ fontWeight: 700 }}>{r.amount}</b>
                 </div>
               ))}
-            </>)}
+            </Rv>)}
 
+            <Rv i={2 + Math.max(d.parties?.length ?? 0, d.recipients?.length ? 1 : 0)}>
             {line}
             <div style={{ fontSize: 14, lineHeight: 1.9 }}>
               <div><span style={{ color: muted }}>{d.whenLabel}</span> {d.when}</div>
@@ -252,9 +271,10 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                     <div style={{ position: 'relative', padding: '6px 0 8px', marginBottom: 6, borderBottom: '1px solid var(--border)' }}>
                       <span aria-hidden style={{ position: 'absolute', left: 11, top: 20, bottom: 22, width: 2, background: 'color-mix(in srgb, var(--success) 35%, transparent)' }} />
                       {d.steps.map((st, i) => (
-                        <div key={i} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '7px 0', fontSize: 14 }}>
+                        <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ ...SPRING_SOFT, delay: i * 0.07 }}
+                          style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '7px 0', fontSize: 14 }}>
                           {stepMark(i)}<span style={{ minWidth: 0 }}>{st}</span>
-                        </div>
+                        </motion.div>
                       ))}
                     </div>
                   )}
@@ -270,8 +290,10 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
               )}
             </>)}
             {d.details.length === 0 && d.steps.length === 0 && <div style={{ height: 14 }} />}
+            </Rv>
           </div>
 
+          <Rv i={4 + (d.parties?.length ?? 0)}>
           {d.action && (
             <button type="button" onClick={d.action.onClick}
               style={{ width: '100%', marginTop: 14, border: 'none', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', cursor: 'pointer' }}>
@@ -279,6 +301,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
             </button>
           )}
           {d.promo !== false && <div style={{ marginTop: 14 }}><SuccessPromo exclude={typeof d.promo === 'string' ? d.promo : undefined} /></div>}
+          </Rv>
           <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--text-muted)', marginTop: 14 }}>MeshPort · Settled on Arc · Circle USDC</div>
         </div>
       </div>
