@@ -89,6 +89,12 @@ interface Recipient {
 
 const QUICK_AMOUNTS = [10, 20, 50, 100]
 
+/** Two letters for an avatar: "Praveen K" → PK, "praveen.arc" → PR. */
+function initialsOf(name: string): string {
+  const parts = name.replace(/\.arc$/i, '').trim().split(/[\s._-]+/).filter(Boolean)
+  return ((parts.length > 1 ? parts[0][0] + parts[1][0] : (parts[0] ?? '?').slice(0, 2)) || '?').toUpperCase()
+}
+
 export function PaySendPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
@@ -1680,13 +1686,18 @@ export function PaySendPage() {
                   title: payPending ? 'Payment submitted' : 'Payment successful',
                   gift: <ScratchGift />,
                   hero: {
-                    amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))} ${payPending ? 'on its way' : 'sent'}`,
-                    line: payPending ? 'Still confirming on Arc. Activity updates when it lands.'
-                      : recipient.isUsername ? `to ${recipient.displayName || recipient.display.replace(/\.arc$/i, '')} · ${recipient.display}` : `to ${midShortenAddress(recipient.walletAddress)}`,
+                    amount: <>{tokenSymbolChar(token)}{formatAmount(numAmount, tokenDisplayDecimals(token))}<span style={{ fontSize: 20, fontWeight: 700, opacity: 0.8, marginLeft: 6, letterSpacing: 0 }}>{token}</span></>,
+                    line: payPending ? 'Still confirming on Arc. Activity updates when it lands.' : null,
                   },
+                  payee: recipient.isUsername
+                    ? { name: recipient.displayName || recipient.display.replace(/\.arc$/i, ''), initial: initialsOf(recipient.displayName || recipient.display),
+                        handle: recipient.display, amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))}`, copy: { value: recipient.display, what: 'Username' } }
+                    : { name: midShortenAddress(recipient.walletAddress), initial: recipient.walletAddress.slice(2, 4).toUpperCase(),
+                        amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))}`, handle: 'Wallet address', copy: { value: recipient.walletAddress, what: 'Address' } },
                   rows: [
+                    { label: 'From', value: senderLabel },
                     { label: 'Network', value: 'Arc Testnet' },
-                    { label: 'Fee', value: estimatedFee > 0 ? `~${formatAmount(estimatedFee, 4)} USDC` : 'Free' },
+                    { label: 'Network fee', value: estimatedFee > 0 ? `~${formatAmount(estimatedFee, 4)} USDC` : 'Free' },
                     { label: 'Time', value: timeLabel },
                     ...(txHash ? [{ label: 'Transaction', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, onCopy: copyHash, copied: hashCopied }] : []),
                   ],
@@ -1716,7 +1727,7 @@ export function PaySendPage() {
                     // Mounted fresh here (not earlier, just hidden) so its
                     // internal toggle timer starts exactly when this becomes
                     // visible.
-                    ? <FlashAuthIcon key="landing-toggle" viaBiometric loop size={34} color={isDesktop ? 'var(--success)' : '#fff'} />
+                    ? <FlashAuthIcon key="landing-toggle" viaBiometric loop size={34} color={isDesktop ? 'var(--success)' : 'var(--brand)'} />
                     : undefined}
                 />
               )

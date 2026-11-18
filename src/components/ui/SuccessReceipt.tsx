@@ -41,6 +41,9 @@ interface SuccessReceiptProps {
     person?: { initial: string; line: ReactNode; amount: string; unit?: string; status: 'success' | 'pending' | 'failed'; statusText: string; when?: string; note?: ReactNode }
     /** The Details card's rows (default: rows + detailRows). */
     rows?: ReceiptRow[]
+    /** Who was paid: the receipt card's top line (initials with a tick, name,
+     *  handle with copy, the amount they got). */
+    payee?: { name: string; initial: string; handle?: string; amount?: string; copy?: { value: string; what: string } }
   }
   /** A "From MeshPort" card under the receipt (full-page receipts): `true`,
    *  or this screen's own feature so it isn't the one shown. */
@@ -91,6 +94,7 @@ interface SuccessReceiptProps {
 /** Size of the header's white check circle - the traveling checkmark's target. */
 export const RECEIPT_CHECK = 76
 
+const statusColorOf = (s: 'success' | 'pending' | 'failed') => s === 'failed' ? 'var(--danger-text)' : s === 'pending' ? 'var(--warning-text)' : 'var(--success-text)'
 const shortHash = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`
 const GOOD = 'color-mix(in srgb, var(--success) 70%, var(--text-primary))'
 const HEADER_BG = {
@@ -233,6 +237,7 @@ export function SuccessReceipt({
   // them back on for a frame (Android repaints the blurred header - a flash).
   usePopupOpen()
   const [open, setOpen] = useState(false)
+  const [payeeCopied, setPayeeCopied] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   // With pinned actions the card scrolls here rather than in rootRef.
@@ -387,7 +392,7 @@ export function SuccessReceipt({
   // the explorer, "For you", and Share + Done at the foot.
   if (page && !desktop) {
     const heroAmount = page.hero?.amount ?? title
-    const heroLine = page.hero?.line ?? subtitle
+    const heroLine = page.hero ? page.hero.line : subtitle
     const share = page.onShare ?? (async () => {
       const text = receiptText({
         amount: page.person ? `${page.person.amount}${page.person.unit ? ` ${page.person.unit}` : ''}` : heroAmount,
@@ -412,6 +417,181 @@ export function SuccessReceipt({
     const label = (t: string) => <p className="text-xs font-bold text-text-secondary" style={{ margin: '20px 4px 8px' }}>{t}</p>
     const person = page.person
     const statusColor = person?.status === 'failed' ? 'var(--danger-text)' : person?.status === 'pending' ? 'var(--warning-text)' : 'var(--success-text)'
+
+    // ── Success page (18 Nov, approved preview): a band in the status colour
+    // holding the header, the white check (the flying checkmark lands in it),
+    // the amount and the settled pill; a receipt card over its lower edge -
+    // who was paid, a torn line, the rows, the explorer - then "For you", and
+    // Done inset at the foot. History records (a person) keep the layout below.
+    if (!person) {
+      const top = status === 'success' ? 'color-mix(in srgb, var(--brand) 70%, #3FD0B8)' : HEADER_BG[status]
+      const band = `linear-gradient(180deg, ${top} 0%, ${status === 'success' ? 'var(--brand)' : HEADER_BG[status]} 58%, color-mix(in srgb, ${status === 'success' ? 'var(--brand)' : HEADER_BG[status]} 72%, black) 100%)`
+      const hasHead = !!(page.title || page.onBack)
+      const giftNode = page.gift ?? gift
+      const payee = page.payee
+      const copyPayee = async () => {
+        if (!payee?.copy) return
+        try { await navigator.clipboard.writeText(payee.copy.value) } catch { return }
+        setPayeeCopied(true)
+        useUIStore.getState().showToastMessage(`${payee.copy.what} copied`, 'success')
+        setTimeout(() => setPayeeCopied(false), 1500)
+      }
+      const got = status === 'success' ? 'Received' : status === 'pending' ? 'On its way' : 'Not sent'
+      const round = { width: 38, height: 38, margin: 0, padding: 0, borderRadius: '50%', background: 'rgba(255,255,255,.16)' } as const
+      return (
+        <div ref={rootRef} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden', color: 'var(--text-primary)', ...style }}>
+          {/* On the band: the header's icons (and the gift's) are white. */}
+          <style>{`.sr-band .back-btn{width:38px;height:38px;margin:0;padding:0;border-radius:50%;background:rgba(255,255,255,.16)}.sr-band .back-btn svg{color:#fff!important}`}</style>
+          {hasHead && (
+            <div className="sr-band header-row flex-shrink-0 gap-3 px-4 pt-header pb-header" style={{ position: 'relative', zIndex: 2, background: top }}>
+              {page.onBack && (
+                <button type="button" onClick={page.onBack} className="back-btn" aria-label="Back" style={round}>
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h1 style={{ fontSize: 17, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.title}</h1>
+              </div>
+              {giftNode}
+              {!page.noShare && (
+                <button type="button" onClick={() => { void share() }} className="back-btn" aria-label="Share" style={round}>
+                  <Share2 className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+          )}
+          <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+            <div className="sr-band" style={{ position: 'relative', background: band, color: '#fff', textAlign: 'center', padding: `${hasHead ? 14 : 26}px 20px 64px` }}>
+              {/* No page header (a page inside the Hub): the gift at the band's corner. */}
+              {!hasHead && giftNode && <div style={{ position: 'absolute', top: 14, right: 16, zIndex: 2 }}>{giftNode}</div>}
+              {burst && <Confetti />}
+              <div ref={setCheck} style={{
+                width: RECEIPT_CHECK, height: RECEIPT_CHECK, borderRadius: '50%', margin: '0 auto', background: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: revealed ? 1 : 0,
+                boxShadow: '0 0 0 10px rgba(255,255,255,.12), 0 0 0 22px rgba(255,255,255,.06)',
+              }}>
+                {checkContent ?? (
+                  <svg viewBox="0 0 24 24" width="50%" height="50%" fill="none" stroke={status === 'success' ? 'var(--brand)' : HEADER_ICON_COLOR[status]} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                    {status === 'failed' ? <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
+                      : status === 'pending' ? <><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></>
+                      : <polyline points="20 6 9 17 4 12" />}
+                  </svg>
+                )}
+              </div>
+              <Reveal i={0} revealed={shown}>
+                <div style={{ fontSize: 40, fontWeight: 900, letterSpacing: '-1.4px', marginTop: 22, lineHeight: 1.1, overflowWrap: 'anywhere', fontVariantNumeric: 'tabular-nums' }}>{heroAmount}</div>
+              </Reveal>
+              {heroLine && (
+                <Reveal i={1} revealed={shown}>
+                  <div style={{ fontSize: 15, opacity: 0.85, marginTop: 6, overflowWrap: 'anywhere' }}>{heroLine}</div>
+                </Reveal>
+              )}
+              {pill && (
+                <Reveal i={2} revealed={shown}>
+                  <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginTop: 14, padding: '7px 13px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: 'rgba(0,0,0,.18)' }}>
+                    <Zap size={14} color="#FFD25E" fill="#FFD25E" />{pill}
+                  </div>
+                </Reveal>
+              )}
+            </div>
+            <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 16px 20px', boxSizing: 'border-box' }}>
+              {(payee || detailRowsAll.length > 0 || !!links?.length) && (
+                <Reveal i={3} revealed={shown} style={{ position: 'relative', marginTop: -44 }}>
+                  <div ref={cardRef} style={{ background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: '0 10px 30px rgba(0,0,0,.10)', borderRadius: 22 }}>
+                    {payee && (<>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 16px 14px' }}>
+                        <span style={{ position: 'relative', width: 46, height: 46, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center', fontSize: 17, fontWeight: 800,
+                          color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>
+                          {payee.initial}
+                          <span style={{ position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: '50%', display: 'grid', placeItems: 'center', border: '2px solid var(--surface)',
+                            background: status === 'failed' ? 'var(--danger)' : status === 'pending' ? 'var(--warning)' : 'var(--success)' }}>
+                            {status === 'failed' ? <X size={9} color="#fff" strokeWidth={4} /> : status === 'pending' ? <Clock size={9} color="#fff" strokeWidth={3.4} /> : <Check size={9} color="#fff" strokeWidth={4} />}
+                          </span>
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <b style={{ display: 'block', fontSize: 16, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{payee.name}</b>
+                          {payee.handle && (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: 'var(--text-secondary)', minWidth: 0 }}>
+                              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{payee.handle}</span>
+                              {payee.copy && (
+                                <button type="button" onClick={() => { void copyPayee() }} aria-label={`Copy ${payee.copy.what.toLowerCase()}`}
+                                  style={{ border: 0, background: 'none', padding: 0, display: 'flex', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                                  {payeeCopied ? <Check data-tick size={15} color="var(--success)" /> : <Copy size={15} />}
+                                </button>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        {payee.amount && (
+                          <div style={{ flex: 'none', textAlign: 'right' }}>
+                            <b style={{ display: 'block', fontSize: 16, fontWeight: 800 }}>{payee.amount}</b>
+                            <small style={{ fontSize: 12, fontWeight: 700, color: statusColorOf(status) }}>{got}</small>
+                          </div>
+                        )}
+                      </div>
+                      {/* Torn line: notches at both edges, dashes between. */}
+                      <div aria-hidden style={{ position: 'relative', height: 18 }}>
+                        <span style={{ position: 'absolute', left: 16, right: 16, top: '50%', borderTop: '2px dashed var(--border)' }} />
+                        <span style={{ position: 'absolute', top: 0, left: -10, width: 18, height: 18, borderRadius: '50%', background: 'var(--bg)' }} />
+                        <span style={{ position: 'absolute', top: 0, right: -10, width: 18, height: 18, borderRadius: '50%', background: 'var(--bg)' }} />
+                      </div>
+                    </>)}
+                    <div style={{ padding: payee ? '4px 16px 4px' : '10px 16px 4px' }}>
+                      {detailRowsAll.map(r => (
+                        <div key={r.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', fontSize: 14.5 }}>
+                          <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>{r.label}</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontWeight: 600, minWidth: 0, color: r.positive ? 'var(--success-text)' : 'var(--text-primary)' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.value}</span>
+                            {r.onCopy && (
+                              <button type="button" onClick={r.onCopy} aria-label={`Copy ${r.label.toLowerCase()}`}
+                                style={{ border: 0, background: 'none', padding: 0, display: 'flex', cursor: 'pointer', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                                {r.copied ? <Check data-tick size={15} color="var(--success)" /> : <Copy size={15} />}
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {!!links?.length && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '4px 16px 16px' }}>
+                        {links.map(l => (
+                          <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer"
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '11px 12px', borderRadius: 14, fontSize: 14, fontWeight: 700,
+                              color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 10%, transparent)', textDecoration: 'none' }}>
+                            {links.length > 1 ? `${l.title}${l.explorer ? ` · ${l.explorer}` : ''}` : `View on ${l.explorer || 'explorer'}`}
+                            <ExternalLink size={15} />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    {!links?.length && <div style={{ height: 8 }} />}
+                  </div>
+                  {linksNote && <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45, margin: '8px 4px 0' }}>{linksNote}</p>}
+                </Reveal>
+              )}
+              {page.sections}
+              {promoShown && <Reveal i={4} revealed={shown}>{label('For you')}<SuccessPromo exclude={promo === true ? undefined : promo} revealed={shown} instant /></Reveal>}
+            </div>
+          </div>
+          {footer.length > 0 && (
+            <motion.div initial={false} animate={shown ? { opacity: 1 } : { opacity: 0 }} transition={{ duration: 0.3 }}
+              style={{ flexShrink: 0, display: 'flex', gap: 10, padding: '10px 16px calc(var(--safe-bottom) + 16px)', background: 'var(--bg)' }}>
+              {footer.map(a => (
+                <motion.button key={a.label} onClick={a.onClick} whileTap={{ scale: 0.98 }}
+                  style={{
+                    flex: 1, height: 54, borderRadius: 999, cursor: 'pointer', fontSize: 16, fontWeight: 800, fontFamily: 'inherit',
+                    ...(a.primary
+                      ? { border: 0, background: 'var(--brand)', color: '#fff' }
+                      : { border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--brand-text)' }),
+                  }}>
+                  {a.label}
+                </motion.button>
+              ))}
+            </motion.div>
+          )}
+        </div>
+      )
+    }
     return (
       <div ref={rootRef} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden', color: 'var(--text-primary)', ...style }}>
         {(page.title || page.onBack) && (
