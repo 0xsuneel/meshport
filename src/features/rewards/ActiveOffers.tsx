@@ -41,11 +41,11 @@ function stateLine(o: RewardOffer): { text: string; color: string } {
 
 export function ActiveOffers({ margin, refreshKey }: { margin: number; refreshKey: number }) {
   const navigate = useNavigate()
-  const [offers, setOffers] = useState<RewardOffer[]>([])
+  const [offers, setOffers] = useState<RewardOffer[] | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(() => { fetchOffers().then(setOffers).catch(() => { /* not available yet: the always-on card still shows */ }) }, [])
+  const load = useCallback(() => { fetchOffers().then(setOffers).catch(() => setOffers(o => o ?? [])) /* not available yet: the always-on card still shows */ }, [])
   useEffect(() => { load() }, [load, refreshKey])
   useEffect(() => {
     const onVisible = () => { if (document.visibilityState === 'visible') load() }
@@ -53,7 +53,7 @@ export function ActiveOffers({ margin, refreshKey }: { margin: number; refreshKe
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [load])
 
-  const open = offers.find(o => o.id === openId) ?? null
+  const open = offers?.find(o => o.id === openId) ?? null
   const activate = async (o: RewardOffer) => {
     setBusy(true)
     try {
@@ -83,12 +83,15 @@ export function ActiveOffers({ margin, refreshKey }: { margin: number; refreshKe
         <h4 style={{ fontSize: 21, fontWeight: 900, letterSpacing: '-0.2px', textTransform: 'uppercase', color: 'var(--text-primary)' }}>Your active offers</h4>
       </div>
       <div className="sr-strip" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: `2px ${margin}px 4px` }}>
-        {offers.map(o => card(o.id,
+        {offers === null && [0, 1].map(i => (
+          <div key={i} aria-hidden className="mp-skel" style={{ flex: '0 0 290px', height: 84, borderRadius: 22 }} />
+        ))}
+        {offers?.map(o => card(o.id,
           <Ring value={o.state === 'idle' || o.state === 'expired' ? 0 : o.progress} steps={o.steps}
             label={o.state === 'done' ? '✓' : o.state === 'running' ? `${o.progress}/${o.steps}` : '$'} />,
           stateLine(o), `${o.title} ${o.line}`, () => setOpenId(o.id)))}
         {/* Always on: every payment wins a card. */}
-        {card('every', <Ring value={1} steps={1} label="$" />, { text: 'ALWAYS ON · EVERY PAYMENT', color: 'var(--success-text)' },
+        {offers !== null && card('every', <Ring value={1} steps={1} label="$" />, { text: 'ALWAYS ON · EVERY PAYMENT', color: 'var(--success-text)' },
           'Every payment wins a card - random points or real USDC', () => navigate('/pay'))}
       </div>
 
