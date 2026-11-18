@@ -21,6 +21,14 @@ function Coin({ size = 54 }: { size?: number }) {
   )
 }
 
+function UsdcCoin({ size = 54 }: { size?: number }) {
+  return (
+    <span aria-hidden style={{ width: size, height: size, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center',
+      background: 'radial-gradient(circle at 32% 28%, #7DB6F5, #2775CA 70%)', border: '3px solid #DCEBFB', boxShadow: 'inset -4px -5px 0 rgba(0,0,0,.14), 0 4px 10px rgba(39,117,202,.35)',
+      color: '#fff', fontWeight: 900, fontSize: size * 0.46 }}>$</span>
+  )
+}
+
 /** "Slide to convert": drag the knob to the end (or press Enter / Space on it). */
 function SlideToConfirm({ label, disabled, busy, onConfirm }: { label: string; disabled?: boolean; busy?: boolean; onConfirm: () => void }) {
   const track = useRef<HTMLDivElement>(null)
@@ -61,7 +69,7 @@ function SlideToConfirm({ label, disabled, busy, onConfirm }: { label: string; d
 }
 
 export function PointsConvertPage({
-  totalPoints, maxClaimable, dailyRemaining, canConvert, claiming, loading, onConvert, onClose, onHistory, historyCount, history,
+  totalPoints, maxClaimable, dailyRemaining, canConvert, claiming, loading, onConvert, onClose, onHistory, historyCount, history, usdcMicro,
 }: {
   totalPoints: number
   /** What one slide converts: all of it, within the per-claim and daily limits. */
@@ -76,11 +84,18 @@ export function PointsConvertPage({
   historyCount: number
   /** The latest points earned (rows from the Rewards page). */
   history: ReactNode
+  /** Set: the USDC-rewards version of the page (USDC won on scratch cards,
+   *  micro-USDC) - "Slide to move to your wallet". totalPoints / maxClaimable
+   *  are then that USDC's value in contract points (1 pt = 500 micro). */
+  usdcMicro?: number
 }) {
   useBackLayer(true, onClose)
   const info = useRef<HTMLDivElement>(null)
+  const U = usdcMicro !== undefined
+  const usd = (pts: number) => `$${pointsToUSDC(pts).toFixed(2)}`
   const capHit = totalPoints >= MIN_CLAIM_POINTS && dailyRemaining < MIN_CLAIM_POINTS
   const toFirst = Math.max(0, MIN_CLAIM_POINTS - totalPoints)
+  const accent = U ? '#2775CA' : GOLD
   const chip = (icon: ReactNode, text: ReactNode, onClick: () => void) => (
     <button type="button" onClick={onClick} className="mp-press"
       style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 16, background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -88,14 +103,14 @@ export function PointsConvertPage({
     </button>
   )
   return createPortal(
-    <motion.div role="dialog" aria-modal="true" aria-label="Convert points"
+    <motion.div role="dialog" aria-modal="true" aria-label={U ? 'Move USDC rewards' : 'Convert points'}
       initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={PAGE_TRANSITION}
       style={{ position: 'fixed', inset: 0, zIndex: 250, background: 'var(--bg)', display: 'flex', flexDirection: 'column', willChange: 'transform' }}>
       <div className="header-row mp-glass-header flex-shrink-0 gap-3 px-5 pt-header pb-header" style={{ position: 'relative' }}>
         <button type="button" onClick={onClose} className="back-btn" aria-label="Back"><ArrowLeft className="w-5 h-5 text-text-primary" /></button>
-        <h1 aria-label="MeshPort Points" style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', marginTop: 'calc(var(--safe-top, 0px) / 2)', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1, pointerEvents: 'none' }}>
+        <h1 aria-label={U ? 'MeshPort USDC rewards' : 'MeshPort Points'} style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', marginTop: 'calc(var(--safe-top, 0px) / 2)', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1, pointerEvents: 'none' }}>
           <b style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-.5px', fontStyle: 'italic', textTransform: 'uppercase', background: 'linear-gradient(180deg, #1C8A7F, #0E524C)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', paddingRight: 2 }}>MeshPort</b>
-          <small style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.14em', color: GOLD, marginTop: 3 }}>POINTS</small>
+          <small style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.14em', color: accent, marginTop: 3 }}>{U ? 'USDC REWARDS' : 'POINTS'}</small>
         </h1>
       </div>
 
@@ -104,36 +119,37 @@ export function PointsConvertPage({
           <div style={{ position: 'relative', textAlign: 'center', padding: '20px 16px 22px' }}>
             <span aria-hidden style={{ position: 'absolute', left: '17%', top: 6, color: '#E3B341', fontSize: 22 }}>✦</span>
             <span aria-hidden style={{ position: 'absolute', right: '15%', top: 34, color: '#E3B341', fontSize: 20 }}>✦</span>
-            <h2 style={{ fontSize: 27, fontWeight: 800, letterSpacing: '-.4px', lineHeight: 1.22, color: 'var(--text-primary)' }}>Every payment<br />earns you points</h2>
+            <h2 style={{ fontSize: 27, fontWeight: 800, letterSpacing: '-.4px', lineHeight: 1.22, color: 'var(--text-primary)' }}>{U ? <>Scratch cards win<br />you real USDC</> : <>Every payment<br />earns you points</>}</h2>
           </div>
 
           {/* Balance + slide to convert */}
           <div style={{ margin: '0 16px', background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 30, padding: '22px 18px 20px', textAlign: 'center' }}>
-            <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Points balance</div>
+            <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{U ? 'USDC rewards balance' : 'Points balance'}</div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 8 }}>
-              <Coin />
-              <span style={{ fontSize: 52, fontWeight: 900, letterSpacing: '-1.5px', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{loading ? '–' : totalPoints.toLocaleString()}</span>
+              {U ? <UsdcCoin /> : <Coin />}
+              <span style={{ fontSize: 52, fontWeight: 900, letterSpacing: '-1.5px', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{loading ? '–' : U ? `$${(usdcMicro! / 1e6).toFixed(2)}` : totalPoints.toLocaleString()}</span>
             </div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: GOLD, marginTop: 8 }}>Are worth ${formatAmount(pointsToUSDC(totalPoints))} real USDC</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: accent, marginTop: 8 }}>{U ? 'Real USDC, ready for your main balance' : `Are worth ${usd(totalPoints)} real USDC`}</div>
             <div style={{ marginTop: 22 }}>
               {toFirst > 0 ? (
                 <div style={{ position: 'relative', height: 64, borderRadius: 999, overflow: 'hidden', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
                   <div style={{ position: 'absolute', inset: 0, width: `${Math.min(100, (totalPoints / MIN_CLAIM_POINTS) * 100)}%`, background: 'color-mix(in srgb, var(--brand) 18%, transparent)' }} />
                   <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 15, fontWeight: 700, color: 'var(--text-secondary)' }}>
-                    {toFirst} more points to convert
+                    {U ? (usdcMicro! > 0 ? `Win ${usd(toFirst)} more to move it` : 'Scratch cards to win USDC') : `${toFirst} more points to convert`}
                   </div>
                 </div>
               ) : capHit ? (
                 <div style={{ padding: '18px 12px', borderRadius: 999, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)' }}>
-                  Today's limit reached - convert again after 00:00 UTC
+                  Today's limit reached - {U ? 'move it' : 'convert'} again after 00:00 UTC
                 </div>
               ) : (
-                <SlideToConfirm label="Slide to convert to USDC" disabled={!canConvert} busy={claiming} onConfirm={onConvert} />
+                <SlideToConfirm label={U ? 'Slide to move to your wallet' : 'Slide to convert to USDC'} disabled={!canConvert} busy={claiming} onConfirm={onConvert} />
               )}
             </div>
             {toFirst === 0 && !capHit && (
               <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 10 }}>
-                Converts {maxClaimable.toLocaleString()} pts → ${formatAmount(pointsToUSDC(maxClaimable))} USDC to your wallet · no passcode
+                {U ? `Moves ${usd(maxClaimable)} USDC to your main balance · no passcode`
+                  : `Converts ${maxClaimable.toLocaleString()} pts → ${usd(maxClaimable)} USDC to your wallet · no passcode`}
               </div>
             )}
           </div>
@@ -146,19 +162,24 @@ export function PointsConvertPage({
 
           <div style={{ textAlign: 'center', margin: '26px 16px 12px' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-              <span aria-hidden style={{ width: 60, height: 1, background: `linear-gradient(90deg, transparent, ${GOLD})` }} />
-              <b style={{ fontSize: 24, fontWeight: 800, color: GOLD }}>Points to USDC</b>
-              <span aria-hidden style={{ width: 60, height: 1, background: `linear-gradient(270deg, transparent, ${GOLD})` }} />
+              <span aria-hidden style={{ width: 60, height: 1, background: `linear-gradient(90deg, transparent, ${accent})` }} />
+              <b style={{ fontSize: 24, fontWeight: 800, color: accent }}>{U ? 'USDC to your wallet' : 'Points to USDC'}</b>
+              <span aria-hidden style={{ width: 60, height: 1, background: `linear-gradient(270deg, transparent, ${accent})` }} />
             </div>
             <div style={{ fontSize: 14.5, color: 'var(--text-secondary)', marginTop: 6 }}>Real USDC on Arc, straight to your MeshPort wallet</div>
           </div>
           <div ref={info} style={{ margin: '0 16px', background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 24, padding: '6px 16px' }}>
-            {[
+            {(U ? [
+              ['Minimum', `${usd(MIN_CLAIM_POINTS)} at a time`],
+              ['Per move', `Up to ${usd(MAX_CLAIM_POINTS)}`],
+              ['Daily limit', `${usd(MAX_DAILY_POINTS)} a day, shared with points · ${usd(dailyRemaining)} left today`],
+              ['Win USDC', 'Random USDC in scratch cards on payments of $1 or more, and in cards from completed offers'],
+            ] : [
               ['Rate', `1,000 pts = $${formatAmount(pointsToUSDC(1000))} USDC`],
               ['Per conversion', `${MIN_CLAIM_POINTS} – ${MAX_CLAIM_POINTS.toLocaleString()} pts`],
               ['Daily limit', `${MAX_DAILY_POINTS.toLocaleString()} pts · ${dailyRemaining.toLocaleString()} left today`],
               ['Earn points', 'Random points for each payment, swap, chat pay, multichain and bulk pay - once a day each, plus scratch cards'],
-            ].map(([k, v], i) => (
+            ]).map(([k, v], i) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '12px 0', borderTop: i ? '1px solid var(--border)' : 'none', fontSize: 14 }}>
                 <span style={{ color: 'var(--text-secondary)', flex: 'none' }}>{k}</span>
                 <span style={{ color: 'var(--text-primary)', fontWeight: 600, textAlign: 'right' }}>{v}</span>
@@ -166,7 +187,7 @@ export function PointsConvertPage({
             ))}
           </div>
 
-          <p className="text-xs font-bold text-text-secondary" style={{ margin: '24px 20px 6px' }}>Recent points</p>
+          <p className="text-xs font-bold text-text-secondary" style={{ margin: '24px 20px 6px' }}>{U ? 'USDC won' : 'Recent points'}</p>
           <div>{history}</div>
         </div>
       </div>

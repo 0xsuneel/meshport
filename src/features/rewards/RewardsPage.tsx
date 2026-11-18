@@ -29,7 +29,7 @@ import { useLeaveGuard } from '@/lib/leaveGuard'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { ScratchRewards } from './ScratchRewards'
 import { PointsConvertPage } from './PointsConvert'
-import { fetchScratchHistory, fmtUsdcMicro, onCardCount, type ScratchWin } from '@/lib/scratchCards'
+import { fetchScratchHistory, fmtUsdcMicro, onCardCount, usdcClaimPoints, MICRO_PER_POINT, type ScratchWin } from '@/lib/scratchCards'
 import { ArrowLeft } from 'lucide-react'
 
 interface ClaimRecord {
@@ -396,6 +396,8 @@ export function RewardsPage() {
   const claimUsdc = (usdcPoints: number) => { void claimOnce(() => runClaim(pendingClaim?.points, usdcPoints)) }
   // Points → USDC page (Points tile): slide converts all it can at once.
   const [showConvert, setShowConvert] = useState(false)
+  const [showUsdc, setShowUsdc] = useState(false)
+  const [usdcMicro, setUsdcMicro] = useState(0)
   const convertAll = () => { void claimOnce(() => runClaim(pendingClaim?.points, undefined, maxClaimable)) }
   const runClaim = async (finishing?: number, usdcPoints?: number, exactPoints?: number) => {
     const usdcRewards = !finishing && !!usdcPoints
@@ -597,7 +599,34 @@ export function RewardsPage() {
 
   const scratch = (
     <ScratchRewards isDesktop={isDesktop} totalPoints={totalPoints} claiming={claiming} refreshKey={scratchRefresh}
-      onPointsWon={() => { void load() }} onClaimUsdc={claimUsdc} onClaimPoints={canOpenClaim ? () => setShowConvert(true) : undefined} onOpenPoints={() => setShowConvert(true)} />
+      onPointsWon={() => { void load() }} onClaimUsdc={claimUsdc} onClaimPoints={canOpenClaim ? () => setShowConvert(true) : undefined} onOpenPoints={() => setShowConvert(true)}
+      onOpenUsdc={() => setShowUsdc(true)} onUsdc={setUsdcMicro} />
+  )
+
+  // USDC won on scratch cards → the wallet (USDC tile): the same page, its
+  // USDC version. Amounts in contract points (1 pt = 500 micro-USDC).
+  const usdcPts = Math.floor(usdcMicro / MICRO_PER_POINT)
+  const usdcMax = Math.min(usdcPts, dailyRemaining, MAX_CLAIM_POINTS)
+  const usdcWins = scratchWins.filter(w => w.kind === 'usdc')
+  const usdcPage = (
+    <AnimatePresence>
+      {showUsdc && (
+        <PointsConvertPage key="rw-usdc" usdcMicro={usdcMicro} totalPoints={usdcPts} maxClaimable={usdcMax} dailyRemaining={dailyRemaining}
+          canConvert={!!userId && !!walletAddress && fresh && usdcMax >= MIN_CLAIM_POINTS} claiming={claiming} loading={loading}
+          onConvert={() => claimUsdc(usdcClaimPoints(usdcMicro))} onClose={() => setShowUsdc(false)}
+          onHistory={() => navigate('/activity?filter=rewards&rewards=earned')}
+          historyCount={usdcWins.length}
+          history={usdcWins.length === 0
+            ? <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '16px' }}>USDC you win on scratch cards will show here.</p>
+            : usdcWins.slice(0, 10).map(w => (
+              <HistoryRow key={w.id}
+                icon={<HistoryIcon tone="in" icon="rewards" />}
+                title="Scratch card won"
+                meta={<><span style={{ color: 'var(--success-text)', fontWeight: 600 }}>In your USDC rewards</span> · {timeAgo(w.scratchedAt)}</>}
+                right={<div style={{ fontSize: 14, fontWeight: 700, color: '#2775CA' }}>+{fmtUsdcMicro(w.usdcMicro)} USDC</div>} />
+            ))} />
+      )}
+    </AnimatePresence>
   )
 
   const convertPage = (
@@ -626,6 +655,7 @@ export function RewardsPage() {
   const overlays = (
     <>
       {convertPage}
+      {usdcPage}
       <AnimatePresence>
         {claimReceipt && <RewardClaimReceipt key={claimReceipt.id} claim={claimReceipt} onClose={() => { claimFlash.closed(claimReceipt.id); setClaimReceipt(null) }} />}
       </AnimatePresence>
