@@ -218,6 +218,8 @@ export function SuccessReceipt({
   // separate `scale` property so the flight's transform is untouched). The
   // sound and buzz already came with the success flash (successFeedback).
   // Not with reduced motion.
+  const [shown, setShown] = useState(false)
+  useEffect(() => { const f = requestAnimationFrame(() => setShown(true)); return () => cancelAnimationFrame(f) }, [])
   const landed = useRef(false)
   useEffect(() => {
     if (!revealed) { landed.current = false; return }
@@ -284,14 +286,14 @@ export function SuccessReceipt({
   const h5 = { fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', margin: '10px 0 2px' } as const
 
   const heroText = (<>
-          <Reveal i={0} revealed={revealed}>
+          <Reveal i={0} revealed={shown}>
             <h2 style={{ fontSize: 25, fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>{title}</h2>
           </Reveal>
-          <Reveal i={1} revealed={revealed}>
+          <Reveal i={1} revealed={shown}>
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '6px 0 12px', overflowWrap: 'anywhere' }}>{subtitle}</p>
           </Reveal>
           {bubble && (
-            <Reveal i={1} revealed={revealed} style={{ display: 'flex', marginBottom: 6 }}>
+            <Reveal i={1} revealed={shown} style={{ display: 'flex', marginBottom: 6 }}>
               <span style={{
                 display: 'inline-block', margin: '0 0 10px auto', padding: '10px 14px', textAlign: 'left',
                 borderRadius: '16px 16px 4px 16px', fontSize: 14, fontWeight: 600,
@@ -300,7 +302,7 @@ export function SuccessReceipt({
             </Reveal>
           )}
           {pill && (
-            <Reveal i={2} revealed={revealed}>
+            <Reveal i={2} revealed={shown}>
               <div style={{
                 display: 'inline-flex', gap: 7, alignItems: 'center', padding: '8px 15px', borderRadius: 999,
                 fontSize: 13, fontWeight: 700, color: GOOD, background: 'color-mix(in srgb, var(--success) 15%, transparent)',
@@ -312,10 +314,10 @@ export function SuccessReceipt({
           {reward && revealed && !gift && <div style={{ marginTop: 8 }}><PointsEarnedLine type={reward} /></div>}
   </>)
   const rowsBlock = (<>
-            {rows.map((r, i) => <Row key={r.label} row={r} i={i + 3} revealed={revealed} />)}
+            {rows.map((r, i) => <Row key={r.label} row={r} i={i + 3} revealed={shown} />)}
 
             {hasMore && (
-              <Reveal i={rows.length + 3} revealed={revealed}>
+              <Reveal i={rows.length + 3} revealed={shown}>
                 <button onClick={toggleDetails} aria-expanded={open}
                   style={{
                     width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -408,7 +410,7 @@ export function SuccessReceipt({
     // unless there's something to do (e.g. Open Recover).
     const footer: Array<{ label: string; onClick: () => void; primary?: boolean }> = page.noDone
       ? (actions ?? [])
-      : [...(page.onBack ? [] : [{ label: 'Share', onClick: () => { void share() } }]), ...(actions?.length ? actions : [{ label: primaryLabel, onClick: onPrimary, primary: true }])]
+      : [...(actions?.length ? actions : [{ label: primaryLabel, onClick: onPrimary, primary: true }])]
     const ring = status === 'success' ? 'var(--brand)' : status === 'pending' ? 'var(--warning)' : 'var(--danger)'
     const detailRowsAll = page.rows ?? [...rows, ...(detailRows ?? [])]
     const cardStyle = { background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 16 } as const
@@ -471,14 +473,14 @@ export function SuccessReceipt({
                     </svg>
                   )}
                 </div>
-                <Reveal i={0} revealed={revealed}>
+                <Reveal i={0} revealed={shown}>
                   <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-1px', marginTop: 20, overflowWrap: 'anywhere' }}>{heroAmount}</div>
                 </Reveal>
-                <Reveal i={1} revealed={revealed}>
+                <Reveal i={1} revealed={shown}>
                   <div style={{ fontSize: 15, color: 'var(--text-secondary)', marginTop: 4, overflowWrap: 'anywhere' }}>{heroLine}</div>
                 </Reveal>
                 {pill && (
-                  <Reveal i={2} revealed={revealed}>
+                  <Reveal i={2} revealed={shown}>
                     <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginTop: 12, padding: '7px 14px', borderRadius: 999, fontSize: 13, fontWeight: 700, color: 'var(--success-text)', background: 'color-mix(in srgb, var(--success) 15%, transparent)' }}>
                       <Zap size={14} color="#F5B82E" fill="#F5B82E" />{pill}
                     </div>
@@ -489,7 +491,7 @@ export function SuccessReceipt({
             )}
             {page.sections}
             {(detailRowsAll.length > 0 || !!links?.length) && (
-              <Reveal i={3} revealed={revealed}>
+              <Reveal i={3} revealed={shown}>
                 {label('Details')}
                 <div ref={cardRef} style={{ ...cardStyle, overflow: 'hidden' }}>
                   {detailRowsAll.map((r, i) => (
@@ -517,11 +519,11 @@ export function SuccessReceipt({
                 {linksNote && <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45, margin: '8px 4px 0' }}>{linksNote}</p>}
               </Reveal>
             )}
-            {promoShown && <>{label('For you')}<SuccessPromo exclude={promo === true ? undefined : promo} revealed={revealed} /></>}
+            {promoShown && <Reveal i={4} revealed={shown}>{label('For you')}<SuccessPromo exclude={promo === true ? undefined : promo} revealed={shown} instant /></Reveal>}
           </div>
         </div>
         {footer.length > 0 && (
-          <motion.div initial={false} animate={revealed ? { opacity: 1 } : { opacity: 0 }} transition={{ duration: 0.3 }}
+          <motion.div initial={false} animate={shown ? { opacity: 1 } : { opacity: 0 }} transition={{ duration: 0.3 }}
             style={{ flexShrink: 0, display: 'flex', gap: 10, padding: '12px 16px calc(var(--safe-bottom) + 18px)', background: 'var(--bg)', borderTop: '1px solid var(--border)' }}>
             {footer.map(a => (
               <motion.button key={a.label} onClick={a.onClick} whileTap={{ scale: 0.98 }}
@@ -617,7 +619,7 @@ export function SuccessReceipt({
             // the receipt scrolls under it - with the points line, four rows
             // and More details it is taller than chat Pay's sheet, and the
             // button sat cut off below the edge (17 Nov).
-            <Reveal i={rows.length + 4} revealed={revealed} style={fill ? {
+            <Reveal i={rows.length + 4} revealed={shown} style={fill ? {
               marginTop: 'auto', paddingTop: 12, paddingBottom: 10,
               position: 'sticky', bottom: 0, zIndex: 1, background: 'var(--surface)',
             } : undefined}>
@@ -635,7 +637,7 @@ export function SuccessReceipt({
       {promoShown && (
         <div style={{ maxWidth: 480, width: '100%', margin: '0 auto auto', flexShrink: 0 }}>
           <p className="text-xs font-bold text-text-secondary" style={{ margin: '18px 4px 8px' }}>For you</p>
-          <SuccessPromo exclude={promo === true ? undefined : promo} revealed={revealed} />
+          <SuccessPromo exclude={promo === true ? undefined : promo} revealed={shown} />
         </div>
       )}
       </div>
