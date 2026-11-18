@@ -10,7 +10,7 @@ import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, Check, ChevronDown, Clock, Copy, ExternalLink, Share2, X, Zap } from 'lucide-react'
 import { useBackLayer } from '@/lib/backLayers'
-import { DESKTOP_QUERY, PAGE_TRANSITION, SPRING_SOFT } from '@/lib/motion'
+import { DESKTOP_QUERY, EASE_OUT, PAGE_TRANSITION } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from './DesktopDialogFrame'
 import { copyToClipboard } from '@/lib/utils'
@@ -104,8 +104,10 @@ function StatusMark({ status }: { status: TxDetail['status'] }) {
 function Rv({ i, children }: { i: number; children: ReactNode }) {
   const reduce = useReducedMotion()
   return (
-    <motion.div initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ ...SPRING_SOFT, delay: Math.max(0, i - 1) * 0.05 }}>
+    <motion.div initial={reduce ? false : { opacity: 0.35, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      // A short tween, not a spring: a spring's slow start (and ~0.5 s to
+      // settle, sharing frames with the slide) made the rows look late.
+      transition={{ duration: 0.22, ease: EASE_OUT, delay: Math.max(0, i - 1) * 0.04 }}>
       {children}
     </motion.div>
   )
@@ -292,7 +294,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                     <div style={{ position: 'relative', padding: '6px 0 8px', marginBottom: 6, borderBottom: '1px solid var(--border)' }}>
                       <span aria-hidden style={{ position: 'absolute', left: 11, top: 20, bottom: 22, width: 2, background: 'color-mix(in srgb, var(--success) 35%, transparent)' }} />
                       {d.steps.map((st, i) => (
-                        <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ ...SPRING_SOFT, delay: i * 0.07 }}
+                        <motion.div key={i} initial={{ opacity: 0.35, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.22, ease: EASE_OUT, delay: i * 0.05 }}
                           style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '7px 0', fontSize: 14 }}>
                           {stepMark(i)}<span style={{ minWidth: 0 }}>{st}</span>
                         </motion.div>
