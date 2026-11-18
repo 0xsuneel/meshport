@@ -12,10 +12,10 @@ import { EASE_OUT } from '@/lib/motion'
 
 export type PromoFeature = 'multichain' | 'swap' | 'p2p'
 
-const PROMOS: Array<{ id: PromoFeature; to: string; title: string; line: string; cta: string; Icon: typeof Globe; flag?: string }> = [
-  { id: 'multichain', to: '/multichain', title: 'Multichain Hub', line: 'Your USDC across 20+ chains, in one place', cta: 'Open', Icon: Globe },
-  { id: 'swap', to: '/swap', title: 'Swap USDC ⇄ EURC', line: 'Change currency in seconds on Arc', cta: 'Swap', Icon: ArrowLeftRight },
-  { id: 'p2p', to: '/p2p', title: 'P2P Marketplace', line: 'Buy and sell USDC safely with escrow', cta: 'Explore', Icon: Users, flag: 'p2p_enabled' },
+const PROMOS: Array<{ id: PromoFeature; to: string; title: string; line: string; cta: string; Icon: typeof Globe; tile: string; flag?: string }> = [
+  { id: 'multichain', to: '/multichain', title: 'Multichain Hub', line: 'Your USDC across 20+ chains, in one place', cta: 'Open', Icon: Globe, tile: 'linear-gradient(135deg, #12665F, #2BA393)' },
+  { id: 'swap', to: '/swap', title: 'Swap USDC ⇄ EURC', line: 'Change currency in seconds on Arc', cta: 'Swap', Icon: ArrowLeftRight, tile: 'linear-gradient(135deg, #2B5CE6, #5B8DEF)' },
+  { id: 'p2p', to: '/p2p', title: 'P2P Marketplace', line: 'Buy and sell USDC safely with escrow', cta: 'Explore', Icon: Users, tile: 'linear-gradient(135deg, #C2410C, #F59E0B)', flag: 'p2p_enabled' },
 ]
 
 /** `exclude`: the feature this receipt is for (Swap's receipt never shows Swap). */
@@ -31,33 +31,31 @@ export function SuccessPromo({ exclude, revealed = true }: { exclude?: PromoFeat
   }, [exclude])
   if (!promo) return null
   const { Icon } = promo
+  // The approved preview's "For you" card: a quiet card in the app's card
+  // style - a coloured tile, the title, one line, and "From MeshPort" small
+  // (where a partner's card would say "Sponsored · their site").
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
       transition={{ duration: 0.35, delay: revealed ? 0.35 : 0, ease: EASE_OUT }}
-      style={{ maxWidth: 480, width: '100%', margin: '14px auto auto', flexShrink: 0 }}
+      style={{ width: '100%', flexShrink: 0 }}
     >
-      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '0 6px 6px' }}>
-        From MeshPort
-      </p>
       <button type="button" onClick={() => navigate(promo.to)}
         className="w-full text-left active:scale-[0.99] transition-transform"
         style={{
-          position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: 12, padding: 14, borderRadius: 22, border: 'none', color: '#fff',
-          background: 'linear-gradient(135deg, #12665F 0%, #1C8A7F 55%, #2BA393 100%)', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, cursor: 'pointer', fontFamily: 'inherit',
+          background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)',
         }}>
-        <span aria-hidden style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(115deg, rgba(255,255,255,.07) 0 10px, transparent 10px 20px)' }} />
-        <span style={{ position: 'relative', width: 46, height: 46, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.18)' }}>
-          <Icon size={22} strokeWidth={2} />
+        <span style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', background: promo.tile }}>
+          <Icon size={22} strokeWidth={2.2} />
         </span>
-        <span style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 15, fontWeight: 700 }}>{promo.title}</span>
-          <span style={{ display: 'block', fontSize: 12.5, opacity: 0.9 }}>{promo.line}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{promo.title}</span>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{promo.line}</span>
+          <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-muted)', marginTop: 3 }}>From MeshPort</span>
         </span>
-        <span style={{ position: 'relative', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 2, background: '#fff', color: '#12665F', fontWeight: 800, fontSize: 12.5, padding: '8px 10px 8px 12px', borderRadius: 999 }}>
-          {promo.cta}<ChevronRight size={14} strokeWidth={2.6} />
-        </span>
+        <ChevronRight size={18} color="var(--text-muted)" style={{ flexShrink: 0 }} />
       </button>
     </motion.div>
   )

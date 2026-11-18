@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Reac
 import { PointsEarnedLine } from '@/components/rewards/PointsEarnedLine'
 import type { RewardActionType } from '@/lib/rewards'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, Check, ChevronDown, Copy, ExternalLink, Share2, Zap } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, Clock, Copy, ExternalLink, Share2, X, Zap } from 'lucide-react'
+import { useUIStore } from '@/store'
 import { DESKTOP_QUERY, EASE_OUT, SPRING_SOFT, springProgress, stableLayer } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
@@ -30,7 +31,15 @@ export interface ReceiptLink { title: string; explorer?: string; hash?: string; 
 interface SuccessReceiptProps {
   /** Shown as a full page (header, check on the page, rows under "Details",
    *  buttons at the foot) instead of the card. */
-  page?: { title?: string; onBack?: () => void; onShare?: () => void; sections?: ReactNode; noDone?: boolean }
+  page?: {
+    title?: string; onBack?: () => void; onShare?: () => void; sections?: ReactNode; noDone?: boolean
+    /** The big line and the line under it (default: title / subtitle). */
+    hero?: { amount: ReactNode; line: ReactNode }
+    /** A record with a person: their initial with a tick instead of the check. */
+    person?: { initial: string; line: ReactNode; amount: string; unit?: string; status: 'success' | 'pending' | 'failed'; statusText: string; when?: string; note?: ReactNode }
+    /** The Details card's rows (default: rows + detailRows). */
+    rows?: ReceiptRow[]
+  }
   /** A "From MeshPort" card under the receipt (full-page receipts): `true`,
    *  or this screen's own feature so it isn't the one shown. */
   promo?: PromoFeature | true
@@ -335,72 +344,141 @@ export function SuccessReceipt({
             </AnimatePresence>
   </>)
 
-  // ── Page layout (18 Nov): a full page instead of a card - the app's
-  // header, the check and amount on the page itself, the rows in a card
-  // under "Details", the page's own sections (To / From on a history
-  // record), the "From MeshPort" slot, and the buttons pinned at the foot.
+  // ── Page layout (18 Nov): a full page, as approved in the preview -
+  // header (back arrow, title, share), the check and the amount on the page
+  // (or, for a record with a person, their avatar with a tick), the page's
+  // own sections (To / From), one flat "Details" card whose last rows open
+  // the explorer, "For you", and Share + Done at the foot.
   if (page && !desktop) {
-    const footer = actions?.length ? actions : page.noDone ? [] : [{ label: primaryLabel, onClick: onPrimary, primary: true }]
+    const heroAmount = page.hero?.amount ?? title
+    const heroLine = page.hero?.line ?? subtitle
+    const share = page.onShare ?? (async () => {
+      const text = [typeof heroAmount === 'string' ? heroAmount : title, typeof heroLine === 'string' ? heroLine : '', links?.[0]?.href ?? ''].filter(Boolean).join('\n')
+      try {
+        if (navigator.share) { await navigator.share({ title: page.title || title, text }); return }
+        await navigator.clipboard.writeText(text)
+        useUIStore.getState().showToastMessage('Copied - paste it anywhere', 'success')
+      } catch { /* closed the share sheet */ }
+    })
+    // Success pages (no back arrow): Share beside Done. History: no buttons
+    // unless there's something to do (e.g. Open Recover).
+    const footer: Array<{ label: string; onClick: () => void; primary?: boolean }> = page.noDone
+      ? (actions ?? [])
+      : [...(page.onBack ? [] : [{ label: 'Share', onClick: () => { void share() } }]), ...(actions?.length ? actions : [{ label: primaryLabel, onClick: onPrimary, primary: true }])]
     const ring = status === 'success' ? 'var(--brand)' : status === 'pending' ? 'var(--warning)' : 'var(--danger)'
+    const detailRowsAll = page.rows ?? [...rows, ...(detailRows ?? [])]
+    const cardStyle = { background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 16 } as const
+    const label = (t: string) => <p className="text-xs font-bold text-text-secondary" style={{ margin: '20px 4px 8px' }}>{t}</p>
+    const person = page.person
+    const statusColor = person?.status === 'failed' ? 'var(--danger-text)' : person?.status === 'pending' ? 'var(--warning-text)' : 'var(--success-text)'
     return (
-      <div ref={rootRef} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden', ...style }}>
-        {(page.title || page.onBack) && <div className="header-row mp-glass-header flex-shrink-0 gap-3 px-5 pt-header pb-header" style={{ position: 'relative', zIndex: 2 }}>
-          {page.onBack && (
-            <button type="button" onClick={page.onBack} className="back-btn" aria-label="Back">
-              <ArrowLeft className="w-5 h-5 text-text-primary" />
-            </button>
-          )}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h1 className="text-xl font-bold text-text-primary" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.title}</h1>
-          </div>
-          {page.onShare && (
-            <button type="button" onClick={page.onShare} className="back-btn" aria-label="Share">
+      <div ref={rootRef} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden', color: 'var(--text-primary)', ...style }}>
+        {(page.title || page.onBack) && (
+          <div className="header-row mp-glass-header flex-shrink-0 gap-3 px-5 pt-header pb-header" style={{ position: 'relative', zIndex: 2 }}>
+            {page.onBack && (
+              <button type="button" onClick={page.onBack} className="back-btn" aria-label="Back">
+                <ArrowLeft className="w-5 h-5 text-text-primary" />
+              </button>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h1 className="text-xl font-bold text-text-primary" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.title}</h1>
+            </div>
+            <button type="button" onClick={() => { void share() }} className="back-btn" aria-label="Share">
               <Share2 className="w-5 h-5 text-text-primary" />
             </button>
-          )}
-        </div>}
-        <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 16px 24px', boxSizing: 'border-box' }}>
+          </div>
+        )}
+        <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '6px 16px 20px', boxSizing: 'border-box' }}>
           <div style={{ maxWidth: 480, margin: '0 auto' }}>
-            <div style={{ position: 'relative', textAlign: 'center', padding: '14px 0 4px', color: 'var(--text-primary)' }}>
-              {burst && <Confetti />}
-              <div ref={setCheck} style={{
-                width: RECEIPT_CHECK, height: RECEIPT_CHECK, borderRadius: '50%', margin: '0 auto 18px', background: ring,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: revealed ? 1 : 0,
-                boxShadow: `0 0 0 10px color-mix(in srgb, ${ring} 12%, transparent)`,
-              }}>
-                {checkContent ?? (
-                  <svg viewBox="0 0 24 24" width="46%" height="46%" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                    {status === 'failed' ? <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
-                      : status === 'pending' ? <><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></>
-                      : <polyline points="20 6 9 17 4 12" />}
-                  </svg>
-                )}
-              </div>
-              {heroText}
-            </div>
-            {page.sections}
-            {(rows.length > 0 || hasMore) && (
-              <>
-                <p className="text-xs font-bold text-text-secondary" style={{ margin: '20px 4px 8px' }}>Details</p>
-                <div ref={cardRef} style={{ background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 16, overflow: 'hidden', padding: '0 14px 4px' }}>
-                  {/* The first row's top line sits on the card's edge: hidden. */}
-                  <div style={{ marginTop: -1 }}>{rowsBlock}</div>
+            {person ? (
+              // A record with a person: their initial with a tick.
+              <div style={{ textAlign: 'center', padding: '10px 0 4px' }}>
+                <div style={{ position: 'relative', width: 64, height: 64, margin: '0 auto' }}>
+                  <div ref={setCheck} style={{ width: 64, height: 64, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 800, color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>{person.initial}</div>
+                  <div style={{ position: 'absolute', right: -2, bottom: -2, width: 24, height: 24, borderRadius: '50%', background: person.status === 'failed' ? 'var(--danger)' : person.status === 'pending' ? 'var(--warning)' : 'var(--success)', border: '3px solid var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {person.status === 'failed' ? <X size={12} color="#fff" strokeWidth={3.4} /> : person.status === 'pending' ? <Clock size={12} color="#fff" strokeWidth={3} /> : <Check size={12} color="#fff" strokeWidth={3.4} />}
+                  </div>
                 </div>
-              </>
+                <div style={{ fontSize: 15, color: 'var(--text-secondary)', marginTop: 12 }}>{person.line}</div>
+                <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-1px', marginTop: 2, overflowWrap: 'anywhere' }}>{person.amount}{person.unit && <span style={{ fontSize: 20, marginLeft: 6 }}>{person.unit}</span>}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}><span style={{ color: statusColor, fontWeight: 700 }}>{person.statusText}</span>{person.when ? ` · ${person.when}` : ''}</div>
+                {person.note}
+              </div>
+            ) : (
+              <div style={{ position: 'relative', textAlign: 'center', padding: '14px 0 6px' }}>
+                {burst && <Confetti />}
+                <div ref={setCheck} style={{
+                  width: RECEIPT_CHECK, height: RECEIPT_CHECK, borderRadius: '50%', margin: '0 auto', background: ring,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: revealed ? 1 : 0,
+                  boxShadow: `0 0 0 10px color-mix(in srgb, ${ring} 12%, transparent)`,
+                }}>
+                  {checkContent ?? (
+                    <svg viewBox="0 0 24 24" width="50%" height="50%" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                      {status === 'failed' ? <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
+                        : status === 'pending' ? <><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></>
+                        : <polyline points="20 6 9 17 4 12" />}
+                    </svg>
+                  )}
+                </div>
+                <Reveal i={0} revealed={revealed}>
+                  <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-1px', marginTop: 20, overflowWrap: 'anywhere' }}>{heroAmount}</div>
+                </Reveal>
+                <Reveal i={1} revealed={revealed}>
+                  <div style={{ fontSize: 15, color: 'var(--text-secondary)', marginTop: 4, overflowWrap: 'anywhere' }}>{heroLine}</div>
+                </Reveal>
+                {pill && (
+                  <Reveal i={2} revealed={revealed}>
+                    <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginTop: 12, padding: '7px 14px', borderRadius: 999, fontSize: 13, fontWeight: 700, color: 'var(--success-text)', background: 'color-mix(in srgb, var(--success) 15%, transparent)' }}>
+                      <Zap size={14} color="#F5B82E" fill="#F5B82E" />{pill}
+                    </div>
+                  </Reveal>
+                )}
+                {reward && revealed && <div style={{ marginTop: 10 }}><PointsEarnedLine type={reward} /></div>}
+              </div>
             )}
-            {promoShown && <SuccessPromo exclude={promo === true ? undefined : promo} revealed={revealed} />}
+            {page.sections}
+            {(detailRowsAll.length > 0 || !!links?.length) && (
+              <Reveal i={3} revealed={revealed}>
+                {label('Details')}
+                <div ref={cardRef} style={{ ...cardStyle, overflow: 'hidden' }}>
+                  {detailRowsAll.map((r, i) => (
+                    <div key={r.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 14px', borderTop: i ? '1px solid var(--border)' : 'none', fontSize: 14 }}>
+                      <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>{r.label}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, minWidth: 0, color: r.positive ? 'var(--success-text)' : 'var(--text-primary)' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.value}</span>
+                        {r.onCopy && (
+                          <button type="button" onClick={r.onCopy} aria-label={`Copy ${r.label.toLowerCase()}`}
+                            style={{ border: 0, background: 'none', padding: 0, display: 'flex', cursor: 'pointer', color: 'var(--brand-text)', flexShrink: 0 }}>
+                            {r.copied ? <Check data-tick size={15} color="var(--success)" /> : <Copy size={15} />}
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                  {links?.map((l, i) => (
+                    <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderTop: detailRowsAll.length || i ? '1px solid var(--border)' : 'none', fontSize: 14, fontWeight: 700, color: 'var(--brand-text)', textDecoration: 'none' }}>
+                      {links.length > 1 ? `${l.title}${l.explorer ? ` · ${l.explorer}` : ''}` : `View on ${l.explorer || 'explorer'}`}
+                      <ExternalLink size={16} />
+                    </a>
+                  ))}
+                </div>
+                {linksNote && <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45, margin: '8px 4px 0' }}>{linksNote}</p>}
+              </Reveal>
+            )}
+            {promoShown && <>{label('For you')}<SuccessPromo exclude={promo === true ? undefined : promo} revealed={revealed} /></>}
           </div>
         </div>
         {footer.length > 0 && (
           <motion.div initial={false} animate={revealed ? { opacity: 1 } : { opacity: 0 }} transition={{ duration: 0.3 }}
-            style={{ flexShrink: 0, display: 'flex', gap: 10, padding: '12px 16px calc(var(--safe-bottom) + 16px)', background: 'var(--bg)', borderTop: '1px solid var(--border)' }}>
+            style={{ flexShrink: 0, display: 'flex', gap: 10, padding: '12px 16px calc(var(--safe-bottom) + 18px)', background: 'var(--bg)', borderTop: '1px solid var(--border)' }}>
             {footer.map(a => (
               <motion.button key={a.label} onClick={a.onClick} whileTap={{ scale: 0.98 }}
                 style={{
-                  flex: 1, padding: 14, borderRadius: 999, cursor: 'pointer', fontSize: 15, fontWeight: 700, fontFamily: 'inherit',
+                  flex: 1, padding: '13px 0', borderRadius: 999, cursor: 'pointer', fontSize: 15, fontWeight: 700, fontFamily: 'inherit',
                   ...(a.primary
                     ? { border: 0, background: 'var(--brand)', color: '#fff' }
-                    : { border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--accent-text)' }),
+                    : { border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--brand-text)' }),
                 }}>
                 {a.label}
               </motion.button>
@@ -502,7 +580,12 @@ export function SuccessReceipt({
           )}
         </div>
       </div>
-      {promoShown && <SuccessPromo exclude={promo === true ? undefined : promo} revealed={revealed} />}
+      {promoShown && (
+        <div style={{ maxWidth: 480, width: '100%', margin: '0 auto auto', flexShrink: 0 }}>
+          <p className="text-xs font-bold text-text-secondary" style={{ margin: '18px 4px 8px' }}>For you</p>
+          <SuccessPromo exclude={promo === true ? undefined : promo} revealed={revealed} />
+        </div>
+      )}
       </div>
       {hasActions && (
         <motion.div initial={false} animate={revealed ? { opacity: 1 } : { opacity: 0 }} transition={{ duration: 0.3 }}

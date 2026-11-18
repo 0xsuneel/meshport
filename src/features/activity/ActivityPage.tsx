@@ -7,6 +7,7 @@ import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
 import {useLocation, useNavigate, useSearchParams} from 'react-router-dom'
 import { RefreshCw, Loader2, X, Copy } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
+import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { useActivity } from '@/hooks/useActivity'
 import { ActivityRecord, ActivityType, recoveredViaLabel, merchantRefundInfo } from '@/lib/ActivityService'
 import { needsRecovery, failureReason } from '@/lib/failure'
@@ -543,6 +544,26 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const { showToastMessage } = useUIStore()
   const navigate = useNavigate()
   const myUsername = useAuthStore(s => s.user?.username) as string | undefined
+  const myUserId = useAuthStore(s => s.user?.id)
+  const [openingChat, setOpeningChat] = useState(false)
+  // Chat with the person on a history record - as the Business page opens a
+  // customer's chat: find them by username, then their conversation (made if new).
+  const openChatWith = async (username: string) => {
+    if (openingChat) return
+    setOpeningChat(true)
+    try {
+      const other = await getUserByUsername(username)
+      if (!other || !myUserId) throw new Error('Could not find this person')
+      const { id, error } = await getOrCreateConversation(myUserId, other.id)
+      if (error || !id) throw new Error('Could not open the chat')
+      const { cacheOtherUser } = await import('@/features/chat/ChatPage')
+      cacheOtherUser(id, other)
+      onClose()
+      navigate(`/chat/${id}`)
+    } catch (e) {
+      showToastMessage(e instanceof Error ? e.message : 'Could not open the chat', 'error')
+    } finally { setOpeningChat(false) }
+  }
   const isRecovery = needsRecovery(record)
   const failReason = record.status === 'failed' ? (failureReason(record) ?? (record.activityType === 'swap' ? SWAP_FAILED_FALLBACK : null)) : null
   const [rowCopied, setRowCopied] = useState<string | null>(null)
@@ -832,7 +853,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const person = (name: string, sub: string, copy?: string, you?: boolean) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
       <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800,
-        color: you ? 'var(--text-secondary)' : 'var(--brand-text)', background: you ? 'color-mix(in srgb, var(--text-primary) 8%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)' }}>
+        color: you ? 'var(--warning-text)' : 'var(--brand-text)', background: you ? 'color-mix(in srgb, var(--warning) 18%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)' }}>
         {((you && myUsername ? String(myUsername) : name).trim().charAt(0) || '?').toUpperCase()}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -857,6 +878,13 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
           style={{ padding: '7px 14px', borderRadius: 999, border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--brand-text)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
           {type === 'send' ? 'Pay again' : 'Send money'}
         </button>
+        {/* Only someone with a MeshPort name has a chat to open. */}
+        {cpName && (
+          <button type="button" onClick={() => { void openChatWith(cpName) }} disabled={openingChat}
+            style={{ padding: '7px 14px', borderRadius: 999, border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--brand-text)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: openingChat ? 0.6 : 1 }}>
+            {openingChat ? 'Opening…' : 'Chat'}
+          </button>
+        )}
       </div>
     </div>
   ) : null
@@ -873,11 +901,48 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   ) : undefined
   const pageTitle = type === 'send' || type === 'receive' ? 'Payment details' : isSwapType ? 'Swap details' : 'Transaction details'
 
+  // The phone page's top and Details for a payment with a person (the
+  // approved preview): their initial with a tick, "Paid to shop", the amount,
+  // "Completed · 18 Nov 2026, 12:30 AM"; then Type, Network, the fee (only
+  // when it's known - a plain send's isn't stored) and the transaction.
+  const sym = (tokenSymbol || 'USDC') === 'USDC' ? '$' : tokenSymbol === 'EURC' ? '€' : ''
+  const created = new Date(createdAt)
+  const whenShort = `${created.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, ${created.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+  const reasonNote = (isRecovery || failReason) ? (
+    <span style={{ display: 'block', marginTop: 12, padding: '8px 10px', borderRadius: 10, fontSize: 13, lineHeight: 1.45, textAlign: 'left',
+      color: isRecovery ? 'var(--warning-text)' : 'var(--danger-text)',
+      background: isRecovery ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : 'color-mix(in srgb, var(--danger) 8%, transparent)' }}>
+      {isRecovery
+        ? `This move didn't finish on its own${failReason ? ` (${failReason.replace(/[.\s]+$/, '')})` : ''}. Your USDC already left the wallet - open Recover to finish it or bring it back.`
+        : failReason}
+    </span>
+  ) : null
+  const pagePerson = personal ? {
+    initial: ((cpName || counterparty).trim().charAt(0) || '?').toUpperCase(),
+    line: `${type === 'send' ? 'Paid to' : 'Received from'} ${cpName || shortAddr(counterparty)}`,
+    amount: `${amountPrefix}${sym}${formatAmt(amount, tokenSymbol)}`,
+    unit: tokenSymbol || 'USDC',
+    status: receiptStatus === 'success' ? 'success' as const : receiptStatus === 'failed' ? 'failed' as const : 'pending' as const,
+    statusText: isRecovery ? 'Needs recovery' : isFailed ? 'Failed' : isSuccess ? 'Completed' : 'Processing',
+    when: whenShort,
+    note: reasonNote,
+  } : undefined
+  const typeRow = (rows as { label: string; value: string }[]).find(r => r.label === 'Type')
+  const feeRow = (rows as { label: string; value: string }[]).find(r => /fee/i.test(r.label) && r.value)
+  const pageRows = personal ? [
+    { label: 'Type', value: activityOrderKind(metadata) === 'shop' ? 'Shop payment' : typeRow?.value && typeRow.value !== type ? typeRow.value : type === 'send' ? 'Payment' : 'Received' },
+    { label: 'Network', value: chain === 'Arc' || !chain ? 'Arc Testnet' : chain },
+    ...(feeRow ? [{ label: 'Fee', value: feeRow.value }] : []),
+    ...(txHash ? [toReceiptRow({ label: 'Transaction', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, copy: txHash })] : []),
+  ] : undefined
+
   return (
     <ReceiptPopup
       onClose={onClose}
       pageTitle={pageTitle}
       sections={pageSections}
+      pagePerson={pagePerson}
+      pageRows={pageRows}
       status={receiptStatus}
       title={receiptTitle}
       subtitle={<>
