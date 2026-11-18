@@ -15,7 +15,7 @@ import { HubPage, HubPageBack, HUB_PANEL_BOX } from '@/components/multichain/Hub
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
-import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
+import { SuccessReceipt, ReceiptAmount } from '@/components/ui/SuccessReceipt'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import {
   ArrowLeft, QrCode, CheckCircle, XCircle, AlertCircle, Clock,
@@ -23,7 +23,7 @@ import {
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useWalletStore, useAuthStore, useUIStore } from '@/store'
-import { formatAmount, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
+import { formatAmount, formatMoney, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { useSettingsStore } from '@/store/settingsStore'
 import { transferRoutes, isCoinEnabled } from '@/lib/featureFilters'
@@ -3834,7 +3834,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
               {successPhase === 'collapsed' && (
               <div style={{ margin: '0 -12px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                <SuccessReceipt promo="multichain" page={{ gift: <ScratchGift /> }}
+                <SuccessReceipt promo="multichain" page={{ gift: <ScratchGift />, chip: 'Sent',
+                  hero: { amount: <ReceiptAmount value={bridgeToken === 'cirBTC' ? fmtTok(successInfo?.sentAmount || numAmount) : formatMoney(successInfo?.sentAmount || numAmount)} unit={tokenSym} />, line: <>Moved from Arc to {chain.name}</> } }}
                   style={{ height: 'auto', flex: 1, minHeight: 0 }}
                   actions={[
                     { label: 'Done', onClick: () => navigate('/multichain'), primary: true },

@@ -44,6 +44,8 @@ interface SuccessReceiptProps {
     /** Who was paid: the receipt card's top line (initials with a tick, name,
      *  handle with copy, the amount they got). */
     payee?: { name: string; initial: string; handle?: string; amount?: string; copy?: { value: string; what: string } }
+    /** The word on the card's chip (default: Paid / On its way / Failed). */
+    chip?: string
   }
   /** A "From MeshPort" card under the receipt (full-page receipts): `true`,
    *  or this screen's own feature so it isn't the one shown. */
@@ -96,6 +98,10 @@ export const RECEIPT_CHECK = 76
 /** The check on the success page's band - smaller, so the amount leads (18 Nov 2026). */
 const BAND_CHECK = 58
 
+/** The success card's amount: the figure, then its token smaller. */
+export function ReceiptAmount({ value, unit }: { value: string; unit?: string }) {
+  return <>{value}{unit && <span style={{ fontSize: 17, fontWeight: 700, opacity: 0.6, marginLeft: 7, letterSpacing: 0 }}>{unit}</span>}</>
+}
 const statusColorOf = (s: 'success' | 'pending' | 'failed') => s === 'failed' ? 'var(--danger-text)' : s === 'pending' ? 'var(--warning-text)' : 'var(--success-text)'
 const shortHash = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`
 const GOOD = 'color-mix(in srgb, var(--success) 70%, var(--text-primary))'
@@ -240,6 +246,11 @@ export function SuccessReceipt({
   usePopupOpen()
   const [open, setOpen] = useState(false)
   const [payeeCopied, setPayeeCopied] = useState(false)
+  // The band's date line ("18 Nov 2026 at 7:17 PM"), fixed when the page opens.
+  const [whenLine] = useState(() => {
+    const d = new Date()
+    return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+  })
   const rootRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   // With pinned actions the card scrolls here rather than in rootRef.
@@ -438,7 +449,7 @@ export function SuccessReceipt({
         useUIStore.getState().showToastMessage(`${payee.copy.what} copied`, 'success')
         setTimeout(() => setPayeeCopied(false), 1500)
       }
-      const got = status === 'success' ? 'Received' : status === 'pending' ? 'On its way' : 'Not sent'
+      const got = status === 'success' ? 'Paid' : status === 'pending' ? 'On its way' : 'Failed'
       const round = { width: 38, height: 38, margin: 0, padding: 0, borderRadius: '50%', background: 'rgba(255,255,255,.16)' } as const
       return (
         <div ref={rootRef} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden', color: 'var(--text-primary)', ...style }}>
@@ -451,9 +462,7 @@ export function SuccessReceipt({
                   <ArrowLeft className="w-5 h-5" />
                 </button>
               )}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h1 style={{ fontSize: 17, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.title}</h1>
-              </div>
+              <div style={{ flex: 1, minWidth: 0 }} />
               {giftNode}
               {!page.noShare && (
                 <button type="button" onClick={() => { void share() }} className="back-btn" aria-label="Share" style={round}>
@@ -463,7 +472,7 @@ export function SuccessReceipt({
             </div>
           )}
           <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
-            <div className="sr-band" style={{ position: 'relative', background: band, color: '#fff', textAlign: 'center', padding: `${hasHead ? 34 : 40}px 20px 64px` }}>
+            <div className="sr-band" style={{ position: 'relative', background: band, color: '#fff', textAlign: 'center', padding: `${hasHead ? 30 : 40}px 20px 66px` }}>
               {/* No page header (a page inside the Hub): the gift at the band's corner. */}
               {!hasHead && giftNode && <div style={{ position: 'absolute', top: 14, right: 16, zIndex: 2 }}>{giftNode}</div>}
               {burst && <Confetti />}
@@ -486,38 +495,38 @@ export function SuccessReceipt({
               </div>
               </div>
               <Reveal i={0} revealed={shown}>
-                <div style={{ fontSize: 56, fontWeight: 900, letterSpacing: '-2.4px', marginTop: 20, lineHeight: 1.05, overflowWrap: 'anywhere', fontVariantNumeric: 'tabular-nums' }}>{heroAmount}</div>
+                <h1 style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-0.3px', marginTop: 24, color: '#fff' }}>{page.title || title}</h1>
               </Reveal>
-              {heroLine && (
-                <Reveal i={1} revealed={shown}>
-                  <div style={{ fontSize: 15, opacity: 0.85, marginTop: 6, overflowWrap: 'anywhere' }}>{heroLine}</div>
-                </Reveal>
-              )}
+              <Reveal i={1} revealed={shown}>
+                <div style={{ fontSize: 13.5, opacity: 0.8, marginTop: 4 }}>{whenLine}</div>
+              </Reveal>
               {pill && (
                 <Reveal i={2} revealed={shown}>
-                  <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginTop: 14, padding: '7px 13px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: 'rgba(0,0,0,.18)' }}>
+                  <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginTop: 12, padding: '7px 13px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: 'rgba(0,0,0,.18)' }}>
                     <Zap size={14} color="#FFD25E" fill="#FFD25E" />{pill}
                   </div>
                 </Reveal>
               )}
             </div>
             <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 16px 20px', boxSizing: 'border-box' }}>
-              {(payee || detailRowsAll.length > 0 || !!links?.length) && (
-                <Reveal i={3} revealed={shown} style={{ position: 'relative', marginTop: -44 }}>
+              {(
+                <Reveal i={3} revealed={shown} style={{ position: 'relative', marginTop: -46 }}>
                   <div ref={cardRef} style={{ background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: '0 10px 30px rgba(0,0,0,.10)', borderRadius: 22 }}>
-                    {payee && (<>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 16px 14px' }}>
-                        <span style={{ position: 'relative', width: 46, height: 46, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center', fontSize: 17, fontWeight: 800,
+                    {(<>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '18px 16px 16px' }}>
+                        {payee && <span style={{ position: 'relative', width: 48, height: 48, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center', fontSize: 17, fontWeight: 800,
                           color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>
                           {payee.initial}
                           <span style={{ position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: '50%', display: 'grid', placeItems: 'center', border: '2px solid var(--surface)',
                             background: status === 'failed' ? 'var(--danger)' : status === 'pending' ? 'var(--warning)' : 'var(--success)' }}>
                             {status === 'failed' ? <X size={9} color="#fff" strokeWidth={4} /> : status === 'pending' ? <Clock size={9} color="#fff" strokeWidth={3.4} /> : <Check size={9} color="#fff" strokeWidth={4} />}
                           </span>
-                        </span>
+                        </span>}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <b style={{ display: 'block', fontSize: 16, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{payee.name}</b>
-                          {payee.handle && (
+                          {payee
+                            ? <b style={{ display: 'block', fontSize: 16.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{payee.name}</b>
+                            : heroLine && <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{heroLine}</span>}
+                          {payee?.handle && (
                             <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: 'var(--text-secondary)', minWidth: 0 }}>
                               <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{payee.handle}</span>
                               {payee.copy && (
@@ -528,13 +537,10 @@ export function SuccessReceipt({
                               )}
                             </span>
                           )}
+                          <div style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-1.4px', lineHeight: 1.05, marginTop: payee ? 10 : 6, overflowWrap: 'anywhere', fontVariantNumeric: 'tabular-nums' }}>{heroAmount}</div>
                         </div>
-                        {payee.amount && (
-                          <div style={{ flex: 'none', textAlign: 'right' }}>
-                            <b style={{ display: 'block', fontSize: 16, fontWeight: 800 }}>{payee.amount}</b>
-                            <small style={{ fontSize: 12, fontWeight: 700, color: statusColorOf(status) }}>{got}</small>
-                          </div>
-                        )}
+                        <span style={{ flex: 'none', fontSize: 12, fontWeight: 700, padding: '5px 10px', borderRadius: 999, color: statusColorOf(status),
+                          background: `color-mix(in srgb, ${status === 'failed' ? 'var(--danger)' : status === 'pending' ? 'var(--warning)' : 'var(--success)'} 14%, transparent)` }}>{page.chip ?? got}</span>
                       </div>
                       {/* Torn line: notches at both edges, dashes between. */}
                       <div aria-hidden style={{ position: 'relative', height: 18 }}>
@@ -543,8 +549,8 @@ export function SuccessReceipt({
                         <span style={{ position: 'absolute', top: 0, right: -10, width: 18, height: 18, borderRadius: '50%', background: 'var(--bg)' }} />
                       </div>
                     </>)}
-                    <div style={{ padding: payee ? '4px 16px 4px' : '10px 16px 4px' }}>
-                      {detailRowsAll.map(r => (
+                    <div style={{ padding: '4px 16px 4px' }}>
+                      {detailRowsAll.filter(r => r.label !== 'Time').map(r => (
                         <div key={r.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', fontSize: 14.5 }}>
                           <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>{r.label}</span>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontWeight: 600, minWidth: 0, color: r.positive ? 'var(--success-text)' : 'var(--text-primary)' }}>
