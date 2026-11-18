@@ -70,6 +70,8 @@ function claimColor(v: ClaimView): string {
 // REWARD_ACTION_TYPES; the point row's reason is `tx_reward:<type>`).
 // The latest 20 of each history here; See all opens Activity → Rewards.
 const HISTORY_LIMIT = 20
+// Phones show the latest 5 under the page (18 Nov 2026); See all has the rest.
+const MOBILE_HISTORY_LIMIT = 5
 const TASKS = REWARD_TASKS
 const taskOf = rewardTaskOf
 
@@ -492,7 +494,7 @@ export function RewardsPage() {
   const historyRows = historyTab === 'earned' ? (
     earnedRows.length === 0 ? (
       <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px' }}>Points and scratch-card rewards you win will show here.</p>
-    ) : earnedRows.slice(0, HISTORY_LIMIT).map(p => {
+    ) : earnedRows.slice(0, isDesktop ? HISTORY_LIMIT : MOBILE_HISTORY_LIMIT).map(p => {
       const t = taskOf(p.reason)
       return (
         <HistoryRow key={p.id} inPanel={isDesktop}
@@ -507,7 +509,7 @@ export function RewardsPage() {
   ) : (
     claimsHistory.length === 0 ? (
       <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px' }}>Your USDC claims will show here.</p>
-    ) : claimsHistory.slice(0, HISTORY_LIMIT).map(claim => {
+    ) : claimsHistory.slice(0, isDesktop ? HISTORY_LIMIT : MOBILE_HISTORY_LIMIT).map(claim => {
       const v = claimView(claim.status, claim.created_at); const c = claimColor(v)
       return (
         <HistoryRow key={claim.id} inPanel={isDesktop} flash={claim.id === claimFlash.flashId}
@@ -548,7 +550,13 @@ export function RewardsPage() {
 
   // How it works - the earning and redeeming rules, floating down from the
   // pill (TokenMenu), at the pill's spot.
-  const howRect = showEarnInfo ? howBtnRef.current?.getBoundingClientRect() : undefined
+  // Low on the page with no room left below (scrolled to the end): the panel
+  // is lifted so all of it stays on screen.
+  const howRaw = showEarnInfo ? howBtnRef.current?.getBoundingClientRect() : undefined
+  const HOW_PANEL_H = 580
+  const howRect = howRaw && !isDesktop && howRaw.top + HOW_PANEL_H > window.innerHeight
+    ? new DOMRect(howRaw.x, Math.max(90, window.innerHeight - HOW_PANEL_H - 16), howRaw.width, howRaw.height)
+    : howRaw
   const howItWorks = (
     <AnimatePresence>
       {howRect && <HowItWorksMenu key="rw-how" rect={howRect} onClose={() => setShowEarnInfo(false)} />}
@@ -679,6 +687,29 @@ export function RewardsPage() {
     </>
   )
 
+  // How it works: in the header on a computer; on a phone, above the history
+  // (18 Nov 2026). Opening it low on the page first brings the pill up so the
+  // panel has room below it.
+  const openHow = () => {
+    const el = howBtnRef.current
+    if (!showEarnInfo && el && !isDesktop) {
+      const top = el.getBoundingClientRect().top
+      if (top > 140) {
+        for (let n = el.parentElement; n; n = n.parentElement) {
+          if (n.scrollHeight > n.clientHeight && /auto|scroll/.test(getComputedStyle(n).overflowY)) { n.scrollTop += top - 120; break }
+        }
+      }
+    }
+    setShowEarnInfo(o => !o)
+  }
+  const howBtn = (
+    <button ref={howBtnRef} onClick={openHow} aria-expanded={showEarnInfo}
+      className={`mp-hit mp-hit-sm ${isDesktop ? 'ml-auto ' : ''}flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold`}
+      style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', color: 'var(--brand-text)', border: 'none', cursor: 'pointer' }}>
+      <Info className="w-3.5 h-3.5" /> How it works
+    </button>
+  )
+
   const header = (
     <div className="header-row mp-glass-header sticky top-0 z-20 flex-shrink-0 gap-3 px-5 pt-header pb-header" style={{ position: 'sticky' }}>
       {isDesktop ? <h1 className="text-xl font-bold text-text-primary">Rewards</h1> : <>
@@ -691,11 +722,7 @@ export function RewardsPage() {
           <b style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-.5px', fontStyle: 'italic', textTransform: 'uppercase', background: 'linear-gradient(180deg, #1C8A7F, #0E524C)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', paddingRight: 2 }}>Rewards</b>
         </h1>
       </>}
-      <button ref={howBtnRef} onClick={() => setShowEarnInfo(o => !o)} aria-expanded={showEarnInfo}
-        className="mp-hit mp-hit-sm ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
-        style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', color: 'var(--brand-text)', border: 'none', cursor: 'pointer' }}>
-        <Info className="w-3.5 h-3.5" /> How it works
-      </button>
+      {isDesktop && howBtn}
     </div>
   )
 
@@ -727,7 +754,10 @@ export function RewardsPage() {
         {header}
         {scratch}
         {hero}
-        <div style={{ height: 22 }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, margin: '26px 18px 4px' }}>
+          <h4 style={{ fontSize: 21, fontWeight: 900, letterSpacing: '-0.2px', textTransform: 'uppercase', color: 'var(--text-primary)' }}>Your rewards</h4>
+          {howBtn}
+        </div>
         {history}
       </div>
     </div>
