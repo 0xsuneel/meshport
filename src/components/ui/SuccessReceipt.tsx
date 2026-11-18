@@ -6,6 +6,7 @@ import { DESKTOP_QUERY, EASE_OUT, SPRING_SOFT, springProgress, stableLayer } fro
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { SuccessPromo, type PromoFeature } from '@/components/ui/SuccessPromo'
+import { PoweredByFooter } from '@/components/ui/PoweredByFooter'
 
 // The receipt card every success flow lands on after SuccessFlash:
 // gradient header holding the check (the traveling checkmark flies into
@@ -614,6 +615,7 @@ export function SuccessReceipt({
               )}
               {page.sections}
               {promoShown && <Reveal i={4} revealed={shown}>{label('For you')}<SuccessPromo exclude={promo === true ? undefined : promo} revealed={shown} instant /></Reveal>}
+              <Reveal i={5} revealed={shown}><PoweredByFooter /></Reveal>
             </div>
           </div>
           {footer.length > 0 && (

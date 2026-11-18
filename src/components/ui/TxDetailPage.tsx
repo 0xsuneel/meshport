@@ -16,6 +16,7 @@ import { DesktopDialogFrame } from './DesktopDialogFrame'
 import { copyToClipboard } from '@/lib/utils'
 import { useUIStore } from '@/store'
 import { SuccessPromo, type PromoFeature } from './SuccessPromo'
+import { PoweredByFooter } from './PoweredByFooter'
 
 export interface TxParty {
   label: 'From' | 'To'
@@ -327,7 +328,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
           )}
           {d.promo !== false && <div style={{ marginTop: 14 }}><SuccessPromo instant exclude={typeof d.promo === 'string' ? d.promo : undefined} /></div>}
           </Rv>
-          <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--text-muted)', marginTop: 14 }}>MeshPort · Settled on Arc · Circle USDC</div>
+          <PoweredByFooter />
         </div>
       </div>
   )
