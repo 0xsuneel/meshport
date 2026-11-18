@@ -254,7 +254,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
               <div><span style={{ color: muted }}>{d.whenLabel}</span> {d.when}</div>
               {d.hashes.map(h => (
                 <div key={h.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ color: muted }}>{h.label}</span> {short(h.hash)} <CopyBtn value={h.hash} what={`${h.label} hash`} />
+                  <span style={{ color: muted }}>{h.label}</span> {short(h.hash)} <CopyBtn value={h.hash} what="Transaction hash" />
                 </div>
               ))}
             </div>
