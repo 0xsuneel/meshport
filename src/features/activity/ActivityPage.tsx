@@ -24,6 +24,7 @@ import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { fetchPointHistory, rewardsUserId, rewardTaskOf } from '@/lib/rewards'
+import { fetchScratchHistory, fmtUsdcMicro } from '@/lib/scratchCards'
 import { pressable } from '@/lib/pressable'
 
 type ActivityTab = ActivityType | 'all' | 'p2p' | 'merchant' | 'rewards'
@@ -1091,12 +1092,21 @@ export function ActivityPage() {
   // Rewards filter: points earned (point_transactions - not money, never in
   // the activity ledger) or rewards claimed as USDC (activity receives).
   const [rewardsTab, setRewardsTab] = useState<'earned' | 'claimed'>(() => (searchParams.get('rewards') === 'claimed' ? 'claimed' : 'earned'))
-  const [earned, setEarned] = useState<{ id: string; points: number; reason: string; created_at: string }[] | null>(null)
+  // Earned: daily-task points plus scratch cards (points or USDC won) - a
+  // scratched card's points row is shown as its card, not twice.
+  const [earned, setEarned] = useState<{ id: string; points: number; usdcMicro?: number; reason: string; created_at: string }[] | null>(null)
   useEffect(() => {
     if (activeTab !== 'rewards' || earned) return
     const uid = rewardsUserId(userId, walletAddress)
     if (!uid) { setEarned([]); return }
-    fetchPointHistory(uid, 200).then(rows => setEarned((rows as any[]).filter(p => p.points > 0))).catch(() => setEarned([]))
+    Promise.all([
+      fetchPointHistory(uid, 200).catch(() => []),
+      fetchScratchHistory(200).catch(() => []),
+    ]).then(([rows, wins]) => {
+      const pts = (rows as any[]).filter(p => p.points > 0 && p.reason !== 'scratch_card')
+      const cards = wins.map(w => ({ id: `sc_${w.id}`, points: w.points, usdcMicro: w.kind === 'usdc' ? w.usdcMicro : undefined, reason: 'scratch_card', created_at: w.scratchedAt }))
+      setEarned([...pts, ...cards].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)))
+    }).catch(() => setEarned([]))
   }, [activeTab, earned, userId, walletAddress])
   const filterBtnRef = useRef<HTMLDivElement>(null)
   const [searchInput, setSearchInput] = useState('')
@@ -1308,7 +1318,7 @@ export function ActivityPage() {
               <button key={t} onClick={() => setRewardsTab(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 0 9px', fontSize: 14,
                 fontWeight: rewardsTab === t ? 700 : 500, color: rewardsTab === t ? 'var(--text-primary)' : 'var(--text-secondary)',
                 borderBottom: `2px solid ${rewardsTab === t ? 'var(--text-primary)' : 'transparent'}`, marginBottom: -1 }}>
-                {t === 'earned' ? 'Points earned' : 'Claimed USDC'}
+                {t === 'earned' ? 'Rewards earned' : 'Claimed USDC'}
               </button>
             ))}
           </div>
@@ -1316,15 +1326,17 @@ export function ActivityPage() {
         {showEarned && (
           <div className="px-4 pt-2 lg:max-w-[1100px] lg:mx-auto">
             {earned === null ? <SkeletonCards className="pt-2" /> : earned.length === 0 ? (
-              <p className="text-center text-sm text-text-muted py-16">Points you earn will show here.</p>
+              <p className="text-center text-sm text-text-muted py-16">Points and scratch-card rewards you win will show here.</p>
             ) : earned.map(p => {
               const t = rewardTaskOf(p.reason)
               return (
                 <HistoryRow key={p.id}
                   icon={<HistoryIcon tone="out" icon={t ? t.action : 'rewards'} />}
                   title={t ? t.done : p.reason === 'scratch_card' ? 'Scratch card won' : 'Points earned'}
-                  meta={<><span style={{ color: 'var(--success-text)', fontWeight: 600 }}>Earned</span> · {timeAgo(p.created_at)}</>}
-                  right={<div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>+{p.points} pts</div>} />
+                  meta={<><span style={{ color: 'var(--success-text)', fontWeight: 600 }}>{p.usdcMicro != null ? 'In your USDC rewards' : 'Earned'}</span> · {timeAgo(p.created_at)}</>}
+                  right={p.usdcMicro != null
+                    ? <div style={{ fontSize: 14, fontWeight: 700, color: '#2775CA' }}>+{fmtUsdcMicro(p.usdcMicro)} USDC</div>
+                    : <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>+{p.points} pts</div>} />
               )
             })}
           </div>
