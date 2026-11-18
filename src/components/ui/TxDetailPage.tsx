@@ -313,7 +313,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
               {d.action.label}
             </button>
           )}
-          {d.promo !== false && <div style={{ marginTop: 14 }}><SuccessPromo exclude={typeof d.promo === 'string' ? d.promo : undefined} /></div>}
+          {d.promo !== false && <div style={{ marginTop: 14 }}><SuccessPromo instant exclude={typeof d.promo === 'string' ? d.promo : undefined} /></div>}
           </Rv>
           <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--text-muted)', marginTop: 14 }}>MeshPort · Settled on Arc · Circle USDC</div>
         </div>
