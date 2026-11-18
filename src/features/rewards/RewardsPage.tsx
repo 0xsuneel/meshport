@@ -164,7 +164,7 @@ function HowItWorksMenu({ rect, onClose }: { rect: DOMRect; onClose: () => void 
   )
 }
 
-function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgress; balanceLeft: number; onClose: () => void; onRetry: () => void }) {
+function ClaimProgressCard({ p, balanceLeft, onClose, onRetry, usdcLifetimeMicro, leftTodayPoints }: { p: ClaimProgress; balanceLeft: number; onClose: () => void; onRetry: () => void; usdcLifetimeMicro?: number; leftTodayPoints?: number }) {
   const doneIdx = p.done.length // steps finished
   const failedIdx = p.phase === 'failed' ? Math.min(doneIdx, STEPS.length - 1) : -1
   const travIdx = Math.min(doneIdx, STEPS.length - 1)
@@ -242,7 +242,11 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
         {ok && (
           <div className="rw-fade">
             <div style={{ textAlign: 'left', marginTop: 14, padding: '8px 12px', borderRadius: 14, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
-              {p.usdcRewards ? <Line k="From" v="USDC won on scratch cards" /> : <>
+              {p.usdcRewards ? <>
+                <Line k="From" v="USDC won on scratch cards" />
+                {usdcLifetimeMicro != null && <Line k="Lifetime earned" v={`${fmtUsdcMicro(usdcLifetimeMicro)} USDC`} />}
+                {leftTodayPoints != null && <Line k="Left to claim today" v={`$${pointsToUSDC(leftTodayPoints).toFixed(2)}`} />}
+              </> : <>
                 <Line k="Points used" v={`${p.points.toLocaleString()} pts`} />
                 <Line k="Balance left" v={`${balanceLeft.toLocaleString()} pts`} />
               </>}
@@ -284,6 +288,8 @@ export function RewardsPage() {
   // loading placeholders until every read answers.
   const [cached] = useState(() => (userId ? readRewardsCache(userId) : null))
   const [totalPoints, setTotalPoints]       = useState(cached?.totalPoints ?? 0)
+  const [lifetimePoints, setLifetimePoints] = useState(cached?.lifetimePoints ?? 0)
+  const [usdcLifetime, setUsdcLifetime] = useState(0)
   const [claimsHistory, setClaimsHistory]   = useState<ClaimRecord[]>((cached?.claims as ClaimRecord[]) ?? [])
   // Tapping a claimed reward opens its receipt.
   const [claimReceipt, setClaimReceipt] = useState<ClaimRecord | null>(null)
@@ -336,6 +342,7 @@ export function RewardsPage() {
     // of both means the UI never promises something the contract will reject.
     const dailyClaimed = Math.max(dailyClaimedOffChain, dailyClaimedChain)
     setTotalPoints(pts.totalPoints)
+    setLifetimePoints(pts.lifetimePoints)
     setClaimsHistory(claims as ClaimRecord[])
     setPointHistory(history as PointRecord[])
     setDailyClaimedPoints(dailyClaimed)
@@ -600,7 +607,7 @@ export function RewardsPage() {
   const scratch = (
     <ScratchRewards isDesktop={isDesktop} totalPoints={totalPoints} claiming={claiming} refreshKey={scratchRefresh}
       onPointsWon={() => { void load() }} onClaimUsdc={claimUsdc} onClaimPoints={canOpenClaim ? () => setShowConvert(true) : undefined} onOpenPoints={() => setShowConvert(true)}
-      onOpenUsdc={() => setShowUsdc(true)} onUsdc={setUsdcMicro} />
+      onOpenUsdc={() => setShowUsdc(true)} onUsdc={setUsdcMicro} onUsdcLifetime={setUsdcLifetime} lifetimePoints={lifetimePoints} />
   )
 
   // USDC won on scratch cards → the wallet (USDC tile): the same page, its
@@ -611,7 +618,7 @@ export function RewardsPage() {
   const usdcPage = (
     <AnimatePresence>
       {showUsdc && (
-        <PointsConvertPage key="rw-usdc" usdcMicro={usdcMicro} totalPoints={usdcPts} maxClaimable={usdcMax} dailyRemaining={dailyRemaining}
+        <PointsConvertPage key="rw-usdc" usdcMicro={usdcMicro} lifetime={`${fmtUsdcMicro(usdcLifetime)} USDC`} totalPoints={usdcPts} maxClaimable={usdcMax} dailyRemaining={dailyRemaining}
           canConvert={!!userId && !!walletAddress && fresh && usdcMax >= MIN_CLAIM_POINTS} claiming={claiming} loading={loading}
           onConvert={() => claimUsdc(usdcClaimPoints(usdcMicro))} onClose={() => setShowUsdc(false)}
           onHistory={() => navigate('/activity?filter=rewards&rewards=earned')}
@@ -632,7 +639,7 @@ export function RewardsPage() {
   const convertPage = (
     <AnimatePresence>
       {showConvert && (
-        <PointsConvertPage key="rw-convert" totalPoints={totalPoints} maxClaimable={maxClaimable} dailyRemaining={dailyRemaining}
+        <PointsConvertPage key="rw-convert" lifetime={`${lifetimePoints.toLocaleString()} pts · $${pointsToUSDC(lifetimePoints).toFixed(2)}`} totalPoints={totalPoints} maxClaimable={maxClaimable} dailyRemaining={dailyRemaining}
           canConvert={canOpenClaim} claiming={claiming} loading={loading} onConvert={convertAll} onClose={() => setShowConvert(false)}
           onHistory={() => navigate('/activity?filter=rewards&rewards=earned')}
           historyCount={pointHistory.filter(p => p.points > 0).length}
@@ -663,7 +670,7 @@ export function RewardsPage() {
       {sheet}
       <AnimatePresence>
         {progress && (
-          <ClaimProgressCard key="rw-progress" p={progress} balanceLeft={totalPoints}
+          <ClaimProgressCard key="rw-progress" p={progress} balanceLeft={totalPoints} usdcLifetimeMicro={usdcLifetime} leftTodayPoints={dailyRemaining}
             onClose={() => setProgress(null)}
             onRetry={() => { const u = progress.usdcRewards; setProgress(null); if (!u) openClaim() }} />
         )}

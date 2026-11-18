@@ -56,7 +56,7 @@ function CountUp({ value, format }: { value: number; format: (v: number) => stri
   return <>{format(shown)}</>
 }
 
-export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsdc, onClaimPoints, onOpenPoints, onOpenUsdc, onUsdc, claiming, refreshKey }: {
+export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsdc, onClaimPoints, onOpenPoints, onOpenUsdc, onUsdc, onUsdcLifetime, lifetimePoints, claiming, refreshKey }: {
   isDesktop: boolean
   totalPoints: number
   /** Points credited by a scratched card (the page re-reads its balance). */
@@ -71,6 +71,10 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
   onOpenUsdc?: () => void
   /** The USDC won, each time it changes (the USDC page shows it live). */
   onUsdc?: (micro: number) => void
+  /** USDC won all-time (micro), for the convert page. */
+  onUsdcLifetime?: (micro: number) => void
+  /** Points earned all-time (user_points.lifetime_points). */
+  lifetimePoints?: number
   claiming: boolean
   /** Bumped by the page after a claim: re-read the balances. */
   refreshKey: number
@@ -78,6 +82,8 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
   const navigate = useNavigate()
   const [usdcMicro, setUsdcMicro] = useState(0)
   useEffect(() => { onUsdc?.(usdcMicro) }, [usdcMicro, onUsdc])
+  const [usdcLifetime, setUsdcLifetime] = useState(0)
+  useEffect(() => { onUsdcLifetime?.(usdcLifetime) }, [usdcLifetime, onUsdcLifetime])
   const [cards, setCards] = useState<{ id: string; createdAt: string }[] | null>(null)
   const [open, setOpen] = useState<{ id: string; look: number } | null>(null)
   const usdcTile = useRef<HTMLDivElement>(null)
@@ -91,6 +97,7 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
     try {
       const [s, list] = await Promise.all([fetchRewardSummary(), fetchScratchCards()])
       setUsdcMicro(s.usdcMicro)
+      setUsdcLifetime(s.usdcLifetimeMicro)
       setCards(list)
       emitCardCount(list.length)
     } catch { /* weak network: keep what's shown */ }
@@ -193,6 +200,19 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
           ) : undefined, onOpenPoints)}
         {tile(null, cards ? cards.length : '–', 'Scratch cards', 'var(--brand-text)', undefined,
           () => bandRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))}
+      </div>
+      {/* Lifetime earned: all the USDC won and points earned, ever. */}
+      <div style={{ margin: `16px ${m}px 0`, background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 20,
+        display: 'grid', gridTemplateColumns: '1fr 1px 1fr', alignItems: 'center', padding: '14px 6px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <small style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '.02em' }}>LIFETIME USDC EARNED</small>
+          <b style={{ display: 'block', fontSize: 19, fontWeight: 800, marginTop: 3, color: USDC_BLUE }}>{fmtUsdcMicro(usdcLifetime)}</b>
+        </div>
+        <span aria-hidden style={{ background: 'var(--border)', height: 34 }} />
+        <div style={{ textAlign: 'center' }}>
+          <small style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '.02em' }}>LIFETIME POINTS EARNED</small>
+          <b style={{ display: 'block', fontSize: 19, fontWeight: 800, marginTop: 3, color: 'var(--brand-text)' }}>{(lifetimePoints ?? 0).toLocaleString()}</b>
+        </div>
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: `10px ${m + 4}px 0`, textAlign: 'center' }}>
         {usdcMicro > 0 && claimPts === 0

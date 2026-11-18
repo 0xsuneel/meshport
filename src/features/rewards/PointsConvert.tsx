@@ -69,7 +69,7 @@ function SlideToConfirm({ label, disabled, busy, onConfirm }: { label: string; d
 }
 
 export function PointsConvertPage({
-  totalPoints, maxClaimable, dailyRemaining, canConvert, claiming, loading, onConvert, onClose, onHistory, historyCount, history, usdcMicro,
+  totalPoints, maxClaimable, dailyRemaining, canConvert, claiming, loading, onConvert, onClose, onHistory, historyCount, history, usdcMicro, lifetime,
 }: {
   totalPoints: number
   /** What one slide converts: all of it, within the per-claim and daily limits. */
@@ -82,6 +82,8 @@ export function PointsConvertPage({
   onClose: () => void
   onHistory: () => void
   historyCount: number
+  /** "Lifetime earned …" under the slider. */
+  lifetime?: string
   /** The latest points earned (rows from the Rewards page). */
   history: ReactNode
   /** Set: the USDC-rewards version of the page (USDC won on scratch cards,
@@ -150,6 +152,11 @@ export function PointsConvertPage({
               <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 10 }}>
                 {U ? `Moves ${usd(maxClaimable)} USDC to your main balance · no passcode`
                   : `Converts ${maxClaimable.toLocaleString()} pts → ${usd(maxClaimable)} USDC to your wallet · no passcode`}
+              </div>
+            )}
+            {lifetime && (
+              <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 14, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', fontSize: 13, color: 'var(--text-secondary)' }}>
+                Lifetime earned <b style={{ color: 'var(--text-primary)' }}>{lifetime}</b>
               </div>
             )}
           </div>
