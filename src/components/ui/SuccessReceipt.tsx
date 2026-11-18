@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Reac
 import { PointsEarnedLine } from '@/components/rewards/PointsEarnedLine'
 import type { RewardActionType } from '@/lib/rewards'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { Check, ChevronDown, Copy, ExternalLink, Zap } from 'lucide-react'
-import { EASE_OUT, SPRING_SOFT, springProgress, stableLayer } from '@/lib/motion'
+import { ArrowLeft, Check, ChevronDown, Copy, ExternalLink, Share2, Zap } from 'lucide-react'
+import { DESKTOP_QUERY, EASE_OUT, SPRING_SOFT, springProgress, stableLayer } from '@/lib/motion'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { SuccessPromo, type PromoFeature } from '@/components/ui/SuccessPromo'
 
@@ -27,6 +28,9 @@ export interface ReceiptRow {
 export interface ReceiptLink { title: string; explorer?: string; hash?: string; href: string }
 
 interface SuccessReceiptProps {
+  /** Shown as a full page (header, check on the page, rows under "Details",
+   *  buttons at the foot) instead of the card. */
+  page?: { title?: string; onBack?: () => void; onShare?: () => void; sections?: ReactNode; noDone?: boolean }
   /** A "From MeshPort" card under the receipt (full-page receipts): `true`,
    *  or this screen's own feature so it isn't the one shown. */
   promo?: PromoFeature | true
@@ -149,10 +153,12 @@ function Confetti() {
 export function SuccessReceipt({
   title, subtitle, pill, bubble, rows, steps, detailRows, fullHash, links, linksNote,
   primaryLabel = 'Done', onPrimary, checkRef, revealed, checkContent, style,
-  status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions, reward, fill = false, promo,
+  status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions, reward, fill = false, promo, page,
 }: SuccessReceiptProps) {
   // The check: handed to the caller (it aims the flying checkmark at it) and
   // kept here for its landing pop.
+  // Phones only: a computer keeps the card (it sits in a side panel there).
+  const desktop = useMediaQuery(DESKTOP_QUERY)
   const ownCheck = useRef<HTMLDivElement | null>(null)
   const setCheck = useCallback((el: HTMLDivElement | null) => {
     ownCheck.current = el
@@ -229,71 +235,7 @@ export function SuccessReceipt({
   const promoShown = !!promo && status === 'success' && !fill
   const h5 = { fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', margin: '10px 0 2px' } as const
 
-  return (
-    <div ref={rootRef} style={hasActions ? {
-      // With pinned actions: the card scrolls in its own region and the
-      // button bar sits below it, outside the scroll - so the bar can never
-      // cover any of the details text.
-      height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', boxSizing: 'border-box', overflow: 'hidden',
-      ...style,
-    } : {
-      // Column so the card can centre itself (margin: auto below).
-      height: '100%', overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg)', boxSizing: 'border-box',
-      display: 'flex', flexDirection: 'column',
-      padding: 'calc(var(--safe-top) + 24px) 16px calc(var(--safe-bottom) + 24px)',
-      ...style,
-    }}>
-      <div ref={scrollRef} style={hasActions ? {
-        flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box',
-        display: 'flex', flexDirection: 'column',
-        padding: 'calc(var(--safe-top) + 24px) 16px 16px',
-      } : { display: 'contents' }}>
-      <div ref={cardRef} className={fill ? undefined : 'shadow-elevation-1'} style={fill ? {
-        // The whole box: grows to fill it (taller when details open, then it scrolls).
-        // overflow clip (not hidden): clips the same, but isn't a scroll box -
-        // so the button below can stick to the bottom of the real scroller.
-        position: 'relative', width: '100%', flex: '1 0 auto', minHeight: '100%', boxSizing: 'border-box',
-        display: 'flex', flexDirection: 'column', background: 'var(--surface)', overflow: 'clip',
-        paddingBottom: 'calc(16px + var(--safe-bottom))',
-      } : {
-        // margin auto: centred top-to-bottom with equal space above and below
-        // when it fits; when it's taller than the screen (details open) the
-        // auto margins collapse to 0 and it scrolls from the top as before.
-        // With a promo under it the two are centred as one group (no gap between).
-        position: 'relative', maxWidth: 480, margin: promoShown ? 'auto auto 0' : 'auto', width: '100%', flexShrink: 0, boxSizing: 'border-box',
-        background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 30, overflow: 'hidden', paddingBottom: 16,
-      }}>
-        {burst && <Confetti />}
-        <div style={{ position: 'relative', height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', background: HEADER_BG[status] }}>
-          {stamp && (
-            <span aria-label={stamp} style={{
-              position: 'absolute', top: 16, right: 16, transform: 'rotate(-8deg)',
-              display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 7,
-              border: '2px solid rgba(255,255,255,0.85)', color: '#fff',
-              fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase',
-              background: 'rgba(255,255,255,0.08)',
-            }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><polyline points="3 3 3 8 8 8" /><polyline points="12 7 12 12 15 14" />
-              </svg>
-              {stamp}
-            </span>
-          )}
-          <div ref={setCheck} style={{
-            width: RECEIPT_CHECK, height: RECEIPT_CHECK, borderRadius: '50%', background: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: revealed ? 1 : 0,
-          }}>
-            {checkContent ?? (
-              <svg viewBox="0 0 24 24" width="46%" height="46%" fill="none" stroke={HEADER_ICON_COLOR[status]} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                {status === 'failed' ? <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
-                  : status === 'pending' ? <><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></>
-                  : <polyline points="20 6 9 17 4 12" />}
-              </svg>
-            )}
-          </div>
-        </div>
-
-        <div style={{ padding: '16px 20px 0', textAlign: 'center', color: 'var(--text-primary)', ...(fill ? { flex: 1, display: 'flex', flexDirection: 'column' } : null) }}>
+  const heroText = (<>
           <Reveal i={0} revealed={revealed}>
             <h2 style={{ fontSize: 25, fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>{title}</h2>
           </Reveal>
@@ -320,8 +262,8 @@ export function SuccessReceipt({
             </Reveal>
           )}
           {reward && revealed && <div style={{ marginTop: 8 }}><PointsEarnedLine type={reward} /></div>}
-
-          <div style={{ textAlign: 'left', marginTop: 10 }}>
+  </>)
+  const rowsBlock = (<>
             {rows.map((r, i) => <Row key={r.label} row={r} i={i + 3} revealed={revealed} />)}
 
             {hasMore && (
@@ -391,6 +333,153 @@ export function SuccessReceipt({
                 </motion.div>
               )}
             </AnimatePresence>
+  </>)
+
+  // ── Page layout (18 Nov): a full page instead of a card - the app's
+  // header, the check and amount on the page itself, the rows in a card
+  // under "Details", the page's own sections (To / From on a history
+  // record), the "From MeshPort" slot, and the buttons pinned at the foot.
+  if (page && !desktop) {
+    const footer = actions?.length ? actions : page.noDone ? [] : [{ label: primaryLabel, onClick: onPrimary, primary: true }]
+    const ring = status === 'success' ? 'var(--brand)' : status === 'pending' ? 'var(--warning)' : 'var(--danger)'
+    return (
+      <div ref={rootRef} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden', ...style }}>
+        {(page.title || page.onBack) && <div className="header-row mp-glass-header flex-shrink-0 gap-3 px-5 pt-header pb-header" style={{ position: 'relative', zIndex: 2 }}>
+          {page.onBack && (
+            <button type="button" onClick={page.onBack} className="back-btn" aria-label="Back">
+              <ArrowLeft className="w-5 h-5 text-text-primary" />
+            </button>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 className="text-xl font-bold text-text-primary" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.title}</h1>
+          </div>
+          {page.onShare && (
+            <button type="button" onClick={page.onShare} className="back-btn" aria-label="Share">
+              <Share2 className="w-5 h-5 text-text-primary" />
+            </button>
+          )}
+        </div>}
+        <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 16px 24px', boxSizing: 'border-box' }}>
+          <div style={{ maxWidth: 480, margin: '0 auto' }}>
+            <div style={{ position: 'relative', textAlign: 'center', padding: '14px 0 4px', color: 'var(--text-primary)' }}>
+              {burst && <Confetti />}
+              <div ref={setCheck} style={{
+                width: RECEIPT_CHECK, height: RECEIPT_CHECK, borderRadius: '50%', margin: '0 auto 18px', background: ring,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: revealed ? 1 : 0,
+                boxShadow: `0 0 0 10px color-mix(in srgb, ${ring} 12%, transparent)`,
+              }}>
+                {checkContent ?? (
+                  <svg viewBox="0 0 24 24" width="46%" height="46%" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                    {status === 'failed' ? <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
+                      : status === 'pending' ? <><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></>
+                      : <polyline points="20 6 9 17 4 12" />}
+                  </svg>
+                )}
+              </div>
+              {heroText}
+            </div>
+            {page.sections}
+            {(rows.length > 0 || hasMore) && (
+              <>
+                <p className="text-xs font-bold text-text-secondary" style={{ margin: '20px 4px 8px' }}>Details</p>
+                <div ref={cardRef} style={{ background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 16, overflow: 'hidden', padding: '0 14px 4px' }}>
+                  {/* The first row's top line sits on the card's edge: hidden. */}
+                  <div style={{ marginTop: -1 }}>{rowsBlock}</div>
+                </div>
+              </>
+            )}
+            {promoShown && <SuccessPromo exclude={promo === true ? undefined : promo} revealed={revealed} />}
+          </div>
+        </div>
+        {footer.length > 0 && (
+          <motion.div initial={false} animate={revealed ? { opacity: 1 } : { opacity: 0 }} transition={{ duration: 0.3 }}
+            style={{ flexShrink: 0, display: 'flex', gap: 10, padding: '12px 16px calc(var(--safe-bottom) + 16px)', background: 'var(--bg)', borderTop: '1px solid var(--border)' }}>
+            {footer.map(a => (
+              <motion.button key={a.label} onClick={a.onClick} whileTap={{ scale: 0.98 }}
+                style={{
+                  flex: 1, padding: 14, borderRadius: 999, cursor: 'pointer', fontSize: 15, fontWeight: 700, fontFamily: 'inherit',
+                  ...(a.primary
+                    ? { border: 0, background: 'var(--brand)', color: '#fff' }
+                    : { border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--accent-text)' }),
+                }}>
+                {a.label}
+              </motion.button>
+            ))}
+          </motion.div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div ref={rootRef} style={hasActions ? {
+      // With pinned actions: the card scrolls in its own region and the
+      // button bar sits below it, outside the scroll - so the bar can never
+      // cover any of the details text.
+      height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', boxSizing: 'border-box', overflow: 'hidden',
+      ...style,
+    } : {
+      // Column so the card can centre itself (margin: auto below).
+      height: '100%', overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg)', boxSizing: 'border-box',
+      display: 'flex', flexDirection: 'column',
+      padding: 'calc(var(--safe-top) + 24px) 16px calc(var(--safe-bottom) + 24px)',
+      ...style,
+    }}>
+      <div ref={scrollRef} style={hasActions ? {
+        flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box',
+        display: 'flex', flexDirection: 'column',
+        padding: 'calc(var(--safe-top) + 24px) 16px 16px',
+      } : { display: 'contents' }}>
+      <div ref={cardRef} className={fill ? undefined : 'shadow-elevation-1'} style={fill ? {
+        // The whole box: grows to fill it (taller when details open, then it scrolls).
+        // overflow clip (not hidden): clips the same, but isn't a scroll box -
+        // so the button below can stick to the bottom of the real scroller.
+        position: 'relative', width: '100%', flex: '1 0 auto', minHeight: '100%', boxSizing: 'border-box',
+        display: 'flex', flexDirection: 'column', background: 'var(--surface)', overflow: 'clip',
+        paddingBottom: 'calc(16px + var(--safe-bottom))',
+      } : {
+        // margin auto: centred top-to-bottom with equal space above and below
+        // when it fits; when it's taller than the screen (details open) the
+        // auto margins collapse to 0 and it scrolls from the top as before.
+        // With a promo under it the two are centred as one group (no gap between).
+        position: 'relative', maxWidth: 480, margin: promoShown ? 'auto auto 0' : 'auto', width: '100%', flexShrink: 0, boxSizing: 'border-box',
+        background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 30, overflow: 'hidden', paddingBottom: 16,
+      }}>
+        {burst && <Confetti />}
+        <div style={{ position: 'relative', height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', background: HEADER_BG[status] }}>
+          {stamp && (
+            <span aria-label={stamp} style={{
+              position: 'absolute', top: 16, right: 16, transform: 'rotate(-8deg)',
+              display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 7,
+              border: '2px solid rgba(255,255,255,0.85)', color: '#fff',
+              fontSize: 11, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase',
+              background: 'rgba(255,255,255,0.08)',
+            }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><polyline points="3 3 3 8 8 8" /><polyline points="12 7 12 12 15 14" />
+              </svg>
+              {stamp}
+            </span>
+          )}
+          <div ref={setCheck} style={{
+            width: RECEIPT_CHECK, height: RECEIPT_CHECK, borderRadius: '50%', background: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: revealed ? 1 : 0,
+          }}>
+            {checkContent ?? (
+              <svg viewBox="0 0 24 24" width="46%" height="46%" fill="none" stroke={HEADER_ICON_COLOR[status]} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                {status === 'failed' ? <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
+                  : status === 'pending' ? <><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></>
+                  : <polyline points="20 6 9 17 4 12" />}
+              </svg>
+            )}
+          </div>
+        </div>
+
+        <div style={{ padding: '16px 20px 0', textAlign: 'center', color: 'var(--text-primary)', ...(fill ? { flex: 1, display: 'flex', flexDirection: 'column' } : null) }}>
+          {heroText}
+
+          <div style={{ textAlign: 'left', marginTop: 10 }}>
+            {rowsBlock}
           </div>
 
           {!actions?.length && (

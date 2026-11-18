@@ -1694,7 +1694,7 @@ export function PaySendPage() {
               const senderLabel = user?.username || (senderStoredAddress ? midShortenAddress(senderStoredAddress) : 'You')
               const amountLabel = `${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token}`
               return (
-                <SuccessReceipt promo
+                <SuccessReceipt promo page={{ title: payPending ? 'Payment submitted' : 'Payment successful' }}
                   reward="pay_send"
                   title={payPending ? 'Payment Submitted' : 'Paid Successfully'}
                   subtitle={payPending
