@@ -12,7 +12,7 @@
 // 'none' (wallet-frame/vercel.json): the frame makes no network requests.
 
 import { generateMnemonic, english, privateKeyToAccount } from 'viem/accounts'
-import { bytesToHex } from 'viem'
+import { bytesToHex, toFunctionSelector } from 'viem'
 import {
   WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION, REVEAL_CHANNEL, PASSKEY_CHANNEL, CONFIRM_CHANNEL,
   isWalletMessage, parseOrigins,
@@ -145,6 +145,28 @@ function isSelfCancel(address: string, tx: Record<string, unknown>): boolean {
     const gas = big(tx.gas ?? 21_000n)
     const price = big(tx.maxFeePerGas ?? tx.gasPrice)
     return gas <= 30_000n && gas * price <= SELF_CANCEL_MAX_FEE
+  } catch { return false }
+}
+
+// Claiming MeshPort rewards (18 Nov 2026: no passcode to claim points or USDC
+// rewards): MeshPortRewards.claimRewards(points, claimId, signature) on Arc,
+// value 0. The contract only ever pays the caller - USDC comes IN, nothing
+// leaves the wallet but the fee, capped like a self-cancel. It needs a
+// voucher the MeshPort server signed for this wallet, so it can't be made up.
+const REWARDS_CONTRACT = (String((import.meta.env.VITE_WALLET_REWARDS as string | undefined) ?? '').trim()
+  || '0x8921fae7322305011aff1c7409472f5c74eaaf15').toLowerCase()
+const CLAIM_REWARDS_SELECTOR = toFunctionSelector('claimRewards(uint256,bytes32,bytes)').toLowerCase()
+const REWARDS_CLAIM_MAX_FEE = 50_000_000_000_000_000n // 0.05 of the native token (USDC)
+function isRewardsClaim(tx: Record<string, unknown>): boolean {
+  try {
+    if (Number(tx.chainId) !== ARC_CHAIN_ID) return false
+    if (typeof tx.to !== 'string' || tx.to.toLowerCase() !== REWARDS_CONTRACT) return false
+    if (big(tx.value) !== 0n) return false
+    if (typeof tx.data !== 'string' || !tx.data.toLowerCase().startsWith(CLAIM_REWARDS_SELECTOR)) return false
+    if (tx.authorizationList != null || tx.type === 'eip7702' || tx.blobs != null) return false
+    const gas = big(tx.gas)
+    const price = big(tx.maxFeePerGas ?? tx.gasPrice)
+    return gas > 0n && gas <= 500_000n && gas * price <= REWARDS_CLAIM_MAX_FEE
   } catch { return false }
 }
 
@@ -517,7 +539,7 @@ const handlers: Handlers = {
       }
       if (!matchesIntent(c.intent, transaction)) throw new RpcError('mismatch', 'This is not the payment you confirmed')
       confirms.delete(confirmation as string)
-    } else if (confirmation != null || !isSelfCancel(a, transaction)) requireApproval(a, 'sign:transaction', params)
+    } else if (confirmation != null || !(isSelfCancel(a, transaction) || isRewardsClaim(transaction))) requireApproval(a, 'sign:transaction', params)
     return { serialized: await signer(a).signTransaction(transaction as any) }
   },
 

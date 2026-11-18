@@ -244,6 +244,20 @@ describe('approval: value-moving signatures need the passcode, checked by the fr
     expect((await ask('sign:transaction', { address, transaction: { ...tx(address, 0n), chainId: undefined } }))!.msg.error.code).toBe('approval-required')
   })
 
+  it('claiming MeshPort rewards needs no passcode; anything else at the rewards contract does', async () => {
+    const address = await walletWithPasscode()
+    const rewards = '0x8921fae7322305011aff1c7409472f5c74eaaf15'
+    const { encodeFunctionData, parseAbi } = await import('viem')
+    const data = encodeFunctionData({ abi: parseAbi(['function claimRewards(uint256,bytes32,bytes)']), functionName: 'claimRewards', args: [100n, ('0x' + '11'.repeat(32)) as `0x${string}`, '0x1234'] })
+    expect((await ask('sign:transaction', { address, transaction: tx(rewards, 0n, data) }))!.msg.result.serialized).toMatch(/^0x/)
+    // Value, another function, another contract, a big fee or another chain: confirm as usual.
+    expect((await ask('sign:transaction', { address, transaction: tx(rewards, 1n, data) }))!.msg.error.code).toBe('approval-required')
+    expect((await ask('sign:transaction', { address, transaction: tx(rewards, 0n, '0xa9059cbb' + data.slice(10)) }))!.msg.error.code).toBe('approval-required')
+    expect((await ask('sign:transaction', { address, transaction: tx(other, 0n, data) }))!.msg.error.code).toBe('approval-required')
+    expect((await ask('sign:transaction', { address, transaction: { ...tx(rewards, 0n, data), maxFeePerGas: 10n ** 18n } }))!.msg.error.code).toBe('approval-required')
+    expect((await ask('sign:transaction', { address, transaction: { ...tx(rewards, 0n, data), chainId: 1 } }))!.msg.error.code).toBe('approval-required')
+  })
+
   it('the approval lasts 2 minutes, and lock ends it', async () => {
     const address = await walletWithPasscode()
     await approveInWallet(address, '123456')
