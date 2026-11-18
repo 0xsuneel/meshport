@@ -1033,8 +1033,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
         : ['Bridge approved', <>{isCctpx ? 'Sent' : 'Burned'} on <b>{other}</b></>, <>Confirmed by <b>Circle</b></>, <>{isCctpx ? 'Delivered' : 'Minted'} on <b>Arc</b></>],
       whenLabel: out ? 'Sent at' : 'Bridged at', when: whenFull,
       hashes: [
-        ...(txHash && !isRecoveredClaim ? [{ label: out ? 'Arc' : other, hash: txHash }] : []),
-        ...(destinationTxHash ? [{ label: out ? other : 'Arc', hash: destinationTxHash }] : []),
+        ...(txHash && !isRecoveredClaim ? [{ label: `Sent on ${out ? 'Arc' : other}`, hash: txHash }] : []),
+        ...(destinationTxHash ? [{ label: `Received on ${out ? other : 'Arc'}`, hash: destinationTxHash }] : []),
       ],
       detailsTitle: out ? 'Transfer details' : 'Bridge details',
       details: [statusDetail, ...moveDetails,
