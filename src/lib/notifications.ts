@@ -250,7 +250,12 @@ export function notifyRewardClaimed({ usdcAmount, txHash, createdAt }: { usdcAmo
 
 // ── Reward notifications (check daily cap) ────────────────────────────────────
 
+// Points no longer notify (18 Nov 2026): earning points is routine; the
+// success page and the Rewards page show them. Kept as the one switch.
+const POINT_NOTIFS = false
+
 async function maybeRewardNotif(body: string) {
+  if (!POINT_NOTIFS) return
   try {
     const pts = await todayPoints()
     // pts is read AFTER the caller's awardTransactionPoints() has already

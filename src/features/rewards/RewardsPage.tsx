@@ -28,6 +28,7 @@ import { TokenMenu } from '@/components/ui/TokenMenu'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
 import { ScratchRewards } from './ScratchRewards'
+import { fetchScratchHistory, fmtUsdcMicro, onCardCount, type ScratchWin } from '@/lib/scratchCards'
 import { ArrowLeft } from 'lucide-react'
 
 interface ClaimRecord {
@@ -468,7 +469,15 @@ export function RewardsPage() {
   const todayUtc = new Date().toISOString().slice(0, 10)
   const doneToday = new Set(pointHistory.filter(p => p.points > 0 && p.created_at.slice(0, 10) === todayUtc).map(p => p.reason))
   const earnedToday = TASKS.filter(t => doneToday.has(`tx_reward:${t.type}`)).length * POINTS_PER_TX
-  const earnedRows = pointHistory.filter(p => p.points > 0)
+  // Earned: task points plus scratch cards won (their points row shows as the card).
+  const [scratchWins, setScratchWins] = useState<ScratchWin[]>([])
+  const [cardsLeft, setCardsLeft] = useState(-1)
+  useEffect(() => onCardCount(setCardsLeft), [])
+  useEffect(() => { void fetchScratchHistory(HISTORY_LIMIT).then(setScratchWins).catch(() => {}) }, [scratchRefresh, totalPoints, cardsLeft])
+  const earnedRows: (PointRecord & { usdcMicro?: number })[] = [
+    ...pointHistory.filter(p => p.points > 0 && p.reason !== 'scratch_card'),
+    ...scratchWins.map(w => ({ id: `sc_${w.id}`, points: w.points, usdcMicro: w.kind === 'usdc' ? w.usdcMicro : undefined, reason: 'scratch_card', tx_hash: null, created_at: w.scratchedAt })),
+  ].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
   const loadedNewUser = totalPoints < MIN_CLAIM_POINTS && claimsHistory.length === 0
   // While loading: the remembered card, else the first-claim one (most people).
   const newUser = loading ? rememberedNewUser ?? true : loadedNewUser
@@ -574,15 +583,17 @@ export function RewardsPage() {
 
   const historyRows = historyTab === 'earned' ? (
     earnedRows.length === 0 ? (
-      <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px' }}>Points you earn will show here.</p>
+      <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px' }}>Points and scratch-card rewards you win will show here.</p>
     ) : earnedRows.slice(0, HISTORY_LIMIT).map(p => {
       const t = taskOf(p.reason)
       return (
         <HistoryRow key={p.id} inPanel={isDesktop}
           icon={<HistoryIcon tone="out" icon={t ? t.action : 'rewards'} />}
           title={t ? t.done : p.reason === 'scratch_card' ? 'Scratch card won' : 'Points earned'}
-          meta={<><span style={{ color: 'var(--success-text)', fontWeight: 600 }}>Earned</span> · {timeAgo(p.created_at)}</>}
-          right={<div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>+{p.points} pts</div>} />
+          meta={<><span style={{ color: 'var(--success-text)', fontWeight: 600 }}>{p.usdcMicro != null ? 'In your USDC rewards' : 'Earned'}</span> · {timeAgo(p.created_at)}</>}
+          right={p.usdcMicro != null
+            ? <div style={{ fontSize: 14, fontWeight: 700, color: '#2775CA' }}>+{fmtUsdcMicro(p.usdcMicro)} USDC</div>
+            : <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>+{p.points} pts</div>} />
       )
     })
   ) : (

@@ -74,3 +74,15 @@ type Listener = (cards: number) => void
 const listeners = new Set<Listener>()
 export function onCardCount(fn: Listener) { listeners.add(fn); return () => { listeners.delete(fn) } }
 export function emitCardCount(n: number) { listeners.forEach(fn => { try { fn(n) } catch { /* listener */ } }) }
+
+export interface ScratchWin { id: string; kind: 'points' | 'usdc'; points: number; usdcMicro: number; payAmount: number; scratchedAt: string }
+
+/** Scratched cards with their prizes, newest first (Activity → Rewards). */
+export async function fetchScratchHistory(limit = 100): Promise<ScratchWin[]> {
+  const { data, error } = await supabase.rpc('my_scratch_history', { p_limit: limit })
+  if (error) throw error
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    id: String(r.id), kind: r.kind === 'usdc' ? 'usdc' : 'points', points: Number(r.points) || 0,
+    usdcMicro: Number(r.usdc_micro) || 0, payAmount: Number(r.pay_amount) || 0, scratchedAt: String(r.scratched_at),
+  }))
+}
