@@ -403,7 +403,10 @@ export function SuccessReceipt({
   // (or, for a record with a person, their avatar with a tick), the page's
   // own sections (To / From), one flat "Details" card whose last rows open
   // the explorer, "For you", and Share + Done at the foot.
-  if (page && !desktop) {
+  // The success page's layout on phones, in a sheet (Chat Pay) and on a
+  // computer's panel too (18 Nov 2026); a history record with a person keeps
+  // its own page on phones.
+  if (page && (!desktop || !page.person)) {
     const heroAmount = page.hero?.amount ?? title
     const heroLine = page.hero ? page.hero.line : subtitle
     const share = page.onShare ?? (async () => {
@@ -452,11 +455,13 @@ export function SuccessReceipt({
       const got = status === 'success' ? 'Paid' : status === 'pending' ? 'On its way' : 'Failed'
       const round = { width: 38, height: 38, margin: 0, padding: 0, borderRadius: '50%', background: 'rgba(255,255,255,.16)' } as const
       return (
-        <div ref={rootRef} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden', color: 'var(--text-primary)', ...style }}>
+        <div ref={rootRef} style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden', color: 'var(--text-primary)',
+          // A computer's panel: the page as a card, rounded like the app's popups.
+          ...(desktop ? { borderRadius: 26, border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)' } : {}), ...style }}>
           {/* On the band: the header's icons (and the gift's) are white. */}
           <style>{`.sr-pulse{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.22);animation:srPulse 2.8s cubic-bezier(.2,.6,.3,1) infinite;pointer-events:none}@keyframes srPulse{from{transform:scale(1);opacity:.9}to{transform:scale(1.75);opacity:0}}@media (prefers-reduced-motion: reduce){.sr-pulse{animation:none;transform:scale(1.58);opacity:.35}.sr-pulse+.sr-pulse{display:none}}.sr-band .back-btn{width:38px;height:38px;margin:0;padding:0;border-radius:50%;background:rgba(255,255,255,.16)}.sr-band .back-btn svg{color:#fff!important}`}</style>
           {hasHead && (
-            <div className="sr-band header-row flex-shrink-0 gap-3 px-4 pt-header pb-header" style={{ position: 'relative', zIndex: 2, background: top }}>
+            <div className={`sr-band header-row flex-shrink-0 gap-3 px-4 ${desktop || fill ? 'pt-3 pb-2' : 'pt-header pb-header'}`} style={{ position: 'relative', zIndex: 2, background: top }}>
               {page.onBack && (
                 <button type="button" onClick={page.onBack} className="back-btn" aria-label="Back" style={round}>
                   <ArrowLeft className="w-5 h-5" />

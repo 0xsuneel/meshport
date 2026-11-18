@@ -941,7 +941,6 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   // ── The phone's transaction page (approved preview, 18 Nov 2026) ─────────
   // Payments, swaps, multichain transfers, bridges in, reward claims and bulk
   // payments open TxDetailPage; anything else keeps the receipt page below.
-  const isDeskView = useMediaQuery(DESKTOP_QUERY)
   const symOf = (t?: string) => (t || 'USDC') === 'USDC' ? '$' : t === 'EURC' ? '€' : ''
   const amtOf = (n: number, t?: string) => `${symOf(t)}${formatAmt(n, t)}`
   const myHandle = myUsername ? `${String(myUsername).replace(/\.arc$/i, '')}.arc` : undefined
@@ -1088,7 +1087,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       promo: 'p2p',
     }
   }
-  if (txDetail && !isDeskView) return <TxDetailPage detail={txDetail} onClose={onClose} />
+  if (txDetail) return <TxDetailPage detail={txDetail} onClose={onClose} />
 
   return (
     <ReceiptPopup

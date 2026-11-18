@@ -23,19 +23,17 @@ import { PinSheet } from '@/components/ui/PinSheet'
 import { ActionSheet } from '@/components/ui/ActionSheet'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
-import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { SearchField } from '@/components/ui/SearchField'
 import { readPeople, writePeople } from '@/lib/peopleCache'
 import { Search, ArrowLeft, Paperclip, Image, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, Trash2, Archive, ArchiveRestore, MessageCirclePlus, Users, UserPlus, Receipt } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DESKTOP_QUERY } from '@/lib/motion'
 import { TxDetailPage, type TxParty } from '@/components/ui/TxDetailPage'
 import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
-import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
+import { SuccessReceipt, ReceiptAmount } from '@/components/ui/SuccessReceipt'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import {formatAmount, trimTrailingZeros, cn} from '@/lib/utils'
 import { AmountField } from '@/components/ui/AmountField'
@@ -1548,15 +1546,14 @@ function MessageTicks({ msg, onMedia }: { msg: any; onMedia?: boolean }) {
 // receiver version.
 function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: boolean; peer: string; onClose: () => void }) {
   const token = (msg.token_symbol as ChatPayToken) || 'USDC'
-  const amount = `${formatAmount(msg.payment_amount || 0, chatPayTokenDecimals(token))} ${token}`
   const hash: string | null = msg.payment_tx_hash || null
-  // Phone: the same Payment details page as Activity (18 Nov 2026), so a
-  // payment reads the same from the chat and from history.
-  const desk = useMediaQuery(DESKTOP_QUERY)
+  // The same Payment details card as Activity (18 Nov 2026), so a payment
+  // reads the same from the chat and from history: a page on a phone, the
+  // centred popup on a computer.
   const navigate = useNavigate()
   const myName = useAuthStore(s => s.user?.username) as string | undefined
   const myWallet = useAuthStore(s => s.walletAddress)
-  if (!desk) {
+  {
     const created = new Date(msg.created_at)
     const sym = token === 'USDC' ? '$' : token === 'EURC' ? '€' : ''
     const peerName = peer.replace(/\.arc$/i, '')
@@ -1587,28 +1584,6 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
       }} />
     )
   }
-  return (
-    <ReceiptPopup
-      onClose={onClose}
-      // A chat payment for an order (bill / request) is a payment; one
-      // person sending another USDC is simply "Received".
-      title={sent ? 'Paid Successfully' : parsePaymentOrderTag(String(msg.content ?? '')) ? 'Payment Received' : 'Received'}
-      subtitle={<>
-        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: sent ? 'var(--text-primary)' : 'var(--success-text)', marginBottom: 4 }}>{sent ? '-' : '+'}{amount}</span>
-        {sent ? <>Sent to {peer} in chat</> : <>From {peer} in chat</>}
-      </>}
-      // The header shows the amount and who it was with; the title the outcome.
-      rows={[
-        ...(hash ? [{ label: 'Transaction Hash', value: `${hash.slice(0, 6)}…${hash.slice(-4)}` }] : []),
-        { label: 'Time', value: new Date(msg.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
-      ]}
-      detailRows={[
-        { label: 'Network', value: 'Arc Testnet' },
-      ]}
-      fullHash={hash || undefined}
-      links={hash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash, href: arcExplorerTxUrl(hash) }] : undefined}
-    />
-  )
 }
 
 function DateSeparator({ iso }: { iso: string }) {
@@ -4521,7 +4496,21 @@ export function ChatConversationPage() {
                 const toLabel = `${recipientClean}.arc`
                 return (
                 <SuccessReceipt
-                  gift={<ScratchGift light />}
+                  // The success page's layout (18 Nov 2026), in the pay sheet / drawer:
+                  // the band, then the card with who was paid and the amount.
+                  page={{
+                    title: payPending ? 'Payment submitted' : 'Payment successful', gift: <ScratchGift light />,
+                    chip: payPending ? 'On its way' : 'Paid',
+                    hero: { amount: <ReceiptAmount value={`${payToken === 'USDC' ? '$' : payToken === 'EURC' ? '€' : ''}${formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))}`} unit={payToken} />, line: null },
+                    payee: { name: otherUser?.display_name || recipientClean, initial: (otherUser?.display_name || recipientClean || '?').replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || '?',
+                      handle: toLabel, copy: { value: toLabel, what: 'Username' } },
+                    rows: [
+                      ...(user?.username ? [{ label: 'From', value: `${String(user.username).replace(/\.arc$/i, '')}.arc` }] : []),
+                      { label: 'Network', value: 'Arc Testnet' },
+                      { label: 'Network fee', value: payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free' },
+                      ...(payTxHash ? [{ label: 'Transaction', value: `${payTxHash.slice(0, 6)}…${payTxHash.slice(-4)}` }] : []),
+                    ],
+                  }}
                   // Phone: fills the pay sheet edge to edge (desktop: the card in the drawer).
                   fill={!isDesktop}
                   style={{ flex: 1, minHeight: 0, height: 'auto', padding: 0, background: 'transparent' }}

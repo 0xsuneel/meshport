@@ -10,7 +10,9 @@ import { createPortal } from 'react-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, Check, ChevronDown, Clock, Copy, ExternalLink, Share2, X, Zap } from 'lucide-react'
 import { useBackLayer } from '@/lib/backLayers'
-import { PAGE_TRANSITION, SPRING_SOFT } from '@/lib/motion'
+import { DESKTOP_QUERY, PAGE_TRANSITION, SPRING_SOFT } from '@/lib/motion'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DesktopDialogFrame } from './DesktopDialogFrame'
 import { copyToClipboard } from '@/lib/utils'
 import { useUIStore } from '@/store'
 import { SuccessPromo, type PromoFeature } from './SuccessPromo'
@@ -111,6 +113,8 @@ function Rv({ i, children }: { i: number; children: ReactNode }) {
 
 export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: () => void }) {
   useBackLayer(true, onClose)
+  // Phones: a page that slides in. Computers: the app's centred popup (as before).
+  const desktop = useMediaQuery(DESKTOP_QUERY)
   const [open, setOpen] = useState(false)
   const d = detail
   const line = <div style={{ height: 1, background: 'var(--border)', margin: '18px 0' }} />
@@ -145,17 +149,22 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
     )
   }
 
-  return createPortal(
-    <motion.div role="dialog" aria-modal="true" aria-label={d.title}
-      initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={PAGE_TRANSITION}
-      onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)', display: 'flex', flexDirection: 'column', willChange: 'transform', color: 'var(--text-primary)' }}>
+  const head = (
       <div className="header-row mp-glass-header flex-shrink-0 gap-3 px-5 pt-header pb-header" style={{ position: 'relative', zIndex: 2 }}>
         <button type="button" onClick={onClose} className="back-btn" aria-label="Back"><ArrowLeft className="w-5 h-5 text-text-primary" /></button>
         <h1 className="text-xl font-bold text-text-primary" style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.title}</h1>
         <button type="button" onClick={() => { void share() }} className="back-btn" aria-label="Share"><Share2 className="w-5 h-5 text-text-primary" /></button>
       </div>
-
+  )
+  // A computer: the same card in the app's centred popup, with a close button.
+  const deskHead = (
+      <div className="flex items-center flex-shrink-0 gap-3 px-5 pt-4 pb-3" style={{ position: 'relative', zIndex: 2 }}>
+        <h1 className="text-xl font-bold text-text-primary" style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.title}</h1>
+        <button type="button" onClick={() => { void share() }} className="back-btn" aria-label="Share"><Share2 className="w-5 h-5 text-text-primary" /></button>
+        <button type="button" onClick={onClose} className="back-btn" aria-label="Close" style={{ marginLeft: 8 }}><X className="w-5 h-5 text-text-primary" /></button>
+      </div>
+  )
+  const body = (
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '6px 14px calc(var(--safe-bottom) + 20px)' }}>
         <div style={{ maxWidth: 480, margin: '0 auto' }}>
           <div style={{ position: 'relative', background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 24, overflow: 'hidden' }}>
@@ -318,6 +327,24 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
           <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--text-muted)', marginTop: 14 }}>MeshPort · Settled on Arc · Circle USDC</div>
         </div>
       </div>
+  )
+
+  if (desktop) return (
+    <DesktopDialogFrame onClose={onClose} maxWidth={440} zIndex={1000} backClose={false} bare>
+      <div role="dialog" aria-label={d.title} onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
+        style={{ display: 'flex', flexDirection: 'column', maxHeight: 'min(88vh, 900px)', borderRadius: 30, overflow: 'hidden', background: 'var(--bg)', color: 'var(--text-primary)' }}>
+        {deskHead}
+        {body}
+      </div>
+    </DesktopDialogFrame>
+  )
+  return createPortal(
+    <motion.div role="dialog" aria-modal="true" aria-label={d.title}
+      initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={PAGE_TRANSITION}
+      onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)', display: 'flex', flexDirection: 'column', willChange: 'transform', color: 'var(--text-primary)' }}>
+      {head}
+      {body}
     </motion.div>,
     document.body,
   )
