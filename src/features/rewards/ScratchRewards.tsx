@@ -6,6 +6,7 @@
 // (lib/scratchCards). A card's prize is decided by the server when the
 // payment is confirmed and is only learned by scratching it - never listed.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeftRight, Gift, Globe, Layers, MessageCircle } from 'lucide-react'
@@ -97,15 +98,25 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
   // is flying to it so it counts up when it lands.
   const [ptsHold, setPtsHold] = useState<number | null>(null)
 
+  // Skeletons until the first full read (18 Nov 2026: the page used to fill
+  // in piece by piece - $0.00, "–", "No cards right now", then the real
+  // state). Everything is read together and shown at once; a refresh keeps
+  // what's on screen until its new numbers are in.
+  const [ready, setReady] = useState(false)
   const load = useCallback(async () => {
     try {
-      const [s, list] = await Promise.all([fetchRewardSummary(), fetchScratchCards()])
+      const [s, list, t, w] = await Promise.all([
+        fetchRewardSummary(), fetchScratchCards(),
+        fetchRewardToday().catch(() => null),
+        fetchScratchHistory(4).catch(() => [] as ScratchWin[]),
+      ])
       setUsdcMicro(s.usdcMicro)
       setUsdcLifetime(s.usdcLifetimeMicro)
-      void fetchRewardToday().then(setToday)
-      void fetchScratchHistory(4).then(setWins).catch(() => setWins([]))
+      setToday(t)
+      setWins(w)
       setCards(list)
       emitCardCount(list.length)
+      setReady(true)
     } catch { /* weak network: keep what's shown */ }
   }, [])
   useEffect(() => { void load() }, [load, refreshKey])
@@ -154,7 +165,9 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
     <div ref={ref ?? undefined} onClick={onClick} role={onClick ? 'button' : undefined}
       style={{ position: 'relative', background: 'var(--surface)', border: '1px solid var(--soft-edge)', borderRadius: 22, padding: '18px 6px 16px', textAlign: 'center', boxShadow: 'var(--soft-card)', cursor: onClick ? 'pointer' : 'default' }}>
       {top}
-      <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.5px', fontVariantNumeric: 'tabular-nums', color }}>{value}</div>
+      <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.5px', fontVariantNumeric: 'tabular-nums', color, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {ready ? value : <Skeleton style={{ width: '62%', height: 26, borderRadius: 8 }} />}
+      </div>
       <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', marginTop: 4 }}>{label}</div>
     </div>
   )
@@ -191,20 +204,20 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
       {/* Balances */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, margin: `26px ${m}px 0` }}>
         {tile(usdcTile, <CountUp value={usdcMicro} format={v => fmtUsdcMicro(Math.round(v))} />, 'USDC won', USDC_BLUE,
-          claimPts > 0 ? (
+          ready && claimPts > 0 ? (
             <button type="button" disabled={claiming} onClick={e => { e.stopPropagation(); if (onOpenUsdc) onOpenUsdc(); else onClaimUsdc(claimPts) }}
               style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap', fontSize: 11.5, fontWeight: 800, padding: '3px 10px', borderRadius: 7, background: USDC_BLUE, color: '#fff', border: 'none', cursor: 'pointer', opacity: claiming ? 0.6 : 1 }}>
               {claiming ? 'Claiming…' : 'Claim'}
             </button>
           ) : undefined, onOpenUsdc)}
         {tile(ptsTile, <CountUp value={ptsHold ?? totalPoints} format={v => Math.round(v).toLocaleString()} />, 'Points', 'var(--brand-text)',
-          onClaimPoints ? (
+          ready && onClaimPoints ? (
             <button type="button" disabled={claiming} onClick={e => { e.stopPropagation(); onClaimPoints() }}
               style={{ position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap', fontSize: 11.5, fontWeight: 800, padding: '3px 10px', borderRadius: 7, background: 'var(--brand)', color: '#fff', border: 'none', cursor: 'pointer', opacity: claiming ? 0.6 : 1 }}>
               Claim
             </button>
           ) : undefined, onOpenPoints)}
-        {tile(null, cards ? cards.length : '–', 'Scratch cards', 'var(--brand-text)', undefined,
+        {tile(null, cards?.length ?? 0, 'Scratch cards', 'var(--brand-text)', undefined,
           () => bandRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))}
       </div>
       {/* Lifetime earned: all the USDC won and points earned, ever. */}
@@ -212,15 +225,24 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
         display: 'grid', gridTemplateColumns: '1fr 1px 1fr', alignItems: 'center', padding: '14px 6px' }}>
         <div style={{ textAlign: 'center' }}>
           <small style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '.02em' }}>LIFETIME USDC EARNED</small>
-          <b style={{ display: 'block', fontSize: 19, fontWeight: 800, marginTop: 3, color: USDC_BLUE }}>{fmtUsdcMicro(usdcLifetime)}</b>
+          <b style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 26, fontSize: 19, fontWeight: 800, marginTop: 3, color: USDC_BLUE }}>
+            {ready ? fmtUsdcMicro(usdcLifetime) : <Skeleton style={{ width: 64, height: 19, borderRadius: 7 }} />}
+          </b>
         </div>
         <span aria-hidden style={{ background: 'var(--border)', height: 34 }} />
         <div style={{ textAlign: 'center' }}>
           <small style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', fontWeight: 700, letterSpacing: '.02em' }}>LIFETIME POINTS EARNED</small>
-          <b style={{ display: 'block', fontSize: 19, fontWeight: 800, marginTop: 3, color: 'var(--brand-text)' }}>{(lifetimePoints ?? 0).toLocaleString()}</b>
+          <b style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 26, fontSize: 19, fontWeight: 800, marginTop: 3, color: 'var(--brand-text)' }}>
+            {ready ? (lifetimePoints ?? 0).toLocaleString() : <Skeleton style={{ width: 52, height: 19, borderRadius: 7 }} />}
+          </b>
         </div>
       </div>
-      {today && (
+      {!ready && (
+        <div aria-hidden style={{ margin: `10px ${m}px 0`, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {[96, 132, 96].map((w, i) => <Skeleton key={i} style={{ width: w, height: 28, borderRadius: 999 }} />)}
+        </div>
+      )}
+      {ready && today && (
         <div style={{ margin: `10px ${m}px 0`, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
           {[
             ['Today', `${Math.min(today.points, today.pointsLimit)} / ${today.pointsLimit} pts`],
@@ -242,7 +264,7 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
       {/* Cards waiting to be scratched. None: the last wins and why (approved
           preview, 18 Nov 2026) - all 10 won today, or pay to win one; a new
           user who has never scratched gets a slim strip. */}
-      {cards !== null && cards.length === 0 && wins !== null && wins.length === 0 && !limitHit ? (
+      {ready && cards !== null && cards.length === 0 && wins !== null && wins.length === 0 && !limitHit ? (
         <div ref={bandRef} style={{ marginTop: 22, background: BAND, padding: '14px 16px', borderRadius: isDesktop ? 18 : 0, display: 'flex', alignItems: 'center', gap: 12 }}>
           <span aria-hidden style={{ width: 40, height: 40, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'rgba(255,224,138,.15)' }}>
             <Gift size={20} color="#FFE08A" />
@@ -256,8 +278,8 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
         </div>
       ) : (
       <div ref={bandRef} style={{ marginTop: 22, background: BAND, padding: '18px 0 18px', borderRadius: isDesktop ? 18 : 0 }}>
-        <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 800, letterSpacing: '.04em', padding: cards && cards.length === 0 ? '0 16px 6px' : '0 16px 14px' }}>SCRATCH &amp; CLAIM YOUR REWARDS</h3>
-        {cards !== null && cards.length === 0 ? (<>
+        <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 800, letterSpacing: '.04em', padding: ready && cards && cards.length === 0 ? '0 16px 6px' : '0 16px 14px' }}>SCRATCH &amp; CLAIM YOUR REWARDS</h3>
+        {ready && cards !== null && cards.length === 0 ? (<>
           <div style={{ color: 'rgba(255,255,255,.75)', fontSize: 13.5, padding: '0 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             {limitHit
               ? <span>You've won all <b style={{ color: '#fff' }}>{today?.cardsLimit ?? 10} cards</b> today · new cards after 00:00 UTC</span>
@@ -286,8 +308,8 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
           </>)}
         </>) : (
         <div className="sr-strip" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 16px' }}>
-          {cards === null
-            ? [0, 1, 2].map(i => <div key={i} style={{ flex: '0 0 140px', height: 210, borderRadius: '10px 10px 0 0', background: 'rgba(255,255,255,.08)' }} />)
+          {!ready || cards === null
+            ? [0, 1, 2].map(i => <div key={i} className="mp-skel" aria-hidden style={{ flex: '0 0 140px', height: 210, borderRadius: '10px 10px 0 0', ['--skel-fill' as string]: 'rgba(255,255,255,.08)' }} />)
             : cards.map((c, i) => <TallCard key={c.id} look={i % LOOKS.length} onClick={() => setOpen({ id: c.id, look: i % LOOKS.length })} />)}
         </div>
         )}
