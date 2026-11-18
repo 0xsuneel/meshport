@@ -8,12 +8,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeftRight, ChevronRight, Gift, Globe, Layers, MessageCircle } from 'lucide-react'
+import { ArrowLeftRight, Gift, Globe, Layers, MessageCircle } from 'lucide-react'
 import {
   fetchRewardSummary, fetchScratchCards, scratchCard, emitCardCount, fmtUsdcMicro, usdcClaimPoints,
   MIN_USDC_CLAIM_MICRO, type ScratchPrize,
 } from '@/lib/scratchCards'
 import { useUIStore } from '@/store'
+import { ActiveOffers } from './ActiveOffers'
 
 const USDC_BLUE = '#2775CA'
 const BAND = '#0E2A28'
@@ -206,21 +207,8 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
         </div>
       </div>
 
-      {/* Active offer */}
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: `26px ${m + 4}px 12px` }}>
-        <h4 style={{ fontSize: 21, fontWeight: 900, letterSpacing: '-0.2px', textTransform: 'uppercase', color: 'var(--text-primary)' }}>Your active offers</h4>
-      </div>
-      <button type="button" onClick={() => navigate('/pay')} className="mp-press"
-        style={{ margin: `0 ${m}px`, width: isDesktop ? '100%' : 'calc(100% - 28px)', maxWidth: 340, textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 22, padding: 14, display: 'flex', gap: 14, alignItems: 'center', cursor: 'pointer', fontFamily: 'inherit' }}>
-        <span style={{ width: 54, height: 54, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--success)' }}>
-          <i style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--surface)', display: 'grid', placeItems: 'center', fontStyle: 'normal', fontWeight: 900, color: 'var(--brand-text)', fontSize: 18 }}>$</i>
-        </span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <small style={{ display: 'block', fontSize: 12.5, fontWeight: 800, letterSpacing: '.03em', color: 'var(--success-text)' }}>WIN A SCRATCH CARD</small>
-          <b style={{ display: 'block', fontSize: 15, fontWeight: 600, marginTop: 3, lineHeight: 1.3, color: 'var(--text-primary)' }}>Every payment wins a card - random points or real USDC</b>
-        </span>
-        <ChevronRight size={18} color="var(--text-secondary)" style={{ flex: 'none' }} />
-      </button>
+      {/* Active offers: activate, fill the ring, win a USDC card */}
+      <ActiveOffers margin={m} refreshKey={refreshKey + (cards?.length ?? 0)} />
 
       {/* Ways to earn more */}
       <div style={{ margin: `26px ${m}px 8px`, background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 24, padding: '18px 0 18px 14px' }}>
