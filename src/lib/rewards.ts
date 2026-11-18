@@ -127,6 +127,14 @@ export function usdcToPoints(usdc: number): number {
 // Send, ChatPay, BulkPay, or Swap on a given day, and NOTHING for repeating
 // that same action again that day, however many more times they use it. Max
 // possible per day is 100 (all 5, once each) - see MAX_DAILY_EARN_POINTS.
+/** A task's points: a random draw from 5 to 20. */
+export function randomTaskPoints(): number {
+  const r = new Uint32Array(1)
+  try { crypto.getRandomValues(r) } catch { r[0] = Math.floor(Math.random() * 2 ** 32) }
+  return MIN_TASK_POINTS + (r[0] % (POINTS_PER_TX - MIN_TASK_POINTS + 1))
+}
+export const MIN_TASK_POINTS = 5
+
 export async function awardTransactionPoints(params: {
   userId: string
   walletAddress: string
@@ -140,6 +148,8 @@ export async function awardTransactionPoints(params: {
   const today = new Date().toISOString().split('T')[0]
   const todayStartIso = `${today}T00:00:00.000Z`
   const reason = rewardReasonFor(params.actionType)
+  // A random draw, 5-20 points (18 Nov 2026: "random points", never a fixed +20).
+  const pts = randomTaskPoints()
 
   // 1. Check duplicate tx reward (unchanged - the same on-chain transaction
   // must never be rewarded twice, regardless of the new per-action rule).
@@ -173,7 +183,7 @@ export async function awardTransactionPoints(params: {
   const { error: ptError } = await supabase.from('point_transactions').insert({
     user_id: params.userId,
     wallet_address: params.walletAddress,
-    points: POINTS_PER_TX,
+    points: pts,
     reason,
     tx_hash: params.txHash,
   })
@@ -196,7 +206,7 @@ export async function awardTransactionPoints(params: {
     user_id: params.userId,
     reward_date: today,
     tx_count: (daily?.tx_count || 0) + 1,
-    points: (daily?.points || 0) + POINTS_PER_TX,
+    points: (daily?.points || 0) + pts,
   }, { onConflict: 'user_id,reward_date' })
   if (dtrError) {
     console.error('[Rewards] daily_tx_rewards upsert failed:', dtrError.code, dtrError.message)
@@ -216,7 +226,7 @@ export async function awardTransactionPoints(params: {
   const { error: upError } = await supabase.rpc('increment_user_points', {
     p_user_id: params.userId,
     p_wallet_address: params.walletAddress,
-    p_amount: POINTS_PER_TX,
+    p_amount: pts,
   })
   if (upError) {
     console.error('[Rewards] increment_user_points failed:', upError.code, upError.message)
@@ -228,8 +238,8 @@ export async function awardTransactionPoints(params: {
   }
 
   // The action's success screen and an open Rewards page show it at once.
-  void import('./pointsEarned').then(m => m.announcePointsEarned(params.actionType, POINTS_PER_TX)).catch(() => {})
-  return { pointsAwarded: POINTS_PER_TX, error: null }
+  void import('./pointsEarned').then(m => m.announcePointsEarned(params.actionType, pts)).catch(() => {})
+  return { pointsAwarded: pts, error: null }
 }
 
 // ─── Fetch user points ────────────────────────────────────────────────────────
