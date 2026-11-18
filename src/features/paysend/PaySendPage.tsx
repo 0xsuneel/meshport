@@ -1,3 +1,4 @@
+import { ScratchGift } from '@/components/rewards/ScratchGift'
 import { backLayerPop } from '@/lib/backLayers'
 import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
 import { displayOrderNumber } from '@/lib/orderLabels'
@@ -1696,6 +1697,7 @@ export function PaySendPage() {
               return (
                 <SuccessReceipt promo page={{
                   title: payPending ? 'Payment submitted' : 'Payment successful',
+                  gift: <ScratchGift />,
                   hero: {
                     amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))} ${payPending ? 'on its way' : 'sent'}`,
                     line: payPending ? 'Still confirming on Arc. Activity updates when it lands.'

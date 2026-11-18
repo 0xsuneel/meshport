@@ -33,6 +33,8 @@ interface SuccessReceiptProps {
    *  buttons at the foot) instead of the card. */
   page?: {
     title?: string; onBack?: () => void; onShare?: () => void; sections?: ReactNode; noDone?: boolean
+    /** Beside Share in the header (the payment page's scratch-card gift); replaces the "+20 points" line. */
+    gift?: ReactNode
     /** The big line and the line under it (default: title / subtitle). */
     hero?: { amount: ReactNode; line: ReactNode }
     /** A record with a person: their initial with a tick instead of the check. */
@@ -383,6 +385,7 @@ export function SuccessReceipt({
             <div style={{ flex: 1, minWidth: 0 }}>
               <h1 className="text-xl font-bold text-text-primary" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.title}</h1>
             </div>
+            {page.gift}
             <button type="button" onClick={() => { void share() }} className="back-btn" aria-label="Share">
               <Share2 className="w-5 h-5 text-text-primary" />
             </button>
@@ -433,7 +436,7 @@ export function SuccessReceipt({
                     </div>
                   </Reveal>
                 )}
-                {reward && revealed && <div style={{ marginTop: 10 }}><PointsEarnedLine type={reward} /></div>}
+                {reward && revealed && !page.gift && <div style={{ marginTop: 10 }}><PointsEarnedLine type={reward} /></div>}
               </div>
             )}
             {page.sections}
