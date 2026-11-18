@@ -29,6 +29,8 @@ import { readPeople, writePeople } from '@/lib/peopleCache'
 import { Search, ArrowLeft, Paperclip, Image, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, Trash2, Archive, ArchiveRestore, MessageCirclePlus, Users, UserPlus, Receipt } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DESKTOP_QUERY } from '@/lib/motion'
+import { TxDetailPage, type TxParty } from '@/components/ui/TxDetailPage'
 import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
@@ -1548,6 +1550,43 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
   const token = (msg.token_symbol as ChatPayToken) || 'USDC'
   const amount = `${formatAmount(msg.payment_amount || 0, chatPayTokenDecimals(token))} ${token}`
   const hash: string | null = msg.payment_tx_hash || null
+  // Phone: the same Payment details page as Activity (18 Nov 2026), so a
+  // payment reads the same from the chat and from history.
+  const desk = useMediaQuery(DESKTOP_QUERY)
+  const navigate = useNavigate()
+  const myName = useAuthStore(s => s.user?.username) as string | undefined
+  const myWallet = useAuthStore(s => s.walletAddress)
+  if (!desk) {
+    const created = new Date(msg.created_at)
+    const sym = token === 'USDC' ? '$' : token === 'EURC' ? '€' : ''
+    const peerName = peer.replace(/\.arc$/i, '')
+    const isOrder = !!parsePaymentOrderTag(String(msg.content ?? ''))
+    const me: TxParty = { label: sent ? 'From' : 'To', name: 'You', you: true,
+      handle: myName ? `${String(myName).replace(/\.arc$/i, '')}.arc` : undefined, address: myWallet || undefined, sub: `MeshPort wallet · ${token} on Arc` }
+    const them: TxParty = { label: sent ? 'To' : 'From', name: peerName.charAt(0).toUpperCase() + peerName.slice(1), handle: peer,
+      actions: [{ label: sent ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(`/pay?to=${encodeURIComponent(peerName)}`) } }] }
+    const st = msg.payment_status === 'failed' ? 'failed' as const : msg.payment_status === 'pending' ? 'pending' as const : 'success' as const
+    return (
+      <TxDetailPage onClose={onClose} detail={{
+        title: 'Payment details', status: st, amountLabel: 'Amount',
+        amount: `${sym}${formatAmount(msg.payment_amount || 0, chatPayTokenDecimals(token))}`, unit: token,
+        pill: isOrder ? '🧾 Order payment' : '💬 Paid in chat',
+        parties: [them, me],
+        steps: ['Payment approved',
+          <>Payment made by <b>{sent ? 'you' : peer}</b></>,
+          <>Payment received by <b>{sent ? peer : 'you'}</b></>],
+        whenLabel: sent ? 'Paid at' : 'Received at',
+        when: `${created.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, ${created.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`,
+        hashes: hash ? [{ label: 'Transaction', hash }] : [],
+        detailsTitle: 'Payment details',
+        details: [
+          { label: 'Status', value: st === 'success' ? 'Completed' : st === 'failed' ? 'Failed' : 'Processing', tone: st === 'success' ? 'ok' : st === 'failed' ? 'bad' : undefined },
+          { label: 'Network', value: 'Arc Testnet' },
+          ...(hash ? [{ label: 'Explorer', value: 'View on ArcScan', href: arcExplorerTxUrl(hash) }] : []),
+        ],
+      }} />
+    )
+  }
   return (
     <ReceiptPopup
       onClose={onClose}
