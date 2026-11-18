@@ -1322,7 +1322,7 @@ export function ActivityPage() {
               return (
                 <HistoryRow key={p.id}
                   icon={<HistoryIcon tone="out" icon={t ? t.action : 'rewards'} />}
-                  title={t ? t.done : 'Points earned'}
+                  title={t ? t.done : p.reason === 'scratch_card' ? 'Scratch card won' : 'Points earned'}
                   meta={<><span style={{ color: 'var(--success-text)', fontWeight: 600 }}>Earned</span> · {timeAgo(p.created_at)}</>}
                   right={<div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>+{p.points} pts</div>} />
               )

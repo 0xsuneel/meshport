@@ -27,6 +27,8 @@ import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { Skeleton, SkeletonRows } from '@/components/ui/Skeleton'
+import { ScratchRewards } from './ScratchRewards'
+import { ArrowLeft } from 'lucide-react'
 
 interface ClaimRecord {
   id: string; points_claimed: number; usdc_received: number
@@ -123,6 +125,8 @@ export interface ClaimProgress {
   done: StepKey[]; times: Partial<Record<StepKey, number>>
   phase: 'running' | 'success' | 'failed'
   error?: string; txHash?: string | null; usdcReceived?: number
+  /** Claiming the USDC won on scratch cards (not points). */
+  usdcRewards?: boolean
 }
 
 /** How rewards work, in the dropdown panel (TokenMenu), portalled over the
@@ -148,6 +152,9 @@ function HowItWorksMenu({ rect, onClose }: { rect: DOMRect; onClose: () => void 
         <div style={{ margin: '4px 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, var(--brand) 10%, transparent)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
           <b style={{ color: 'var(--text-primary)' }}>1,000 pts = ${formatAmount(pointsToUSDC(1000))} USDC</b>, sent to your Arc wallet.
           {' '}{MIN_CLAIM_POINTS}–{MAX_CLAIM_POINTS.toLocaleString()} pts per claim, up to {MAX_DAILY_POINTS.toLocaleString()} a day. Earn up to {MAX_DAILY_EARN_POINTS} pts a day.
+        </div>
+        <div style={{ margin: '0 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, #2775CA 10%, transparent)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          <b style={{ color: 'var(--text-primary)' }}>Scratch cards:</b> every payment wins one (up to 10 a day) - random points, or real USDC cashback on payments of $1 or more. Claim the USDC to your wallet anytime.
         </div>
       </TokenMenu>
     </div>,
@@ -185,7 +192,7 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
         <div style={{ marginTop: 14 }}>
           {p.phase === 'running' && <>
             <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)' }}>${formatAmount(p.usdc)} USDC</div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Claiming {p.points.toLocaleString()} pts to your wallet</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{p.usdcRewards ? 'Claiming your USDC rewards to your wallet' : `Claiming ${p.points.toLocaleString()} pts to your wallet`}</div>
           </>}
           {ok && <div className="rw-fade">
             <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--success-text)' }}>+${formatAmount(p.usdcReceived ?? p.usdc)} USDC</div>
@@ -193,7 +200,7 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
           </div>}
           {p.phase === 'failed' && <div className="rw-fade">
             <div style={{ fontSize: 21, fontWeight: 800, color: 'var(--text-primary)' }}>Claim didn't go through</div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Your {p.points.toLocaleString()} pts were not deducted.</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{p.usdcRewards ? 'Your USDC rewards are kept.' : `Your ${p.points.toLocaleString()} pts were not deducted.`}</div>
           </div>}
         </div>
 
@@ -222,7 +229,7 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
                     <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--surface)', border: '2px solid var(--border)' }} />
                   )}
                 </span>
-                <span style={{ color: isFailed ? 'var(--danger-text)' : isDone || i === doneIdx ? 'var(--text-primary)' : dim, fontWeight: i === doneIdx && p.phase === 'running' ? 600 : 500 }}>{s.label}</span>
+                <span style={{ color: isFailed ? 'var(--danger-text)' : isDone || i === doneIdx ? 'var(--text-primary)' : dim, fontWeight: i === doneIdx && p.phase === 'running' ? 600 : 500 }}>{p.usdcRewards && s.key === 'check' ? 'Checking your rewards' : s.label}</span>
                 {isDone && t != null && <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-secondary)' }}>{t < 1000 ? `${(t / 1000).toFixed(1)}s` : `${(t / 1000).toFixed(1)}s`}</span>}
               </div>
             )
@@ -233,8 +240,10 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
         {ok && (
           <div className="rw-fade">
             <div style={{ textAlign: 'left', marginTop: 14, padding: '8px 12px', borderRadius: 14, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
-              <Line k="Points used" v={`${p.points.toLocaleString()} pts`} />
-              <Line k="Balance left" v={`${balanceLeft.toLocaleString()} pts`} />
+              {p.usdcRewards ? <Line k="From" v="USDC won on scratch cards" /> : <>
+                <Line k="Points used" v={`${p.points.toLocaleString()} pts`} />
+                <Line k="Balance left" v={`${balanceLeft.toLocaleString()} pts`} />
+              </>}
               {p.txHash && <Line k="Transaction" v={<a href={arcExplorerTxUrl(p.txHash)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-text)', textDecoration: 'none' }}>{p.txHash.slice(0, 6)}…{p.txHash.slice(-4)} ↗</a>} />}
             </div>
             <button onClick={onClose} style={{ width: '100%', border: 'none', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', marginTop: 16, cursor: 'pointer' }}>Done</button>
@@ -390,17 +399,27 @@ export function RewardsPage() {
     return () => { live = false }
   }, [userId, walletAddress, claiming])
   const finishPending = () => { if (pendingClaim) void claimOnce(() => runClaim(pendingClaim.points)) }
-  const runClaim = async (finishing?: number) => {
+  // usdcPoints: claim the USDC won on scratch cards instead (its value in
+  // contract points, lib/scratchCards usdcClaimPoints).
+  const [scratchRefresh, setScratchRefresh] = useState(0)
+  const claimUsdc = (usdcPoints: number) => { void claimOnce(() => runClaim(pendingClaim?.points, usdcPoints)) }
+  const runClaim = async (finishing?: number, usdcPoints?: number) => {
+    const usdcRewards = !finishing && !!usdcPoints
     setClaimError(null)
     if (!walletAddress)        { setClaimError('Wallet not connected'); return }
     if (!userId)               { setClaimError('User not found - please log out and back in'); return }
     if (!username)             { setClaimError('Username not set'); return }
-    if (!finishing && totalPoints < MIN_CLAIM_POINTS) { setClaimError(`Need at least ${MIN_CLAIM_POINTS} points to claim`); return }
+    if (!finishing && !usdcRewards && totalPoints < MIN_CLAIM_POINTS) { setClaimError(`Need at least ${MIN_CLAIM_POINTS} points to claim`); return }
 
     const activeSigner = await getReadySigner()
     if (!activeSigner) { useAuthStore.getState().lock(); window.location.href = '/auth/lock'; return }
 
-    const pointsToUse = finishing ?? Math.min(typedPoints, totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
+    const pointsToUse = finishing ?? (usdcRewards ? Math.min(usdcPoints!, dailyRemaining, MAX_CLAIM_POINTS) : Math.min(typedPoints, totalPoints, dailyRemaining, MAX_CLAIM_POINTS))
+    if (usdcRewards && pointsToUse < MIN_CLAIM_POINTS) {
+      setProgress({ points: usdcPoints!, usdc: pointsToUSDC(usdcPoints!), done: [], times: {}, phase: 'failed', usdcRewards,
+        error: "You've reached today's claim limit - claim your USDC again after 00:00 UTC." })
+      return
+    }
     if (!finishing && pointsToUse < MIN_CLAIM_POINTS) {
       setClaimError(`Select at least ${MIN_CLAIM_POINTS} points${dailyRemaining < MIN_CLAIM_POINTS ? ` (daily limit: ${dailyRemaining} pts remaining today)` : ''}`)
       return
@@ -411,7 +430,7 @@ export function RewardsPage() {
     const started = Date.now()
     let last = started
     setClaimPoints(pointsToUse)
-    setProgress({ points: pointsToUse, usdc: pointsToUSDC(pointsToUse), done: [], times: {}, phase: 'running' })
+    setProgress({ points: pointsToUse, usdc: pointsToUSDC(pointsToUse), done: [], times: {}, phase: 'running', usdcRewards })
 
     const result = await claimPointsAsUSDC({
       userId,
@@ -419,6 +438,7 @@ export function RewardsPage() {
       walletAddress,
       signer: activeSigner,
       points: pointsToUse,
+      source: usdcRewards ? 'usdc' : 'points',
       onStep: s => {
         const now = Date.now(), took = now - last
         last = now
@@ -428,6 +448,7 @@ export function RewardsPage() {
 
     if (result.error) {
       setProgress(p => p ? { ...p, phase: 'failed', error: result.error ?? undefined } : p)
+      setScratchRefresh(k => k + 1)
       setClaiming(false)
       return
     }
@@ -435,8 +456,9 @@ export function RewardsPage() {
     await new Promise(r => setTimeout(r, Math.max(0, 650 - (Date.now() - last))))
     setProgress(p => p ? { ...p, done: ['check', 'approve', 'send'], phase: 'success', txHash: result.txHash, usdcReceived: result.usdcReceived } : p)
     // A finished earlier claim's points already left the balance.
-    if (!finishing) setTotalPoints(prev => Math.max(0, prev - pointsToUse))
+    if (!finishing && !usdcRewards) setTotalPoints(prev => Math.max(0, prev - pointsToUse))
     setPendingClaim(null)
+    setScratchRefresh(k => k + 1)
     await load()
     setHistoryTab('claimed')
     setClaiming(false)
@@ -558,7 +580,7 @@ export function RewardsPage() {
       return (
         <HistoryRow key={p.id} inPanel={isDesktop}
           icon={<HistoryIcon tone="out" icon={t ? t.action : 'rewards'} />}
-          title={t ? t.done : 'Points earned'}
+          title={t ? t.done : p.reason === 'scratch_card' ? 'Scratch card won' : 'Points earned'}
           meta={<><span style={{ color: 'var(--success-text)', fontWeight: 600 }}>Earned</span> · {timeAgo(p.created_at)}</>}
           right={<div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>+{p.points} pts</div>} />
       )
@@ -664,6 +686,11 @@ export function RewardsPage() {
     </P2PSheet>
   )
 
+  const scratch = (
+    <ScratchRewards isDesktop={isDesktop} totalPoints={totalPoints} claiming={claiming} refreshKey={scratchRefresh}
+      onPointsWon={() => { void load() }} onClaimUsdc={claimUsdc} />
+  )
+
   const overlays = (
     <>
       <AnimatePresence>
@@ -675,15 +702,24 @@ export function RewardsPage() {
         {progress && (
           <ClaimProgressCard key="rw-progress" p={progress} balanceLeft={totalPoints}
             onClose={() => setProgress(null)}
-            onRetry={() => { setProgress(null); openClaim() }} />
+            onRetry={() => { const u = progress.usdcRewards; setProgress(null); if (!u) openClaim() }} />
         )}
       </AnimatePresence>
     </>
   )
 
   const header = (
-    <div className="header-row mp-glass-header sticky top-0 z-20 flex-shrink-0 gap-3 px-5 pt-header pb-header">
-      <h1 className="text-xl font-bold text-text-primary">Rewards</h1>
+    <div className="header-row mp-glass-header sticky top-0 z-20 flex-shrink-0 gap-3 px-5 pt-header pb-header" style={{ position: 'sticky' }}>
+      {isDesktop ? <h1 className="text-xl font-bold text-text-primary">Rewards</h1> : <>
+        <button type="button" onClick={() => navigate(-1)} className="back-btn" aria-label="Back">
+          <ArrowLeft className="w-5 h-5 text-text-primary" />
+        </button>
+        {/* The page's mark, centred (approved preview). */}
+        <h1 aria-label="MeshPort Rewards" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1, pointerEvents: 'none' }}>
+          <small style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: 'var(--brand-text)' }}>MESHPORT</small>
+          <b style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-.5px', fontStyle: 'italic', textTransform: 'uppercase', background: 'linear-gradient(180deg, #1C8A7F, #0E524C)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', paddingRight: 2 }}>Rewards</b>
+        </h1>
+      </>}
       <button ref={howBtnRef} onClick={() => setShowEarnInfo(o => !o)} aria-expanded={showEarnInfo}
         className="mp-hit mp-hit-sm ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
         style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', color: 'var(--brand-text)', border: 'none', cursor: 'pointer' }}>
@@ -702,6 +738,7 @@ export function RewardsPage() {
           {/* Scrolls when the window is short; the cards keep their full
               height (flex items would otherwise shrink and cut off Claim USDC). */}
           <div style={{ flex: '1 1 0%', minWidth: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 18, padding: 2, margin: -2 }}>
+            <div style={{ flexShrink: 0 }}>{scratch}</div>
             <div style={{ flexShrink: 0 }}>{hero}</div>
             <div style={{ flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 18, padding: '14px 14px 6px' }}>{tasks}</div>
           </div>
@@ -718,6 +755,8 @@ export function RewardsPage() {
           under its glass like Home. */}
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'var(--nav-space)' }}>
         {header}
+        {scratch}
+        <div style={{ height: 22 }} />
         {hero}
         {tasks}
         {history}

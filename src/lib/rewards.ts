@@ -321,10 +321,14 @@ export async function claimPointsAsUSDC(params: {
   walletAddress: string
   signer: WalletAccount
   points: number
+  /** 'usdc': claim the USDC won on scratch cards (reward_usdc), as its points
+   *  value on the same contract (1 point = 0.0005 USDC). Default: points. */
+  source?: 'points' | 'usdc'
   /** Progress for the claim screen: called as each real step finishes. */
   onStep?: (step: 'check' | 'approve' | 'send') => void
 }): Promise<{ txHash: string | null; usdcReceived: number; error: string | null }> {
   const { userId, username, walletAddress, signer } = params
+  const source = params.source === 'usdc' ? 'usdc' : 'points'
   let points = params.points
   // An earlier claim that didn't finish holds its points: finish that one
   // (same voucher, same points) - the server would anyway.
@@ -359,7 +363,7 @@ export async function claimPointsAsUSDC(params: {
   }
 
   const available = userPts?.total_points || 0
-  if (!pending && available < points) {
+  if (!pending && source === 'points' && available < points) {
     return { txHash: null, usdcReceived: 0, error: `Only ${available} points available, need ${points}` }
   }
 
@@ -380,7 +384,7 @@ export async function claimPointsAsUSDC(params: {
   // 2. Claim id - reuse an unfinished claim's id for the same amount: the
   // server already reserved those points for it and re-issues the same
   // voucher, so a failed send never costs points twice.
-  const pendingKey = `mp_reward_claim_${walletAddress.toLowerCase()}`
+  const pendingKey = `mp_reward_claim_${source === 'usdc' ? 'usdc_' : ''}${walletAddress.toLowerCase()}`
   let pendingClaim: { claimId: string; points: number } | null = null
   try { pendingClaim = JSON.parse(localStorage.getItem(pendingKey) || 'null') } catch { /* none */ }
   let claimIdBytes32 = (pending ? pending.claimId
@@ -435,7 +439,7 @@ export async function claimPointsAsUSDC(params: {
       // (deducts) the points before signing.
       const { data: signData, error: signError } = await supabase.functions.invoke(
         'rewards-claim-sign',
-        { body: { points, claimId: claimIdBytes32 } },
+        { body: { points, claimId: claimIdBytes32, source } },
       )
       if (signError || !signData?.signature) {
         const msg = signError?.message ?? 'Signing service unavailable'
@@ -535,7 +539,7 @@ export async function claimPointsAsUSDC(params: {
             amount: paidUsdc,
             fromAddress: REWARDS_CONTRACT || '',
             fromUsername: 'MeshPort Reward',
-            note: `${points} points claimed`,
+            note: source === 'usdc' ? 'Scratch card rewards claimed' : `${points} points claimed`,
             receiveKind: 'reward_claim',
           })
         }).catch(() => {})

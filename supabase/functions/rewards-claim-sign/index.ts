@@ -43,6 +43,11 @@ const ARC_TESTNET_CHAIN_ID = 5042002n
 // Claim bounds - must mirror MIN_CLAIM_POINTS / MAX_CLAIM_POINTS in rewards.ts
 const MIN_CLAIM_POINTS = 100
 const MAX_CLAIM_POINTS = 1000
+// A reservation of points, or of scratch-card USDC (18 Nov) - claimed as
+// points at the contract's rate: 1000 points = 0.5 USDC, so 1 point = 500
+// micro-USDC.
+const RESERVED = ['claim_reserved', 'claim_reserved_usdc']
+const MICRO_PER_POINT = 500
 
 Deno.serve(async (req: Request) => {
   const preflight = handleOptions(req)
@@ -71,6 +76,8 @@ Deno.serve(async (req: Request) => {
   }
 
   const action       = String(body?.action ?? 'sign')
+  // 'usdc' (18 Nov): claim USDC won on scratch cards (reward_usdc) through the same voucher.
+  const source       = body?.source === 'usdc' ? 'usdc' : 'points'
   let points         = Number(body?.points)
   let claimId        = (body?.claimId      ?? '').toString().trim().toLowerCase()
   if (action === 'pending') { points = MIN_CLAIM_POINTS; claimId = '0x' + '0'.repeat(64) } // only who's asking matters
@@ -124,7 +131,7 @@ Deno.serve(async (req: Request) => {
   // ── Same claimId again (a retry after a failed send): re-issue the same
   // voucher. Points were already reserved for it, so nothing is deducted twice.
   const { data: existing } = await supabase.from('point_transactions')
-    .select('points, user_id').eq('reason', 'claim_reserved').eq('tx_hash', claimId).maybeSingle()
+    .select('points, user_id').in('reason', RESERVED).eq('tx_hash', claimId).maybeSingle()
   if (existing) {
     if (existing.user_id !== userId || -Number(existing.points) !== points) {
       return json({ success: false, error: 'This claim id belongs to another claim' }, 409)
@@ -134,12 +141,37 @@ Deno.serve(async (req: Request) => {
     // checked before reserving so a capped claim never burns points.
     const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0)
     const { data: today } = await supabase.from('point_transactions')
-      .select('points').eq('user_id', userId).eq('reason', 'claim_reserved').gte('created_at', dayStart.toISOString())
+      .select('points').eq('user_id', userId).in('reason', RESERVED).gte('created_at', dayStart.toISOString())
     const usedToday = (today ?? []).reduce((n: number, r: any) => n + Math.abs(Number(r.points) || 0), 0)
     if (usedToday + points > MAX_CLAIM_POINTS) {
       return json({ success: false, error: `Daily limit reached - ${Math.max(0, MAX_CLAIM_POINTS - usedToday)} points left today` }, 400)
     }
 
+    if (source === 'usdc') {
+      // USDC won on scratch cards: the voucher's points are its USDC value
+      // (1 point = 500 micro-USDC on the contract), reserved from reward_usdc
+      // the same way - compare-and-swap, then the reservation record.
+      const need = points * MICRO_PER_POINT
+      const { data: ub } = await supabase.from('reward_usdc').select('balance_micro').eq('user_id', userId).maybeSingle()
+      const micro = Number(ub?.balance_micro ?? 0)
+      if (micro < need) {
+        return json({ success: false, error: `Not enough USDC rewards: have $${(micro / 1e6).toFixed(2)}, need $${(need / 1e6).toFixed(2)}` }, 400)
+      }
+      const { data: took } = await supabase.from('reward_usdc')
+        .update({ balance_micro: micro - need, updated_at: new Date().toISOString() })
+        .eq('user_id', userId).eq('balance_micro', micro).select('user_id')
+      if (!took || took.length !== 1) {
+        return json({ success: false, error: 'Your USDC rewards changed - please try again' }, 409)
+      }
+      const { error: uErr } = await supabase.from('point_transactions').insert({
+        user_id: userId, wallet_address: walletAddress, points: -points, reason: 'claim_reserved_usdc', tx_hash: claimId,
+      })
+      if (uErr) {
+        await supabase.from('reward_usdc').update({ balance_micro: micro }).eq('user_id', userId).eq('balance_micro', micro - need)
+        console.error('[rewards-claim-sign] usdc reservation insert failed:', uErr.message)
+        return json({ success: false, error: 'Could not reserve your USDC - try again' }, 500)
+      }
+    } else {
     // Reserve the points atomically (compare-and-swap on the balance), then
     // record the reservation. Only then is a voucher signed.
     const { data: bal } = await supabase.from('user_points').select('total_points').eq('user_id', userId).maybeSingle()
@@ -161,6 +193,7 @@ Deno.serve(async (req: Request) => {
       await supabase.from('user_points').update({ total_points: available }).eq('user_id', userId).eq('total_points', available - points)
       console.error('[rewards-claim-sign] reservation insert failed:', resErr.message)
       return json({ success: false, error: 'Could not reserve points - try again' }, 500)
+    }
     }
   }
 
@@ -220,7 +253,7 @@ async function claimUsed(claimId: string): Promise<boolean | null> {
 async function openReservation(supabase: any, userId: string): Promise<{ points: number; claimId: string } | null | 'unknown'> {
   const since = new Date(Date.now() - 60 * 86400_000).toISOString()
   const { data: reserved } = await supabase.from('point_transactions')
-    .select('points, tx_hash, created_at').eq('user_id', userId).eq('reason', 'claim_reserved')
+    .select('points, tx_hash, created_at').eq('user_id', userId).in('reason', RESERVED)
     .gte('created_at', since).order('created_at', { ascending: true }).limit(50)
   const ids = (reserved ?? []).map((r: any) => String(r.tx_hash)).filter((x: string) => /^0x[0-9a-f]{64}$/.test(x))
   if (!ids.length) return null
