@@ -100,8 +100,11 @@ export const CIRCLE_IRIS_API = 'https://iris-api-sandbox.circle.com'
 // event-based detection is skipped and the worker falls back to balance
 // heuristics with a loud warning - do not ship to a real-money environment
 // with this still unset.
+// Circle's MessageTransmitterV2 - the same address on every CCTP v2 testnet
+// (src/lib/cctpRecovery.ts). Fallback when the env var isn't set (18 Nov 2026:
+// it wasn't, so finished claims never matched their mint and sat "settling").
 export const ARC_MESSAGE_TRANSMITTER =
-  Deno.env.get('ARC_MESSAGE_TRANSMITTER_ADDRESS') ?? ''
+  (Deno.env.get('ARC_MESSAGE_TRANSMITTER_ADDRESS') || '0xe737e5cebeeba77efe34d4aa090756590b1ce275').trim().toLowerCase()
 
 // CCTP v2 changed this event's shape from v1 (nonce: uint64 → bytes32,
 // added finalityThresholdExecuted before messageBody) - a different event

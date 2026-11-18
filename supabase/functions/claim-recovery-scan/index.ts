@@ -141,7 +141,10 @@ const NATIVE_DECIMALS = 18
 // claim-worker's normal (non-recovery) path already decodes - reusing it
 // here means recovered claims no longer need to fall back to 'Unknown':
 // the real source chain is sitting right there in the same transaction.
-const ARC_MESSAGE_TRANSMITTER = Deno.env.get('ARC_MESSAGE_TRANSMITTER_ADDRESS') ?? ''
+// Circle's MessageTransmitterV2 - the same address on every CCTP v2 testnet
+// (src/lib/cctpRecovery.ts). Fallback when the env var isn't set (18 Nov 2026:
+// it wasn't, so finished claims never matched their mint and sat "settling").
+const ARC_MESSAGE_TRANSMITTER = (Deno.env.get('ARC_MESSAGE_TRANSMITTER_ADDRESS') || '0xe737e5cebeeba77efe34d4aa090756590b1ce275').trim().toLowerCase()
 // CCTP v2 changed this event's shape from v1 (nonce: uint64 → bytes32, and
 // added finalityThresholdExecuted before messageBody) - a different event
 // shape means a completely different topic0 hash, even though the event

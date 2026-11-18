@@ -77,8 +77,11 @@ const ARC_RPCS = [
   'https://rpc.testnet.arc.io',
 ]
 const CIRCLE_IRIS_API = 'https://iris-api-sandbox.circle.com'
+// Circle's MessageTransmitterV2 - the same address on every CCTP v2 testnet
+// (src/lib/cctpRecovery.ts). Fallback when the env var isn't set (18 Nov 2026:
+// it wasn't, so finished claims never matched their mint and sat "settling").
 const ARC_MESSAGE_TRANSMITTER =
-  Deno.env.get('ARC_MESSAGE_TRANSMITTER_ADDRESS') ?? ''
+  (Deno.env.get('ARC_MESSAGE_TRANSMITTER_ADDRESS') || '0xe737e5cebeeba77efe34d4aa090756590b1ce275').trim().toLowerCase()
 const MESSAGE_RECEIVED_TOPIC0_V1 =
   '0x58200b4c34ae05ee816d710053fff3fb75af4395915d3d2a771b24aa10e3cc5d'
 const MESSAGE_RECEIVED_TOPIC0_V2 =
