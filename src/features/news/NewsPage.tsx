@@ -37,11 +37,18 @@ export function newsMeta(it: NewsItem, withSource = true): string {
 
 export function NewsCover({ item, style, children, variant = 'stack' }: { item: NewsItem; style?: React.CSSProperties; children?: ReactNode; variant?: 'stack' | 'hero' | 'thumb' }) {
   const [ok, setOk] = useState(true)
+  // A picture shows only once it has fully loaded (18 Nov 2026): until then
+  // a skeleton - never the source colour or a half-drawn image.
+  const [loaded, setLoaded] = useState(false)
+  const pic = !!item.image_url && ok
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', background: NEWS_SOURCE_TINT[item.source], ...style }}>
-      {item.image_url && ok
-        ? <img decoding="async" src={item.image_url} alt="" loading="lazy" onError={() => setOk(false)}
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+    <div className={pic && !loaded ? 'mp-skel' : undefined}
+      style={{ position: 'relative', overflow: 'hidden', background: pic ? 'var(--skel-fill)' : NEWS_SOURCE_TINT[item.source], ...style }}>
+      {pic
+        ? <img decoding="async" src={item.image_url!} alt="" loading="lazy" onError={() => setOk(false)}
+            ref={el => { if (el && el.complete && el.naturalWidth > 0 && !loaded) setLoaded(true) }}
+            onLoad={() => setLoaded(true)}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: loaded ? 1 : 0, transition: 'opacity .3s ease' }} />
         : <NewsArt item={item} variant={variant} />}
       {children}
     </div>
