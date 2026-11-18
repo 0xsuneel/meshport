@@ -1,3 +1,4 @@
+import { ScratchGift } from '@/components/rewards/ScratchGift'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import { quoteAccount } from '@/wallet/account'
@@ -1960,7 +1961,7 @@ export function SwapPage() {
           const fmtOut = `${trimTrailingZeros(outNum.toFixed(swapTokenDecimals(tokenOut.id)))} ${tokenOut.id}`
           return (
           <motion.div key="done" initial={false} style={isDesktop ? { margin: '-16px -16px 0' } : { margin: '-16px -16px -32px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <SuccessReceipt promo="swap" page={{ title: 'Swap successful', hero: { amount: `+${fmtOut}`, line: `Swapped from ${fmtIn} on Arc` } }}
+            <SuccessReceipt promo="swap" page={{ title: 'Swap successful', gift: <ScratchGift />, noShare: true, hero: { amount: `+${fmtOut}`, line: `Swapped from ${fmtIn} on Arc` } }}
               reward="swap"
               style={isDesktop ? undefined : { height: 'auto', flex: 1 }}
               title="Swap Successful!"

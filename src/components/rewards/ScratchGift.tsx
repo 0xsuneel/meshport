@@ -26,7 +26,7 @@ function markSeen(ids: string[]) {
   try { sessionStorage.setItem(SEEN_KEY, JSON.stringify([...new Set([...seenIds(), ...ids])].slice(-60))) } catch { /* private mode */ }
 }
 
-export function ScratchGift({ watch = true }: { watch?: boolean }) {
+export function ScratchGift({ watch = true, light = false }: { watch?: boolean; /** White icon (on a coloured header band). */ light?: boolean }) {
   const navigate = useNavigate()
   const business = useBusinessTab()
   const rewardsOff = useSettingsStore(s => s.settings.rewards_enabled?.enabled === false)
@@ -97,7 +97,7 @@ export function ScratchGift({ watch = true }: { watch?: boolean }) {
       <style>{`.sg-pulse{animation:sgPulse .5s ease}@keyframes sgPulse{40%{transform:scale(1.25)}}`}</style>
       <button ref={btn} type="button" onClick={() => navigate('/rewards')} className="back-btn"
         aria-label={n ? `Rewards - ${n} scratch card${n === 1 ? '' : 's'} to scratch` : 'Rewards'} style={{ position: 'relative' }}>
-        <Gift className="w-5 h-5 text-text-primary" />
+        <Gift className={light ? 'w-5 h-5' : 'w-5 h-5 text-text-primary'} color={light ? '#fff' : undefined} />
         <span aria-hidden style={{ position: 'absolute', top: 0, right: -2, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: '#E5484D', color: '#fff',
           fontSize: 11, fontWeight: 800, lineHeight: '18px', textAlign: 'center', border: '2px solid var(--bg)', boxSizing: 'content-box',
           transform: n > 0 ? 'scale(1)' : 'scale(0)', transition: 'transform .25s cubic-bezier(.3,1.6,.5,1)' }}>{n > 49 ? '50+' : n}</span>
