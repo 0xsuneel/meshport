@@ -554,8 +554,14 @@ export function SuccessReceipt({
                         <span style={{ position: 'absolute', top: 0, right: -10, width: 18, height: 18, borderRadius: '50%', background: 'var(--bg)' }} />
                       </div>
                     </>)}
-                    <div style={{ padding: '4px 16px 4px' }}>
-                      {detailRowsAll.filter(r => r.label !== 'Time').map(r => (
+                    {/* Like the history card (18 Nov 2026): the transaction stays in view;
+                        the other rows and the explorer sit under "Payment details",
+                        so "For you" and the buttons fit on the screen. */}
+                    {(() => {
+                      const all = detailRowsAll.filter(r => r.label !== 'Time')
+                      const shown1 = all.filter(r => /transaction|hash/i.test(r.label))
+                      const folded = all.filter(r => !shown1.includes(r))
+                      const row = (r: ReceiptRow) => (
                         <div key={r.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', fontSize: 14.5 }}>
                           <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>{r.label}</span>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontWeight: 600, minWidth: 0, color: r.positive ? 'var(--success-text)' : 'var(--text-primary)' }}>
@@ -568,9 +574,22 @@ export function SuccessReceipt({
                             )}
                           </span>
                         </div>
-                      ))}
-                    </div>
-                    {!!links?.length && (
+                      )
+                      return (<>
+                        <div style={{ padding: '4px 16px 0' }}>{shown1.map(row)}</div>
+                        {(folded.length > 0 || !!links?.length) && (<>
+                          <button type="button" onClick={() => setOpen(v => !v)} aria-expanded={open}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, margin: '4px 16px 14px', padding: 0, border: 0, background: 'none', cursor: 'pointer',
+                              fontFamily: 'inherit', fontSize: 14.5, fontWeight: 700, color: 'var(--brand-text)' }}>
+                            {detailsTitle !== 'Transaction details' ? detailsTitle : page.chip === 'Swapped' ? 'Swap details' : page.chip === 'Sent' ? 'Transfer details' : page.chip === 'Arrived' ? 'Bridge details' : 'Payment details'}
+                            <ChevronDown size={17} style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none' }} />
+                          </button>
+                          <AnimatePresence initial={false}>
+                            {open && (
+                              <motion.div key="more" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.28, ease: EASE_OUT }} style={{ overflow: 'hidden' }}>
+                                <div style={{ padding: '0 16px 4px', borderTop: '1px solid var(--border)', margin: '0 16px', paddingInline: 0 }}>{folded.map(row)}</div>
+                                {!!links?.length && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '4px 16px 16px' }}>
                         {links.map(l => (
                           <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer"
@@ -582,7 +601,13 @@ export function SuccessReceipt({
                         ))}
                       </div>
                     )}
-                    {!links?.length && <div style={{ height: 8 }} />}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </>)}
+                        {folded.length === 0 && !links?.length && <div style={{ height: 8 }} />}
+                      </>)
+                    })()}
                   </div>
                   {linksNote && <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.45, margin: '8px 4px 0' }}>{linksNote}</p>}
                 </Reveal>
