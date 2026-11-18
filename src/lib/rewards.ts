@@ -149,7 +149,7 @@ export async function awardTransactionPoints(params: {
   const todayStartIso = `${today}T00:00:00.000Z`
   const reason = rewardReasonFor(params.actionType)
   // A random draw, 5-20 points (18 Nov 2026: "random points", never a fixed +20).
-  const pts = randomTaskPoints()
+  let pts = randomTaskPoints()
 
   // 1. Check duplicate tx reward (unchanged - the same on-chain transaction
   // must never be rewarded twice, regardless of the new per-action rule).
@@ -180,13 +180,17 @@ export async function awardTransactionPoints(params: {
   // 3. Record point transaction - reason encodes the action type, which is
   // both the audit trail and (per step 2 above) the actual enforcement
   // mechanism for "once per action type per day."
-  const { error: ptError } = await supabase.from('point_transactions').insert({
+  const { data: ptRow, error: ptError } = await supabase.from('point_transactions').insert({
     user_id: params.userId,
     wallet_address: params.walletAddress,
     points: pts,
     reason,
     tx_hash: params.txHash,
-  })
+  }).select('points').single()
+  // 50 points a day (tasks and scratch cards together): the server trims a
+  // task to what's left, and refuses one once there's nothing left.
+  if (ptError && /Daily points limit/i.test(ptError.message)) return { pointsAwarded: 0, error: null }
+  if (!ptError && ptRow && Number(ptRow.points) > 0) pts = Number(ptRow.points)
   if (ptError) {
     console.error('[Rewards] point_transactions insert failed:', ptError.code, ptError.message)
     return { pointsAwarded: 0, error: `Could not record points: ${ptError.message}` }

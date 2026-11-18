@@ -453,6 +453,10 @@ export function SuccessReceipt({
               </div>
             ) : (
               <div style={{ position: 'relative', textAlign: 'center', padding: '14px 0 6px' }}>
+                {/* No page header (a page inside the Hub): the gift sits at the hero's corner. */}
+                {!(page.title || page.onBack) && (page.gift ?? gift) && (
+                  <div style={{ position: 'absolute', top: 4, right: 0, zIndex: 2 }}>{page.gift ?? gift}</div>
+                )}
                 {burst && <Confetti />}
                 <div ref={setCheck} style={{
                   width: RECEIPT_CHECK, height: RECEIPT_CHECK, borderRadius: '50%', margin: '0 auto', background: ring,
