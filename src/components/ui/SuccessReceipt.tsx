@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from 'react'
-import { PointsEarnedLine } from '@/components/rewards/PointsEarnedLine'
-import type { RewardActionType } from '@/lib/rewards'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, Check, ChevronDown, Clock, Copy, ExternalLink, Share2, X, Zap } from 'lucide-react'
 import { useUIStore } from '@/store'
@@ -81,8 +79,6 @@ interface SuccessReceiptProps {
    * primary button, so they stay visible while "More details" is open.
    */
   actions?: Array<{ label: string; onClick: () => void; primary?: boolean }>
-  /** The daily reward task this action counts for: "+20 points · …" once it pays out. */
-  reward?: RewardActionType
   /** The scratch-card gift (rewards/ScratchGift) at the card's top-right corner -
    *  flows whose transaction wins a card. Replaces the points line. */
   gift?: ReactNode
@@ -201,7 +197,7 @@ export function receiptText({ amount, line, fallbackTitle, status, when, rows, f
 export function SuccessReceipt({
   title, subtitle, pill, bubble, rows, steps, detailRows, fullHash, links, linksNote,
   primaryLabel = 'Done', onPrimary, checkRef, revealed, checkContent, style,
-  status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions, reward, fill = false, promo, page, gift,
+  status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions, fill = false, promo, page, gift,
 }: SuccessReceiptProps) {
   // The check: handed to the caller (it aims the flying checkmark at it) and
   // kept here for its landing pop.
@@ -311,7 +307,6 @@ export function SuccessReceipt({
               </div>
             </Reveal>
           )}
-          {reward && revealed && !gift && <div style={{ marginTop: 8 }}><PointsEarnedLine type={reward} /></div>}
   </>)
   const rowsBlock = (<>
             {rows.map((r, i) => <Row key={r.label} row={r} i={i + 3} revealed={shown} />)}
@@ -486,7 +481,6 @@ export function SuccessReceipt({
                     </div>
                   </Reveal>
                 )}
-                {reward && revealed && !page.gift && !gift && <div style={{ marginTop: 10 }}><PointsEarnedLine type={reward} /></div>}
               </div>
             )}
             {page.sections}

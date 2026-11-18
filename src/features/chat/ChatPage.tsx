@@ -4126,25 +4126,6 @@ export function ChatConversationPage() {
       // Transaction on-chain - ArcScan is source of truth
 
 
-      // PERF FIX: fire-and-forget - rewards points are a nice-to-have on top
-      // of an already-confirmed payment; awaiting this server round trip
-      // before showing success only added latency with no correctness
-      // benefit. Same fix already applied to Pay/Send, Swap, and Bulk
-      // Payout. Internal try/catch still swallows all errors, so this can
-      // never produce an unhandled rejection.
-      (async () => {
-        try {
-          const { awardTransactionPoints } = await import('@/lib/rewards')
-          const { notifyRewardChatPay } = await import('@/lib/notifications')
-          const { user: u, walletAddress: wa } = useAuthStore.getState()
-          const pointUserId = u?.id && !u.id.startsWith('usr_') ? u.id : wa ? `wallet_${wa.toLowerCase().slice(2, 18)}` : null
-          if (pointUserId && wa) {
-            const r = await awardTransactionPoints({ userId: pointUserId, walletAddress: wa, txHash: result.txHash, actionType: 'chatpay' })
-            if (r.pointsAwarded > 0) notifyRewardChatPay(r.pointsAwarded)
-          }
-        } catch {}
-      })()
-
       try {
         // Fire-and-forget - only refreshes the displayed balance, no reason
         // to block the success screen on it.
@@ -4540,7 +4521,6 @@ export function ChatConversationPage() {
                 const toLabel = `${recipientClean}.arc`
                 return (
                 <SuccessReceipt
-                  reward="chatpay"
                   gift={<ScratchGift light />}
                   // Phone: fills the pay sheet edge to edge (desktop: the card in the drawer).
                   fill={!isDesktop}

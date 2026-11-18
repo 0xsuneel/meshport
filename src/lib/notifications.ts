@@ -17,28 +17,6 @@ import { trimTrailingZeros } from './utils'
 import { isMerchantNow } from './merchant'
 import { hasRecentPaymentRequest } from './merchantPayBasics'
 
-// BUG FIX (2026-09-17): was 200, matching the OLD per-transaction earn cap.
-// The earn side was redesigned to 5 action types x 20 = 100/day (see
-// rewards.ts) - this must track that, not the separate on-chain claim
-// limit, or a reward-earned notification could still fire even after the
-// user has already hit today's actual earn cap.
-const MAX_DAILY_PTS = 100
-
-async function todayPoints(): Promise<number> {
-  try {
-    const { user, walletAddress } = useAuthStore.getState()
-    // Try userId first, fallback to walletAddress lookup
-    const userId = user?.id && !user.id.startsWith('usr_') ? user.id : null
-    if (!userId && !walletAddress) return 0
-    const today = new Date().toISOString().split('T')[0]
-    const query = supabase.from('daily_tx_rewards').select('points').eq('reward_date', today)
-    const { data } = userId
-      ? await query.eq('user_id', userId).maybeSingle()
-      : await query.ilike('user_id', `wallet_${(walletAddress || '').toLowerCase().slice(2, 18)}%`).maybeSingle()
-    return data?.points || 0
-  } catch { return 0 }
-}
-
 // ── Received payments (always fire - no cap) ──────────────────────────────────
 
 // Amount text for notifications. Normal amounts keep 2 decimals; tiny
@@ -249,51 +227,6 @@ export function notifyRewardClaimed({ usdcAmount, txHash, createdAt }: { usdcAmo
 }
 
 // ── Reward notifications (check daily cap) ────────────────────────────────────
-
-// Points no longer notify (18 Nov 2026): earning points is routine; the
-// success page and the Rewards page show them. Kept as the one switch.
-const POINT_NOTIFS = false
-
-async function maybeRewardNotif(body: string) {
-  if (!POINT_NOTIFS) return
-  try {
-    const pts = await todayPoints()
-    // pts is read AFTER the caller's awardTransactionPoints() has already
-    // written this reward's own points to daily_tx_rewards, so it already
-    // includes them. Checking `pts >= MAX_DAILY_PTS` meant the exact
-    // transaction that reaches the cap (every 10th tx of the day, since
-    // 20 pts x 10 tx = 200 = the cap) always fell right on the boundary
-    // and got silently skipped - even though it genuinely earned points.
-    // Only skip if the cap was already exceeded BEFORE this reward.
-    if (pts > MAX_DAILY_PTS) return  // cap already exceeded - silent skip
-  } catch { /* Supabase error - still fire the notif */ }
-  useNotificationStore.getState().addNotification({
-    type: 'reward_earned',
-    title: 'Points Earned',
-    body,
-    isRead: false,
-  })
-}
-
-export function notifyRewardSend(points = 20, tokenSymbol = 'USDC') {
-  maybeRewardNotif(`You earned ${points} points for sending ${tokenSymbol}.`)
-}
-
-export function notifyRewardChatPay(points = 20) {
-  maybeRewardNotif(`You earned ${points} points for paying in chat.`)
-}
-
-export function notifyRewardSwap(points = 20) {
-  maybeRewardNotif(`You earned ${points} points for completing a swap.`)
-}
-
-export function notifyRewardMultichain(points = 20) {
-  maybeRewardNotif(`You earned ${points} points for sending a multichain payment.`)
-}
-
-export function notifyRewardBulk(points = 20) {
-  maybeRewardNotif(`You earned ${points} points for completing a bulk payment.`)
-}
 
 export function formatBadgeCount(count: number): string {
   if (count <= 0) return ''
