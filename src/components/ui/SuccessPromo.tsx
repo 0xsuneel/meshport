@@ -19,7 +19,7 @@ const PROMOS: Array<{ id: PromoFeature; to: string; title: string; line: string;
 ]
 
 /** `exclude`: the feature this receipt is for (Swap's receipt never shows Swap). */
-export function SuccessPromo({ exclude, revealed = true }: { exclude?: PromoFeature; revealed?: boolean }) {
+export function SuccessPromo({ exclude, revealed = true, instant = false }: { exclude?: PromoFeature; revealed?: boolean; /** Shown by its parent's reveal: no fade of its own. */ instant?: boolean }) {
   const navigate = useNavigate()
   const settings = useSettingsStore(s => s.settings)
   // One card per receipt, picked once (no change while it's on screen); only
@@ -36,7 +36,7 @@ export function SuccessPromo({ exclude, revealed = true }: { exclude?: PromoFeat
   // (where a partner's card would say "Sponsored · their site").
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={instant ? false : { opacity: 0, y: 8 }}
       animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
       transition={{ duration: 0.35, delay: revealed ? 0.35 : 0, ease: EASE_OUT }}
       style={{ width: '100%', flexShrink: 0 }}
