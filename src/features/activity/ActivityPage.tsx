@@ -1088,6 +1088,52 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       promo: 'p2p',
     }
   }
+  // A payment to or from yourself (19 Nov 2026): the same card, you on both sides.
+  if (!txDetail && (type === 'send' || type === 'receive') && isSelfTransferDetail && !refundDetail) {
+    txDetail = {
+      title: 'Payment details', status: receiptStatus, amountLabel: type === 'send' ? 'Moved to yourself' : 'Received from yourself',
+      amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC', note: noteText || undefined,
+      pill: '↺ To yourself', reason: reasonNote ?? undefined,
+      parties: [youParty('From'), youParty('To')],
+      steps: ['Payment approved', <>Sent from <b>your wallet</b></>, <>Received in <b>your wallet</b></>],
+      whenLabel: type === 'send' ? 'Paid at' : 'Received at', when: whenFull,
+      hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
+      detailsTitle: 'Payment details',
+      details: [statusDetail, networkDetail, ...(anyFee ? [{ label: 'Network fee', value: anyFee.value }] : []), ...arcExplorer],
+    }
+  }
+  // Anything else (a refund, money from the faucet or another system
+  // account, a merchant's receipt, a record with nobody on the other side):
+  // the same card, built from this record's own rows (19 Nov 2026) - every
+  // history card opens the new design.
+  if (!txDetail) {
+    const systemName = cpUsername ? SYSTEM_LABELS[cpUsername] : undefined
+    const other: TxParty | null = (cpUsername || counterparty) ? {
+      label: isIncoming ? 'From' : 'To',
+      name: systemName || (cpName ? cpName.charAt(0).toUpperCase() + cpName.slice(1) : shortAddr(counterparty)),
+      handle: !systemName && cpName ? `${cpName}.arc` : undefined,
+      address: counterparty || undefined,
+    } : null
+    const rowText = (v: unknown) => (typeof v === 'string' || typeof v === 'number') ? String(v) : ''
+    const allRows = [...mainRows, ...detailRowsList].filter(r => r.label !== 'Time' && !(other && (r.label === 'From' || r.label === 'To' || r.label === 'Wallet')))
+    txDetail = {
+      title: pageTitle, status: receiptStatus, amountLabel: receiptTitle, amount: amountText,
+      reason: reasonNote ?? undefined,
+      parties: other ? [other, youParty(isIncoming ? 'To' : 'From')] : undefined,
+      steps: [],
+      whenLabel: isIncoming ? 'Received at' : 'Sent at', when: whenFull,
+      hashes: [
+        ...(txHash && !isRecoveredClaim ? [{ label: destinationTxHash ? sourceHashLabel : 'Transaction', hash: txHash }] : []),
+        ...(destinationTxHash && destinationTxHash !== txHash ? [{ label: 'Destination transaction', hash: destinationTxHash }] : []),
+      ],
+      detailsTitle: 'Details',
+      details: [statusDetail,
+        ...allRows.filter(r => !/hash|^tx\b/i.test(r.label) || !/^0x/.test(rowText(r.value))).map(r => ({ label: r.label, value: r.value })),
+        ...receiptLinks.map(l => ({ label: 'Explorer', value: l.title, href: l.href })),
+      ],
+      action: recoverAction,
+    }
+  }
   if (txDetail) return <TxDetailPage detail={txDetail} onClose={onClose} />
 
   return (
