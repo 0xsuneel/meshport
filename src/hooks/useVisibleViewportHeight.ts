@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from 'react'
 import { opensKeyboard } from '@/hooks/useKeyboardOpen'
-import { keyboardInset, virtualKeyboard, holdKeyboardOverlay, disableKeyboardOverlay, keyboardOverlayDisabled } from '@/lib/keyboardOverlay'
+import { keyboardInset, virtualKeyboard, holdKeyboardOverlay, disableKeyboardOverlay, keyboardOverlayDisabled, assumedKeyboardInset, setAssumedKeyboardInset } from '@/lib/keyboardOverlay'
 
 // The real, currently-visible viewport height in pixels - NOT the CSS
 // `100vh`/`100dvh` layout viewport. On iOS (Safari and Chrome, both
@@ -69,12 +69,18 @@ export function visibleFrame(): { top: number; height: number } {
   // the bottom nav floating mid-screen over an empty band (16 Nov).
   const inset = typing ? keyboardInset() : 0
   if (inset > 0) return { top, height: Math.round(vv.height - inset) }
+  // Keyboard neither resizing the page nor reported: use the estimate, but
+  // only while the viewport is still full size (if it shrinks later, that wins).
+  const assumed = typing ? assumedKeyboardInset() : 0
+  if (assumed > 0 && top === 0 && vv.height >= document.documentElement.clientHeight - 80) {
+    return { top: 0, height: Math.round(document.documentElement.clientHeight - assumed) }
+  }
   // Chromium (Android, desktop) with no field focused: the layout viewport is
   // the visible screen - its toolbars never draw over the page (that is
   // iPhone, which has no virtualKeyboard and keeps the rules below). Some
   // Android web views leave visualViewport at the keyboard-up height after
   // it closes, with no event to correct it; the layout viewport is right.
-  if (!typing && top === 0 && virtualKeyboard()) {
+  if (!typing && top === 0 && !isAppleTouch()) {
     return { top: 0, height: Math.max(Math.round(vv.height), document.documentElement.clientHeight) }
   }
   // iOS 26: after the keyboard closes, visualViewport can stay ~24px shorter
@@ -141,6 +147,7 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     let fullH = 0, fullW = 0, kb = false
     const ios = isAppleTouch()
     const apply = () => {
+      if (!opensKeyboard(document.activeElement)) setAssumedKeyboardInset(0)
       const { top, height } = visibleFrame()
       if (window.innerWidth !== fullW) { fullW = window.innerWidth; fullH = 0 }
       fullH = Math.max(fullH, height)
@@ -234,15 +241,26 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     let verifyTimer = 0
     const verifyKeyboardReported = () => {
       const el = document.activeElement
-      const vk = virtualKeyboard()
-      if (!vk || !vk.overlaysContent || keyboardOverlayDisabled() || !(el instanceof HTMLElement) || !opensKeyboard(el)) return
-      if (keyboardInset() > 0) return
+      if (!(el instanceof HTMLElement) || !opensKeyboard(el) || ios) return
+      let coarse = false
+      try { coarse = window.matchMedia('(pointer: coarse)').matches } catch { /* no matchMedia */ }
+      if (!coarse || keyboardInset() > 0 || assumedKeyboardInset() > 0) return
       const { top, height } = visibleFrame()
-      if (height < document.documentElement.clientHeight - 80) return // viewport did shrink: fine
+      const layoutH = document.documentElement.clientHeight
+      if (height < layoutH - 80) return // the viewport did shrink: all fine
       if (el.getBoundingClientRect().bottom < top + height * 0.45) return // high up: can't be covered
-      disableKeyboardOverlay()
-      schedule()
-      window.setTimeout(() => { apply(); keepFocusedInView() }, 150)
+      const vk = virtualKeyboard()
+      if (vk?.overlaysContent && !keyboardOverlayDisabled()) {
+        // Step 1: the overlay isn't reporting - let the browser resize instead.
+        disableKeyboardOverlay()
+        schedule()
+        clearTimeout(verifyTimer); verifyTimer = window.setTimeout(verifyKeyboardReported, 700)
+        return
+      }
+      // Step 2: still nothing moved (a webview that neither resizes nor
+      // reports): make room for a typical keyboard height.
+      setAssumedKeyboardInset(Math.round(layoutH * 0.36))
+      apply(); settle()
     }
     const onFocus = (e: FocusEvent) => {
       if (!opensKeyboard(e.target as Element | null)) return
@@ -277,7 +295,7 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     return () => {
       vk?.removeEventListener('geometrychange', schedule)
       releaseOverlay()
-      cancelAnimationFrame(raf); clearTimeout(verifyTimer)
+      cancelAnimationFrame(raf); clearTimeout(verifyTimer); setAssumedKeyboardInset(0)
       cancelAnimationFrame(recheckRaf); clearTimeout(recheckTimer); clearTimeout(docFixTimer)
       document.removeEventListener('touchstart', onTouchStart, { capture: true })
       document.removeEventListener('touchend', onTouchEnd, { capture: true })
