@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
-import { useStaggerIn } from '@/lib/staggerIn'
 import { getReadySigner } from '@/lib/paymentReadiness'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
@@ -321,7 +320,6 @@ export function RewardsPage() {
   const [historyTab, setHistoryTab]         = useState<'earned' | 'claimed'>('earned')
   // The history rows arrive one after another once loaded (19 Nov 2026).
   const historyRevealRef = useRef<HTMLDivElement>(null)
-  useStaggerIn(historyRevealRef, !loading)
 
   const load = useCallback(async () => {
     if (!userId) { setLoading(false); return }

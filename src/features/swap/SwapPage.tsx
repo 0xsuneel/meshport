@@ -1,5 +1,4 @@
 import { ScratchGift } from '@/components/rewards/ScratchGift'
-import { useStaggerIn } from '@/lib/staggerIn'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import { quoteAccount } from '@/wallet/account'
@@ -499,7 +498,6 @@ export function SwapPage() {
   const [historyLoaded, setHistoryLoaded] = useState(false)
   // The swaps arrive one after another as the history shows (19 Nov 2026).
   const swapRevealRef = useRef<HTMLDivElement>(null)
-  useStaggerIn(swapRevealRef, history.length > 0)
   const [histDetail,   setHistDetail]   = useState<SwapRecord|null>(null)
   const [histFlashId, setHistFlashId] = useState<string | null>(null)
   // Mirrors the last quote's total fee so the silent Review-poll can detect
