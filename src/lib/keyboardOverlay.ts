@@ -40,8 +40,23 @@ export function keyboardInset(): number {
  * switch it off under each other. Phones and tablets only.
  */
 let overlayUsers = 0
+// Set once the overlay is seen NOT to report the keyboard (some Android
+// webviews / installed-app shells accept overlaysContent = true, which stops
+// the window resizing, yet never give boundingRect or fire geometrychange).
+// The keyboard then covers the chat box and nothing makes room for it. From
+// then on the app lets the browser resize the page itself (resizes-content).
+let overlayDisabled = false
+export function disableKeyboardOverlay(): void {
+  if (overlayDisabled) return
+  overlayDisabled = true
+  const vk = virtualKeyboard()
+  try { if (vk) vk.overlaysContent = false } catch { /* ignore */ }
+}
+export function keyboardOverlayDisabled(): boolean { return overlayDisabled }
+
 export function holdKeyboardOverlay(): () => void {
   const vk = virtualKeyboard()
+  if (overlayDisabled) return () => {}
   let coarse = false
   try { coarse = window.matchMedia('(pointer: coarse)').matches } catch { /* no matchMedia */ }
   if (!vk || !coarse) return () => {}

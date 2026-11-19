@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from 'react'
 import { opensKeyboard } from '@/hooks/useKeyboardOpen'
-import { keyboardInset, virtualKeyboard, holdKeyboardOverlay } from '@/lib/keyboardOverlay'
+import { keyboardInset, virtualKeyboard, holdKeyboardOverlay, disableKeyboardOverlay, keyboardOverlayDisabled } from '@/lib/keyboardOverlay'
 
 // The real, currently-visible viewport height in pixels - NOT the CSS
 // `100vh`/`100dvh` layout viewport. On iOS (Safari and Chrome, both
@@ -224,8 +224,29 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     // Only a field that opens the keyboard: a tapped button takes focus too,
     // and measuring here (it reads layout) on every button tap landed right
     // as the sheet it opens began to move.
+    // Android keyboard drawn over the app but never reported (boundingRect
+    // stays 0, no geometrychange, window not resized): the keyboard sits on
+    // top of the chat box. Checked once the keyboard has had time to rise -
+    // a field in the lower half of the screen with nothing making room for
+    // it means the overlay isn't working here, so hand resizing back to the
+    // browser for good. A hidden keyboard (hardware keyboard) costs nothing:
+    // the browser's own resize is simply used instead.
+    let verifyTimer = 0
+    const verifyKeyboardReported = () => {
+      const el = document.activeElement
+      const vk = virtualKeyboard()
+      if (!vk || !vk.overlaysContent || keyboardOverlayDisabled() || !(el instanceof HTMLElement) || !opensKeyboard(el)) return
+      if (keyboardInset() > 0) return
+      const { top, height } = visibleFrame()
+      if (height < document.documentElement.clientHeight - 80) return // viewport did shrink: fine
+      if (el.getBoundingClientRect().bottom < top + height * 0.45) return // high up: can't be covered
+      disableKeyboardOverlay()
+      schedule()
+      window.setTimeout(() => { apply(); keepFocusedInView() }, 150)
+    }
     const onFocus = (e: FocusEvent) => {
       if (!opensKeyboard(e.target as Element | null)) return
+      clearTimeout(verifyTimer); verifyTimer = window.setTimeout(verifyKeyboardReported, 700)
       apply(); if (visibleFrame().height < document.documentElement.clientHeight - 80) settle()
     }
     document.addEventListener('touchstart', onTouchStart, { passive: true, capture: true })
@@ -256,7 +277,7 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     return () => {
       vk?.removeEventListener('geometrychange', schedule)
       releaseOverlay()
-      cancelAnimationFrame(raf)
+      cancelAnimationFrame(raf); clearTimeout(verifyTimer)
       cancelAnimationFrame(recheckRaf); clearTimeout(recheckTimer); clearTimeout(docFixTimer)
       document.removeEventListener('touchstart', onTouchStart, { capture: true })
       document.removeEventListener('touchend', onTouchEnd, { capture: true })
