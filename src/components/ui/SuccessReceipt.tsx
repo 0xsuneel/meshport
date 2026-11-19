@@ -584,7 +584,9 @@ export function SuccessReceipt({
                       )
                       return (<>
                         <div style={{ padding: '4px 16px 0' }}>{shown1.map(row)}</div>
-                        {(folded.length > 0 || !!links?.length) && (<>
+                        {/* The explorer stays visible under the toggle (19 Nov 2026); the
+                            details open above it and push it down. */}
+                        {folded.length > 0 && (<>
                           <button type="button" onClick={() => setOpen(v => !v)} aria-expanded={open}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, margin: '4px 16px 14px', padding: 0, border: 0, background: 'none', cursor: 'pointer',
                               fontFamily: 'inherit', fontSize: 14.5, fontWeight: 700, color: 'var(--brand-text)' }}>
@@ -596,8 +598,12 @@ export function SuccessReceipt({
                               <motion.div key="more" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                                 transition={{ duration: 0.28, ease: EASE_OUT }} style={{ overflow: 'hidden' }}>
                                 <div style={{ padding: '0 16px 4px', borderTop: '1px solid var(--border)', margin: '0 16px', paddingInline: 0 }}>{folded.map(row)}</div>
-                                {!!links?.length && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '4px 16px 16px' }}>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </>)}
+                        {!!links?.length && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: folded.length > 0 ? '0 16px 16px' : '4px 16px 16px' }}>
                         {links.map(l => (
                           <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer"
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '11px 12px', borderRadius: 14, fontSize: 14, fontWeight: 700,
@@ -608,10 +614,6 @@ export function SuccessReceipt({
                         ))}
                       </div>
                     )}
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </>)}
                         {folded.length === 0 && !links?.length && <div style={{ height: 8 }} />}
                       </>)
                     })()}

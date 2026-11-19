@@ -89,7 +89,7 @@ function TradeReceipt({ t, isBuyer, label, counterparty, counterpartyWallet, onO
       parties: [{ label: isBuyer ? 'From' : 'To', name: counterparty, address: counterpartyWallet || undefined }],
       steps: [isBuyer ? 'Trade opened' : 'Offer accepted', <>Paid <b>{currencySymbol(t.currency)}{t.amountFiat} {t.currency}</b></>, <>USDC {isBuyer ? 'released to you' : 'released from escrow'}</>],
       whenLabel: t.completedAt ? 'Completed at' : 'Opened at', when: fmtDate(t.completedAt || t.createdAt),
-      hashes: hash ? [{ label: 'Transaction', hash }] : [],
+      hashes: hash ? [{ label: 'Transaction hash', hash }] : [],
       detailsTitle: 'Trade details',
       details: [
         { label: 'Status', value: label, tone: status === 'success' ? 'ok' : status === 'failed' ? 'bad' : undefined },

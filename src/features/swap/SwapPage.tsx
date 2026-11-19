@@ -224,7 +224,7 @@ function HistoryDetail({ r, onClose }: { r: SwapRecord; onClose: () => void }) {
       pill: { icon: 'swap', text: 'Swap' }, reason: ok ? undefined : `The swap to ${tOut.id} did not complete`,
       steps: ['Swap approved', <>Sent <b>{fmtIn}</b></>, got ? <>Received <b>{fmtOut}</b></> : <>Receive <b>{tOut.id}</b></>],
       whenLabel: 'Swapped at', when: whenFull,
-      hashes: r.txHash ? [{ label: 'Transaction', hash: r.txHash }] : [],
+      hashes: r.txHash ? [{ label: 'Transaction hash', hash: r.txHash }] : [],
       detailsTitle: 'Swap details',
       details: [
         { label: 'Status', value: ok ? 'Completed' : 'Failed', tone: ok ? 'ok' : 'bad' },

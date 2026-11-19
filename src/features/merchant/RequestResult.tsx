@@ -234,7 +234,7 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
           {paid && (paidBy || tx) && (
             <div className="w-full text-left"><DetailList rows={[
               ...(paidBy ? [{ label: 'Paid by', value: `${paidBy.replace(/\.arc$/i, '')}.arc` }] : []),
-              ...(tx ? [{ label: 'Transaction', value: short(tx) }] : []),
+              ...(tx ? [{ label: 'Transaction hash', value: short(tx) }] : []),
             ]} /></div>
           )}
           {open && <ShareRow url={link} text={shareText} subject={`${from}: ${bill ? 'bill' : 'payment'} ${num} for ${money(intent.amount)}`} />}
