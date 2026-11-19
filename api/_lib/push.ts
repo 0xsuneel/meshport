@@ -43,6 +43,34 @@ async function supaFetch(path: string, method: string, body?: object) {
   return { ok: res.ok, status: res.status, data: json }
 }
 
+// A payment to a business for one of its orders (Shop QR, bill, request)
+// already alerts the business with its own "Payment Received" (the
+// merchant_payment_intents trigger -> notifications -> push). The generic
+// "Received" for the same transfer would be a second alert. The order's
+// payment row can be written a moment after the chain event, so check twice.
+// Only a business (an account that has orders) is checked, so nobody else's
+// alert waits.
+export async function isBusinessOrderPayment(userId: string, txHash: string | null | undefined): Promise<boolean> {
+  const h = String(txHash || '').toLowerCase()
+  if (!/^0x[0-9a-f]{64}$/.test(h) || !/^[0-9a-f-]{36}$/i.test(userId)) return false
+  try {
+    const b = await supaFetch(`/merchant_payment_intents?select=id&merchant_user_id=eq.${userId}&limit=1`, 'GET')
+    if (!(b.ok && Array.isArray(b.data) && b.data.length > 0)) return false
+  } catch { return false }
+  const found = async () => {
+    for (const table of ['merchant_payments', 'merchant_chain_receipts']) {
+      const r = await supaFetch(`/${table}?select=id&or=(tx_hash.ilike.${h},arc_tx_hash.ilike.${h})&limit=1`, 'GET')
+      if (r.ok && Array.isArray(r.data) && r.data.length > 0) return true
+    }
+    return false
+  }
+  try {
+    if (await found()) return true
+    await new Promise(r => setTimeout(r, 3000))
+    return await found()
+  } catch { return false } // check failed: alert as before
+}
+
 export interface PushPayload {
   title: string
   body: string

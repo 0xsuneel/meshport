@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { sendPushToUser } from './_lib/push'
+import { sendPushToUser, isBusinessOrderPayment } from './_lib/push'
 import { waitUntil } from '@vercel/functions'
 
 /**
@@ -496,7 +496,9 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
           ? await supaFetch('/rpc/chat_quiet_from', 'POST', { recipient: recipientId, from_wallet: senderWallet })
               .then(r => r.ok && r.data === true).catch(() => false)
           : false
+        const businessOrder = !quiet && await isBusinessOrderPayment(recipientId, paymentTxHash)
         if (quiet) console.log('[chat/send] push skipped: recipient blocks stranger payments')
+        else if (businessOrder) console.log('[chat/send] push skipped: business order payment (alerted by the order)')
         else try {
           const push = await Promise.race([
             sendPushToUser(recipientId, {

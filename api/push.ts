@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { sendPushToUser, sendPushToAll, resolveAdminFromToken, resolveUserFromToken } from './_lib/push'
+import { sendPushToUser, sendPushToAll, isBusinessOrderPayment, resolveAdminFromToken, resolveUserFromToken } from './_lib/push'
 import { timingSafeEqual } from 'crypto'
 
 // Only real browser push services may be stored as endpoints - the server
@@ -189,6 +189,13 @@ async function handleSendInternal(req: VercelRequest, res: VercelResponse) {
   const { userId, title, body, url, tag, data } = req.body || {}
   if (!userId || !title || !body) {
     return res.status(400).json({ error: 'Missing userId, title, or body' })
+  }
+
+  // One alert per business order payment: the order's own "Payment
+  // Received" covers it (see isBusinessOrderPayment).
+  const recvHash = title === 'Received' && typeof tag === 'string' ? tag.match(/^payment-(0x[0-9a-f]{64})$/i)?.[1] : null
+  if (recvHash && await isBusinessOrderPayment(String(userId), recvHash)) {
+    return res.status(200).json({ sent: 0, failed: 0, skipped: 'business order payment' })
   }
 
   try {
