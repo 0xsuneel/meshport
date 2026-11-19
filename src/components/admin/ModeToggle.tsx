@@ -25,6 +25,7 @@ import { MENU_MOTION } from '@/lib/motion'
 import { ShieldCheck, Smartphone } from 'lucide-react'
 import { useAdminStore } from '@/store/adminStore'
 import { ADMIN_PATH } from '@/lib/adminPath'
+import { useFloatingHidden } from '@/lib/floatingHide'
 
 const POS_KEY = 'meshport_mode_toggle_pos'
 const CIRCLE = 52 // rendered diameter, used to keep it on-screen when clamping
@@ -76,7 +77,8 @@ export function ModeToggle() {
   // switch just navigated) so it never lingers open on the new screen.
   useEffect(() => { setExpanded(false) }, [location.pathname])
 
-  if (!isAdminAuthenticated || !pos) return null
+  const hidden = useFloatingHidden()
+  if (!isAdminAuthenticated || !pos || hidden) return null
 
   const inAdminMode = location.pathname.startsWith(ADMIN_PATH)
   const goNormal = () => { setExpanded(false); if (inAdminMode) navigate('/', { replace: true }) }
