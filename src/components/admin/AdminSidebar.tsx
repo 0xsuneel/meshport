@@ -7,7 +7,7 @@ import { ADMIN_PATH } from '@/lib/adminPath'
 import {
   LayoutDashboard, ToggleLeft, Coins, Link2, Landmark,
   BarChart3, AlertTriangle, ScrollText, Settings, Bell, X, LifeBuoy, Handshake, Wrench,
-  Store, Newspaper, ReceiptText, ArrowLeftRight, Activity, Users,
+  Store, Newspaper, Megaphone, ReceiptText, ArrowLeftRight, Activity, Users,
 } from 'lucide-react'
 import { useAdminStore } from '@/store/adminStore'
 
@@ -28,6 +28,7 @@ const navItems = [
   { to: `${ADMIN_PATH}/analytics`,    label: 'Analytics',     icon: BarChart3 },
   { to: `${ADMIN_PATH}/notifications`, label: 'Notifications', icon: Bell },
   { to: `${ADMIN_PATH}/news`,         label: 'Updates',        icon: Newspaper },
+  { to: `${ADMIN_PATH}/ads`,          label: 'Ads',            icon: Megaphone },
   { to: `${ADMIN_PATH}/maintenance`,  label: 'Maintenance',   icon: AlertTriangle },
   { to: `${ADMIN_PATH}/system`,       label: 'System',         icon: Activity },
   { to: `${ADMIN_PATH}/logs`,         label: 'Logs',           icon: ScrollText },

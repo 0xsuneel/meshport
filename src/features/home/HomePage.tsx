@@ -55,6 +55,8 @@ import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { ActionSheet } from '@/components/ui/ActionSheet'
 import { ActionIcon } from '@/components/ui/ActionIcon'
 import { NavIcon } from '@/components/layout/navIcons'
+import { useAds, openAd, isExternalAd } from '@/lib/ads'
+import { AdArt } from '@/components/ui/AdArt'
 import { biometricLabel } from '@/lib/biometric'
 import { ServiceIcon } from '@/components/ui/ServiceIcon'
 import { pressable } from '@/lib/pressable'
@@ -2299,25 +2301,14 @@ function MobileHeroCarousel({
 // deliberately not advertised here). Tap opens the feature; swipe to change.
 // Taglines stay short (~24 characters): beside "Try now" on a phone a longer
 // one is cut off.
-const FEATURE_BANNERS: Array<{ title: string; text: string; path: string; icon: 'globe' | 'p2p' | 'swap' | 'chat' | 'bulk' }> = [
-  { title: 'Multichain Hub',    text: 'USDC across 20+ chains',        path: '/multichain',  icon: 'globe' },
-  { title: 'P2P Marketplace',   text: 'Buy & sell USDC safely',        path: '/p2p',         icon: 'p2p' },
-  { title: 'Instant Swap',      text: 'USDC, EURC and cirBTC',         path: '/swap',        icon: 'swap' },
-  { title: 'Pay in Chat',       text: 'Send money as you chat',        path: '/chat',        icon: 'chat' },
-  { title: 'Bulk Payout',       text: 'Pay many people at once',       path: '/bulk-payout', icon: 'bulk' },
-]
-
-// Same icons as Home's buttons / More sheet; Pay in Chat uses the Chats tab icon.
-function BannerIcon({ kind, size = 24 }: { kind: typeof FEATURE_BANNERS[number]['icon']; size?: number }) {
-  if (kind === 'chat') return <NavIcon name="chat" size={size} color="#fff" />
-  return <ActionIcon name={kind === 'globe' ? 'hub' : kind} size={size} />
-}
-
+// The banner's slides are the ads from Admin → Ads (lib/ads, 19 Nov 2026).
 function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onOpen: (path: string) => void; docked?: boolean; inCard?: boolean }) {
   const hub = useHubLabel()
-  const [idx, setIdx] = useState(0)
+  const ads = useAds('home')
+  const [idx0, setIdx] = useState(0)
   const touchX = useRef<number | null>(null)
-  const n = FEATURE_BANNERS.length
+  const n = Math.max(1, ads.length)
+  const idx = idx0 % n
 
   // Auto-advance through the promos ONCE per Home visit, then stay put: an
   // endlessly moving strip under the balance kept pulling the eye. Stops for
@@ -2331,17 +2322,18 @@ function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onO
     return () => clearTimeout(t)
   }, [idx, n, userMoved])
 
-  const b = FEATURE_BANNERS[idx]
+  const b = ads[idx]
   const dot = docked ? { w: 11.4, gap: 5.7, pill: 19 } : { w: 4, gap: 6, pill: 10 }
   const firstIdx = useRef(idx)
   const bannerMoved = useRef(false)
   if (idx !== firstIdx.current) bannerMoved.current = true
+  if (!b) return null
   return (
     <div
       role="button"
-      aria-label={`${hub(b.title)}: ${b.text}`}
+      aria-label={b ? `${b.sponsor ? b.title : hub(b.title)}: ${b.body}` : undefined}
       className={docked ? undefined : 'mp-press'}
-      onClick={() => onOpen(b.path)}
+      onClick={() => { if (b) openAd(b, onOpen) }}
       onTouchStart={e => { touchX.current = e.touches[0].clientX }}
       onTouchEnd={e => {
         if (touchX.current === null) return
@@ -2377,16 +2369,21 @@ function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onO
 
       {/* Slides in only when the banner changes - not when Home first opens. */}
       <div key={idx} className={docked ? 'mp-press' : undefined} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: docked ? 9.5 : 12, flex: docked ? undefined : 1, minHeight: docked ? 45.6 : undefined, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 220ms var(--ease-out)' : undefined }}>
-        <div style={{ width: 40, height: 40, borderRadius: docked ? '50%' : 12, background: docked ? 'rgba(140,225,205,0.16)' : 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <BannerIcon kind={b.icon} size={docked ? 23 : 24} />
-        </div>
+        {b.image_url
+          ? <AdArt ad={b} size={40} radius={12} round={docked} />
+          : <div style={{ width: 40, height: 40, borderRadius: docked ? '50%' : 12, background: docked ? 'rgba(140,225,205,0.16)' : 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {b.icon === 'chat' ? <NavIcon name="chat" size={docked ? 23 : 24} color="#fff" /> : <ActionIcon name={b.icon ?? 'hub'} size={docked ? 23 : 24} />}
+            </div>}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: docked ? 14.25 : 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hub(b.title)}</div>
-          <div style={{ fontSize: docked ? 12.35 : 13, color: 'rgba(255,255,255,0.82)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.text}</div>
+          <div style={{ fontSize: docked ? 14.25 : 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {b.sponsor ? b.title : hub(b.title)}
+            {b.sponsor && <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.8, background: 'rgba(255,255,255,0.16)', borderRadius: 5, padding: '1px 5px', marginLeft: 6, verticalAlign: 2 }}>Sponsored</span>}
+          </div>
+          <div style={{ fontSize: docked ? 12.35 : 13, color: 'rgba(255,255,255,0.82)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.body}</div>
         </div>
         <span className={docked ? 'mp-try' : undefined} style={{ flexShrink: 0, position: 'relative', fontSize: docked ? 11.9 : 12, fontWeight: docked ? 600 : 700, color: docked ? '#0F2E2B' : 'var(--brand)', background: '#fff', borderRadius: 999,
           padding: docked ? '0 11.4px' : '6px 12px', height: docked ? 30.4 : undefined, display: 'flex', alignItems: 'center', gap: 5, boxShadow: docked ? '0 2px 6px rgba(0,0,0,0.12)' : undefined }}>
-          <span className="mp-try-label">Try now</span>
+          <span className="mp-try-label">{isExternalAd(b) ? 'Open' : 'Try now'}</span>
           {docked && <svg width="12.4" height="12.4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>}
         </span>
       </div>
@@ -2395,7 +2392,7 @@ function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onO
         {/* Equal dots stay still; one white pill slides to the current banner
             (transform only - growing a dot's width re-laid out the row). */}
         <div style={{ position: 'relative', display: 'flex', gap: dot.gap }}>
-          {FEATURE_BANNERS.map((_, i) => (
+          {ads.map((_, i) => (
             <span key={i} style={{ width: dot.w, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.4)' }} />
           ))}
           <span aria-hidden style={{
