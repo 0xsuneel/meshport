@@ -148,6 +148,25 @@ export async function ensureAnonSession(): Promise<void> {
 // only signs when it isn't. Fires `meshport:session-bound` when it changed
 // something, so screens that loaded before the link can reload.
 let _bindInflight: Promise<boolean> | null = null
+
+/**
+ * Wallet sign-in (supabase/functions/wallet-login): signs
+ *   MeshPort sign-in / Wallet / Nonce (random) / Time
+ * in the wallet frame and trades the signature for a session of the
+ * account's one server identity. Only the signature leaves the device - never
+ * the key or the passcode. Returns the signed-in identity's id, or null.
+ */
+async function walletSignIn(signer: import('@/wallet').WalletAccount): Promise<string | null> {
+  try {
+    const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('')
+    const message = `MeshPort sign-in\nWallet: ${signer.address}\nNonce: ${nonce}\nTime: ${new Date().toISOString()}`
+    const signature = await signer.signMessage({ message })
+    const { data, error } = await supabase.functions.invoke('wallet-login', { body: { message, signature } })
+    if (error || !data?.ok || !data.tokenHash) return null
+    const { data: signed, error: signErr } = await supabase.auth.verifyOtp({ token_hash: data.tokenHash, type: 'magiclink' })
+    return signErr ? null : signed?.session?.user?.id ?? null
+  } catch { return null }
+}
 export function syncAuthUidToProfile(userId: string, signer?: import('@/wallet').WalletAccount | null, force = false): Promise<boolean> {
   if (!userId || !signer) return Promise.resolve(false)
   if (force) _linkedKey = null
@@ -176,6 +195,20 @@ export function syncAuthUidToProfile(userId: string, signer?: import('@/wallet')
       // the app reads for an account.
       const { data: owns, error: ownsErr } = await supabase.rpc('session_owns_user', { p_user_id: userId })
       if (!ownsErr && owns === true) { _linkedKey = linkKey; return true }
+
+      // Sign in with the wallet (19 Nov 2026), like importing it into
+      // MetaMask: the wallet frame signs one short message (the key never
+      // leaves it), the server checks the signature and returns a one-time
+      // sign-in for the account's one identity - the same on every device.
+      const walletUid = await walletSignIn(signer)
+      if (walletUid) {
+        _anonSignInDone = true
+        _linkedKey = `${userId}:${walletUid}`
+        invalidateConversationsCache()
+        try { window.dispatchEvent(new CustomEvent('meshport:session-bound')) } catch { /* no window */ }
+        return true
+      }
+      // Not available (an e-mail account, an older server…): link as before.
 
       const message = `MeshPort sign-in\nAccount: ${userId}\nSession: ${sessionId}\nTime: ${new Date().toISOString()}`
       const signature = await signer.signMessage({ message })
