@@ -1,12 +1,12 @@
 // Admin console client - every call goes to the admin-api edge function,
 // which checks the admin's role (and 2FA once required) on the server.
-import { supabase } from './supabase'
+import { adminDb } from './adminDb'
 import { describeFunctionsError } from './describeFunctionsError'
 
 export type AdminRole = 'owner' | 'operations' | 'support' | 'viewer'
 
 async function call<T>(action: string, body: Record<string, unknown> = {}): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('admin-api', { body: { action, ...body } })
+  const { data, error } = await adminDb.functions.invoke('admin-api', { body: { action, ...body } })
   if (error) {
     const msg = await describeFunctionsError(error, 'Admin request failed')
     // Not deployed yet (404) reads better as a plain sentence on the page.

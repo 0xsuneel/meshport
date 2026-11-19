@@ -12,6 +12,7 @@
 // they should never talk to Supabase or a provider directly.
 
 import { supabase } from './supabase'
+import { adminDb } from './adminDb'
 import { authHeaders, subscribeWithRetry } from './chatService'
 import { bootPart } from './homeBootstrap'
 import { escrowProvider, paymentProvider } from './p2pProviders'
@@ -652,7 +653,7 @@ export async function fetchAllOffersAdmin(limit = 200): Promise<P2POffer[]> {
 
 /** Live updates for the admin Offers panel - new offers, cancellations, depletion (status flipping to 'completed'), all appear instantly. */
 export function subscribeToAllOffers(onChange: (offer: P2POffer) => void): () => void {
-  return subscribeWithRetry(supabase, 'p2p-admin-offers', channel =>
+  return subscribeWithRetry(adminDb, 'p2p-admin-offers', channel =>
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'p2p_offers' },
       (payload: any) => onChange(offerFromRow(payload.new ?? payload.old))))
 }
@@ -2459,7 +2460,7 @@ export async function adminFetchAllActiveTrades(): Promise<P2PTrade[]> {
 
 /** Live updates for the admin Trades panel - mirrors subscribeToAllOffers's own reasoning; no per-user filter, since this view is every active trade regardless of who's on it. */
 export function subscribeToAllTrades(onChange: (trade: P2PTrade) => void): () => void {
-  return subscribeWithRetry(supabase, 'p2p-admin-trades', channel =>
+  return subscribeWithRetry(adminDb, 'p2p-admin-trades', channel =>
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'p2p_trades' },
       (payload: any) => onChange(tradeFromRow(payload.new ?? payload.old))))
 }

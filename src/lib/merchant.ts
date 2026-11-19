@@ -261,8 +261,9 @@ export async function removeBusinessDoc(path: string): Promise<void> {
 }
 
 /** Short-lived link to open an application document (owner or admin). */
-export async function businessDocUrl(path: string): Promise<string> {
-  const { data, error } = await supabase.storage.from(DOCS_BUCKET).createSignedUrl(path, 300)
+export async function businessDocUrl(path: string, asAdmin = false): Promise<string> {
+  const db = asAdmin ? (await import('./adminDb')).adminDb : supabase
+  const { data, error } = await db.storage.from(DOCS_BUCKET).createSignedUrl(path, 300)
   if (error || !data?.signedUrl) throw new Error(error?.message || 'Could not open the document')
   return data.signedUrl
 }
@@ -291,14 +292,17 @@ export async function applyForMerchant(p: {
 }
 
 // ── Admin ───────────────────────────────────────────────────────────────────
+// The admin panel's own sign-in (lib/adminDb), never the app's wallet sign-in.
 export async function adminListMerchantApplications(): Promise<MerchantApplication[]> {
-  const { data, error } = await supabase.from('merchant_applications').select('*').order('created_at', { ascending: false }).limit(500)
+  const { adminDb } = await import('./adminDb')
+  const { data, error } = await adminDb.from('merchant_applications').select('*').order('created_at', { ascending: false }).limit(500)
   if (error) throw new Error(error.message)
   return (data ?? []).map(mapRow)
 }
 
 export async function adminReviewMerchant(id: string, status: 'approved' | 'rejected' | 'revoked', note: string | null, reviewer: string): Promise<void> {
-  const { error } = await supabase.from('merchant_applications')
+  const { adminDb } = await import('./adminDb')
+  const { error } = await adminDb.from('merchant_applications')
     .update({ status, review_note: note?.trim() || null, reviewed_by: reviewer })
     .eq('id', id)
   if (error) throw new Error(error.message)

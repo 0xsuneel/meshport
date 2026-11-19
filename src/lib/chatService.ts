@@ -3,6 +3,7 @@
  * No supabase-js for writes. All writes go to /api/send-message (service key)
  * with direct Supabase REST as fallback.
  */
+import { isAdminMode } from './adminMode'
 import type { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
 import { supabase as _sbClient, chatApiHeaders } from './supabase'
 
@@ -36,7 +37,9 @@ if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KE
 // same bare-anon-key fallback for the (rare) case there's no session yet.
 export async function authHeaders(): Promise<Record<string, string>> {
   try {
-    const { data: { session } } = await _sbClient.auth.getSession()
+    // In the admin panel: the admin's own sign-in (lib/adminMode).
+    const client = isAdminMode() ? (await import('./adminDb')).adminDb : _sbClient
+    const { data: { session } } = await client.auth.getSession()
     const token = session?.access_token || ANON_KEY
     return { 'apikey': ANON_KEY, 'Authorization': `Bearer ${token}` }
   } catch {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { supabase } from '@/lib/supabase'
+import { adminDb as supabase } from '@/lib/adminDb'
 import { isAdminUser, fetchAdminRole } from '@/lib/adminSupabase'
 import { AdminMfaGate } from '@/components/admin/AdminMfaGate'
 import { useAdminStore } from '@/store/adminStore'

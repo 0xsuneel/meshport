@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Newspaper, Send, Eye, EyeOff, Trash2, Pencil } from 'lucide-react'
 import { AdminCard } from '@/components/admin/AdminCard'
-import { supabase } from '@/lib/supabase'
+import { adminDb as supabase } from '@/lib/adminDb'
 import { NEWS_SOURCE_LABEL, newsDate, type NewsSource } from '@/lib/news'
 
 // Admin → News. Writes MeshPort's own posts into public.news_items (shown in

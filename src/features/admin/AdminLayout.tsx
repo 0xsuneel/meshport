@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
 import { AdminHeader } from '@/components/admin/AdminHeader'
@@ -6,6 +6,7 @@ import { ModeToggle } from '@/components/admin/ModeToggle'
 import { useAdminStore } from '@/store/adminStore'
 import { ADMIN_PATH } from '@/lib/adminPath'
 import { adminSignOut } from '@/lib/adminSupabase'
+import { setAdminMode } from '@/lib/adminMode'
 
 const titles: Record<string, string> = {
   [`${ADMIN_PATH}/dashboard`]:   'Dashboard',
@@ -36,6 +37,8 @@ export function AdminLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const { adminEmail, clearAdminSession } = useAdminStore()
+  // While the panel is open, shared helpers act with the admin's own sign-in.
+  useEffect(() => { setAdminMode(true); return () => setAdminMode(false) }, [])
 
   const title = titles[location.pathname] || 'Admin'
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Megaphone, Send, Eye, EyeOff, Trash2, Pencil, ImagePlus, X } from 'lucide-react'
 import { AdminCard } from '@/components/admin/AdminCard'
-import { supabase } from '@/lib/supabase'
+import { adminDb as supabase } from '@/lib/adminDb'
 import { AdArt } from '@/components/ui/AdArt'
 import { loadAds, type Ad, type AdIcon } from '@/lib/ads'
 
@@ -24,6 +24,10 @@ const MAX_BYTES = 1024 * 1024
 const ICONS: { id: AdIcon; name: string }[] = [
   { id: 'hub', name: 'Multichain' }, { id: 'swap', name: 'Swap' }, { id: 'p2p', name: 'P2P' }, { id: 'chat', name: 'Chat' }, { id: 'bulk', name: 'Bulk' },
 ]
+
+// A change the database refused without an error (0 rows): this browser's
+// sign-in isn't the admin's.
+const NOT_SAVED = 'Not saved - your admin sign-in has ended. Sign out and sign in to the admin panel again.'
 
 const validLink = (s: string) => /^\/[A-Za-z0-9/_?=&.-]*$/.test(s) || /^https:\/\/\S+$/.test(s)
 
@@ -94,10 +98,11 @@ export function AdsAdminPage() {
       on_home: onHome, on_success: onSuccess, updated_at: new Date().toISOString(),
     }
     const res = editingId
-      ? await supabase.from('app_ads').update(payload).eq('id', editingId)
-      : await supabase.from('app_ads').insert({ ...payload, sort: (rows.reduce((m, r) => Math.max(m, r.sort), 0) || 0) + 10 })
+      ? await supabase.from('app_ads').update(payload).eq('id', editingId).select('id')
+      : await supabase.from('app_ads').insert({ ...payload, sort: (rows.reduce((m, r) => Math.max(m, r.sort), 0) || 0) + 10 }).select('id')
     setSaving(false)
     if (res.error) { setError(res.error.message); return }
+    if (!res.data?.length) { setError(NOT_SAVED); return }
     setNotice(editingId ? 'Ad updated' : 'Ad added - it now shows in the app')
     reset(); changed()
   }
@@ -110,15 +115,19 @@ export function AdsAdminPage() {
   }
 
   const toggle = async (r: Row) => {
-    const { error } = await supabase.from('app_ads').update({ active: !r.active, updated_at: new Date().toISOString() }).eq('id', r.id)
+    setError(null); setNotice(null)
+    const { data, error } = await supabase.from('app_ads').update({ active: !r.active, updated_at: new Date().toISOString() }).eq('id', r.id).select('id')
     if (error) { setError(error.message); return }
+    if (!data?.length) { setError(NOT_SAVED); return }
+    setNotice(r.active ? `“${r.title}” is off - it no longer shows in the app` : `“${r.title}” is on - it shows in the app`)
     changed()
   }
 
   const remove = async (id: string) => {
-    const { error } = await supabase.from('app_ads').delete().eq('id', id)
+    const { data, error } = await supabase.from('app_ads').delete().eq('id', id).select('id')
     setConfirmDelete(null)
     if (error) { setError(error.message); return }
+    if (!data?.length) { setError(NOT_SAVED); return }
     if (editingId === id) reset()
     changed()
   }
@@ -230,6 +239,9 @@ export function AdsAdminPage() {
 
       <div>
         <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, margin: '0 0 10px 4px' }}>All ads</p>
+        {/* The list's own result line (the form's is far above on a phone). */}
+        {error && <div style={{ marginBottom: 10, background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 25%, transparent)', borderRadius: 12, padding: '10px 12px', color: 'var(--danger-text)', fontSize: 13 }}>{error}</div>}
+        {notice && <div style={{ marginBottom: 10, background: 'color-mix(in srgb, var(--success) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--success) 25%, transparent)', borderRadius: 12, padding: '10px 12px', color: 'var(--success-text)', fontSize: 13 }}>{notice}</div>}
         {loading ? (
           <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Loading…</p>
         ) : rows.length === 0 ? (

@@ -50,7 +50,7 @@ export function MerchantApplicationsPage() {
   const openDoc = async (path: string) => {
     const tabRef = window.open('', '_blank')
     try {
-      const url = await businessDocUrl(path)
+      const url = await businessDocUrl(path, true)
       if (tabRef) tabRef.location.href = url; else window.location.assign(url)
     } catch (e) {
       tabRef?.close()

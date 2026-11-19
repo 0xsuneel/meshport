@@ -10,7 +10,7 @@
 // flag is what makes 2FA mandatory, so this never locks everyone out.
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { ShieldCheck } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { adminDb as supabase } from '@/lib/adminDb'
 import { AdminCard } from '@/components/admin/AdminCard'
 import { ActionButton, CopyText, Notice } from '@/components/admin/AdminUi'
 
