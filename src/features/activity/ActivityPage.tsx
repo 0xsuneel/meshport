@@ -1,7 +1,7 @@
 import { DESKTOP_QUERY } from '@/lib/motion'
 import { useStaggerIn } from '@/lib/staggerIn'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
@@ -28,6 +28,7 @@ import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { fetchPointHistory, rewardsUserId, rewardTaskOf } from '@/lib/rewards'
 import { fetchScratchHistory, fmtUsdcMicro } from '@/lib/scratchCards'
 import { pressable } from '@/lib/pressable'
+import { PersonHistory, InPersonHistory, type HistoryWith } from './PersonHistory'
 
 type ActivityTab = ActivityType | 'all' | 'p2p' | 'merchant' | 'rewards'
 
@@ -549,6 +550,9 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const myUsername = useAuthStore(s => s.user?.username) as string | undefined
   const myUserId = useAuthStore(s => s.user?.id)
   const [openingChat, setOpeningChat] = useState(false)
+  // History with this payment's person / address (not again inside it).
+  const inHistory = useContext(InPersonHistory)
+  const [historyWith, setHistoryWith] = useState<HistoryWith | null>(null)
   // Chat with the person on a history record - as the Business page opens a
   // customer's chat: find them by username, then their conversation (made if new).
   const openChatWith = async (username: string) => {
@@ -992,6 +996,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       actions: [
         { label: type === 'send' ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(`/pay?to=${encodeURIComponent(cpName || counterparty)}`) } },
         ...(cpName ? [{ label: 'Chat', onClick: () => { void openChatWith(cpName) }, busy: openingChat }] : []),
+        ...(counterparty && !inHistory ? [{ label: 'History', onClick: () => setHistoryWith({ address: counterparty, name: cpName ? cpName.charAt(0).toUpperCase() + cpName.slice(1) : shortAddr(counterparty), handle: theirHandle }) }] : []),
       ],
     }
     txDetail = {
@@ -1135,7 +1140,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       steps: [],
       whenLabel: isIncoming ? 'Received at' : 'Sent at', when: whenFull,
       hashes: [
-        ...(txHash && !isRecoveredClaim ? [{ label: destinationTxHash ? sourceHashLabel : 'Transaction', hash: txHash }] : []),
+        ...(txHash && !isRecoveredClaim ? [{ label: destinationTxHash ? sourceHashLabel : 'Transaction hash', hash: txHash }] : []),
         ...(destinationTxHash && destinationTxHash !== txHash ? [{ label: 'Destination transaction', hash: destinationTxHash }] : []),
       ],
       detailsTitle: 'Details',
@@ -1146,7 +1151,10 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       action: recoverAction,
     }
   }
-  if (txDetail) return <TxDetailPage detail={txDetail} onClose={onClose} />
+  if (txDetail) return (<>
+    <TxDetailPage detail={txDetail} onClose={onClose} />
+    {historyWith && <PersonHistory who={historyWith} onClose={() => setHistoryWith(null)} />}
+  </>)
 
   return (
     <ReceiptPopup
@@ -1180,7 +1188,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   )
 }
 
-function groupByDate(records: ActivityRecord[]) {
+export function groupByDate(records: ActivityRecord[]) {
   const now = new Date()
   const todayMs     = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
   const yesterdayMs = todayMs - 86400000
