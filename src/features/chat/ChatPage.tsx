@@ -3,7 +3,7 @@ import { useStaggerIn } from '@/lib/staggerIn'
 import { backLayerPop } from '@/lib/backLayers'
 import { formatLocale } from '@/lib/localeFormat'
 import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, lazy, Suspense, type ReactNode } from 'react'
 import { SendIcon } from '@/components/ui/SendIcon'
 import { reachCheck, PAYMENT_REACH_WAIT_MS, chatCountChanged, STRANGER_PAY_BLOCKED, BLOCKED_YOU, cachedPrivacy, fetchMyPrivacy, fetchMyRequestIds, fetchBlocked, blockUser, unblockUser, type ChatPrivacy } from '@/lib/privacy'
 import { Ban, Check, Pin, PinOff, Plus } from 'lucide-react'
@@ -49,6 +49,7 @@ import {
   searchUsersDb,
   addContactDb,
   invalidateConversationsCache,
+  getUserByUsername,
   type DbConversation,
   type DbUser,
 } from '@/lib/supabase'
@@ -1548,6 +1549,9 @@ function MessageTicks({ msg, onMedia }: { msg: any; onMedia?: boolean }) {
 // Tapping a payment card (or a row in this chat's payment history) reopens
 // the same receipt a live Chat Pay ends on; payments you received get the
 // receiver version.
+// History with the person (19 Nov 2026) - loaded when first opened.
+const PersonHistoryLazy = lazy(() => import('@/features/activity/PersonHistory').then(m => ({ default: m.PersonHistory })))
+
 function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: boolean; peer: string; onClose: () => void }) {
   const token = (msg.token_symbol as ChatPayToken) || 'USDC'
   const hash: string | null = msg.payment_tx_hash || null
@@ -1557,6 +1561,8 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
   const navigate = useNavigate()
   const myName = useAuthStore(s => s.user?.username) as string | undefined
   const myWallet = useAuthStore(s => s.walletAddress)
+  const [historyWith, setHistoryWith] = useState<{ address: string; name: string; handle?: string } | null>(null)
+  const [findingWallet, setFindingWallet] = useState(false)
   {
     const created = new Date(msg.created_at)
     const sym = token === 'USDC' ? '$' : token === 'EURC' ? '€' : ''
@@ -1565,9 +1571,21 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
     const me: TxParty = { label: sent ? 'From' : 'To', name: 'You', you: true,
       handle: myName ? `${String(myName).replace(/\.arc$/i, '')}.arc` : undefined, address: myWallet || undefined }
     const them: TxParty = { label: sent ? 'To' : 'From', name: peerName.charAt(0).toUpperCase() + peerName.slice(1), handle: peer,
-      actions: [{ label: sent ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(`/pay?to=${encodeURIComponent(peerName)}`) } }] }
+      actions: [
+        { label: sent ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(`/pay?to=${encodeURIComponent(peerName)}`) } },
+        { label: 'History', busy: findingWallet, onClick: async () => {
+          if (findingWallet) return
+          setFindingWallet(true)
+          try {
+            const u = await getUserByUsername(peerName)
+            if (u?.wallet_address) setHistoryWith({ address: u.wallet_address, name: peerName.charAt(0).toUpperCase() + peerName.slice(1), handle: `${peerName}.arc` })
+            else useUIStore.getState().showToastMessage('Could not open the history', 'error')
+          } catch { useUIStore.getState().showToastMessage('Could not open the history', 'error') }
+          finally { setFindingWallet(false) }
+        } },
+      ] }
     const st = msg.payment_status === 'failed' ? 'failed' as const : msg.payment_status === 'pending' ? 'pending' as const : 'success' as const
-    return (
+    return (<>
       <TxDetailPage onClose={onClose} detail={{
         title: 'Payment details', status: st, amountLabel: 'Amount',
         amount: `${sym}${formatAmount(msg.payment_amount || 0, chatPayTokenDecimals(token))}`, unit: token,
@@ -1586,7 +1604,8 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
           ...(hash ? [{ label: 'Explorer', value: 'View on ArcScan', href: arcExplorerTxUrl(hash) }] : []),
         ],
       }} />
-    )
+      {historyWith && <Suspense fallback={null}><PersonHistoryLazy who={historyWith} onClose={() => setHistoryWith(null)} /></Suspense>}
+    </>)
   }
 }
 
