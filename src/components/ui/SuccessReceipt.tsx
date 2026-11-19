@@ -7,6 +7,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { SuccessPromo, type PromoFeature } from '@/components/ui/SuccessPromo'
 import { PoweredByFooter } from '@/components/ui/PoweredByFooter'
+import { useStatusBarTint } from '@/lib/statusBarTint'
 
 // The receipt card every success flow lands on after SuccessFlash:
 // gradient header holding the check (the traveling checkmark flies into
@@ -216,6 +217,10 @@ export function SuccessReceipt({
   // kept here for its landing pop.
   // Phones only: a computer keeps the card (it sits in a side panel there).
   const desktop = useMediaQuery(DESKTOP_QUERY)
+  // The success page on a phone: the status bar in the band's top colour, so
+  // the band runs up under the clock (19 Nov 2026) - not a white strip.
+  useStatusBarTint(page && !page.person && !desktop && !fill
+    ? (status === 'success' ? 'color-mix(in srgb, var(--brand) 70%, #3FD0B8)' : HEADER_BG[status]) : null)
   const ownCheck = useRef<HTMLDivElement | null>(null)
   const setCheck = useCallback((el: HTMLDivElement | null) => {
     ownCheck.current = el

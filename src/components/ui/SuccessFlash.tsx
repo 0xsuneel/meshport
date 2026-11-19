@@ -1,4 +1,5 @@
 import { useEffect, type Ref, type CSSProperties } from 'react'
+import { useStatusBarTint } from '@/lib/statusBarTint'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { FlashAuthIcon } from './FlashAuthIcon'
@@ -34,6 +35,8 @@ interface SuccessFlashProps {
 export function SuccessFlash({ title, checkRef, viaBiometric, circleReady = true, onCircleReady, portal = true, rect, radius = 20 }: SuccessFlashProps) {
   useEffect(() => { successFeedback() }, [])
   usePopupOpen()
+  // Full screen on a phone: the status bar takes the flash's colour too.
+  useStatusBarTint(portal && !rect && !isDesktopNow() ? 'var(--brand)' : null)
 
   // Desktop: never cover the sidebar and header - fill the content area
   // (screens that pass their own rect keep it).

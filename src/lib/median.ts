@@ -87,3 +87,17 @@ export function syncMedianStatusBar(theme: 'light' | 'dark'): void {
     if (pending) apply(w, pending)
   }
 }
+
+/**
+ * A screen whose top is all one colour (the success flash / band) tints the
+ * native status bar to it, light icons on it; null puts the theme's bar back.
+ * Outside a Median app this does nothing.
+ */
+export function setMedianStatusBarColor(hex: string | null): void {
+  if (typeof window === 'undefined') return
+  const w = window as MedianWindow
+  const set = w.median?.statusbar?.set
+  if (typeof set !== 'function') return
+  if (!hex) { apply(w, currentTheme); return }
+  try { set.call(w.median!.statusbar, { style: 'light', color: hex.replace(/^#/, ''), overlay: overlayVerdict() !== 'no' }) } catch { /* an older app shell */ }
+}

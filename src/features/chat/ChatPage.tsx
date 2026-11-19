@@ -4508,7 +4508,7 @@ export function ChatConversationPage() {
                       ...(user?.username ? [{ label: 'From', value: `${String(user.username).replace(/\.arc$/i, '')}.arc` }] : []),
                       { label: 'Network', value: 'Arc Testnet' },
                       { label: 'Network fee', value: payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free' },
-                      ...(payTxHash ? [{ label: 'Transaction', value: `${payTxHash.slice(0, 6)}…${payTxHash.slice(-4)}` }] : []),
+                      ...(payTxHash ? [{ label: 'Transaction hash', value: `${payTxHash.slice(0, 6)}…${payTxHash.slice(-4)}` }] : []),
                     ],
                   }}
                   // Phone: fills the pay sheet edge to edge (desktop: the card in the drawer).
