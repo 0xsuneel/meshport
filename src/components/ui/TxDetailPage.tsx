@@ -188,15 +188,20 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
               <b style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-1.5px', overflowWrap: 'anywhere' }}>{d.amount}</b>
               {d.unit && <span style={{ fontSize: 18, fontWeight: 700, opacity: 0.8 }}>{d.unit}</span>}
             </div>
-            {d.pill && (
-              <div style={{ marginTop: 12 }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 999, fontSize: 13.5, fontWeight: 700, background: 'rgba(0,0,0,.18)' }}>
+            {/* The tag on the left, when it happened on the right (19 Nov 2026). */}
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              {d.pill ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 999, fontSize: 13.5, fontWeight: 700, background: 'rgba(0,0,0,.18)', flexShrink: 0 }}>
                   {typeof d.pill === 'string'
                     ? <><Zap size={14} color="#FFD25E" fill="#FFD25E" />{d.pill}</>
                     : <><ActionIcon name={d.pill.icon} size={15} color="#fff" />{d.pill.text}</>}
                 </span>
-              </div>
-            )}
+              ) : <span />}
+              <span style={{ textAlign: 'right', lineHeight: 1.3, marginLeft: 'auto' }}>
+                <span style={{ display: 'block', fontSize: 11.5, fontWeight: 600, opacity: 0.75 }}>{d.whenLabel}</span>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 700 }}>{d.when}</span>
+              </span>
+            </div>
             </div>
             </div>
             <div style={{ padding: '0 18px 6px' }}>
@@ -284,9 +289,8 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
             </Rv>)}
 
             <Rv i={2 + Math.max(d.parties?.length ?? 0, d.recipients?.length ? 1 : 0)}>
-            {line}
+            {d.hashes.length > 0 && line}
             <div style={{ fontSize: 14, lineHeight: 1.9 }}>
-              <div><span style={{ color: muted }}>{d.whenLabel}</span> {d.when}</div>
               {d.hashes.map(h => (
                 <div key={h.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ color: muted }}>{h.label}</span> {short(h.hash)} <CopyBtn value={h.hash} what="Transaction hash" />
