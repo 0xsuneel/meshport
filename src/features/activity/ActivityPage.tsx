@@ -936,7 +936,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     { label: 'Type', value: activityOrderKind(metadata) === 'shop' ? 'Shop payment' : typeRow?.value && typeRow.value !== type ? typeRow.value : type === 'send' ? 'Payment' : 'Received' },
     { label: 'Network', value: chain === 'Arc' || !chain ? 'Arc Testnet' : chain },
     ...(feeRow ? [{ label: 'Fee', value: feeRow.value }] : []),
-    ...(txHash ? [toReceiptRow({ label: 'Transaction', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, copy: txHash })] : []),
+    ...(txHash ? [toReceiptRow({ label: 'Transaction hash', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, copy: txHash })] : []),
   ] : undefined
 
   // ── The phone's transaction page (approved preview, 18 Nov 2026) ─────────
@@ -948,7 +948,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const myAddr = record.walletAddress ? String(record.walletAddress) : undefined
   const youParty = (label: 'From' | 'To', onChain?: string): TxParty => ({
     label, name: 'You', you: true, handle: myHandle, address: myAddr,
-    ...(onChain ? { chain: onChain } : { sub: `MeshPort wallet · ${tokenSymbol || 'USDC'} on Arc` }),
+    ...(onChain ? { chain: onChain } : {}),
   })
   const whenFull = `${created.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, ${created.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
   const statusDetail = { label: 'Status', value: isRecovery ? 'Needs recovery' : isFailed ? 'Failed' : isSuccess ? 'Completed' : 'Processing', tone: isSuccess ? 'ok' as const : isFailed ? 'bad' as const : undefined }
@@ -978,7 +978,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       ],
       steps: ['Claim approved', <>Paid by <b>MeshPort Rewards</b></>, <>Received by <b>you</b></>],
       whenLabel: 'Claimed at', when: whenFull,
-      hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
+      hashes: txHash ? [{ label: 'Transaction hash', hash: txHash }] : [],
       detailsTitle: 'Claim details',
       details: [statusDetail, ...(noteText ? [{ label: 'Paid for', value: noteText.replace(/ claimed$/i, '') }] : []), networkDetail, ...arcExplorer],
     }
@@ -1005,7 +1005,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
         <>Payment made by <b>{type === 'send' ? 'you' : theirLabel}</b></>,
         <>Payment received by <b>{type === 'send' ? theirLabel : 'you'}</b></>],
       whenLabel: type === 'send' ? 'Paid at' : 'Received at', when: whenFull,
-      hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
+      hashes: txHash ? [{ label: 'Transaction hash', hash: txHash }] : [],
       detailsTitle: 'Payment details',
       details: [statusDetail, networkDetail, ...(anyFee ? [{ label: 'Network fee', value: anyFee.value }] : []),
         ...(merchantOrderDetail ? [{ label: 'Order', value: displayOrderNumber(merchantOrderDetail) }] : []), ...arcExplorer],
@@ -1022,7 +1022,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       pill: { icon: 'swap', text: 'Swap' }, reason: reasonNote ?? undefined,
       steps: ['Swap approved', <>Sent <b>{aIn} {tIn}</b></>, got ? <>Received <b>{aOut} {tOut}</b></> : <>Receive <b>{tOut || 'the other coin'}</b></>],
       whenLabel: 'Swapped at', when: whenFull,
-      hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
+      hashes: txHash ? [{ label: 'Transaction hash', hash: txHash }] : [],
       detailsTitle: 'Swap details',
       details: [statusDetail, ...(rate > 0 ? [{ label: 'Rate', value: `1 ${tIn} = ${rate.toFixed(4).replace(/\.?0+$/, '')} ${tOut}` }] : []), networkDetail, ...arcExplorer],
       promo: 'swap',
@@ -1064,7 +1064,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       recipients: list.map((r, i) => ({ name: r.label?.startsWith('0x') ? shortAddr(r.label) : (r.label || `Recipient ${i + 1}`), amount: `$${formatAmt(Number(r.amount) || 0)}` })),
       steps: ['Payout approved', <>Paid in <b>one transaction</b></>, <>Received by <b>{n ? `${isSuccess ? n : 0} of ${n}` : 'everyone'}</b></>],
       whenLabel: 'Paid at', when: whenFull,
-      hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
+      hashes: txHash ? [{ label: 'Transaction hash', hash: txHash }] : [],
       detailsTitle: 'Payment details',
       details: [statusDetail, ...(metadata.purpose ? [{ label: 'Purpose', value: String(metadata.purpose) }] : []), networkDetail, ...arcExplorer],
     }
@@ -1092,7 +1092,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
         ? ['Sell order cancelled', <>USDC released from <b>escrow</b></>, <>Received by <b>you</b></>]
         : [<>Payment sent to the <b>seller</b></>, 'Seller confirmed', <>USDC released to <b>you</b></>],
       whenLabel: isP2PSellOrder ? 'Locked at' : isP2PRefund ? 'Returned at' : 'Bought at', when: whenFull,
-      hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
+      hashes: txHash ? [{ label: 'Transaction hash', hash: txHash }] : [],
       detailsTitle: 'P2P details',
       details: [statusDetail, ...(ref ? [{ label: md?.tradeId ? 'Trade' : 'Order', value: `#${ref.slice(0, 8)}` }] : []), networkDetail, ...arcExplorer],
       promo: 'p2p',
@@ -1107,7 +1107,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       parties: [youParty('From'), youParty('To')],
       steps: ['Payment approved', <>Sent from <b>your wallet</b></>, <>Received in <b>your wallet</b></>],
       whenLabel: type === 'send' ? 'Paid at' : 'Received at', when: whenFull,
-      hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
+      hashes: txHash ? [{ label: 'Transaction hash', hash: txHash }] : [],
       detailsTitle: 'Payment details',
       details: [statusDetail, networkDetail, ...(anyFee ? [{ label: 'Network fee', value: anyFee.value }] : []), ...arcExplorer],
     }

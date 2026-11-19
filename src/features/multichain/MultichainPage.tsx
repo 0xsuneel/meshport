@@ -1520,7 +1520,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
           const isCctpx = it.route === 'cctpx'
           const me = useAuthStore.getState()
           const myHandle = me.user?.username ? `${String(me.user.username).replace(/\.arc$/i, '')}.arc` : undefined
-          const you = (label: 'From' | 'To'): TxParty => ({ label, name: 'You', you: true, handle: myHandle, address: walletAddress || undefined, chain: 'Arc', sub: `MeshPort wallet · ${sym} on Arc` })
+          const you = (label: 'From' | 'To'): TxParty => ({ label, name: 'You', you: true, handle: myHandle, address: walletAddress || undefined, chain: 'Arc' })
           const sentTo = it.destinationAddress
           const toSelf = !!sentTo && !!walletAddress && sentTo.toLowerCase() === walletAddress.toLowerCase()
           const when = new Date(it.timestamp)

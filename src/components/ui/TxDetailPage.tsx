@@ -7,7 +7,7 @@
 // chat's payment cards - so a payment looks the same from everywhere.
 import { useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, Check, ChevronDown, Clock, Copy, ExternalLink, Share2, X, Zap } from 'lucide-react'
 import { useBackLayer } from '@/lib/backLayers'
 import { DESKTOP_QUERY, EASE_OUT, PAGE_TRANSITION } from '@/lib/motion'
@@ -125,6 +125,8 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const [open, setOpen] = useState(false)
   const d = detail
+  const infoRows = d.details.filter(r => !r.href)
+  const linkRows = d.details.filter(r => r.href)
   const line = <div style={{ height: 1, background: 'var(--border)', margin: '18px 0' }} />
   const muted = 'var(--text-secondary)'
 
@@ -290,12 +292,17 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
               ))}
             </div>
 
-            {(d.details.length > 0 || d.steps.length > 0) && (<>
+            {/* Explorer links stay visible under the details toggle (19 Nov
+                2026); the details open above them and push them down. */}
+            {(infoRows.length > 0 || d.steps.length > 0) && (<>
               <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--brand-text)', fontWeight: 700, fontSize: 14.5, padding: '14px 0 12px', background: 'none', border: 0, cursor: 'pointer', fontFamily: 'inherit' }}>
                 {d.detailsTitle} <ChevronDown size={16} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
               </button>
+              <AnimatePresence initial={false}>
               {open && (
+                <motion.div key="more" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.28, ease: EASE_OUT }} style={{ overflow: 'hidden' }}>
                 <div style={{ borderTop: '1px solid var(--border)', padding: '6px 0 10px' }}>
                   {/* The steps it went through (18 Nov 2026: inside the details). */}
                   {d.steps.length > 0 && (
@@ -309,18 +316,29 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                       ))}
                     </div>
                   )}
-                  {d.details.map(r => (
+                  {infoRows.map(r => (
                     <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 14, fontSize: 14, padding: '8px 0' }}>
                       <span style={{ color: muted, flexShrink: 0 }}>{r.label}</span>
-                      {r.href
-                        ? <a href={r.href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-text)', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>{r.value}<ExternalLink size={13} /></a>
-                        : <span style={{ fontWeight: 600, textAlign: 'right', overflowWrap: 'anywhere', color: r.tone === 'ok' ? 'var(--success-text)' : r.tone === 'bad' ? 'var(--danger-text)' : undefined }}>{r.value}</span>}
+                      <span style={{ fontWeight: 600, textAlign: 'right', overflowWrap: 'anywhere', color: r.tone === 'ok' ? 'var(--success-text)' : r.tone === 'bad' ? 'var(--danger-text)' : undefined }}>{r.value}</span>
                     </div>
                   ))}
                 </div>
+                </motion.div>
               )}
+              </AnimatePresence>
             </>)}
-            {d.details.length === 0 && d.steps.length === 0 && <div style={{ height: 14 }} />}
+            {linkRows.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: infoRows.length > 0 || d.steps.length > 0 ? '2px 0 16px' : '14px 0 16px' }}>
+                {linkRows.map((r, i) => (
+                  <a key={`${r.href}-${i}`} href={r.href} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '11px 12px', borderRadius: 14, fontSize: 14, fontWeight: 700,
+                      color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 10%, transparent)', textDecoration: 'none' }}>
+                    {r.value}<ExternalLink size={15} />
+                  </a>
+                ))}
+              </div>
+            )}
+            {infoRows.length === 0 && d.steps.length === 0 && linkRows.length === 0 && <div style={{ height: 14 }} />}
             </Rv>
             </div>
           </div>

@@ -1563,7 +1563,7 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
     const peerName = peer.replace(/\.arc$/i, '')
     const isOrder = !!parsePaymentOrderTag(String(msg.content ?? ''))
     const me: TxParty = { label: sent ? 'From' : 'To', name: 'You', you: true,
-      handle: myName ? `${String(myName).replace(/\.arc$/i, '')}.arc` : undefined, address: myWallet || undefined, sub: `MeshPort wallet · ${token} on Arc` }
+      handle: myName ? `${String(myName).replace(/\.arc$/i, '')}.arc` : undefined, address: myWallet || undefined }
     const them: TxParty = { label: sent ? 'To' : 'From', name: peerName.charAt(0).toUpperCase() + peerName.slice(1), handle: peer,
       actions: [{ label: sent ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(`/pay?to=${encodeURIComponent(peerName)}`) } }] }
     const st = msg.payment_status === 'failed' ? 'failed' as const : msg.payment_status === 'pending' ? 'pending' as const : 'success' as const
@@ -1578,7 +1578,7 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
           <>Payment received by <b>{sent ? peer : 'you'}</b></>],
         whenLabel: sent ? 'Paid at' : 'Received at',
         when: `${created.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, ${created.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`,
-        hashes: hash ? [{ label: 'Transaction', hash }] : [],
+        hashes: hash ? [{ label: 'Transaction hash', hash }] : [],
         detailsTitle: 'Payment details',
         details: [
           { label: 'Status', value: st === 'success' ? 'Completed' : st === 'failed' ? 'Failed' : 'Processing', tone: st === 'success' ? 'ok' : st === 'failed' ? 'bad' : undefined },

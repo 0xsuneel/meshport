@@ -44,7 +44,7 @@ export function ReceiptCard({
     ...(order ? [{ label: 'For', value: order }] : []),
     ...(outlet ? [{ label: 'Store', value: outlet }] : []),
     { label: 'Network', value: chainLabel },
-    ...(txHash ? [{ label: 'Transaction', value: `${txHash.slice(0, 10)}…${txHash.slice(-6)}`, mono: true }] : []),
+    ...(txHash ? [{ label: 'Transaction hash', value: `${txHash.slice(0, 10)}…${txHash.slice(-6)}`, mono: true }] : []),
   ]
 
   return (
