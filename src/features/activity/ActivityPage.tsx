@@ -881,7 +881,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     <div style={cardStyle}>
       {person(cpName || shortAddr(counterparty), [cpName ? `${cpName}.arc` : '', counterparty ? shortAddr(counterparty) : ''].filter(Boolean).join(' · '), counterparty || undefined)}
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button type="button" onClick={() => { onClose(); navigate(`/pay?to=${encodeURIComponent(cpName || counterparty)}`) }}
+        <button type="button" onClick={() => { onClose(); navigate(`/pay?to=${encodeURIComponent(cpName && counterparty ? `${cpName}|${counterparty}` : cpName || counterparty)}`) }}
           style={{ padding: '7px 14px', borderRadius: 999, border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--brand-text)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
           {type === 'send' ? 'Pay again' : 'Send money'}
         </button>
@@ -994,7 +994,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       label: type === 'send' ? 'To' : 'From', name: cpName ? cpName.charAt(0).toUpperCase() + cpName.slice(1) : shortAddr(counterparty),
       handle: theirHandle, address: counterparty || undefined, tag: shop && type === 'send' ? 'SHOP' : undefined,
       actions: [
-        { label: type === 'send' ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(`/pay?to=${encodeURIComponent(cpName || counterparty)}`) } },
+        { label: type === 'send' ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(`/pay?to=${encodeURIComponent(cpName && counterparty ? `${cpName}|${counterparty}` : cpName || counterparty)}`) } },
         ...(cpName ? [{ label: 'Chat', onClick: () => { void openChatWith(cpName) }, busy: openingChat }] : []),
         ...(counterparty && !inHistory ? [{ label: 'History', onClick: () => setHistoryWith({ address: counterparty, name: cpName ? cpName.charAt(0).toUpperCase() + cpName.slice(1) : shortAddr(counterparty), handle: theirHandle }) }] : []),
       ],

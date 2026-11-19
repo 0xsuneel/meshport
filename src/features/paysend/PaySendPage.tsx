@@ -527,7 +527,15 @@ export function PaySendPage() {
   // Async version - looks up MeshPort profile for a plain wallet address
   async function resolveCompoundAsync(input: string): Promise<Recipient | null> {
     const sync = resolveCompound(input)
-    if (!sync) return null
+    if (!sync) {
+      // A plain MeshPort name ("vrsun" / "vrsun.arc" - history's Pay / Pay
+      // again): look the person up and open on the amount, like a recent tap.
+      const name = input.trim().replace(/^@/, '').replace(/\.arc$/i, '')
+      if (!/^[a-z0-9_-]{2,32}$/i.test(name)) return null
+      const u = await getUserByUsername(name).catch(() => null)
+      if (!u?.wallet_address || !isValidAddress(u.wallet_address)) return null
+      return { id: u.id, display: `${String(u.username).replace(/\.arc$/i, '')}.arc`, displayName: u.display_name || u.username, walletAddress: u.wallet_address, isUsername: true, avatarUrl: u.avatar_url }
+    }
     // If we only have a bare address (no username from compound format), try DB lookup
     if (!sync.isUsername && isValidAddress(input.trim())) {
       const profile = await getUserByWalletAddress(input.trim()).catch(() => null)
