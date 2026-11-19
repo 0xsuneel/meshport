@@ -30,6 +30,8 @@ import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/b
 import { StorePicker } from '@/features/merchant/StorePicker'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, spokenLine, MIN_AMOUNTS } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockSigner } from './settlement'
+import { settlementDetail } from './settlementDetail'
+import { TxDetailPage } from '@/components/ui/TxDetailPage'
 import { listMyRefunds, subscribeMyRefunds, refundPayment, chainUsdcBalance, canRefundOnChain, checkRefundableSender, type SenderCheck, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
 import { mergeSales } from '@/lib/businessSales'
 import { groupRefunds, refundedSum, remainingAfter, isFullyRefunded, canRefundMore, netPayments, MIN_REFUND } from '@/lib/refundTotals'
@@ -314,6 +316,8 @@ function OwnerBusinessPage() {
   }, [storeRaw, kept])
   const [progressOpen, setProgressOpen] = useState(false)
   const [historyId, setHistoryId] = useState<string | null>(() => query.get('claim'))
+  // A finished settlement tapped in the history opens as the history card.
+  const [historyAsCard, setHistoryAsCard] = useState(false)
   const [pin, setPin] = useState<{ kind: 'settle'; retry?: string[] } | { kind: 'one'; chainId: string } | { kind: 'refund' } | null>(null)
   const pinShown = useLatched(pin)
   const [pinError, setPinError] = useState<string | undefined>()
@@ -523,7 +527,9 @@ function OwnerBusinessPage() {
     id: c.id, amount: money(c.arrivedAmount ?? c.amount), chainLabels: [chainLabel(c.sourceChain)], when: c.createdAt,
     status: c.status === 'completed' ? 'completed' as const : c.status === 'failed' ? 'failed' as const : 'in_progress' as const,
   }))
-  const historyClaim = historyId ? (history ?? []).find(c => c.id === historyId) : undefined
+  const historyFound = historyId ? (history ?? []).find(c => c.id === historyId) : undefined
+  const historyCard = historyAsCard && historyFound && (historyFound.status === 'completed' || historyFound.status === 'failed') ? historyFound : undefined
+  const historyClaim = historyCard ? undefined : historyFound
   const progressRows: SettleProgressRow[] = progressOpen
     ? settle.run.map(r => ({ id: r.id, label: r.label, logo: r.logo, amount: money(r.balance), stage: r.stage, message: r.message }))
     : historyClaim ? [{ id: historyClaim.id, label: chainLabel(historyClaim.sourceChain), logo: chainLogoSrc(historyClaim.sourceChain),
@@ -685,7 +691,7 @@ function OwnerBusinessPage() {
                     total={money(settle.total)}
                     settle={{ enabled: !scanning && settle.ready && !settle.running && settle.due.length > 0, label: settleLabel, note: settleNote }}
                     onSettle={() => beginSettle()} onRefresh={settle.rescan}
-                    history={historyItems} onHistory={id => { setProgressOpen(false); setHistoryId(id) }}
+                    history={historyItems} onHistory={id => { setProgressOpen(false); setHistoryAsCard(true); setHistoryId(id) }}
                     lastRun={settle.run.length ? { running: settle.running, onOpen: () => { setHistoryId(null); setProgressOpen(true) } } : undefined} />
                 )}
                 {tab === 'settlements' && (
@@ -732,7 +738,10 @@ function OwnerBusinessPage() {
       <SettleProgressSheet open={progressOpen || !!historyClaim} running={progressOpen && settle.running} rows={progressRows}
         onClose={() => { setProgressOpen(false); setHistoryId(null) }}
         onRetryFailed={() => { if (failedIds.length) beginSettle(failedIds) }}
-        onTrack={id => { const c = settle.run.find(r => r.id === id)?.claimId; if (c) { setProgressOpen(false); setHistoryId(c) } }} />
+        onTrack={id => { const c = settle.run.find(r => r.id === id)?.claimId; if (c) { setProgressOpen(false); setHistoryAsCard(false); setHistoryId(c) } }} />
+
+      {historyCard && <TxDetailPage detail={settlementDetail(historyCard, { handle: username ? `${username.replace(/\.arc$/i, '')}.arc` : undefined, address: walletAddress || undefined })}
+        onClose={() => { setHistoryId(null); setHistoryAsCard(false) }} />}
 
       <PinSheet open={!!pin} title={pinShown?.kind === 'refund' ? 'Confirm refund' : 'Confirm settle'}
         // Refund: the amount (+ Circle's fee when it goes back by CCTP); settle: the balances moved to Arc.
