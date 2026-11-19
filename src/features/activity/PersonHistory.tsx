@@ -12,6 +12,7 @@ import { useAuthStore } from '@/store'
 import { useBackLayer } from '@/lib/backLayers'
 import { DESKTOP_QUERY, PAGE_TRANSITION } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useStaggerIn } from '@/lib/staggerIn'
 import { fetchActivity, resolveCounterpartyNames, type ActivityRecord } from '@/lib/ActivityService'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { SkeletonCards } from '@/components/ui/Skeleton'
@@ -56,6 +57,7 @@ export function PersonHistory({ who, onClose }: { who: HistoryWith; onClose: () 
   }, [records])
 
   const listRef = useRef<HTMLDivElement>(null)
+  useStaggerIn(listRef, !!records?.length, '[data-stagger], [data-activity-id]')
   const short = `${addr.slice(0, 6)}…${addr.slice(-4)}`
   const initial = (who.handle || who.name).replace(/^0x/i, '').charAt(0).toUpperCase() || '?'
 

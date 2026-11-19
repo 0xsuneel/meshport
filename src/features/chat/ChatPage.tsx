@@ -1,4 +1,5 @@
 import { ScratchGift } from '@/components/rewards/ScratchGift'
+import { useStaggerIn } from '@/lib/staggerIn'
 import { backLayerPop } from '@/lib/backLayers'
 import { formatLocale } from '@/lib/localeFormat'
 import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
@@ -624,6 +625,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   const [listLoadFailed, setListLoadFailed] = useState(false)
   // The chats arrive one after another as the list opens (19 Nov 2026).
   const chatRevealRef = useRef<HTMLDivElement>(null)
+  useStaggerIn(chatRevealRef, !loading && conversations.length > 0)
   const [newChatSearch, setNewChatSearch] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
   // Last-known contacts show instantly (see peopleCache); the loader below refreshes them.
