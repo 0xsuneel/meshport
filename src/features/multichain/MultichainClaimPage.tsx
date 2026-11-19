@@ -2436,6 +2436,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 // EURC / cirBTC: Circle's forwarder delivers - no Arc transaction of ours to link.
                 const mintPending = !token && chainProgress.some(p => !p.mintTxHash)
                 return (
+                <div style={{ margin: '0 -12px', height: '100%' }}>
                 <SuccessReceipt promo="multichain" page={{ chip: 'Arrived',
                   hero: { amount: <ReceiptAmount value={fmtCoin(displayTotal)} unit={coin} />, line: <>From {fromLabel}, now in your Arc wallet</> } }}
                   actions={[
@@ -2471,6 +2472,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     ? <FlashAuthIcon key="landing-toggle" viaBiometric loop size={34} color="var(--success)" />
                     : undefined}
                 />
+                </div>
                 )
               })()}
             </motion.div>
