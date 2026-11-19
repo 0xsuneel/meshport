@@ -176,37 +176,55 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   // This prevents the null flash where HomePage unmounts/remounts on every refresh
   const [checked, setChecked] = useState(() => !!useAuthStore.getState().username)
 
-  // Check Supabase for existing profile by wallet address
-  // This is the permanent identity lookup - runs once when wallet is available
+  // Check Supabase for existing profile by wallet address.
+  // This is the permanent identity lookup. The first time (no username on
+  // this device yet) it blocks with the loading dots; after that it still
+  // runs - quietly, in the background - every time the app opens and when it
+  // comes back to the front (at most every 30 s), so a name or photo changed
+  // on another device shows here too (19 Nov 2026: a photo set on the phone
+  // never reached the desktop, which had skipped this lookup for good once
+  // it knew its username).
   useEffect(() => {
-    // If no walletAddress, mark as checked immediately - nothing to look up
     if (!walletAddress) { setChecked(true); return }
-    if (checked) return  // only skip if already fetched this session
-    setChecking(true)
-    import('@/lib/supabase').then(({ getUserByWalletAddress }) => {
-      getUserByWalletAddress(walletAddress).then(profile => {
-        if (profile) {
-          if (profile.username) setUsername(profile.username)
-          // Always update user with fresh DB data - avatar, displayName etc
-          const current = useAuthStore.getState().user
-          if (current) {
-            useAuthStore.getState().setUser({
-              ...current,
-              id:            profile.id,
-              username:      profile.username ? profile.username + '.arc' : current.username,
-              displayName:   profile.display_name || current.displayName,
-              walletAddress: profile.wallet_address || current.walletAddress,
-              // Cache-buster ensures browser loads fresh image, not cached old one
-              avatar: profile.avatar_url
-                ? profile.avatar_url.split('?')[0]  // no cache-buster - stable URL
-                : null,
-            })
+    let live = true
+    let lastRun = 0
+    const run = (blocking: boolean) => {
+      lastRun = Date.now()
+      if (blocking) setChecking(true)
+      import('@/lib/supabase').then(({ getUserByWalletAddress }) => {
+        getUserByWalletAddress(walletAddress).then(profile => {
+          if (!live) return
+          if (profile) {
+            if (profile.username) setUsername(profile.username)
+            // Always update user with fresh DB data - avatar, displayName etc
+            const current = useAuthStore.getState().user
+            if (current) {
+              const avatar = profile.avatar_url ? profile.avatar_url.split('?')[0] : null  // no cache-buster - stable URL
+              const next = {
+                ...current,
+                id:            profile.id,
+                username:      profile.username ? profile.username + '.arc' : current.username,
+                displayName:   profile.display_name || current.displayName,
+                walletAddress: profile.wallet_address || current.walletAddress,
+                avatar,
+              }
+              // Only when something changed - no needless re-render of the app.
+              if (next.id !== current.id || next.username !== current.username || next.displayName !== current.displayName
+                || next.walletAddress !== current.walletAddress || next.avatar !== current.avatar) {
+                useAuthStore.getState().setUser(next)
+              }
+            }
           }
-        }
-        setChecking(false)
-        setChecked(true)
-      }).catch(() => { setChecking(false); setChecked(true) })
-    })
+          if (blocking) setChecking(false)
+          setChecked(true)
+        }).catch(() => { if (live) { if (blocking) setChecking(false); setChecked(true) } })
+      })
+    }
+    run(!checked)
+    const onFront = () => { if (document.visibilityState === 'visible' && Date.now() - lastRun > 30_000) run(false) }
+    document.addEventListener('visibilitychange', onFront)
+    window.addEventListener('focus', onFront)
+    return () => { live = false; document.removeEventListener('visibilitychange', onFront); window.removeEventListener('focus', onFront) }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [walletAddress, username])
 
