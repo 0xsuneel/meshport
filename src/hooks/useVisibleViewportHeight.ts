@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from 'react'
 import { opensKeyboard } from '@/hooks/useKeyboardOpen'
-import { keyboardInset, virtualKeyboard, holdKeyboardOverlay, disableKeyboardOverlay, keyboardOverlayDisabled, assumedKeyboardInset, setAssumedKeyboardInset } from '@/lib/keyboardOverlay'
+import { keyboardInset, virtualKeyboard, holdKeyboardOverlay, disableKeyboardOverlay } from '@/lib/keyboardOverlay'
 
 // The real, currently-visible viewport height in pixels - NOT the CSS
 // `100vh`/`100dvh` layout viewport. On iOS (Safari and Chrome, both
@@ -69,12 +69,6 @@ export function visibleFrame(): { top: number; height: number } {
   // the bottom nav floating mid-screen over an empty band (16 Nov).
   const inset = typing ? keyboardInset() : 0
   if (inset > 0) return { top, height: Math.round(vv.height - inset) }
-  // Keyboard neither resizing the page nor reported: use the estimate, but
-  // only while the viewport is still full size (if it shrinks later, that wins).
-  const assumed = typing ? assumedKeyboardInset() : 0
-  if (assumed > 0 && top === 0 && vv.height >= document.documentElement.clientHeight - 80) {
-    return { top: 0, height: Math.round(document.documentElement.clientHeight - assumed) }
-  }
   // Chromium (Android, desktop) with no field focused: the layout viewport is
   // the visible screen - its toolbars never draw over the page (that is
   // iPhone, which has no virtualKeyboard and keeps the rules below). Some
@@ -147,7 +141,6 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     let fullH = 0, fullW = 0, kb = false
     const ios = isAppleTouch()
     const apply = () => {
-      if (!opensKeyboard(document.activeElement)) setAssumedKeyboardInset(0)
       const { top, height } = visibleFrame()
       if (window.innerWidth !== fullW) { fullW = window.innerWidth; fullH = 0 }
       fullH = Math.max(fullH, height)
@@ -231,40 +224,8 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     // Only a field that opens the keyboard: a tapped button takes focus too,
     // and measuring here (it reads layout) on every button tap landed right
     // as the sheet it opens began to move.
-    // Android keyboard drawn over the app but never reported (boundingRect
-    // stays 0, no geometrychange, window not resized): the keyboard sits on
-    // top of the chat box. Checked once the keyboard has had time to rise -
-    // a field in the lower half of the screen with nothing making room for
-    // it means the overlay isn't working here, so hand resizing back to the
-    // browser for good. A hidden keyboard (hardware keyboard) costs nothing:
-    // the browser's own resize is simply used instead.
-    let verifyTimer = 0
-    const verifyKeyboardReported = () => {
-      const el = document.activeElement
-      if (!(el instanceof HTMLElement) || !opensKeyboard(el) || ios) return
-      let coarse = false
-      try { coarse = window.matchMedia('(pointer: coarse)').matches } catch { /* no matchMedia */ }
-      if (!coarse || keyboardInset() > 0 || assumedKeyboardInset() > 0) return
-      const { top, height } = visibleFrame()
-      const layoutH = document.documentElement.clientHeight
-      if (height < layoutH - 80) return // the viewport did shrink: all fine
-      if (el.getBoundingClientRect().bottom < top + height * 0.45) return // high up: can't be covered
-      const vk = virtualKeyboard()
-      if (vk?.overlaysContent && !keyboardOverlayDisabled()) {
-        // Step 1: the overlay isn't reporting - let the browser resize instead.
-        disableKeyboardOverlay()
-        schedule()
-        clearTimeout(verifyTimer); verifyTimer = window.setTimeout(verifyKeyboardReported, 700)
-        return
-      }
-      // Step 2: still nothing moved (a webview that neither resizes nor
-      // reports): make room for a typical keyboard height.
-      setAssumedKeyboardInset(Math.round(layoutH * 0.36))
-      apply(); settle()
-    }
     const onFocus = (e: FocusEvent) => {
       if (!opensKeyboard(e.target as Element | null)) return
-      clearTimeout(verifyTimer); verifyTimer = window.setTimeout(verifyKeyboardReported, 700)
       apply(); if (visibleFrame().height < document.documentElement.clientHeight - 80) settle()
     }
     document.addEventListener('touchstart', onTouchStart, { passive: true, capture: true })
@@ -289,13 +250,14 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     window.addEventListener('scroll', schedule)
     // Android keyboard drawn over the app (only while this frame is up):
     // no viewport event fires, this does.
+    disableKeyboardOverlay()
     const releaseOverlay = holdKeyboardOverlay()
     const vk = virtualKeyboard()
     vk?.addEventListener('geometrychange', schedule)
     return () => {
       vk?.removeEventListener('geometrychange', schedule)
       releaseOverlay()
-      cancelAnimationFrame(raf); clearTimeout(verifyTimer); setAssumedKeyboardInset(0)
+      cancelAnimationFrame(raf)
       cancelAnimationFrame(recheckRaf); clearTimeout(recheckTimer); clearTimeout(docFixTimer)
       document.removeEventListener('touchstart', onTouchStart, { capture: true })
       document.removeEventListener('touchend', onTouchEnd, { capture: true })

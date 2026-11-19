@@ -40,32 +40,23 @@ export function keyboardInset(): number {
  * switch it off under each other. Phones and tablets only.
  */
 let overlayUsers = 0
-// Set once the overlay is seen NOT to report the keyboard (some Android
-// webviews / installed-app shells accept overlaysContent = true, which stops
-// the window resizing, yet never give boundingRect or fire geometrychange).
-// The keyboard then covers the chat box and nothing makes room for it. From
-// then on the app lets the browser resize the page itself (resizes-content).
+// Switched off for good by the app frame (useVisibleFrame). Android browsers
+// and webviews (Via, in-app browsers) report this API unreliably: the keyboard
+// rect stayed non-zero after the keyboard closed, or was subtracted on top of
+// a window the browser had already shrunk - the chat sat in the top half with
+// a blank band under it (19 Nov). The browser's own resize (interactive-widget
+// =resizes-content) is what every Android browser does right, so the frame
+// follows that instead.
 let overlayDisabled = false
 export function disableKeyboardOverlay(): void {
-  if (overlayDisabled) return
   overlayDisabled = true
   const vk = virtualKeyboard()
   try { if (vk) vk.overlaysContent = false } catch { /* ignore */ }
 }
-export function keyboardOverlayDisabled(): boolean { return overlayDisabled }
-
-// Last resort for Android webviews that neither resize for the keyboard nor
-// report it (no viewport change, no boundingRect): an estimate of its height
-// (px), set by useVisibleFrame only while a field is focused, so the frame
-// still makes room above the keys. Ignored the moment the viewport itself
-// shrinks (visibleFrame).
-let assumedInset = 0
-export function setAssumedKeyboardInset(px: number): void { assumedInset = Math.max(0, px) }
-export function assumedKeyboardInset(): number { return assumedInset }
 
 export function holdKeyboardOverlay(): () => void {
-  const vk = virtualKeyboard()
   if (overlayDisabled) return () => {}
+  const vk = virtualKeyboard()
   let coarse = false
   try { coarse = window.matchMedia('(pointer: coarse)').matches } catch { /* no matchMedia */ }
   if (!vk || !coarse) return () => {}
