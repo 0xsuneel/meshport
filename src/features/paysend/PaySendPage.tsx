@@ -1700,7 +1700,7 @@ export function PaySendPage() {
                     { label: 'Network', value: 'Arc Testnet' },
                     { label: 'Network fee', value: estimatedFee > 0 ? `~${formatAmount(estimatedFee, 4)} USDC` : 'Free' },
                     { label: 'Time', value: timeLabel },
-                    ...(txHash ? [{ label: 'Transaction', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, onCopy: copyHash, copied: hashCopied }] : []),
+                    ...(txHash ? [{ label: 'Transaction hash', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, onCopy: copyHash, copied: hashCopied }] : []),
                   ],
                 }}
                   title={payPending ? 'Payment Submitted' : 'Paid Successfully'}
