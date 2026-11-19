@@ -1,4 +1,5 @@
 import { PinSheet } from '@/components/ui/PinSheet'
+import { PhotoFill, UserPhoto } from '@/components/ui/PhotoFill'
 import { useBusinessTab, useHubLabel, useMerchant } from '@/lib/merchant'
 import { fetchBtcPriceUsd, lastKnownBtcPrice } from '@/lib/btcPrice'
 import { fetchEurcPriceUsd, lastKnownEurcPrice } from '@/lib/eurcPrice'
@@ -4150,8 +4151,9 @@ export function HomePage() {
                 {searchPeople.map(p => (
                   <div key={p.id} {...pressable(() => openChatWithUser(p))}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px', borderRadius: 12, cursor: 'pointer', opacity: navigatingId === p.id ? 0.5 : 1 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
+                    <div style={{ position: 'relative', width: 34, height: 34, borderRadius: '50%', background: 'var(--brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
                       {(p.display_name || p.username || 'U').charAt(0).toUpperCase()}
+                      {p.avatar_url ? <PhotoFill src={p.avatar_url} /> : <UserPhoto name={p.username} />}
                     </div>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>{highlightMatch(p.display_name || p.username || '', searchQuery.trim())}</div>

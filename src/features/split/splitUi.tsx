@@ -1,5 +1,6 @@
 // Small shared pieces of the Split screens: the page header, a person's
 // avatar, cards, a progress bar, status pills and the bottom action bar.
+import { UserPhoto } from '@/components/ui/PhotoFill'
 import type { CSSProperties, ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { RECENT_AVATAR_COLORS } from '@/lib/recentContacts'
@@ -31,7 +32,7 @@ export function SplitAvatar({ name, username, avatar, you, size = 40 }: { name?:
   if (avatar && !you) return <img src={avatar} alt="" decoding="async" style={{ ...base, objectFit: 'cover', display: 'block' }} />
   return (
     <div aria-hidden style={{ ...base, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800,
-      fontSize: Math.round(size * 0.38), background: you ? 'var(--brand)' : colorFor(username || name || '?') }}>{label}</div>
+      fontSize: Math.round(size * 0.38), position: 'relative', background: you ? 'var(--brand)' : colorFor(username || name || '?') }}>{label}{!you && <UserPhoto name={username} />}</div>
   )
 }
 
