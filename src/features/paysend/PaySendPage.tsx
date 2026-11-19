@@ -23,7 +23,7 @@ import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { useWalletStore, useAuthStore, useUIStore } from '@/store'
-import { formatAmount, shortenAddress, midShortenAddress, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
+import { formatAmount, shortenAddress, midShortenAddress, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { sendUSDC, sendEURC, estimateTransferFee, isValidAddress, trackPendingSend } from '@/lib/arcService'
 import { classifyFailure, recordFailure, FAILURE_MESSAGES } from '@/lib/failure'
 import { arcRpcJson } from '@/lib/arc'
@@ -38,8 +38,8 @@ import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import { SuccessReceipt, ReceiptAmount } from '@/components/ui/SuccessReceipt'
-import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
-import { ActivityRow } from '@/features/activity/ActivityPage'
+import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton } from '@/components/ui/DesktopHistoryPanel'
+import { ActivityRow, DetailSheet } from '@/features/activity/ActivityPage'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
@@ -1965,28 +1965,11 @@ export function PaySendPage() {
       }
       extra={
       <AnimatePresence>
-        {payHistDetail && (() => {
-          const r = payHistDetail
-          const toLabel = ((r.metadata?.toUsername as string | undefined) || '').replace(/\.arc$/, '')
-            || (r.counterpartyAddress ? shortenAddress(r.counterpartyAddress) : 'Unknown recipient')
-          return (
-            <DesktopHistoryDetail
-              onClose={() => { payFlash.closed(r.id); setPayHistDetail(null) }}
-              title="Payment Details"
-              icon={<svg width="20" height="20" viewBox="0 0 14 14" fill="none"><path d="M2 12L12 2M12 2H6M12 2V8" stroke="var(--danger)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-              iconColor="var(--danger)"
-              amountLabel={`-${formatAmount(r.amount, 8)} ${r.tokenSymbol}`}
-              amountColor="var(--danger)"
-              rows={[
-                { label: 'To', value: toLabel },
-                { label: 'Time', value: timeAgo(r.createdAt) },
-                { label: 'Status', value: r.status === 'completed' ? 'Completed' : r.status === 'failed' ? 'Failed' : 'Pending' },
-                ...(r.txHash ? [{ label: 'Tx Hash', value: `${r.txHash.slice(0, 8)}…${r.txHash.slice(-6)}` }] : []),
-              ]}
-              explorerLinks={r.txHash ? [{ label: 'View on Arc Explorer', href: arcExplorerTxUrl(r.txHash) }] : undefined}
-            />
-          )
-        })()}
+        {/* The same Payment details card as Activity (19 Nov 2026), in its popup. */}
+        {payHistDetail && (
+          <DetailSheet key={`pay-hist-${payHistDetail.id}`} record={payHistDetail}
+            onClose={() => { payFlash.closed(payHistDetail.id); setPayHistDetail(null) }} />
+        )}
       </AnimatePresence>
       }
     />
