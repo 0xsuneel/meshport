@@ -6,6 +6,7 @@
 // The error shows in one place on both: under the title, in red, and the
 // dots shake. With no passcode set, a plain confirm button stands in for the
 // keypad, so it's still an explicit "are you sure" step.
+import { useHideFloating } from '@/lib/floatingHide'
 import { UserPhoto, usernameOf } from './PhotoFill'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence } from 'framer-motion'
@@ -151,6 +152,8 @@ export function PinSheet(p: PinSheetProps) {
   // passcode step flashed in after the passcode was already typed (chat Pay).
   const justApproved = !p.open && wasOpenForLinger.current && approvedAt.current > 0 && performance.now() - approvedAt.current < APPROVED_SHOW_MS
   const shownOpen = p.open || linger || justApproved
+  // Nothing floats over the keypad (the admin's mode switch covered a key).
+  useHideFloating(shownOpen)
   // While it only lingers to show the tick, the screen has already moved on:
   // it is not a layer any more - Back and taps on the dim aren't its to
   // take. (A screen tidying up its own Back entry right then fires a Back;
