@@ -6,6 +6,7 @@
 // (lib/scratchCards). A card's prize is decided by the server when the
 // payment is confirmed and is only learned by scratching it - never listed.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useStaggerIn } from '@/lib/staggerIn'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
@@ -106,6 +107,7 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
   // The page's sections arrive one after another as it opens (19 Nov 2026) -
   // banner, balances, lifetime, today, the cards, offers, ways to earn.
   const revealRef = useRef<HTMLDivElement>(null)
+  useStaggerIn(revealRef, true)
   const load = useCallback(async () => {
     try {
       const [s, list, t, w] = await Promise.all([
