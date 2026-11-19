@@ -105,6 +105,18 @@ Deno.serve(async req => {
     }
   }
 
+  // Once the account uses the shared identity, an app that can't share
+  // (an older version still open on another device) never moves the link
+  // away from it - that flip is what blanked the other device. It gets
+  // "not linked" and signs in properly once it updates. Same for the app's
+  // own fallback (`noShare`): it never pulls a shared link away either.
+  if (user.auth_uid && user.auth_uid !== sessionId && (body.canShare !== true || body.noShare === true)) {
+    const { data: linked } = await db.auth.admin.getUserById(user.auth_uid).catch(() => ({ data: null as any }))
+    if (linked?.user?.email === `wallet-${userId}@accounts.meshport.xyz`) {
+      return jsonFor(req, { error: 'Update the app to sign in on this device' }, 409)
+    }
+  }
+
   if (user.auth_uid !== sessionId) {
     const { error } = await db.from('users').update({ auth_uid: sessionId }).eq('id', userId)
     if (error) return jsonFor(req, { error: 'Could not link session' }, 500)
