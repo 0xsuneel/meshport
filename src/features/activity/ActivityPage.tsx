@@ -997,8 +997,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     txDetail = {
       title: 'Payment details', status: receiptStatus, amountLabel: 'Amount', amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC',
       note: noteText || undefined, pill: shop ? { icon: 'qr', text: 'Shop payment' } : merchantOrderDetail ? { icon: 'list', text: orderWord }
-        : viaChat ? { icon: 'chat', text: type === 'send' ? 'Paid in chat' : 'Received in chat' }
-        : type === 'send' ? { icon: 'pay', text: 'Sent' } : { icon: 'receive', text: 'Received' },
+        : viaChat ? { icon: 'chat', text: type === 'send' ? 'Paid' : 'Received' }
+        : type === 'send' ? { icon: 'pay', text: 'Paid' } : { icon: 'receive', text: 'Received' },
       reason: reasonNote ?? undefined,
       parties: type === 'send' ? [them, youParty('From')] : [them, youParty('To')],
       steps: ['Payment approved',
