@@ -74,6 +74,37 @@ Deno.serve(async req => {
   } catch { ok = false }
   if (!ok) return jsonFor(req, { error: 'Signature does not match this account' }, 403)
 
+  // 4. One account, one sign-in identity across all its devices (19 Nov 2026).
+  // Every access rule trusts users.auth_uid = auth.uid(), and that column
+  // holds one session. Re-pointing it at each device's own (anonymous)
+  // session meant the phone and the computer took turns: unlocking the
+  // wallet on one hid the chats, splits and business data on the other
+  // until it unlocked again. Now, when the account is already linked to
+  // another session, this device is given THAT identity instead: the server
+  // (after the wallet's signature above - the same proof the link needs)
+  // sets a fresh random password on the linked identity, under an address
+  // only MeshPort uses, and returns it; the app signs in with it once and
+  // the link never changes. A linked identity with a real e-mail login is
+  // left alone (its owner signs in with it on every device already).
+  // Only for an app that asks for it (`canShare`); `noShare`: the app couldn't
+  // sign in that way (password sign-in off) - link this session directly.
+  if (user.auth_uid && user.auth_uid !== sessionId && body.canShare === true && body.noShare !== true) {
+    const { data: linked } = await db.auth.admin.getUserById(user.auth_uid).catch(() => ({ data: null as any }))
+    const linkedUser = linked?.user
+    if (linkedUser) {
+      const deviceEmail = `wallet-${userId}@accounts.meshport.xyz`
+      const ours = !linkedUser.email || linkedUser.email === deviceEmail
+      if (ours) {
+        const bytes = new Uint8Array(32); crypto.getRandomValues(bytes)
+        const password = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
+        const { error: upErr } = await db.auth.admin.updateUserById(user.auth_uid, { email: deviceEmail, email_confirm: true, password })
+        // Couldn't (e.g. e-mail sign-in switched off): link directly below, as before.
+        if (!upErr) return jsonFor(req, { ok: true, adopt: { email: deviceEmail, password } })
+        console.warn('[bind-session] sharing the sign-in failed, linking directly:', upErr.message)
+      }
+    }
+  }
+
   if (user.auth_uid !== sessionId) {
     const { error } = await db.from('users').update({ auth_uid: sessionId }).eq('id', userId)
     if (error) return jsonFor(req, { error: 'Could not link session' }, 500)
