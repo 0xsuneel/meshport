@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Send, Bell, Users, CheckCircle, XCircle, Trash2 } from 'lucide-react'
 import { AdminCard } from '@/components/admin/AdminCard'
-import { supabase } from '@/lib/supabase'
+import { adminDb as supabase } from '@/lib/adminDb'
 
 interface BroadcastRecord {
   id: string
