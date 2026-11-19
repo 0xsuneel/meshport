@@ -15,7 +15,7 @@ import {
   fetchRewardSummary, fetchScratchCards, scratchCard, emitCardCount, fmtUsdcMicro, usdcClaimPoints, fetchRewardToday, type RewardToday, fetchScratchHistory, type ScratchWin,
   MIN_USDC_CLAIM_MICRO, type ScratchPrize,
 } from '@/lib/scratchCards'
-import { useUIStore } from '@/store'
+import { useAuthStore, useUIStore } from '@/store'
 import { timeAgo } from '@/lib/utils'
 import { ActiveOffers } from './ActiveOffers'
 
@@ -59,6 +59,12 @@ function CountUp({ value, format }: { value: number; format: (v: number) => stri
   return <>{format(shown)}</>
 }
 
+// The last numbers this page loaded, for this account (19 Nov 2026): a
+// reopen shows them at once and refreshes behind them - no placeholders
+// flashing and the page below them jumping each time Rewards opens.
+type ScratchSnap = { key: string; usdcMicro: number; usdcLifetime: number; today: RewardToday | null; wins: ScratchWin[] | null; cards: { id: string; createdAt: string }[] | null }
+let lastScratch: ScratchSnap | null = null
+
 export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsdc, onClaimPoints, onOpenPoints, onOpenUsdc, onUsdc, onUsdcLifetime, lifetimePoints, claiming, refreshKey }: {
   isDesktop: boolean
   totalPoints: number
@@ -83,14 +89,16 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
   refreshKey: number
 }) {
   const navigate = useNavigate()
-  const [usdcMicro, setUsdcMicro] = useState(0)
+  const acct = (useAuthStore(s => s.walletAddress) ?? '').toLowerCase()
+  const [snap] = useState(() => (lastScratch && acct && lastScratch.key === acct ? lastScratch : null))
+  const [usdcMicro, setUsdcMicro] = useState(snap?.usdcMicro ?? 0)
   useEffect(() => { onUsdc?.(usdcMicro) }, [usdcMicro, onUsdc])
-  const [usdcLifetime, setUsdcLifetime] = useState(0)
-  const [today, setToday] = useState<RewardToday | null>(null)
-  const [wins, setWins] = useState<ScratchWin[] | null>(null)
+  const [usdcLifetime, setUsdcLifetime] = useState(snap?.usdcLifetime ?? 0)
+  const [today, setToday] = useState<RewardToday | null>(snap?.today ?? null)
+  const [wins, setWins] = useState<ScratchWin[] | null>(snap?.wins ?? null)
   const limitHit = !!today && today.cards >= today.cardsLimit
   useEffect(() => { onUsdcLifetime?.(usdcLifetime) }, [usdcLifetime, onUsdcLifetime])
-  const [cards, setCards] = useState<{ id: string; createdAt: string }[] | null>(null)
+  const [cards, setCards] = useState<{ id: string; createdAt: string }[] | null>(snap?.cards ?? null)
   const [open, setOpen] = useState<{ id: string; look: number } | null>(null)
   const usdcTile = useRef<HTMLDivElement>(null)
   const ptsTile = useRef<HTMLDivElement>(null)
@@ -103,7 +111,7 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
   // in piece by piece - $0.00, "–", "No cards right now", then the real
   // state). Everything is read together and shown at once; a refresh keeps
   // what's on screen until its new numbers are in.
-  const [ready, setReady] = useState(false)
+  const [ready, setReady] = useState(!!snap)
   // The page's sections arrive one after another as it opens (19 Nov 2026) -
   // banner, balances, lifetime, today, the cards, offers, ways to earn.
   const revealRef = useRef<HTMLDivElement>(null)
@@ -125,6 +133,10 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
     } catch { /* weak network: keep what's shown */ }
   }, [])
   useEffect(() => { void load() }, [load, refreshKey])
+  // Kept up to date (a scratched card leaves the list) for the next opening.
+  useEffect(() => {
+    if (ready && acct) lastScratch = { key: acct, usdcMicro, usdcLifetime, today, wins, cards }
+  }, [ready, acct, usdcMicro, usdcLifetime, today, wins, cards])
 
   const bump = (el: HTMLElement | null) => { if (!el) return; el.classList.remove('sr-bump'); void el.offsetWidth; el.classList.add('sr-bump') }
 
@@ -242,20 +254,17 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
           </b>
         </div>
       </div>
-      {!ready && (
-        <div aria-hidden style={{ margin: `10px ${m}px 0`, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-          {[96, 132, 96].map((w, i) => <Skeleton key={i} style={{ width: w, height: 28, borderRadius: 999 }} />)}
-        </div>
-      )}
-      {ready && today && (
+      {/* The same chips while loading (a placeholder in place of each value),
+          so the page below never moves when the numbers arrive. */}
+      {(!ready || today) && (
         <div style={{ margin: `10px ${m}px 0`, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-          {[
-            ['Today', `${Math.min(today.points, today.pointsLimit)} / ${today.pointsLimit} pts`],
-            ['USDC today', `${fmtUsdcMicro(Math.min(today.usdcMicro, today.usdcLimitMicro))} / ${fmtUsdcMicro(today.usdcLimitMicro)}`],
-            ['Cards today', `${Math.min(today.cards, today.cardsLimit)} / ${today.cardsLimit}`],
-          ].map(([k, v]) => (
-            <span key={k} style={{ fontSize: 12, padding: '6px 10px', borderRadius: 999, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-secondary)' }}>
-              {k} <b style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{v}</b>
+          {([
+            ['Today', today ? `${Math.min(today.points, today.pointsLimit)} / ${today.pointsLimit} pts` : null, 62],
+            ['USDC today', today ? `${fmtUsdcMicro(Math.min(today.usdcMicro, today.usdcLimitMicro))} / ${fmtUsdcMicro(today.usdcLimitMicro)}` : null, 84],
+            ['Cards today', today ? `${Math.min(today.cards, today.cardsLimit)} / ${today.cardsLimit}` : null, 40],
+          ] as [string, string | null, number][]).map(([k, v, w]) => (
+            <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, padding: '6px 10px', borderRadius: 999, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-secondary)' }}>
+              {k} {ready && v ? <b style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{v}</b> : <Skeleton style={{ width: w, height: 12, borderRadius: 5 }} />}
             </span>
           ))}
         </div>
