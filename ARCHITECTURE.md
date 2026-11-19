@@ -202,4 +202,6 @@ The server keeps off-chain data: chats, splits, rewards, P2P, business data and 
    The token is for the account's identity (an admin magic-link token, no email sent). The identity is created once under `wallet-<account id>@accounts.meshport.xyz`. The token comes back in the response, never by email.
 3. **Same identity on every device.** The app swaps the token for a session (`verifyOtp`). The identity itself never changes, so other devices stay signed in. Never set a password on it: a password change signs every other device out.
 
+The identity carries a server-only tag, `app_metadata.meshport_wallet = <account id>`, that only the server can write. `wallet-login` trusts only an identity tagged for that exact account, so nobody can claim it by registering the address themselves. The app's rule that logs non-admin email sign-ins out skips tagged identities: wallet sign-in uses an email-type token behind the scenes, but it is not an email login.
+
 `bind-session` is the older path, kept as a fallback. It links a device's own session, or hands it the shared identity, after a wallet signature. Once an account uses the shared identity, it refuses to move the link away from it. Accounts whose identity has a real email sign in with that email.

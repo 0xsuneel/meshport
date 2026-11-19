@@ -96,9 +96,11 @@ Deno.serve(async req => {
       const deviceEmail = `wallet-${userId}@accounts.meshport.xyz`
       const ours = !linkedUser.email || linkedUser.email === deviceEmail
       if (ours) {
-        let ready = linkedUser.email === deviceEmail
+        let ready = linkedUser.email === deviceEmail && linkedUser.app_metadata?.meshport_wallet === userId
         if (!ready) {
-          const { error: upErr } = await db.auth.admin.updateUserById(user.auth_uid, { email: deviceEmail, email_confirm: true })
+          const { error: upErr } = await db.auth.admin.updateUserById(user.auth_uid, {
+            email: deviceEmail, email_confirm: true, app_metadata: { ...(linkedUser.app_metadata ?? {}), meshport_wallet: userId },
+          })
           ready = !upErr
           if (upErr) console.warn('[bind-session] could not give the identity its address:', upErr.message)
         }

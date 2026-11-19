@@ -90,15 +90,19 @@ Deno.serve(async req => {
     const lu = linked?.user
     if (lu) {
       if (lu.email && lu.email !== email) return jsonFor(req, { error: 'This account signs in with its e-mail' }, 409)
-      if (!lu.email) {
-        const { error } = await db.auth.admin.updateUserById(lu.id, { email, email_confirm: true })
+      // The account's own linked identity: give it the address (once) and the
+      // server-only tag that marks it as this account's wallet sign-in.
+      if (!lu.email || lu.app_metadata?.meshport_wallet !== user.id) {
+        const { error } = await db.auth.admin.updateUserById(lu.id, {
+          email, email_confirm: true, app_metadata: { ...(lu.app_metadata ?? {}), meshport_wallet: user.id },
+        })
         if (error) return jsonFor(req, { error: 'Could not prepare sign-in' }, 500)
       }
       identityId = lu.id
     }
   }
   if (!identityId) {
-    const { data: created, error } = await db.auth.admin.createUser({ email, email_confirm: true })
+    const { data: created, error } = await db.auth.admin.createUser({ email, email_confirm: true, app_metadata: { meshport_wallet: user.id } })
     if (created?.user?.id) identityId = created.user.id
     else if (!error || !/already|exists|registered/i.test(error.message)) return jsonFor(req, { error: 'Could not prepare sign-in' }, 500)
   }
@@ -109,6 +113,12 @@ Deno.serve(async req => {
   const linkUserId: string | undefined = (link as any)?.user?.id
   if (linkErr || !tokenHash || !linkUserId) return jsonFor(req, { error: 'Could not issue sign-in' }, 500)
   if (identityId && identityId !== linkUserId) return jsonFor(req, { error: 'Sign-in identity mismatch' }, 500)
+  // Only an identity the server made / tagged for THIS account - never one
+  // someone else registered under the same address (app_metadata can only be
+  // written by the server).
+  if ((link as any)?.user?.app_metadata?.meshport_wallet !== user.id) {
+    return jsonFor(req, { error: 'Sign-in identity not recognised' }, 403)
+  }
 
   // 7. The account points at that identity (every access rule checks it).
   if (user.auth_uid !== linkUserId) {
