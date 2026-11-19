@@ -18,6 +18,7 @@ import { useUIStore } from '@/store'
 import { SuccessPromo, type PromoFeature } from './SuccessPromo'
 import { PoweredByFooter } from './PoweredByFooter'
 import { ActionIcon, type ActionIconName } from './ActionIcon'
+import { UserPhoto } from './PhotoFill'
 
 export interface TxParty {
   label: 'From' | 'To'
@@ -259,10 +260,11 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                       </div>
                     )}
                   </div>
-                  <span aria-hidden style={{ width: 50, height: 50, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 17,
+                  <span aria-hidden style={{ position: 'relative', overflow: 'hidden', width: 50, height: 50, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 17,
                     color: p.you ? 'var(--warning-text)' : 'var(--brand-text)',
                     background: p.you ? 'color-mix(in srgb, var(--warning) 16%, transparent)' : 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>
                     {initials(p.handle || p.name)}
+                    <UserPhoto name={p.handle} />
                   </span>
                 </div>
               </Rv>
@@ -273,8 +275,8 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
               <div style={{ fontSize: 13, fontWeight: 700, color: muted, marginBottom: 2 }}>To</div>
               {d.recipients.map((r, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i ? '1px solid var(--border)' : 'none', fontSize: 14 }}>
-                  <span style={{ width: 30, height: 30, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 12,
-                    color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>{initials(r.name)}</span>
+                  <span style={{ position: 'relative', overflow: 'hidden', width: 30, height: 30, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 12,
+                    color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>{initials(r.name)}<UserPhoto name={r.name} /></span>
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
                   <b style={{ fontWeight: 700 }}>{r.amount}</b>
                 </div>

@@ -6,6 +6,7 @@
 // The error shows in one place on both: under the title, in red, and the
 // dots shake. With no passcode set, a plain confirm button stands in for the
 // keypad, so it's still an explicit "are you sure" step.
+import { UserPhoto, usernameOf } from './PhotoFill'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { WalletConfirmFrame, type WalletConfirmRequest } from '@/components/wallet/WalletConfirmFrame'
@@ -285,9 +286,10 @@ export function PinSheet(p: PinSheetProps) {
 function SummaryCard({ label, name, detail, amount, unit }: NonNullable<PinSheetProps['card']>) {
   return (
     <div className="mt-4 flex items-center gap-3 rounded-[18px] bg-bg px-4 py-3.5 text-left">
-      <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0 text-[18px] font-extrabold text-brand-text"
+      <div className="relative w-11 h-11 rounded-full flex items-center justify-center shrink-0 text-[18px] font-extrabold text-brand-text"
         style={{ background: 'color-mix(in srgb, var(--brand) 16%, transparent)' }}>
         {name.trim().charAt(0).toUpperCase() || '?'}
+        <UserPhoto name={usernameOf(detail) ? detail : name} />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[13px] text-text-secondary">{label}</p>

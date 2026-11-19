@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from 'react'
+import { UserPhoto } from './PhotoFill'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, Check, ChevronDown, Clock, Copy, ExternalLink, Share2, X, Zap } from 'lucide-react'
 import { useUIStore } from '@/store'
@@ -529,6 +530,7 @@ export function SuccessReceipt({
                         {payee && <span style={{ position: 'relative', width: 48, height: 48, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center', fontSize: 17, fontWeight: 800,
                           color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>
                           {payee.initial}
+                          <UserPhoto name={payee.handle} />
                           <span style={{ position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: '50%', display: 'grid', placeItems: 'center', border: '2px solid var(--surface)',
                             background: status === 'failed' ? 'var(--danger)' : status === 'pending' ? 'var(--warning)' : 'var(--success)' }}>
                             {status === 'failed' ? <X size={9} color="#fff" strokeWidth={4} /> : status === 'pending' ? <Clock size={9} color="#fff" strokeWidth={3.4} /> : <Check size={9} color="#fff" strokeWidth={4} />}
