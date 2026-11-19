@@ -1,39 +1,34 @@
-// A small "from MeshPort" card under a success receipt (preview "A", 17 Nov):
-// one of the app's own features, opening its real page. Never an invented
-// offer - a paid partner card can take this slot later, labelled "Sponsored".
-// It sits below the receipt card, never inside it: people screenshot the
-// receipt as proof of payment.
-import { useMemo } from 'react'
+// A small "For you" card under a success receipt: one ad from Admin → Ads,
+// picked at random each time (MeshPort's own features and partners alike).
+// MeshPort's say "From MeshPort"; a partner's "Sponsored · <name>" and opens
+// their site in a new tab. It sits below the receipt card, never inside it:
+// people screenshot the receipt as proof of payment.
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeftRight, ChevronRight, Globe, Users } from 'lucide-react'
-import { useSettingsStore } from '@/store/settingsStore'
+import { ChevronRight, ExternalLink } from 'lucide-react'
 import { EASE_OUT } from '@/lib/motion'
+import { useAds, openAd, isExternalAd, type Ad } from '@/lib/ads'
+import { AdArt } from './AdArt'
 
 export type PromoFeature = 'multichain' | 'swap' | 'p2p'
-
-const PROMOS: Array<{ id: PromoFeature; to: string; title: string; line: string; cta: string; Icon: typeof Globe; tile: string; flag?: string }> = [
-  { id: 'multichain', to: '/multichain', title: 'Multichain Hub', line: 'Your USDC across 20+ chains, in one place', cta: 'Open', Icon: Globe, tile: 'linear-gradient(135deg, #12665F, #2BA393)' },
-  { id: 'swap', to: '/swap', title: 'Swap USDC ⇄ EURC', line: 'Change currency in seconds on Arc', cta: 'Swap', Icon: ArrowLeftRight, tile: 'linear-gradient(135deg, #2B5CE6, #5B8DEF)' },
-  { id: 'p2p', to: '/p2p', title: 'P2P Marketplace', line: 'Buy and sell USDC safely with escrow', cta: 'Explore', Icon: Users, tile: 'linear-gradient(135deg, #C2410C, #F59E0B)', flag: 'p2p_enabled' },
-]
+const FEATURE_LINK: Record<PromoFeature, string> = { multichain: '/multichain', swap: '/swap', p2p: '/p2p' }
 
 /** `exclude`: the feature this receipt is for (Swap's receipt never shows Swap). */
 export function SuccessPromo({ exclude, revealed = true, instant = false }: { exclude?: PromoFeature; revealed?: boolean; /** Shown by its parent's reveal: no fade of its own. */ instant?: boolean }) {
   const navigate = useNavigate()
-  const settings = useSettingsStore(s => s.settings)
-  // One card per receipt, picked once (no change while it's on screen); only
-  // features this account can open.
-  const promo = useMemo(() => {
-    const open = PROMOS.filter(p => p.id !== exclude && (!p.flag || settings[p.flag]?.enabled !== false))
-    return open.length ? open[Math.floor(Math.random() * open.length)] : null
+  const ads = useAds('success')
+  // One ad per receipt, picked once - it never changes while it's on screen.
+  const [ad, setAd] = useState<Ad | null>(null)
+  const key = ads.map(a => a.id).join(',')
+  useEffect(() => {
+    if (ad) return
+    const open = ads.filter(a => !exclude || a.link !== FEATURE_LINK[exclude])
+    if (open.length) setAd(open[Math.floor(Math.random() * open.length)])
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exclude])
-  if (!promo) return null
-  const { Icon } = promo
-  // The approved preview's "For you" card: a quiet card in the app's card
-  // style - a coloured tile, the title, one line, and "From MeshPort" small
-  // (where a partner's card would say "Sponsored · their site").
+  }, [key, exclude])
+  if (!ad) return null
+  const external = isExternalAd(ad)
   return (
     <motion.div
       initial={instant ? false : { opacity: 0, y: 8 }}
@@ -41,21 +36,19 @@ export function SuccessPromo({ exclude, revealed = true, instant = false }: { ex
       transition={{ duration: 0.35, delay: revealed ? 0.35 : 0, ease: EASE_OUT }}
       style={{ width: '100%', flexShrink: 0 }}
     >
-      <button type="button" onClick={() => navigate(promo.to)}
+      <button type="button" onClick={() => openAd(ad, navigate)}
         className="w-full text-left active:scale-[0.99] transition-transform"
         style={{
           display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, cursor: 'pointer', fontFamily: 'inherit',
           background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)',
         }}>
-        <span style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', background: promo.tile }}>
-          <Icon size={22} strokeWidth={2.2} />
-        </span>
+        <AdArt ad={ad} size={44} radius={12} />
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{promo.title}</span>
-          <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{promo.line}</span>
-          <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-muted)', marginTop: 3 }}>From MeshPort</span>
+          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ad.title}</span>
+          {ad.body && <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ad.body}</span>}
+          <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-muted)', marginTop: 3 }}>{ad.sponsor ? `Sponsored · ${ad.sponsor}` : 'From MeshPort'}</span>
         </span>
-        <ChevronRight size={18} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+        {external ? <ExternalLink size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} /> : <ChevronRight size={18} color="var(--text-muted)" style={{ flexShrink: 0 }} />}
       </button>
     </motion.div>
   )

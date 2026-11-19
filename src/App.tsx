@@ -127,6 +127,7 @@ const P2PAdminPage             = lazyRetry(() => import('./features/p2p/P2PAdmin
 const TreasuryAdminPage        = lazyRetry(() => import('./features/admin/TreasuryAdminPage').then(m => ({ default: m.TreasuryAdminPage })), 'TreasuryAdminPage')
 const AdminAnalyticsPage       = lazyRetry(() => import('./features/admin/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })), 'AdminAnalyticsPage')
 const NewsAdminPage = lazyRetry(() => import('./features/admin/NewsAdminPage').then(m => ({ default: m.NewsAdminPage })), 'NewsAdminPage')
+const AdsAdminPage = lazyRetry(() => import('./features/admin/AdsAdminPage').then(m => ({ default: m.AdsAdminPage })), 'AdsAdminPage')
 const NotificationBroadcastPage = lazyRetry(() => import('./features/admin/NotificationBroadcastPage').then(m => ({ default: m.NotificationBroadcastPage })), 'NotificationBroadcastPage')
 const AdminMaintenancePage     = lazyRetry(() => import('./features/admin/MaintenancePage').then(m => ({ default: m.MaintenancePage })), 'AdminMaintenancePage')
 const AdminLogsPage            = lazyRetry(() => import('./features/admin/LogsPage').then(m => ({ default: m.LogsPage })), 'AdminLogsPage')
@@ -438,6 +439,7 @@ const router = createBrowserRouter([
       { path: 'analytics',   element: <AdminAnalyticsPage /> },
       { path: 'notifications', element: <NotificationBroadcastPage /> },
       { path: 'news',        element: <NewsAdminPage /> },
+      { path: 'ads',         element: <AdsAdminPage /> },
       { path: 'maintenance', element: <AdminMaintenancePage /> },
       { path: 'logs',        element: <AdminLogsPage /> },
       { path: 'support',     element: <AdminSupportTicketsPage /> },
