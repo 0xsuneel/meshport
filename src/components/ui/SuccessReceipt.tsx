@@ -461,26 +461,27 @@ export function SuccessReceipt({
           ...(desktop ? { borderRadius: 26, border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)' } : {}), ...style }}>
           {/* On the band: the header's icons (and the gift's) are white. */}
           <style>{`.sr-pulse{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.22);animation:srPulse 2.8s cubic-bezier(.2,.6,.3,1) infinite;pointer-events:none}@keyframes srPulse{from{transform:scale(1);opacity:.9}to{transform:scale(1.75);opacity:0}}@media (prefers-reduced-motion: reduce){.sr-pulse{animation:none;transform:scale(1.58);opacity:.35}.sr-pulse+.sr-pulse{display:none}}.sr-band .back-btn{width:38px;height:38px;margin:0;padding:0;border-radius:50%;background:rgba(255,255,255,.16)}.sr-band .back-btn svg{color:#fff!important}`}</style>
-          {hasHead && (
-            <div className={`sr-band header-row flex-shrink-0 gap-3 px-4 ${desktop || fill ? 'pt-3 pb-2' : 'pt-header pb-header'}`} style={{ position: 'relative', zIndex: 2, background: top }}>
-              {page.onBack && (
-                <button type="button" onClick={page.onBack} className="back-btn" aria-label="Back" style={round}>
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-              )}
-              <div style={{ flex: 1, minWidth: 0 }} />
-              {giftNode}
-              {!page.noShare && (
-                <button type="button" onClick={() => { void share() }} className="back-btn" aria-label="Share" style={round}>
-                  <Share2 className="w-5 h-5" />
-                </button>
-              )}
-            </div>
-          )}
           <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
-            <div className="sr-band" style={{ position: 'relative', background: band, color: '#fff', textAlign: 'center', padding: `${hasHead ? 30 : 40}px 20px 66px` }}>
-              {/* No page header (a page inside the Hub): the gift at the band's corner. */}
-              {!hasHead && giftNode && <div style={{ position: 'absolute', top: 14, right: 16, zIndex: 2 }}>{giftNode}</div>}
+            {/* The check starts near the band's top (18 Nov 2026) - no header row
+                above it: back, the gift and share sit in the band's top corners,
+                level with the check's top, so there's no empty strip. */}
+            <div className="sr-band" style={{ position: 'relative', background: band, color: '#fff', textAlign: 'center',
+              padding: `${desktop || fill ? '26px' : 'calc(var(--safe-top) + 26px)'} 20px 66px` }}>
+              <div style={{ position: 'absolute', zIndex: 2, left: 14, right: 14, top: desktop || fill ? 12 : 'calc(var(--safe-top) + 12px)',
+                display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'none' }}>
+                {page.onBack && (
+                  <button type="button" onClick={page.onBack} className="back-btn" aria-label="Back" style={{ ...round, pointerEvents: 'auto' }}>
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                )}
+                <div style={{ flex: 1 }} />
+                {giftNode && <span style={{ pointerEvents: 'auto', display: 'flex' }}>{giftNode}</span>}
+                {hasHead && !page.noShare && (
+                  <button type="button" onClick={() => { void share() }} className="back-btn" aria-label="Share" style={{ ...round, pointerEvents: 'auto' }}>
+                    <Share2 className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
               {burst && <Confetti />}
               {/* The check, a soft ring, and two slow pulses going out from it
                   (still with reduced motion: one fixed outer ring instead). */}
