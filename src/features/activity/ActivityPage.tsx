@@ -1,5 +1,4 @@
 import { DESKTOP_QUERY } from '@/lib/motion'
-import { useStaggerIn } from '@/lib/staggerIn'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react'
 import { AnimatePresence } from 'framer-motion'
@@ -1341,11 +1340,9 @@ export function ActivityPage() {
   // The list fades in once, when it replaces the loading cards - not on
   // scroll-loading, a refresh or a new row (the class stays, so the
   // animation never restarts).
-  // 19 Nov 2026: the rows (and their day labels) arrive one after another
-  // as the page opens - from the saved list at once, or when the first load
-  // replaces the loading cards. Once per visit (lib/staggerIn).
+  // (The row-by-row reveal was removed 19 Nov 2026: lists show at once; only
+  // history cards and success screens reveal in turn.)
   const listRef = useRef<HTMLDivElement>(null)
-  useStaggerIn(listRef, records.length > 0 && !loading, '[data-stagger], [data-activity-id]')
 
   // Debounce the search box → useActivity's `search` state, which re-queries
   // Supabase (see fetchActivity's search clause) rather than only filtering
