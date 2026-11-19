@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ChevronRight, ExternalLink } from 'lucide-react'
+import { ArrowRight, ExternalLink } from 'lucide-react'
 import { EASE_OUT } from '@/lib/motion'
 import { useAds, openAd, isExternalAd, type Ad } from '@/lib/ads'
 import { AdArt } from './AdArt'
@@ -39,16 +39,28 @@ export function SuccessPromo({ exclude, revealed = true, instant = false }: { ex
       <button type="button" onClick={() => openAd(ad, navigate)}
         className="w-full text-left active:scale-[0.99] transition-transform"
         style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, cursor: 'pointer', fontFamily: 'inherit',
+          display: 'flex', flexDirection: 'column', gap: 12, padding: 14, borderRadius: 20, cursor: 'pointer', fontFamily: 'inherit',
           background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)',
         }}>
-        <AdArt ad={ad} size={44} radius={12} />
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ad.title}</span>
-          {ad.body && <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ad.body}</span>}
-          <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-muted)', marginTop: 3 }}>{ad.sponsor ? `Sponsored · ${ad.sponsor}` : 'From MeshPort'}</span>
+        <span style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+          <AdArt ad={ad} size={56} radius={16} />
+          <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 11, fontWeight: 600, letterSpacing: '0.02em' }}>
+              <span style={{ color: ad.sponsor ? 'var(--text-muted)' : 'var(--brand-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ad.sponsor ? `Sponsored · ${ad.sponsor}` : 'From MeshPort'}</span>
+              {ad.sponsor && <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Ad</span>}
+            </span>
+            <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.2px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ad.title}</span>
+            {ad.body && <span style={{ fontSize: 13, lineHeight: 1.4, color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ad.body}</span>}
+          </span>
         </span>
-        {external ? <ExternalLink size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} /> : <ChevronRight size={18} color="var(--text-muted)" style={{ flexShrink: 0 }} />}
+        <span style={{
+          height: 42, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 12px', fontSize: 14, fontWeight: 700,
+          background: external ? 'color-mix(in srgb, var(--brand) 14%, var(--surface))' : 'var(--brand)',
+          color: external ? 'var(--brand-text)' : '#fff',
+        }}>
+          <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{external ? `Explore ${ad.title}` : `Try ${ad.title}`}</span>
+          {external ? <ExternalLink size={15} style={{ flexShrink: 0 }} /> : <ArrowRight size={15} style={{ flexShrink: 0 }} />}
+        </span>
       </button>
     </motion.div>
   )
