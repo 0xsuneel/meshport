@@ -961,8 +961,11 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   // Paid in a chat: newer rows say so (via 'chat'); older ones carried the
   // stand-in note 'Contact Payment' - never shown as the user's note.
   const viaChat = (metadata as any)?.via === 'chat' || (metadata as any)?.note === 'Contact Payment'
-  const noteText = typeof (metadata as any)?.note === 'string' && !(metadata as any)?.merchantOrder && (metadata as any)?.note !== 'Contact Payment'
-    ? String((metadata as any).note).trim() : ''
+  // System stand-in notes ('Contact Payment', the chain watcher's "External
+  // deposit") are labels, never the payer's note - not shown.
+  const rawNote = typeof (metadata as any)?.note === 'string' ? String((metadata as any).note).trim() : ''
+  const noteText = rawNote && !(metadata as any)?.merchantOrder
+    && rawNote !== 'Contact Payment' && !/^External deposit\b/i.test(rawNote) ? rawNote : ''
   let txDetail: TxDetail | null = null
   if (isRewardClaim) {
     txDetail = {
@@ -985,7 +988,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     const theirLabel = theirHandle || shortAddr(counterparty)
     const them: TxParty = {
       label: type === 'send' ? 'To' : 'From', name: cpName ? cpName.charAt(0).toUpperCase() + cpName.slice(1) : shortAddr(counterparty),
-      handle: theirHandle, address: counterparty || undefined, tag: shop ? 'SHOP' : undefined,
+      handle: theirHandle, address: counterparty || undefined, tag: shop && type === 'send' ? 'SHOP' : undefined,
       actions: [
         { label: type === 'send' ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(`/pay?to=${encodeURIComponent(cpName || counterparty)}`) } },
         ...(cpName ? [{ label: 'Chat', onClick: () => { void openChatWith(cpName) }, busy: openingChat }] : []),
