@@ -15,7 +15,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from './DesktopDialogFrame'
 import { copyToClipboard } from '@/lib/utils'
 import { useUIStore } from '@/store'
-import { SuccessPromo, type PromoFeature } from './SuccessPromo'
+import type { PromoFeature } from './SuccessPromo'
 import { PoweredByFooter } from './PoweredByFooter'
 import { ActionIcon, type ActionIconName } from './ActionIcon'
 import { UserPhoto } from './PhotoFill'
@@ -63,6 +63,7 @@ export interface TxDetail {
   reason?: ReactNode
   /** A button at the foot (e.g. "Open Recover"). */
   action?: { label: string; onClick: () => void }
+  /** Unused since 19 Nov 2026 (history cards show no offers); kept so callers needn't change. */
   promo?: PromoFeature | boolean
 }
 
@@ -356,7 +357,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
               {d.action.label}
             </button>
           )}
-          {d.promo !== false && <div style={{ marginTop: 14 }}><SuccessPromo instant exclude={typeof d.promo === 'string' ? d.promo : undefined} /></div>}
+          {/* No "For you" offers on a history card (19 Nov 2026) - only on success screens. */}
           </Rv>
           <PoweredByFooter />
         </div>
