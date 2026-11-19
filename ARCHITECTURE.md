@@ -185,3 +185,21 @@ This repository's `docs/` folder is unusually thorough and is the authoritative 
 - `docs/LEDGER_CANONICAL_EVENT_DESIGN.md`, `docs/LEDGER_SCHEMA_GAP_AUDIT.md` — ledger schema and design gaps found along the way
 - `docs/SECURITY_ARCHITECTURE.md` — security model
 - `docs/BLOCKCHAIN_ARCHITECTURE_PROPOSAL.md` — the original proposal that led to consolidating `chains.ts`
+
+## 10. One account on any device (wallet sign-in)
+
+MeshPort wallets are private-key wallets. The key is stored encrypted in the wallet frame on each device, unlocked by the passcode. It never leaves the frame. A user can import the same wallet on several devices, the way MetaMask works.
+
+The server keeps off-chain data: chats, splits, rewards, P2P, business data and the profile. Every access rule identifies the caller by `users.auth_uid = auth.uid()`. Each account has **one** server identity, shared by all its devices:
+
+1. **Sign.** The app signs one short message in the wallet frame. The message contains `MeshPort sign-in`, `Wallet`, a random `Nonce` and `Time`. Only the signature leaves the device.
+2. **Check.** `supabase/functions/wallet-login` verifies the message and replies with a one-time sign-in token:
+   - The message format must be correct and the time within 5 minutes.
+   - The signature must recover that wallet.
+   - The nonce must be unused. It is stored in `wallet_login_nonces`, so a captured message cannot be replayed.
+   - The wallet must have an account.
+
+   The token is for the account's identity (an admin magic-link token, no email sent). The identity is created once under `wallet-<account id>@accounts.meshport.xyz`. The token comes back in the response, never by email.
+3. **Same identity on every device.** The app swaps the token for a session (`verifyOtp`). The identity itself never changes, so other devices stay signed in. Never set a password on it: a password change signs every other device out.
+
+`bind-session` is the older path, kept as a fallback. It links a device's own session, or hands it the shared identity, after a wallet signature. Once an account uses the shared identity, it refuses to move the link away from it. Accounts whose identity has a real email sign in with that email.
