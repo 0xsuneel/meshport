@@ -31,7 +31,7 @@ import { ChainPicker, WalletPaymentDetails, useOrderSolanaUri } from './Merchant
 import { SOLANA_PAY_OPTION } from '@/lib/solanaPay'
 import { useSolanaWallet } from '@/wallet/useSolanaWallet'
 import { SkeletonRows } from '@/components/ui/Skeleton'
-import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { TxDetailPage } from '@/components/ui/TxDetailPage'
 import { ScreenPush } from '@/components/ui/ScreenPush'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -796,33 +796,40 @@ function MerchantPaymentReceipt({ p, orderNumber, note, onViewOrder, onClose }: 
   const onArc = p.chain === ARC_CHAIN_KEY
   const href = onArc ? arcExplorerTxUrl(p.txHash) : explorerTxUrl(p.chain, p.txHash)
   const chainName = onArc ? 'Arc' : (CHAIN_LABEL[p.chain] ?? p.chain.replace(/_/g, ' '))
-  const from = p.customerUsername ? `${p.customerUsername.replace(/\.arc$/i, '')}.arc` : short(p.from)
+  const handle = p.customerUsername ? `${p.customerUsername.replace(/\.arc$/i, '')}.arc` : undefined
+  const fromName = handle ? handle.replace(/\.arc$/i, '').replace(/^./, c => c.toUpperCase()) : short(p.from)
+  const me = useAuthStore.getState()
+  const myHandle = me.user?.username ? `${String(me.user.username).replace(/\.arc$/i, '')}.arc` : undefined
+  const at = new Date(p.createdAt)
+  const whenFull = `${at.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, ${at.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+  // The app's history card (19 Nov 2026), as every other payment.
   return (
-    <ReceiptPopup
-      onClose={onClose}
-      status={arriving ? 'pending' : 'success'}
-      title={arriving ? 'Payment Arriving' : 'Payment Received'}
-      subtitle={<>
-        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: 'var(--success-text)', marginBottom: 4 }}>+${formatAmount(p.amount)} USDC</span>
-        From {from}{orderNumber ? ` · ${orderNumber}` : ''}
-      </>}
-      // The header shows the amount, who paid and the order; the title the outcome.
-      rows={[
-        ...(arriving ? [{ label: 'Status', value: paymentStageLabel(p) }] : []),
-        ...(p.txHash ? [{ label: 'Transaction Hash', value: `${p.txHash.slice(0, 6)}…${p.txHash.slice(-4)}` }] : []),
-        { label: 'Time', value: new Date(p.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
-      ]}
-      detailRows={[
+    <TxDetailPage onClose={onClose} detail={{
+      title: 'Payment details', status: arriving ? 'pending' : 'success',
+      amountLabel: arriving ? 'Arriving' : 'Amount received',
+      amount: `+$${formatAmount(p.amount)}`, unit: 'USDC',
+      pill: { icon: 'list', text: orderNumber || 'Payment received' },
+      parties: [
+        { label: 'From', name: fromName, handle, address: p.from || undefined, ...(onArc ? {} : { chain: chainName }) },
+        { label: 'To', name: 'You', you: true, handle: myHandle, address: me.walletAddress || undefined },
+      ],
+      steps: [
+        <>Paid by <b>{handle || short(p.from)}</b>{onArc ? null : <> on <b>{chainName}</b></>}</>,
+        arriving ? paymentStageLabel(p) : <>Received by <b>you</b></>,
+      ],
+      whenLabel: arriving ? 'Sent at' : 'Received at', when: whenFull,
+      hashes: p.txHash ? [{ label: 'Transaction hash', hash: p.txHash }] : [],
+      detailsTitle: 'Payment details',
+      details: [
+        { label: 'Status', value: arriving ? paymentStageLabel(p) : 'Completed', tone: arriving ? undefined : 'ok' },
         { label: 'Route', value: routeLabel(p.chain) || 'Arc' },
-        { label: 'Sender wallet', value: short(p.from) },
         ...(p.matchedBy ? [{ label: 'Matched by', value: p.matchedBy === 'watcher' ? 'Direct deposit' : p.matchedBy === 'merchant' ? 'You (checked a transaction)' : 'Customer' }] : []),
         ...(note ? [{ label: 'Note', value: note }] : []),
-      ]}
-      fullHash={p.txHash || undefined}
-      links={p.txHash && href ? [{ title: `View on ${onArc ? 'ArcScan' : chainName}`, explorer: onArc ? 'ArcScan' : chainName, hash: p.txHash, href }] : undefined}
-      primaryLabel={onViewOrder ? 'View order' : 'Done'}
-      onPrimary={onViewOrder}
-    />
+        ...(p.txHash && href ? [{ label: 'Explorer', value: `View on ${onArc ? 'ArcScan' : chainName}`, href }] : []),
+      ],
+      action: onViewOrder ? { label: 'View order', onClick: onViewOrder } : undefined,
+      promo: false,
+    }} />
   )
 }
 

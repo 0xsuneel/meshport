@@ -38,7 +38,7 @@ import { BusinessMoney } from '@/features/merchant/BusinessMoney'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { formatAmount, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
-import { moveBreakdown, moveLabels, formatFee, formatMoveAmount, type MoveBreakdown } from '@/lib/moveFees'
+import { moveBreakdown, moveLabels, type MoveBreakdown } from '@/lib/moveFees'
 import { subscribeToWalletClaims, type Claim as ServerClaim } from '@/lib/claimService'
 import { useSettingsStore } from '@/store/settingsStore'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
@@ -47,7 +47,6 @@ import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSharedKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
-import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { TxDetailPage, type TxDetail, type TxParty } from '@/components/ui/TxDetailPage'
 import { ChainScanner } from '@/components/ui/ChainScanner'
 import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpinner'
@@ -395,7 +394,6 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const { balance: arcBalance } = useWalletStore()
   const { showToastMessage } = useUIStore()
-  const [rowCopied, setRowCopied] = useState<string | null>(null)
   // Admin Panel → Chains toggles - a chain disabled by admin is excluded
   // from balance scanning entirely, so it never contributes to "Available
   // to claim" here. Live subscription: re-enabling a chain picks it back up
@@ -1499,23 +1497,14 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
         const moveLbl = moveLabels(isClaimItem ? 'bring' : 'transfer', it.destinationAddress, walletAddress)
         const netFeeLabel = it.route === 'ub' ? 'Gateway fee' : 'Circle fee'
         const status = it.status === 'success' ? 'success' : it.status === 'failed' ? 'failed' : 'pending'
-        const doneTitle = it.isRecovery ? 'Refunded to Arc' : it.merchant ? (it.chainReceipt ? 'Payment Received' : it.ownClaim ? 'Moved to Arc (Own)' : 'Moved to Arc') : isClaimItem ? 'Funds Arrived' : 'Transfer Complete'
-        const title = status === 'success' ? doneTitle : status === 'failed' ? (isClaimItem ? 'Claim Failed' : 'Transfer Failed') : 'Processing…'
-        const copyRow = (label: string, value: string) => async () => {
-          const ok = await copyToClipboard(value)
-          setRowCopied(label)
-          showToastMessage(ok ? `${label} copied` : `Could not copy ${label.toLowerCase()}`, ok ? 'success' : 'error')
-          setTimeout(() => setRowCopied(null), 1500)
-        }
-        const hashRow = (label: string, hash: string) => ({ label, value: `${hash.slice(0, 6)}…${hash.slice(-4)}`, onCopy: copyRow(label, hash), copied: rowCopied === label })
-        const primaryHash = isClaimItem ? (it.destinationTxHash || it.sourceTxHash) : (it.sourceTxHash || it.destinationTxHash)
-        const amountText = `${status === 'failed' ? '' : isClaimItem ? '+' : '-'}${itemMoneyUnit(it, it.amount)}`
 
         // Transfers and brings open the same Payment details card as the main
         // Activity (18 Nov 2026): a page on a phone, the centred popup on a
-        // computer. A merchant's own receipts keep their receipt below.
-        if (!it.merchant && !it.chainReceipt && !it.isRecovery) {
-          const out = !isClaimItem
+        // computer. 19 Nov 2026: a business's settlements, payments received
+        // on another chain and refunds use the same card (their own words).
+        {
+          const out = !isClaimItem && !it.isRecovery
+          const kind: 'refund' | 'chainPay' | 'settle' | 'move' = it.isRecovery ? 'refund' : it.chainReceipt ? 'chainPay' : it.merchant ? 'settle' : 'move'
           const sym = it.tokenSymbol || 'USDC'
           const isCctpx = it.route === 'cctpx'
           const me = useAuthStore.getState()
@@ -1527,25 +1516,34 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
           const whenFull = `${when.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, ${when.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
           const money = (n: number) => itemMoneyUnit(it, n)
           const detail: TxDetail = {
-            title: out ? 'Transfer details' : 'Bridge details', status,
-            amountLabel: out ? 'Amount sent' : 'Amount received',
+            title: kind === 'refund' ? 'Refund details' : kind === 'chainPay' ? 'Payment details' : kind === 'settle' ? 'Settlement details' : out ? 'Transfer details' : 'Bridge details', status,
+            amountLabel: kind === 'refund' ? 'Amount refunded' : kind === 'settle' ? 'Amount settled' : out ? 'Amount sent' : 'Amount received',
             amount: `${out || status === 'failed' ? '' : '+'}${itemMoney(it, it.amount)}`, unit: sym === 'cirBTC' ? undefined : sym,
-            pill: out ? { icon: 'hub', text: 'Multichain transfer' } : { icon: 'hub', text: 'Brought in to Arc' },
+            pill: kind === 'refund' ? { icon: 'recover', text: 'Refunded to Arc' }
+              : kind === 'chainPay' ? { icon: 'receive', text: it.ownReceipt ? 'Own payment' : `Received on ${chainName}` }
+              : kind === 'settle' ? { icon: 'hub', text: status === 'success' ? 'Settled to Arc' : status === 'failed' ? 'Settlement' : 'Settling to Arc' }
+              : out ? { icon: 'hub', text: 'Multichain transfer' } : { icon: 'hub', text: 'Brought in to Arc' },
             reason: it.error && status === 'failed' ? it.error : undefined,
-            parties: out
+            parties: kind === 'chainPay'
+              ? [{ label: 'From', name: 'Customer', chain: chainName }, { ...you('To'), chain: chainName }]
+              : out
               ? [{ label: 'To', name: toSelf ? 'Your wallet' : sentTo ? `${sentTo.slice(0, 6)}…${sentTo.slice(-4)}` : chainName, address: sentTo || undefined, chain: chainName }, you('From')]
               : [{ label: 'From', name: 'Your wallet', chain: chainName }, you('To')],
-            steps: out
+            steps: kind === 'chainPay'
+              ? [<>Paid on <b>{chainName}</b></>, <>Received by <b>you</b></>, it.chainReceipt === 'converted' ? <>Moved to <b>Arc</b></> : it.chainReceipt === 'converting' ? 'Moving to Arc' : <>Kept on <b>{chainName}</b> until you settle</>]
+              : kind === 'refund' ? ['Move did not finish', <>Recovered by <b>{it.recoveredVia ? it.recoveredVia.toUpperCase() : 'MeshPort'}</b></>, <>Refunded on <b>Arc</b></>]
+              : kind === 'settle' ? ['Settlement approved', <>Sent on <b>{chainName}</b></>, <>Confirmed by <b>Circle</b></>, <>Delivered on <b>Arc</b></>]
+              : out
               ? ['Transfer approved', <>{isCctpx ? 'Sent' : 'Burned'} on <b>Arc</b></>, <>Confirmed by <b>Circle</b></>, <>Delivered on <b>{chainName}</b></>]
               : ['Bridge approved', <>{isCctpx ? 'Sent' : 'Burned'} on <b>{chainName}</b></>, <>Confirmed by <b>Circle</b></>, <>{isCctpx ? 'Delivered' : 'Minted'} on <b>Arc</b></>],
-            whenLabel: out ? 'Sent at' : 'Bridged at', when: whenFull,
+            whenLabel: kind === 'refund' ? 'Refunded at' : kind === 'chainPay' ? 'Received at' : kind === 'settle' ? 'Settled at' : out ? 'Sent at' : 'Bridged at', when: whenFull,
             hashes: [
               ...(it.sourceTxHash && !isRecoveredClaim ? [{ label: `Sent on ${out ? 'Arc' : chainName}`, hash: it.sourceTxHash }] : []),
               ...(it.destinationTxHash ? [{ label: `Received on ${out ? chainName : 'Arc'}`, hash: it.destinationTxHash }] : []),
             ],
-            detailsTitle: out ? 'Transfer details' : 'Bridge details',
+            detailsTitle: kind === 'refund' ? 'Refund details' : kind === 'chainPay' ? 'Payment details' : kind === 'settle' ? 'Settlement details' : out ? 'Transfer details' : 'Bridge details',
             details: [
-              { label: 'Status', value: status === 'success' ? 'Completed' : status === 'failed' ? 'Failed' : 'Processing', tone: status === 'success' ? 'ok' : status === 'failed' ? 'bad' : undefined },
+              { label: 'Status', value: chainReceiptLabel(it) ?? (status === 'success' ? 'Completed' : status === 'failed' ? 'Failed' : 'Processing'), tone: status === 'success' ? 'ok' : status === 'failed' ? 'bad' : undefined },
               ...(move ? [
                 { label: moveLbl.sent, value: money(move.sent) },
                 { label: moveLbl.received, value: money(move.received) },
@@ -1562,60 +1560,6 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
           return <TxDetailPage key="hub-detail" detail={detail} onClose={() => { setFlashId(it.id); setSelectedItem(null) }} />
         }
 
-        return (
-          <ReceiptPopup
-            onClose={() => { setFlashId(it.id); setSelectedItem(null) }}
-            status={status}
-            title={title}
-            subtitle={<>
-              <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: status === 'failed' ? 'var(--text-muted)' : isClaimItem ? 'var(--success-text)' : 'var(--text-primary)', marginBottom: 4 }}>{amountText}</span>
-              {hubItemTitle(it, walletAddress)}
-            </>}
-            // The header shows the amount and "Claim from / Transfer to <chain>",
-            // the title the outcome - rows add only what those don't.
-            rows={[
-              ...(move ? [
-                ...(it.route === 'cctpx' ? [
-                  // EURC / cirBTC: amounts and MeshPort's fee in the token.
-                  { label: moveLbl.sent, value: itemMoneyUnit(it, move.sent) },
-                  { label: moveLbl.received, value: itemMoneyUnit(it, move.received), positive: true },
-                  { label: 'Fees paid', value: itemMoneyUnit(it, move.fees) },
-                ] : [
-                  { label: moveLbl.sent, value: `$${formatMoveAmount(move.sent)} USDC` },
-                  { label: moveLbl.received, value: `$${formatMoveAmount(move.received)} USDC`, positive: true },
-                  { label: 'Fees paid', value: formatFee(move.fees) },
-                ]),
-              ] : []),
-              ...(it.merchant && walletAddress ? [{ label: 'Paid to', value: `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`, onCopy: copyRow('Paid to', walletAddress), copied: rowCopied === 'Paid to' }] : []),
-              ...(primaryHash && !isRecoveredClaim ? [hashRow('Transaction Hash', primaryHash)] : []),
-              { label: 'Time', value: new Date(it.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
-            ]}
-            detailRows={[
-              ...(chainReceiptLabel(it) ? [{ label: 'Status', value: chainReceiptLabel(it)!, positive: status === 'success' }] : []),
-              ...(it.merchant && !it.isRecovery ? [{ label: 'Type', value: `Moved to Arc from ${it.chainLabel || it.chain}` }] : []),
-              ...((isClaimItem || it.route === 'cctpx') && it.route ? [{ label: 'Route', value: it.route === 'ub' ? 'Unified Balance' : it.route === 'cctpx' ? 'Circle CCTPx' : 'CCTP' }] : []),
-              ...(it.recoveredVia ? [{ label: 'Recovered', value: `Via ${it.recoveredVia.toUpperCase()}` }] : []),
-              ...(it.route === 'cctpx' ? [
-                // EURC / cirBTC: MeshPort's fee (in the token) paid the gas and Circle's fee.
-                ...(move && move.meshportFee > 0 ? [{ label: 'MeshPort fee', value: itemMoneyUnit(it, move.meshportFee) }] : []),
-                ...(isClaimItem ? [{ label: 'Circle fee', value: 'Paid by MeshPort' }] : [{ label: 'Circle fee', value: 'Paid in USDC on Arc' }]),
-              ] : move && move.meshportFee > 0 ? [
-                { label: 'MeshPort fee', value: formatFee(move.meshportFee) },
-                { label: netFeeLabel, value: formatFee(move.networkFee) },
-              ] : move && move.fees > 0 ? [{ label: netFeeLabel, value: formatFee(move.networkFee) }] : []),
-              // The summary row above already shows one of these two.
-              ...(it.sourceTxHash && !isRecoveredClaim && it.sourceTxHash !== primaryHash ? [hashRow(isClaimItem ? (it.route === 'cctpx' ? 'Source Tx (Send)' : 'Source Tx (Burn)') : 'Source Tx (Arc)', it.sourceTxHash)] : []),
-              ...(it.destinationTxHash && it.destinationTxHash !== primaryHash ? [hashRow(isClaimItem ? (it.route === 'cctpx' ? 'Destination Tx (Arc)' : 'Destination Tx (Arc Mint)') : 'Destination Tx (Arrival)', it.destinationTxHash)] : []),
-              ...(it.type === 'transfer' && !it.isRecovery ? [{ label: 'Chain', value: chainName }] : []),
-              ...(it.type === 'transfer' && it.destinationAddress ? [hashRow('Sent To', it.destinationAddress)] : []),
-            ]}
-            links={[
-              ...(sourceHref && it.sourceTxHash ? [{ title: isClaimItem ? `View Burn on ${chainName}` : 'View Burn on Arc', explorer: isClaimItem ? chainName : 'ArcScan', hash: it.sourceTxHash, href: sourceHref }] : []),
-              ...(destinationHref && it.destinationTxHash ? [{ title: isClaimItem ? 'View Mint on Arc' : `View Mint on ${chainName}`, explorer: isClaimItem ? 'ArcScan' : chainName, hash: it.destinationTxHash, href: destinationHref }] : []),
-            ]}
-            linksNote={it.error && status === 'failed' ? it.error : undefined}
-          />
-        )
       })()}
       </AnimatePresence>
     </div>

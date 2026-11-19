@@ -16,7 +16,7 @@ import { AnimatePresence } from 'framer-motion'
 import { cardInnerWidth } from '@/features/chat/chatCard'
 import { formatAmount } from '@/lib/utils'
 import { dueText } from '@/lib/businessBills'
-import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { TxDetailPage, type TxDetail, type TxParty } from '@/components/ui/TxDetailPage'
 import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
   watchPayment, getPayment, withLocalPayment, orderLabel, orderKindOf, orderTitle, expiryText, STATUS_LABEL, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type PaymentView,
@@ -285,49 +285,46 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
     ? (route && route !== ARC_CHAIN_KEY ? null : arcExplorerTxUrl(hash))
     : null
 
-  return (
-    <ReceiptPopup
-      onClose={onClose}
-      status={status}
-      title={title}
-      subtitle={<>
-        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: paid ? 'var(--success-text)' : 'var(--text-primary)', marginBottom: 4 }}>
-          ${formatAmount(v.amount)} {v.currency || 'USDC'}
-        </span>
-        {orderTitle(orderKind, number, { paid, received: paid && isMine })}{v.merchantName ? ` · ${v.merchantName}` : ''}
-      </>}
-      // The title already says paid / expired / cancelled and the subtitle
-      // shows the amount and order number - rows only add what they don't.
-      rows={[
-        ...(!paid && !closed || statusText !== STATUS_LABEL[v.status] ? [{ label: 'Status', value: statusText, positive: paid }] : []),
-        ...(v.received > 0 && Math.abs(v.received - v.amount) > 0.000001 ? [{ label: isMine ? 'Received' : 'Paid', value: `$${formatAmount(v.received)} USDC`, positive: true }] : []),
-        ...(!paid && !closed && due > 0 ? [{ label: 'Still due', value: `$${formatAmount(due)} USDC` }] : []),
-        ...(dueLine && dueOn ? [{ label: 'Pay by', value: dueLine.tone === 'danger' ? `${dueOn} · ${dueLine.text.toLowerCase()}` : dueOn }] : []),
-        ...(hash ? [{ label: 'Transaction Hash', value: `${hash.slice(0, 6)}…${hash.slice(-4)}` }] : []),
-        ...(when(v.paidAt ?? payment?.createdAt) ? [{ label: paid ? 'Paid on' : 'Time', value: when(v.paidAt ?? payment?.createdAt)! }] : []),
-      ]}
-      detailRows={[
-        ...(v.merchantName || v.merchantUsername ? [{ label: 'Business', value: v.merchantName || `${v.merchantUsername}.arc` }] : []),
-        ...(v.customerUsername ? [{ label: 'Customer', value: `${v.customerUsername.replace(/\.arc$/i, '')}.arc` }] : []),
-        ...(isBill && v.items?.length
-          ? v.items.map(i => ({
-              label: `${i.name} × ${Number(i.qty)}`,
-              value: Number.isFinite(Number(i.total ?? i.qty * i.price)) ? `$${formatAmount(Number(i.total ?? i.qty * i.price))}` : '-',
-            }))
-          : []),
-        ...(v.note ? [{ label: 'Note', value: v.note }] : []),
-        ...(routeLabel ? [{ label: 'Route', value: routeLabel }] : []),
-        ...(when(v.createdAt) ? [{ label: 'Created', value: when(v.createdAt)! }] : []),
-        ...(!paid && !closed && when(v.expiresAt) ? [{ label: 'Expires', value: when(v.expiresAt)! }] : []),
-        ...(v.completedByMerchant && v.completedNote ? [{ label: 'Business note', value: v.completedNote }] : []),
-      ]}
-      detailsTitle={`${kind} details`}
-      // Only a settled (paid) bill is history; an open or closed one isn't.
-      stamp={paid ? 'History' : undefined}
-      fullHash={hash || undefined}
-      links={hash && explorerHref ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash, href: explorerHref }] : undefined}
-      primaryLabel={canPay ? `${isBill ? 'Pay invoice' : 'Pay'} · $${formatAmount(due)}` : 'Done'}
-      onPrimary={canPay ? onPay : onClose}
-    />
-  )
+  // The app's history card (19 Nov 2026): the business and the customer, the
+  // order as the tag, when it was paid (or made) in the band, the bill's lines
+  // under its details - and Pay while there's something still due.
+  const bizHandle = v.merchantUsername ? `${v.merchantUsername.replace(/\.arc$/i, '')}.arc` : undefined
+  const custHandle = v.customerUsername ? `${v.customerUsername.replace(/\.arc$/i, '')}.arc` : undefined
+  const business: TxParty = { label: isMine ? 'To' : (paid ? 'To' : 'From'), name: v.merchantName || (bizHandle ? bizHandle.replace(/\.arc$/i, '') : 'Business'), handle: bizHandle, tag: 'SHOP', ...(isMine ? { you: true } : {}) }
+  const customer: TxParty = { label: isMine ? 'From' : (paid ? 'From' : 'To'), name: isMine ? (custHandle ? custHandle.replace(/\.arc$/i, '') : 'Customer') : 'You', handle: custHandle, ...(isMine ? {} : { you: true }) }
+  const at = new Date(v.paidAt ?? payment?.createdAt ?? v.createdAt ?? Date.now())
+  const whenFull = `${at.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, ${at.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+  const detail: TxDetail = {
+    title: paid ? 'Payment details' : `${kind} details`,
+    status,
+    amountLabel: paid ? (isMine ? 'Amount received' : 'Amount paid') : closed ? title : 'Amount due',
+    amount: `$${formatAmount(paid || closed ? v.amount : (due || v.amount))}`, unit: v.currency || 'USDC',
+    pill: { icon: orderKind === 'shop' ? 'qr' : 'list', text: orderTitle(orderKind, number, { paid, received: paid && isMine }) },
+    parties: customer.label === 'From' ? [customer, business] : [business, customer],
+    steps: [],
+    whenLabel: paid ? (isMine ? 'Received at' : 'Paid at') : 'Created at', when: whenFull,
+    hashes: hash ? [{ label: 'Transaction hash', hash }] : [],
+    detailsTitle: `${kind} details`,
+    details: [
+      { label: 'Status', value: statusText, tone: paid ? 'ok' : closed ? 'bad' : undefined },
+      ...(v.received > 0 && Math.abs(v.received - v.amount) > 0.000001 ? [{ label: isMine ? 'Received' : 'Paid', value: `$${formatAmount(v.received)} USDC` }] : []),
+      ...(!paid && !closed && due > 0 ? [{ label: 'Still due', value: `$${formatAmount(due)} USDC` }] : []),
+      ...(dueLine && dueOn ? [{ label: 'Pay by', value: dueLine.tone === 'danger' ? `${dueOn} · ${dueLine.text.toLowerCase()}` : dueOn, tone: dueLine.tone === 'danger' ? 'bad' as const : undefined }] : []),
+      ...(isBill && v.items?.length
+        ? v.items.map(i => ({
+            label: `${i.name} × ${Number(i.qty)}`,
+            value: Number.isFinite(Number(i.total ?? i.qty * i.price)) ? `$${formatAmount(Number(i.total ?? i.qty * i.price))}` : '-',
+          }))
+        : []),
+      ...(v.note ? [{ label: 'Note', value: v.note }] : []),
+      ...(routeLabel ? [{ label: 'Route', value: routeLabel }] : []),
+      ...(when(v.createdAt) ? [{ label: 'Created', value: when(v.createdAt)! }] : []),
+      ...(!paid && !closed && when(v.expiresAt) ? [{ label: 'Expires', value: when(v.expiresAt)! }] : []),
+      ...(v.completedByMerchant && v.completedNote ? [{ label: 'Business note', value: v.completedNote }] : []),
+      ...(hash && explorerHref ? [{ label: 'Explorer', value: 'View on ArcScan', href: explorerHref }] : []),
+    ],
+    action: canPay ? { label: `${isBill ? 'Pay invoice' : 'Pay'} · $${formatAmount(due)}`, onClick: onPay } : undefined,
+    promo: false,
+  }
+  return <TxDetailPage detail={detail} onClose={onClose} />
 }
