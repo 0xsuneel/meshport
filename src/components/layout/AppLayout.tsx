@@ -108,8 +108,13 @@ export function AppLayout() {
     void (async () => {
       const u = (await supabase.auth.getSession()).data.session?.user
       if (!u || u.is_anonymous) return
-      const m = (u.app_metadata ?? {}) as { provider?: string; providers?: string[] }
+      const m = (u.app_metadata ?? {}) as { provider?: string; providers?: string[]; meshport_wallet?: string }
       if (m.provider !== 'email') return
+      // The account's wallet sign-in (supabase/functions/wallet-login) uses an
+      // e-mail-type token behind the scenes - it is not an e-mail login, so
+      // it stays (19 Nov 2026: this signed wallets out). The server tags it;
+      // a session from before the tag still has the account's own address.
+      if (m.meshport_wallet === userId || u.email === `wallet-${userId}@accounts.meshport.xyz`) return
       const { isAdminUser } = await import('@/lib/adminSupabase')
       if (cancelled || await isAdminUser(u.id)) return
       useAuthStore.getState().logout()
