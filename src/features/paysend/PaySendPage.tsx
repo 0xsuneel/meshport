@@ -1008,7 +1008,7 @@ export function PaySendPage() {
 
       if (result.txHash) {
         const { Activity, updateActivityStatus } = await import('@/lib/ActivityService')
-        Activity.send({ walletAddress: result.senderAddress, txHash: result.txHash, status: result.state === 'pending' ? 'pending' : 'completed', amount: numAmount, tokenSymbol: token, toAddress: result.recipientAddress, fee: estimatedFee, toUsername: recipient?.isUsername ? recipient.display : undefined, note: note.trim() || undefined }).catch(() => {})
+        Activity.send({ walletAddress: result.senderAddress, txHash: result.txHash, status: result.state === 'pending' ? 'pending' : 'completed', amount: numAmount, tokenSymbol: token, toAddress: result.recipientAddress, fee: estimatedFee, toUsername: recipient?.isUsername ? recipient.display : undefined, note: note.trim() || undefined, via: 'pay' }).catch(() => {})
 
         // Write the RECEIVE-side row directly, right here, in the same
         // processing event as the confirmed on-chain transfer - instead of

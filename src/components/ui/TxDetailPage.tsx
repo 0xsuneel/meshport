@@ -17,6 +17,7 @@ import { copyToClipboard } from '@/lib/utils'
 import { useUIStore } from '@/store'
 import { SuccessPromo, type PromoFeature } from './SuccessPromo'
 import { PoweredByFooter } from './PoweredByFooter'
+import { ActionIcon, type ActionIconName } from './ActionIcon'
 
 export interface TxParty {
   label: 'From' | 'To'
@@ -42,7 +43,10 @@ export interface TxDetail {
   amount: string
   unit?: string
   note?: string
-  pill?: string
+  /** The band's tag. A kind of record: the app's own icon for it and its
+   *  name ({ icon: 'chat', text: 'Paid in chat' }). A plain string is a speed
+   *  line ("Settled in 1.2s on Arc") and gets the lightning mark. */
+  pill?: string | { icon: ActionIconName; text: string }
   /** A swap: what was paid and what came back. */
   exchange?: { paid: string; got: string }
   parties?: TxParty[]
@@ -184,7 +188,9 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
             {d.pill && (
               <div style={{ marginTop: 12 }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 999, fontSize: 13.5, fontWeight: 700, background: 'rgba(0,0,0,.18)' }}>
-                  <Zap size={14} color="#FFD25E" fill="#FFD25E" />{d.pill}
+                  {typeof d.pill === 'string'
+                    ? <><Zap size={14} color="#FFD25E" fill="#FFD25E" />{d.pill}</>
+                    : <><ActionIcon name={d.pill.icon} size={15} color="#fff" />{d.pill.text}</>}
                 </span>
               </div>
             )}

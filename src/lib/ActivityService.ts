@@ -324,6 +324,8 @@ export const Activity = {
   send: (p: {
     walletAddress: string; userId?: string; txHash: string
     amount: number; toAddress: string; tokenSymbol?: string; note?: string; fee?: number; toUsername?: string
+    /** Where it was paid from: the Pay screen or a chat (19 Nov 2026) - the history card's tag. */
+    via?: 'pay' | 'chat'
     /** 'pending' while the payment is sent but not yet confirmed (shows as Processing). Default 'completed'. */
     status?: ActivityStatus
   }) => saveActivity({
@@ -336,7 +338,7 @@ export const Activity = {
     tokenSymbol:         p.tokenSymbol ?? 'USDC',
     counterpartyAddress: p.toAddress?.toLowerCase(),
     explorerUrl:         explorerUrl(p.txHash),
-    metadata:            { note: p.note, fee: p.fee, toUsername: p.toUsername },
+    metadata:            { note: p.note, fee: p.fee, toUsername: p.toUsername, ...(p.via ? { via: p.via } : {}) },
   }),
 
   /**
