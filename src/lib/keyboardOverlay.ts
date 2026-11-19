@@ -54,6 +54,15 @@ export function disableKeyboardOverlay(): void {
 }
 export function keyboardOverlayDisabled(): boolean { return overlayDisabled }
 
+// Last resort for Android webviews that neither resize for the keyboard nor
+// report it (no viewport change, no boundingRect): an estimate of its height
+// (px), set by useVisibleFrame only while a field is focused, so the frame
+// still makes room above the keys. Ignored the moment the viewport itself
+// shrinks (visibleFrame).
+let assumedInset = 0
+export function setAssumedKeyboardInset(px: number): void { assumedInset = Math.max(0, px) }
+export function assumedKeyboardInset(): number { return assumedInset }
+
 export function holdKeyboardOverlay(): () => void {
   const vk = virtualKeyboard()
   if (overlayDisabled) return () => {}
