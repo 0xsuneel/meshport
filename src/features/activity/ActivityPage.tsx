@@ -958,12 +958,16 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const moveDetails = (rows as { label: string; value: string }[]).filter(r => move && [moveLbl.sent, moveLbl.received, 'Fees paid', 'MeshPort fee', networkFeeLabel(record)].includes(r.label))
   const recoverAction = isRecovery ? { label: 'Open Recover', onClick: () => { onClose(); navigate('/multichain', { state: { tab: 'recovery' } }) } } : undefined
   const isRewardClaim = isReceive && ((metadata as any)?.receiveKind === 'reward_claim' || !!SYSTEM_LABELS[cpUsername])
-  const noteText = typeof (metadata as any)?.note === 'string' && !(metadata as any)?.merchantOrder ? String((metadata as any).note).trim() : ''
+  // Paid in a chat: newer rows say so (via 'chat'); older ones carried the
+  // stand-in note 'Contact Payment' - never shown as the user's note.
+  const viaChat = (metadata as any)?.via === 'chat' || (metadata as any)?.note === 'Contact Payment'
+  const noteText = typeof (metadata as any)?.note === 'string' && !(metadata as any)?.merchantOrder && (metadata as any)?.note !== 'Contact Payment'
+    ? String((metadata as any).note).trim() : ''
   let txDetail: TxDetail | null = null
   if (isRewardClaim) {
     txDetail = {
       title: 'Payment details', status: receiptStatus, amountLabel: 'Amount received', amount: `+${amtOf(amount, tokenSymbol)}`, unit: tokenSymbol || 'USDC',
-      pill: '🎁 Reward claimed', reason: reasonNote ?? undefined,
+      pill: { icon: 'rewards', text: 'Reward claimed' }, reason: reasonNote ?? undefined,
       parties: [
         { label: 'From', name: 'MeshPort Rewards', sub: 'Rewards contract', address: counterparty || undefined,
           actions: [{ label: 'Open Rewards', onClick: () => { onClose(); navigate('/rewards') } }] },
@@ -989,7 +993,10 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     }
     txDetail = {
       title: 'Payment details', status: receiptStatus, amountLabel: 'Amount', amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC',
-      note: noteText || undefined, pill: shop ? '🛍️ Shop payment' : merchantOrderDetail ? `🧾 ${orderWord}` : undefined, reason: reasonNote ?? undefined,
+      note: noteText || undefined, pill: shop ? { icon: 'qr', text: 'Shop payment' } : merchantOrderDetail ? { icon: 'list', text: orderWord }
+        : viaChat ? { icon: 'chat', text: type === 'send' ? 'Paid in chat' : 'Received in chat' }
+        : type === 'send' ? { icon: 'pay', text: 'Sent' } : { icon: 'receive', text: 'Received' },
+      reason: reasonNote ?? undefined,
       parties: type === 'send' ? [them, youParty('From')] : [them, youParty('To')],
       steps: ['Payment approved',
         <>Payment made by <b>{type === 'send' ? 'you' : theirLabel}</b></>,
@@ -1009,7 +1016,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       title: 'Swap details', status: receiptStatus, amountLabel: got ? 'You got' : 'You paid',
       amount: got ? `${symOf(tOut)}${aOut}` : `${symOf(tIn)}${aIn}`, unit: got ? tOut : tIn,
       exchange: got ? { paid: `${aIn} ${tIn}`, got: `${aOut} ${tOut}` } : undefined,
-      pill: '⇄ Swap', reason: reasonNote ?? undefined,
+      pill: { icon: 'swap', text: 'Swap' }, reason: reasonNote ?? undefined,
       steps: ['Swap approved', <>Sent <b>{aIn} {tIn}</b></>, got ? <>Received <b>{aOut} {tOut}</b></> : <>Receive <b>{tOut || 'the other coin'}</b></>],
       whenLabel: 'Swapped at', when: whenFull,
       hashes: txHash ? [{ label: 'Transaction', hash: txHash }] : [],
@@ -1024,7 +1031,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     txDetail = {
       title: out ? 'Transfer details' : 'Bridge details', status: receiptStatus,
       amountLabel: out ? 'Amount sent' : 'Amount received', amount: `${out ? '' : '+'}${amtOf(amount, tokenSymbol)}`, unit: tokenSymbol || 'USDC',
-      pill: out ? '🌐 Multichain transfer' : '⤵ Bridged to Arc', reason: reasonNote ?? undefined,
+      pill: out ? { icon: 'hub', text: 'Multichain transfer' } : { icon: 'hub', text: 'Brought in to Arc' }, reason: reasonNote ?? undefined,
       parties: out
         ? [{ label: 'To', name: toName, handle: transferCpName || undefined, address: transferCp || undefined, chain: other }, youParty('From', 'Arc')]
         : [{ label: 'From', name: 'Your wallet', address: counterparty || undefined, chain: other }, youParty('To', 'Arc')],
@@ -1050,7 +1057,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     txDetail = {
       title: 'Payment details', status: receiptStatus, amountLabel: `Total paid${n ? ` · ${n} ${n === 1 ? 'person' : 'people'}` : ''}`,
       amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC',
-      pill: isPayroll(metadata) ? '👥 Staff payment' : '👥 Bulk payment', reason: reasonNote ?? undefined,
+      pill: { icon: 'bulk', text: isPayroll(metadata) ? 'Staff payment' : 'Bulk payment' }, reason: reasonNote ?? undefined,
       recipients: list.map((r, i) => ({ name: r.label?.startsWith('0x') ? shortAddr(r.label) : (r.label || `Recipient ${i + 1}`), amount: `$${formatAmt(Number(r.amount) || 0)}` })),
       steps: ['Payout approved', <>Paid in <b>one transaction</b></>, <>Received by <b>{n ? `${isSuccess ? n : 0} of ${n}` : 'everyone'}</b></>],
       whenLabel: 'Paid at', when: whenFull,
@@ -1072,8 +1079,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       title: 'P2P details', status: receiptStatus,
       amountLabel: isP2PSellOrder ? (topUp ? 'Added to escrow' : 'Locked in escrow') : isP2PRefund ? 'Returned to you' : 'USDC bought',
       amount: `${isP2PSellOrder ? '' : '+'}${amtOf(amount, tokenSymbol)}`, unit: tokenSymbol || 'USDC',
-      pill: isP2PSellOrder ? (topUp ? '➕ Escrow top-up' : '🔒 Sell order created')
-        : isP2PRefund ? (kind === 'admin_cancelled_offer' ? '↩️ Cancelled by admin' : '↩️ Sell order cancelled') : '🛒 P2P purchase',
+      pill: { icon: isP2PRefund ? 'recover' : 'p2p', text: isP2PSellOrder ? (topUp ? 'Escrow top-up' : 'Sell order created')
+        : isP2PRefund ? (kind === 'admin_cancelled_offer' ? 'Cancelled by admin' : 'Sell order cancelled') : 'P2P purchase' },
       reason: reasonNote ?? undefined,
       parties: isP2PSellOrder ? [escrow, youParty('From')] : [escrow, youParty('To')],
       steps: isP2PSellOrder
@@ -1093,7 +1100,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     txDetail = {
       title: 'Payment details', status: receiptStatus, amountLabel: type === 'send' ? 'Moved to yourself' : 'Received from yourself',
       amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC', note: noteText || undefined,
-      pill: '↺ To yourself', reason: reasonNote ?? undefined,
+      pill: { icon: 'wallet', text: 'To yourself' }, reason: reasonNote ?? undefined,
       parties: [youParty('From'), youParty('To')],
       steps: ['Payment approved', <>Sent from <b>your wallet</b></>, <>Received in <b>your wallet</b></>],
       whenLabel: type === 'send' ? 'Paid at' : 'Received at', when: whenFull,

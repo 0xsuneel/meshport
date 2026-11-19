@@ -1530,7 +1530,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
             title: out ? 'Transfer details' : 'Bridge details', status,
             amountLabel: out ? 'Amount sent' : 'Amount received',
             amount: `${out || status === 'failed' ? '' : '+'}${itemMoney(it, it.amount)}`, unit: sym === 'cirBTC' ? undefined : sym,
-            pill: out ? '🌐 Multichain transfer' : '⤵ Bridged to Arc',
+            pill: out ? { icon: 'hub', text: 'Multichain transfer' } : { icon: 'hub', text: 'Brought in to Arc' },
             reason: it.error && status === 'failed' ? it.error : undefined,
             parties: out
               ? [{ label: 'To', name: toSelf ? 'Your wallet' : sentTo ? `${sentTo.slice(0, 6)}…${sentTo.slice(-4)}` : chainName, address: sentTo || undefined, chain: chainName }, you('From')]

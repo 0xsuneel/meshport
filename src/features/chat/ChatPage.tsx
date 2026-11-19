@@ -1571,7 +1571,7 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
       <TxDetailPage onClose={onClose} detail={{
         title: 'Payment details', status: st, amountLabel: 'Amount',
         amount: `${sym}${formatAmount(msg.payment_amount || 0, chatPayTokenDecimals(token))}`, unit: token,
-        pill: isOrder ? '🧾 Order payment' : '💬 Paid in chat',
+        pill: isOrder ? { icon: 'list', text: 'Order payment' } : { icon: 'chat', text: sent ? 'Paid in chat' : 'Received in chat' },
         parties: [them, me],
         steps: ['Payment approved',
           <>Payment made by <b>{sent ? 'you' : peer}</b></>,
@@ -4082,7 +4082,10 @@ export function ChatConversationPage() {
             amount:          numAmount,
             tokenSymbol:     payToken || 'USDC',
             toAddress:       result.recipientAddress,
-            note:            'Contact Payment',
+            // Paid in a chat (19 Nov 2026): the card's "Paid in chat" tag, and
+            // who to - no stand-in note (it read as the user's own note).
+            toUsername:      recipientClean ? `${recipientClean}.arc` : undefined,
+            via:             'chat',
             status:          result.state === 'pending' ? 'pending' : 'completed',
           }).catch(() => {})
         }).catch(() => {})

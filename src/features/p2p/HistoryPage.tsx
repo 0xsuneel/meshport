@@ -85,7 +85,7 @@ function TradeReceipt({ t, isBuyer, label, counterparty, counterpartyWallet, onO
     <TxDetailPage onClose={onClose} detail={{
       title: 'P2P details', status, amountLabel: isBuyer ? 'You bought' : 'You sold',
       amount: `${status === 'failed' ? '' : isBuyer ? '+' : ''}$${t.amountUsdc}`, unit: 'USDC',
-      pill: `🤝 ${label}`,
+      pill: { icon: 'p2p', text: `P2P · ${label}` },
       parties: [{ label: isBuyer ? 'From' : 'To', name: counterparty, address: counterpartyWallet || undefined }],
       steps: [isBuyer ? 'Trade opened' : 'Offer accepted', <>Paid <b>{currencySymbol(t.currency)}{t.amountFiat} {t.currency}</b></>, <>USDC {isBuyer ? 'released to you' : 'released from escrow'}</>],
       whenLabel: t.completedAt ? 'Completed at' : 'Opened at', when: fmtDate(t.completedAt || t.createdAt),

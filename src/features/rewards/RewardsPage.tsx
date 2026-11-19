@@ -87,7 +87,7 @@ function RewardClaimReceipt({ claim, onClose }: { claim: ClaimRecord; onClose: (
   return (
     <TxDetailPage onClose={onClose} detail={{
       title: 'Payment details', status, amountLabel: 'Amount received', amount: `${status === 'success' ? '+' : ''}$${formatAmount(claim.usdc_received)}`, unit: 'USDC',
-      pill: '🎁 Reward claimed',
+      pill: { icon: 'rewards', text: 'Reward claimed' },
       reason: status === 'failed' ? 'Claim did not go through - your points were not deducted' : undefined,
       parties: [
         { label: 'From', name: 'MeshPort Rewards', sub: 'Rewards contract' },
