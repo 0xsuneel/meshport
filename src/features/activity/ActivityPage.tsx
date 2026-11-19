@@ -1027,26 +1027,28 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       details: [statusDetail, ...(rate > 0 ? [{ label: 'Rate', value: `1 ${tIn} = ${rate.toFixed(4).replace(/\.?0+$/, '')} ${tOut}` }] : []), networkDetail, ...arcExplorer],
       promo: 'swap',
     }
-  } else if (isTransfer || (isClaim && !(metadata as any)?.merchant)) {
+  } else if (isTransfer || isClaim) {
     const out = isTransfer
+    // A business's settlement: its money on another chain moved to its Arc balance.
+    const biz = !out && (!!(metadata as any)?.merchant || isMerchantClaim(record as any))
     const other = chainLabel(out ? destinationChain : sourceChain) || 'the other chain'
     const toName = out ? (isSelfTransferDetail ? 'Your wallet' : transferCpName || shortAddr(transferCp)) : ''
     txDetail = {
-      title: out ? 'Transfer details' : 'Bridge details', status: receiptStatus,
-      amountLabel: out ? 'Amount sent' : 'Amount received', amount: `${out ? '' : '+'}${amtOf(amount, tokenSymbol)}`, unit: tokenSymbol || 'USDC',
-      pill: out ? { icon: 'hub', text: 'Multichain transfer' } : { icon: 'hub', text: 'Brought in to Arc' }, reason: reasonNote ?? undefined,
+      title: out ? 'Transfer details' : biz ? 'Settlement details' : 'Bridge details', status: receiptStatus,
+      amountLabel: out ? 'Amount sent' : biz ? 'Amount settled' : 'Amount received', amount: `${out ? '' : '+'}${amtOf(amount, tokenSymbol)}`, unit: tokenSymbol || 'USDC',
+      pill: out ? { icon: 'hub', text: 'Multichain transfer' } : biz ? { icon: 'hub', text: receiptStatus === 'success' ? 'Settled to Arc' : receiptStatus === 'failed' ? 'Settlement' : 'Settling to Arc' } : { icon: 'hub', text: 'Brought in to Arc' }, reason: reasonNote ?? undefined,
       parties: out
         ? [{ label: 'To', name: toName, handle: transferCpName || undefined, address: transferCp || undefined, chain: other }, youParty('From', 'Arc')]
         : [{ label: 'From', name: 'Your wallet', address: counterparty || undefined, chain: other }, youParty('To', 'Arc')],
       steps: out
         ? ['Transfer approved', <>{isCctpx ? 'Sent' : 'Burned'} on <b>Arc</b></>, <>Confirmed by <b>Circle</b></>, <>Delivered on <b>{other}</b></>]
-        : ['Bridge approved', <>{isCctpx ? 'Sent' : 'Burned'} on <b>{other}</b></>, <>Confirmed by <b>Circle</b></>, <>{isCctpx ? 'Delivered' : 'Minted'} on <b>Arc</b></>],
-      whenLabel: out ? 'Sent at' : 'Bridged at', when: whenFull,
+        : [biz ? 'Settlement approved' : 'Bridge approved', <>{isCctpx ? 'Sent' : 'Burned'} on <b>{other}</b></>, <>Confirmed by <b>Circle</b></>, <>{isCctpx ? 'Delivered' : 'Minted'} on <b>Arc</b></>],
+      whenLabel: out ? 'Sent at' : biz ? 'Settled at' : 'Bridged at', when: whenFull,
       hashes: [
         ...(txHash && !isRecoveredClaim ? [{ label: `Sent on ${out ? 'Arc' : other}`, hash: txHash }] : []),
         ...(destinationTxHash ? [{ label: `Received on ${out ? other : 'Arc'}`, hash: destinationTxHash }] : []),
       ],
-      detailsTitle: out ? 'Transfer details' : 'Bridge details',
+      detailsTitle: out ? 'Transfer details' : biz ? 'Settlement details' : 'Bridge details',
       details: [statusDetail, ...moveDetails,
         ...(sourceHref && txHash ? [{ label: out ? 'Arc explorer' : 'Source explorer', value: sourceLinkLabel.replace(/ ↗$/, ''), href: sourceHref }] : []),
         ...(destinationHref && destinationTxHash ? [{ label: out ? 'Destination explorer' : 'Arc explorer', value: destinationLinkLabel.replace(/ ↗$/, ''), href: destinationHref }] : []),
