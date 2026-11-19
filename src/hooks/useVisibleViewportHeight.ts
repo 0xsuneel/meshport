@@ -53,6 +53,8 @@ export function useVisibleViewportHeight(): number | null {
 // the top with a blank space below" / "sheet pulled upward" bug.
 // Following offsetTop too keeps the frame exactly on the visible area.
 // Android (resizes-content) never pans: offsetTop stays 0 there.
+// Tallest visible height seen with no field focused, at the current width.
+let fullSeen = 0, fullSeenW = 0
 export function visibleFrame(): { top: number; height: number } {
   const vv = typeof window !== 'undefined' ? window.visualViewport : null
   if (!vv) return { top: 0, height: typeof window !== 'undefined' ? window.innerHeight : 0 }
@@ -75,7 +77,17 @@ export function visibleFrame(): { top: number; height: number } {
   // Android web views leave visualViewport at the keyboard-up height after
   // it closes, with no event to correct it; the layout viewport is right.
   if (!typing && top === 0 && !isAppleTouch()) {
-    return { top: 0, height: Math.max(Math.round(vv.height), document.documentElement.clientHeight) }
+    const cur = Math.max(Math.round(vv.height), document.documentElement.clientHeight)
+    // Leaving a chat with its box still focused (Back): the field is removed
+    // without a blur, Via / Android webviews never report the keyboard going
+    // away, and the viewport stays at the keyboard-up height - the app sat in
+    // the top two thirds with a blank band under the bottom nav (19 Nov).
+    // With no field focused, a height a keyboard's worth short of the full
+    // height seen at this width is that stale state, not a real size.
+    const w = window.innerWidth
+    if (w !== fullSeenW) { fullSeenW = w; fullSeen = 0 }
+    if (cur >= fullSeen - 150) { fullSeen = Math.max(fullSeen, cur); return { top: 0, height: cur } }
+    return { top: 0, height: Math.min(fullSeen, window.screen?.height || fullSeen) }
   }
   // iOS 26: after the keyboard closes, visualViewport can stay ~24px shorter
   // than the screen for good (Apple FB19889436 / WebKit 297779) - the frame
