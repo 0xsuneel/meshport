@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { useStaggerIn } from '@/lib/staggerIn'
 import { getReadySigner } from '@/lib/paymentReadiness'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
@@ -318,6 +319,9 @@ export function RewardsPage() {
   // The claim is signing and sending on-chain: hold Back / sidebar until it lands.
   useLeaveGuard(progress?.phase === 'running', 'Reward claim')
   const [historyTab, setHistoryTab]         = useState<'earned' | 'claimed'>('earned')
+  // The history rows arrive one after another once loaded (19 Nov 2026).
+  const historyRevealRef = useRef<HTMLDivElement>(null)
+  useStaggerIn(historyRevealRef, !loading)
 
   const load = useCallback(async () => {
     if (!userId) { setLoading(false); return }
@@ -539,7 +543,7 @@ export function RewardsPage() {
         ))}
       </div>
       <div style={isDesktop ? { overflowY: 'auto', overflowX: 'hidden', flex: 1, minHeight: 0, padding: '4px 0' } : { padding: '4px 0 24px' }}>
-        {loading ? <SkeletonRows count={4} className="px-4" /> : historyRows}
+        {loading ? <SkeletonRows count={4} className="px-4" /> : <div ref={historyRevealRef}>{historyRows}</div>}
         {!loading && (historyTab === 'earned' ? earnedRows.length : claimsHistory.length) > 0 && (
           <button onClick={() => navigate(`/activity?filter=rewards&rewards=${historyTab}`)}
             style={{ display: 'block', margin: '6px auto 4px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--brand-text)', padding: '8px 12px' }}>

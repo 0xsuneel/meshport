@@ -1,4 +1,5 @@
 import { ScratchGift } from '@/components/rewards/ScratchGift'
+import { useStaggerIn } from '@/lib/staggerIn'
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import { quoteAccount } from '@/wallet/account'
@@ -496,6 +497,9 @@ export function SwapPage() {
   // Until the swap history has loaded, an empty list means "not known yet"
   // (skeleton), not "no swaps" - the empty state flashed on every open.
   const [historyLoaded, setHistoryLoaded] = useState(false)
+  // The swaps arrive one after another as the history shows (19 Nov 2026).
+  const swapRevealRef = useRef<HTMLDivElement>(null)
+  useStaggerIn(swapRevealRef, history.length > 0)
   const [histDetail,   setHistDetail]   = useState<SwapRecord|null>(null)
   const [histFlashId, setHistFlashId] = useState<string | null>(null)
   // Mirrors the last quote's total fee so the silent Review-poll can detect
@@ -2062,7 +2066,7 @@ export function SwapPage() {
                 <p className="text-xs text-text-muted text-center px-8">Your completed swaps will appear here</p>
               </div>
             ) : (
-              <div>
+              <div ref={swapRevealRef}>
                 {history.slice(0, SWAP_RECENT).map(r => (
                   <SwapHistoryItem key={r.id} r={r} onOpen={() => { setHistFlashId(null); setHistDetail(r) }} flash={r.id === histFlashId}/>
                 ))}
