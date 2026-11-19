@@ -80,27 +80,34 @@ Deno.serve(async req => {
   // session meant the phone and the computer took turns: unlocking the
   // wallet on one hid the chats, splits and business data on the other
   // until it unlocked again. Now, when the account is already linked to
-  // another session, this device is given THAT identity instead: the server
-  // (after the wallet's signature above - the same proof the link needs)
-  // sets a fresh random password on the linked identity, under an address
-  // only MeshPort uses, and returns it; the app signs in with it once and
-  // the link never changes. A linked identity with a real e-mail login is
-  // left alone (its owner signs in with it on every device already).
-  // Only for an app that asks for it (`canShare`); `noShare`: the app couldn't
-  // sign in that way (password sign-in off) - link this session directly.
-  if (user.auth_uid && user.auth_uid !== sessionId && body.canShare === true && body.noShare !== true) {
+  // another session, this device is given THAT identity instead: after the
+  // wallet's signature above (the same proof the link needs) the server
+  // issues a one-time sign-in token for it (an admin magic-link token - no
+  // e-mail is sent; the identity gets an address only MeshPort uses, once)
+  // and the app signs in with it. Nothing about the identity changes, so the
+  // other devices stay signed in - an earlier version set a new password
+  // each time, and a password change signs every other device out.
+  // A linked identity with a real e-mail login is left alone.
+  // Only for an app that signs in that way (`canOtp`).
+  if (user.auth_uid && user.auth_uid !== sessionId && body.canShare === true && body.canOtp === true && body.noShare !== true) {
     const { data: linked } = await db.auth.admin.getUserById(user.auth_uid).catch(() => ({ data: null as any }))
     const linkedUser = linked?.user
     if (linkedUser) {
       const deviceEmail = `wallet-${userId}@accounts.meshport.xyz`
       const ours = !linkedUser.email || linkedUser.email === deviceEmail
       if (ours) {
-        const bytes = new Uint8Array(32); crypto.getRandomValues(bytes)
-        const password = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
-        const { error: upErr } = await db.auth.admin.updateUserById(user.auth_uid, { email: deviceEmail, email_confirm: true, password })
-        // Couldn't (e.g. e-mail sign-in switched off): link directly below, as before.
-        if (!upErr) return jsonFor(req, { ok: true, adopt: { email: deviceEmail, password } })
-        console.warn('[bind-session] sharing the sign-in failed, linking directly:', upErr.message)
+        let ready = linkedUser.email === deviceEmail
+        if (!ready) {
+          const { error: upErr } = await db.auth.admin.updateUserById(user.auth_uid, { email: deviceEmail, email_confirm: true })
+          ready = !upErr
+          if (upErr) console.warn('[bind-session] could not give the identity its address:', upErr.message)
+        }
+        if (ready) {
+          const { data: link, error: linkErr } = await db.auth.admin.generateLink({ type: 'magiclink', email: deviceEmail })
+          const tokenHash = (link as any)?.properties?.hashed_token
+          if (!linkErr && tokenHash) return jsonFor(req, { ok: true, adopt: { tokenHash } })
+          console.warn('[bind-session] could not issue a sign-in token:', linkErr?.message)
+        }
       }
     }
   }
@@ -109,8 +116,9 @@ Deno.serve(async req => {
   // (an older version still open on another device) never moves the link
   // away from it - that flip is what blanked the other device. It gets
   // "not linked" and signs in properly once it updates. Same for the app's
-  // own fallback (`noShare`): it never pulls a shared link away either.
-  if (user.auth_uid && user.auth_uid !== sessionId && (body.canShare !== true || body.noShare === true)) {
+  // own fallback (`noShare`), or a version that only knew the password way:
+  // it never pulls a shared link away (nor signs the other device out).
+  if (user.auth_uid && user.auth_uid !== sessionId && (body.canShare !== true || body.canOtp !== true || body.noShare === true)) {
     const { data: linked } = await db.auth.admin.getUserById(user.auth_uid).catch(() => ({ data: null as any }))
     if (linked?.user?.email === `wallet-${userId}@accounts.meshport.xyz`) {
       return jsonFor(req, { error: 'Update the app to sign in on this device' }, 409)

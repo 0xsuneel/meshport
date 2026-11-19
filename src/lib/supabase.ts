@@ -155,11 +155,23 @@ export function syncAuthUidToProfile(userId: string, signer?: import('@/wallet')
   _bindInflight = (async () => {
     try {
       await ensureAnonSession()
-      const { data: { session } } = await supabase.auth.getSession()
-      const sessionId = session?.user?.id
+      let sessionId = (await supabase.auth.getSession()).data.session?.user?.id
       if (!sessionId) return false
-      const linkKey = `${userId}:${sessionId}`
+      let linkKey = `${userId}:${sessionId}`
       if (_linkedKey === linkKey) return true
+      // Ask the server whether this device's sign-in still exists: one signed
+      // out elsewhere still looks fine locally until its token expires (a
+      // refused payment said "sign in again"). If it's gone, drop it and start
+      // a fresh one, which then joins the account below.
+      const { error: userErr } = await supabase.auth.getUser().catch(e => ({ error: e }))
+      if (userErr && !/fetch|network|timeout/i.test(String((userErr as { message?: string }).message ?? userErr))) {
+        try { await supabase.auth.signOut({ scope: 'local' }) } catch { /* already gone */ }
+        resetAnonSession()
+        await ensureAnonSession()
+        sessionId = (await supabase.auth.getSession()).data.session?.user?.id
+        if (!sessionId) return false
+        linkKey = `${userId}:${sessionId}`
+      }
       // Already linked? Asked server-side - users.auth_uid isn't something
       // the app reads for an account.
       const { data: owns, error: ownsErr } = await supabase.rpc('session_owns_user', { p_user_id: userId })
@@ -167,22 +179,16 @@ export function syncAuthUidToProfile(userId: string, signer?: import('@/wallet')
 
       const message = `MeshPort sign-in\nAccount: ${userId}\nSession: ${sessionId}\nTime: ${new Date().toISOString()}`
       const signature = await signer.signMessage({ message })
-      const { data, error } = await supabase.functions.invoke('bind-session', { body: { userId, message, signature, canShare: true } })
+      const { data, error } = await supabase.functions.invoke('bind-session', { body: { userId, message, signature, canShare: true, canOtp: true } })
       if (error || !data?.ok) return false
       // The account is already linked on another device: sign in as that
-      // same identity (19 Nov 2026), so both devices see the account's data
-      // instead of taking turns - see bind-session step 4.
-      if (data.adopt?.email && data.adopt?.password) {
-        const { data: signed, error: signErr } = await supabase.auth.signInWithPassword({ email: data.adopt.email, password: data.adopt.password })
-        if (signErr || !signed?.session) {
-          // Couldn't sign in that way: link this device's own session, as before.
-          const retry = await supabase.functions.invoke('bind-session', { body: { userId, message, signature, noShare: true } })
-          if (retry.error || !retry.data?.ok) return false
-          _linkedKey = linkKey
-          invalidateConversationsCache()
-          try { window.dispatchEvent(new CustomEvent('meshport:session-bound')) } catch { /* no window */ }
-          return true
-        }
+      // same identity with the one-time token the server issued (19 Nov
+      // 2026), so both devices see the account's data instead of taking
+      // turns - and nothing about the identity changes, so the other device
+      // stays signed in (see bind-session step 4).
+      if (data.adopt?.tokenHash) {
+        const { data: signed, error: signErr } = await supabase.auth.verifyOtp({ token_hash: data.adopt.tokenHash, type: 'magiclink' })
+        if (signErr || !signed?.session) return false
         _anonSignInDone = true
         _linkedKey = `${userId}:${signed.session.user.id}`
         invalidateConversationsCache()
