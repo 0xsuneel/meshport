@@ -3,7 +3,7 @@ import { useStaggerIn } from '@/lib/staggerIn'
 import { backLayerPop } from '@/lib/backLayers'
 import { formatLocale } from '@/lib/localeFormat'
 import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, lazy, Suspense, type ReactNode } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, memo, Fragment, lazy, Suspense, type ReactNode } from 'react'
 import { SendIcon } from '@/components/ui/SendIcon'
 import { reachCheck, PAYMENT_REACH_WAIT_MS, chatCountChanged, STRANGER_PAY_BLOCKED, BLOCKED_YOU, cachedPrivacy, fetchMyPrivacy, fetchMyRequestIds, fetchBlocked, blockUser, unblockUser, type ChatPrivacy } from '@/lib/privacy'
 import { Ban, Check, Pin, PinOff, Plus } from 'lucide-react'
@@ -2185,178 +2185,6 @@ function QuoteBody({ quoted, name, nameColor, textColor, convKey }: {
   )
 }
 
-// ─── Chat wallpaper - WhatsApp/Telegram-style tiled doodle background ──────────
-// Payments-app take on the pattern: crypto coin, food and merchant line icons,
-// scattered and rotated, tinted with the app's own brand color so it reads as
-// MeshPort-branded rather than generic gray doodles. Real inline SVG (not a
-// CSS data-URI background-image) so it can reference var(--brand) directly -
-// one pattern definition, automatically correct in both light and dark mode,
-// no separate theme-specific assets to keep in sync. useId() keeps the
-// <pattern> id collision-free if this ever mounts more than once (e.g. a
-// future split view rendering two conversations at once).
-function ChatWallpaper() {
-  const uid = useId()
-  const patternId = `chat-wallpaper-${uid}`
-  const c = 'var(--brand)'
-  return (
-    <svg
-      aria-hidden="true"
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-    >
-      <defs>
-        <pattern id={patternId} width="340" height="340" patternUnits="userSpaceOnUse" patternTransform="rotate(8)">
-          {/* Coin ($) */}
-          <g transform="translate(28,32)" opacity="0.16">
-            <circle r="13" stroke={c} strokeWidth="1.6" fill="none" />
-            <path d="M0 -7v14M-4 -3.4c0-2 1.8-3.1 4-3.1s4 1.1 4 2.9-1.8 2.7-4 2.7-4 1-4 2.9 1.8 3.1 4 3.1 4-1.1 4-3.1" stroke={c} strokeWidth="1.3" strokeLinecap="round" fill="none" />
-          </g>
-          {/* Coffee cup */}
-          <g transform="translate(140,44)" opacity="0.16">
-            <path d="M-9 -6h16v9a8 8 0 01-16 0v-9z" stroke={c} strokeWidth="1.4" strokeLinejoin="round" fill="none" />
-            <path d="M7 -3c4 0 5 2 5 4s-1 4-5 4" stroke={c} strokeWidth="1.3" fill="none" />
-            <path d="M-5 -10c0 1.5 2 1.5 2 3M0 -10c0 1.5 2 1.5 2 3" stroke={c} strokeWidth="1.1" strokeLinecap="round" fill="none" />
-          </g>
-          {/* Bitcoin */}
-          <g transform="translate(252,28)" opacity="0.16">
-            <circle r="13" stroke={c} strokeWidth="1.5" fill="none" />
-            <text x="0" y="5.5" fontSize="15" textAnchor="middle" fill={c} fontFamily="sans-serif" fontWeight="700">₿</text>
-          </g>
-          {/* Ethereum */}
-          <g transform="translate(318,96)" opacity="0.16">
-            <circle r="13" stroke={c} strokeWidth="1.5" fill="none" />
-            <text x="0" y="5.5" fontSize="15" textAnchor="middle" fill={c} fontFamily="sans-serif" fontWeight="700">Ξ</text>
-          </g>
-          {/* Shopping bag (merchant) */}
-          <g transform="translate(50,136)" opacity="0.16">
-            <path d="M-9 -4h18l-2 16h-14l-2-16z" stroke={c} strokeWidth="1.4" strokeLinejoin="round" fill="none" />
-            <path d="M-5 -4v-3a5 5 0 0110 0v3" stroke={c} strokeWidth="1.3" fill="none" />
-          </g>
-          {/* Globe coin (multichain) */}
-          <g transform="translate(174,116)" opacity="0.16">
-            <circle r="13" stroke={c} strokeWidth="1.5" fill="none" />
-            <path d="M-13 0h26M0 -13c3.5 3.5 5.3 8 5.3 13s-1.8 9.5-5.3 13c-3.5-3.5-5.3-8-5.3-13s1.8-9.5 5.3-13z" stroke={c} strokeWidth="1.1" fill="none" />
-          </g>
-          {/* Shopping cart (grocery) */}
-          <g transform="translate(282,150)" opacity="0.16">
-            <path d="M-10 -8h3l2 12h11l3-9h-14" stroke={c} strokeWidth="1.3" fill="none" strokeLinejoin="round" />
-            <circle cx="-3" cy="9" r="1.6" fill={c} />
-            <circle cx="7" cy="9" r="1.6" fill={c} />
-          </g>
-          {/* Chain link (blockchain) */}
-          <g transform="translate(30,228)" opacity="0.16">
-            <rect x="-11" y="-4" width="12" height="8" rx="4" transform="rotate(-25)" stroke={c} strokeWidth="1.3" fill="none" />
-            <rect x="-1" y="-4" width="12" height="8" rx="4" transform="rotate(-25)" stroke={c} strokeWidth="1.3" fill="none" />
-          </g>
-          {/* Pizza slice (food) */}
-          <g transform="translate(112,208)" opacity="0.16">
-            <path d="M-10 8L0 -10l10 8c-5 5-15 5-20 0z" stroke={c} strokeWidth="1.4" strokeLinejoin="round" fill="none" />
-            <circle cx="-2" cy="2" r="1.1" fill={c} />
-            <circle cx="3" cy="-1" r="1.1" fill={c} />
-          </g>
-          {/* Burger (food) */}
-          <g transform="translate(224,224)" opacity="0.16">
-            <path d="M-11 -4a11 5 0 0122 0z" stroke={c} strokeWidth="1.3" fill="none" />
-            <path d="M-11 1h22" stroke={c} strokeWidth="1.3" strokeLinecap="round" />
-            <path d="M-11 5h22" stroke={c} strokeWidth="1.3" strokeLinecap="round" />
-            <path d="M-9 9a9 3 0 0018 0z" stroke={c} strokeWidth="1.3" fill="none" />
-          </g>
-          {/* Wallet */}
-          <g transform="translate(306,258)" opacity="0.16">
-            <rect x="-12" y="-8" width="24" height="16" rx="3" stroke={c} strokeWidth="1.3" fill="none" />
-            <path d="M4 -8v4h8" stroke={c} strokeWidth="1.2" fill="none" />
-            <circle cx="6" cy="0" r="1.6" fill={c} />
-          </g>
-          {/* Apple (grocery) */}
-          <g transform="translate(76,296)" opacity="0.16">
-            <path d="M-6 -2c-4 3-3 10 2 12c2 1 4 1 4 1s2 0 4-1c5-2 6-9 2-12c-2-1.5-4 0-6 0c-2 0-4-1.5-6 0z" stroke={c} strokeWidth="1.2" fill="none" />
-            <path d="M0 -2v-4M0 -6c1-2 3-2 4-1" stroke={c} strokeWidth="1.1" strokeLinecap="round" fill="none" />
-          </g>
-          {/* Tree */}
-          <g transform="translate(186,308)" opacity="0.16">
-            <circle cy="-4" r="8" stroke={c} strokeWidth="1.3" fill="none" />
-            <path d="M0 4v8" stroke={c} strokeWidth="1.4" strokeLinecap="round" />
-          </g>
-          {/* Storefront (merchant) */}
-          <g transform="translate(276,328)" opacity="0.16">
-            <path d="M-11 -6l2-5h18l2 5" stroke={c} strokeWidth="1.3" strokeLinejoin="round" fill="none" />
-            <path d="M-12 -6a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0" stroke={c} strokeWidth="1.2" fill="none" />
-            <path d="M-9 -3v11h18v-11" stroke={c} strokeWidth="1.3" fill="none" />
-            <path d="M-3 8v-6h6v6" stroke={c} strokeWidth="1.2" fill="none" />
-          </g>
-          {/* Bank */}
-          <g transform="translate(200,66)" opacity="0.16">
-            <path d="M-11 -7l11-6 11 6" stroke={c} strokeWidth="1.3" strokeLinejoin="round" fill="none" />
-            <path d="M-11 -7h22M-9 -4v10M-3 -4v10M3 -4v10M9 -4v10" stroke={c} strokeWidth="1.2" strokeLinecap="round" />
-            <path d="M-12 6h24" stroke={c} strokeWidth="1.3" strokeLinecap="round" />
-          </g>
-          {/* Laptop / code */}
-          <g transform="translate(14,168)" opacity="0.16">
-            <rect x="-12" y="-8" width="24" height="14" rx="1.5" stroke={c} strokeWidth="1.3" fill="none" />
-            <path d="M-15 9h30l-2 3h-26z" stroke={c} strokeWidth="1.2" strokeLinejoin="round" fill="none" />
-            <path d="M-6 -3l-3 3 3 3M6 -3l3 3-3 3" stroke={c} strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-          </g>
-          {/* Bar chart */}
-          <g transform="translate(258,196)" opacity="0.16">
-            <path d="M-10 8V-2M-2 8V-8M6 8V2" stroke={c} strokeWidth="2" strokeLinecap="round" />
-            <path d="M-12 8h24" stroke={c} strokeWidth="1.2" strokeLinecap="round" />
-          </g>
-          {/* Credit card */}
-          <g transform="translate(140,272)" opacity="0.16">
-            <rect x="-13" y="-8" width="26" height="16" rx="2.5" stroke={c} strokeWidth="1.3" fill="none" />
-            <path d="M-13 -3h26" stroke={c} strokeWidth="1.3" />
-            <path d="M-9 4h6" stroke={c} strokeWidth="1.2" strokeLinecap="round" />
-          </g>
-          {/* Gear / settings */}
-          <g transform="translate(328,218)" opacity="0.16">
-            <circle r="6" stroke={c} strokeWidth="1.3" fill="none" />
-            <circle r="1.6" fill={c} />
-            <path d="M0 -10v3M0 7v3M-10 0h3M7 0h3M-7 -7l2 2M5 5l2 2M-7 7l2-2M5 -5l2-2" stroke={c} strokeWidth="1.2" strokeLinecap="round" />
-          </g>
-          {/* Target */}
-          <g transform="translate(58,52)" opacity="0.16">
-            <circle r="9" stroke={c} strokeWidth="1.2" fill="none" />
-            <circle r="5" stroke={c} strokeWidth="1.2" fill="none" />
-            <circle r="1.4" fill={c} />
-          </g>
-          {/* Wifi / connectivity */}
-          <g transform="translate(300,10)" opacity="0.16">
-            <path d="M-9 -1a13 13 0 0118 0M-5 3a7 7 0 0110 0" stroke={c} strokeWidth="1.2" fill="none" strokeLinecap="round" />
-            <circle cy="6" r="1.4" fill={c} />
-          </g>
-          {/* WEB3 label */}
-          <text x="96" y="152" fontSize="11" fontWeight="700" letterSpacing="1" fill={c} opacity="0.16" fontFamily="sans-serif">WEB3</text>
-          {/* DeFi label */}
-          <text x="222" y="102" fontSize="11" fontWeight="700" fill={c} opacity="0.16" fontFamily="sans-serif">DeFi</text>
-          {/* DAO label */}
-          <text x="8" y="272" fontSize="10.5" fontWeight="700" letterSpacing="1" fill={c} opacity="0.16" fontFamily="sans-serif">DAO</text>
-          {/* NFT hex badge */}
-          <g transform="translate(150,336)" opacity="0.16">
-            <path d="M0 -11l9.5 5.5v11L0 11l-9.5 -5.5v-11z" stroke={c} strokeWidth="1.2" fill="none" strokeLinejoin="round" />
-            <text x="0" y="4" fontSize="8" textAnchor="middle" fill={c} fontFamily="sans-serif" fontWeight="700">NFT</text>
-          </g>
-          {/* Scattered tiny accents - small crosses/dots for texture, matching
-              the reference image's busier confetti-like scattering between
-              the main icons. */}
-          <g stroke={c} strokeWidth="1.1" strokeLinecap="round" opacity="0.13">
-            <path d="M100 14v8M96 18h8" />
-            <path d="M232 138v8M228 142h8" />
-            <path d="M20 98v8M16 102h8" />
-            <path d="M162 198v8M158 202h8" />
-            <path d="M52 246v8M48 250h8" />
-            <path d="M282 296v8M278 300h8" />
-          </g>
-          <g fill={c} opacity="0.13">
-            <circle cx="188" cy="18" r="1.6" />
-            <circle cx="8" cy="140" r="1.6" />
-            <circle cx="250" cy="256" r="1.6" />
-            <circle cx="108" cy="256" r="1.6" />
-          </g>
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill={`url(#${patternId})`} />
-    </svg>
-  )
-}
 
 // ─── Chat Conversation ─────────────────────────────────────────────────────────
 export function ChatConversationPage() {
@@ -4840,17 +4668,7 @@ export function ChatConversationPage() {
       minHeight: 0,
       overflow: 'hidden',
     }}>
-      {/* Wallpaper - a sibling of the scrollable messages area (not a child
-          of it), pinned via position:absolute to this whole conversation
-          panel. WhatsApp/Telegram's chat background never moves as you
-          scroll message history - only the bubbles scroll, the wallpaper
-          stays put. Putting it inside the scrollable container (the
-          earlier approach) can't guarantee that; living outside it here
-          means it structurally cannot scroll - there's no scroll container
-          between it and this panel. Header is opaque and paints over it;
-          the messages area below has no background of its own, so the
-          wallpaper shows through in the gaps between bubbles. */}
-      <ChatWallpaper />
+      {/* Plain background (19 Nov 2026): the doodle wallpaper was removed. */}
       {/* Header */}
       {/* A hairline under the header (19 Nov 2026) sets it apart from the messages. */}
       <div className="header-row mp-glass-header sticky top-0 gap-3 px-4 pt-header pb-3 flex-shrink-0 z-10" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -4961,8 +4779,7 @@ export function ChatConversationPage() {
       )}
 
       {/* Scrollable conversation area - tap to hide keyboard. No background
-          of its own (transparent) so the fixed ChatWallpaper sibling above
-          shows through in the gaps between message bubbles. */}
+          of its own: the panel's plain background shows behind the bubbles. */}
       {/* The message area plus, until it's loaded and positioned, chat bubble
           placeholders drawn over it in the same space. */}
       <div className="flex-1 min-h-0 relative flex flex-col">
