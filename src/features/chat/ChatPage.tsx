@@ -4852,7 +4852,8 @@ export function ChatConversationPage() {
           wallpaper shows through in the gaps between bubbles. */}
       <ChatWallpaper />
       {/* Header */}
-      <div className="header-row mp-glass-header sticky top-0 gap-3 px-4 pt-header pb-3 flex-shrink-0 z-10">
+      {/* A hairline under the header (19 Nov 2026) sets it apart from the messages. */}
+      <div className="header-row mp-glass-header sticky top-0 gap-3 px-4 pt-header pb-3 flex-shrink-0 z-10" style={{ borderBottom: '1px solid var(--border)' }}>
         {selecting ? (
           <>
             <button onClick={clearSelection} className="back-btn" aria-label="Cancel selection">
