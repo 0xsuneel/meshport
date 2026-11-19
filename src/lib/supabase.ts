@@ -167,8 +167,28 @@ export function syncAuthUidToProfile(userId: string, signer?: import('@/wallet')
 
       const message = `MeshPort sign-in\nAccount: ${userId}\nSession: ${sessionId}\nTime: ${new Date().toISOString()}`
       const signature = await signer.signMessage({ message })
-      const { data, error } = await supabase.functions.invoke('bind-session', { body: { userId, message, signature } })
+      const { data, error } = await supabase.functions.invoke('bind-session', { body: { userId, message, signature, canShare: true } })
       if (error || !data?.ok) return false
+      // The account is already linked on another device: sign in as that
+      // same identity (19 Nov 2026), so both devices see the account's data
+      // instead of taking turns - see bind-session step 4.
+      if (data.adopt?.email && data.adopt?.password) {
+        const { data: signed, error: signErr } = await supabase.auth.signInWithPassword({ email: data.adopt.email, password: data.adopt.password })
+        if (signErr || !signed?.session) {
+          // Couldn't sign in that way: link this device's own session, as before.
+          const retry = await supabase.functions.invoke('bind-session', { body: { userId, message, signature, noShare: true } })
+          if (retry.error || !retry.data?.ok) return false
+          _linkedKey = linkKey
+          invalidateConversationsCache()
+          try { window.dispatchEvent(new CustomEvent('meshport:session-bound')) } catch { /* no window */ }
+          return true
+        }
+        _anonSignInDone = true
+        _linkedKey = `${userId}:${signed.session.user.id}`
+        invalidateConversationsCache()
+        try { window.dispatchEvent(new CustomEvent('meshport:session-bound')) } catch { /* no window */ }
+        return true
+      }
       _linkedKey = linkKey
       if (data.changed) {
         invalidateConversationsCache()
