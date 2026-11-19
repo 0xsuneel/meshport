@@ -1,4 +1,5 @@
 import { ScratchGift } from '@/components/rewards/ScratchGift'
+import { useStaggerIn } from '@/lib/staggerIn'
 import { backLayerPop } from '@/lib/backLayers'
 import { formatLocale } from '@/lib/localeFormat'
 import { prepareSigner, getReadySigner, preparePayments } from '@/lib/paymentReadiness'
@@ -621,6 +622,9 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   const [loading, setLoading] = useState(() => _cachedConversations.length === 0 && _cacheLoadedForUser !== user?.id && readChatListCache(user?.id) === null)
   // The list couldn't load and there's nothing to show: a retry, not "No conversations yet".
   const [listLoadFailed, setListLoadFailed] = useState(false)
+  // The chats arrive one after another as the list opens (19 Nov 2026).
+  const chatRevealRef = useRef<HTMLDivElement>(null)
+  useStaggerIn(chatRevealRef, !loading && conversations.length > 0)
   const [newChatSearch, setNewChatSearch] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
   // Last-known contacts show instantly (see peopleCache); the loader below refreshes them.
@@ -1290,7 +1294,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
           </button>
         </div>
       ) : (
-        <div className="pb-4">
+        <div className="pb-4" ref={chatRevealRef}>
           {listTab === 'requests' && !searchQ && (
             <p className="px-4 pt-3 pb-1 text-[13px] text-text-secondary">
               People you don't know yet. Hold a chat to accept or block them - accepted chats move to All.

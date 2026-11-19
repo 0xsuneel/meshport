@@ -1,4 +1,5 @@
 import { DESKTOP_QUERY } from '@/lib/motion'
+import { useStaggerIn } from '@/lib/staggerIn'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { AnimatePresence } from 'framer-motion'
@@ -1274,12 +1275,11 @@ export function ActivityPage() {
   // The list fades in once, when it replaces the loading cards - not on
   // scroll-loading, a refresh or a new row (the class stays, so the
   // animation never restarts).
-  const sawSkeleton = useRef(false)
-  const [listFade, setListFade] = useState(false)
-  if (loading && records.length === 0) sawSkeleton.current = true
-  useEffect(() => {
-    if (!listFade && sawSkeleton.current && records.length > 0) setListFade(true)
-  }, [listFade, records.length])
+  // 19 Nov 2026: the rows (and their day labels) arrive one after another
+  // as the page opens - from the saved list at once, or when the first load
+  // replaces the loading cards. Once per visit (lib/staggerIn).
+  const listRef = useRef<HTMLDivElement>(null)
+  useStaggerIn(listRef, records.length > 0 && !loading, '[data-stagger], [data-activity-id]')
 
   // Debounce the search box → useActivity's `search` state, which re-queries
   // Supabase (see fetchActivity's search clause) rather than only filtering
@@ -1353,7 +1353,7 @@ export function ActivityPage() {
             <div className="px-4 lg:max-w-[1100px] lg:mx-auto">
               {groups.map(group => (
                 <div key={group.label} className="mb-6">
-                  <p className="text-xs font-bold text-text-secondary mb-2 px-1">{group.label}</p>
+                  <p data-stagger className="text-xs font-bold text-text-secondary mb-2 px-1">{group.label}</p>
                   <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 16, overflow: 'hidden' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)' }}>
@@ -1391,7 +1391,7 @@ export function ActivityPage() {
     <div>
             {!showEarned && !loading && groups.map(group => (
               <div key={group.label} className="px-4 mb-4">
-                <p className="text-xs font-bold text-text-secondary mb-2 mt-4 px-1">{group.label}</p>
+                <p data-stagger className="text-xs font-bold text-text-secondary mb-2 mt-4 px-1">{group.label}</p>
                 <div>
                   {group.items.map((item, i, arr) => (
                     <ActivityRow key={item.id} record={item}
@@ -1513,7 +1513,7 @@ export function ActivityPage() {
             onSelect. Only the one on screen is rendered (both used to be,
             one hidden by CSS - every row twice on a phone), and it's built
             once per change of the list, so a re-render mid-scroll is cheap. */}
-        <div className={listFade ? 'mp-fade-in' : undefined}>{listView}</div>
+        <div ref={listRef}>{listView}</div>
 
         <div ref={bottomRef} className="py-2 flex justify-center">
           {loadingMore && <Loader2 className="w-5 h-5 text-text-muted animate-spin" />}

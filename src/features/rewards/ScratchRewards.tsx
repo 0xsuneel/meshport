@@ -6,6 +6,7 @@
 // (lib/scratchCards). A card's prize is decided by the server when the
 // payment is confirmed and is only learned by scratching it - never listed.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useStaggerIn } from '@/lib/staggerIn'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
@@ -103,6 +104,10 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
   // state). Everything is read together and shown at once; a refresh keeps
   // what's on screen until its new numbers are in.
   const [ready, setReady] = useState(false)
+  // The page's sections arrive one after another as it opens (19 Nov 2026) -
+  // banner, balances, lifetime, today, the cards, offers, ways to earn.
+  const revealRef = useRef<HTMLDivElement>(null)
+  useStaggerIn(revealRef, true)
   const load = useCallback(async () => {
     try {
       const [s, list, t, w] = await Promise.all([
@@ -180,7 +185,7 @@ export function ScratchRewards({ isDesktop, totalPoints, onPointsWon, onClaimUsd
   ]
 
   return (
-    <div>
+    <div ref={revealRef}>
       <style>{CSS}</style>
       {/* Banner */}
       <div style={{ position: 'relative', margin: `4px ${m}px 0`, height: 168, borderRadius: 22, overflow: 'hidden', padding: '18px 16px',

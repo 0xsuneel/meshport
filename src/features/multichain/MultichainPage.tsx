@@ -1,4 +1,5 @@
 import { backLayerPop } from '@/lib/backLayers'
+import { useStaggerIn } from '@/lib/staggerIn'
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { HistoryIcon } from '@/components/ui/HistoryRow'
@@ -969,6 +970,9 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
       })
     : allItems.filter(i => i.status === tab)
   const pendingCount = allItems.filter(i => i.status === 'pending').length
+  // The history rows arrive one after another as the Hub opens (19 Nov 2026).
+  const hubRevealRef = useRef<HTMLDivElement>(null)
+  useStaggerIn(hubRevealRef, !(loadingActivity && filtered.length === 0) && filtered.length > 0)
   // Recover's dot / count: only moves whose money already left and still
   // needs finishing - a failure where nothing moved has nothing to recover.
   const failedCount  = allItems.filter(i => i.status === 'failed' && i.needsRecovery).length
@@ -1038,7 +1042,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
 
           {/* Activity list - a clean list like the main Activity: no card
               or divider lines, rows sit on the page. */}
-          <div>
+          <div ref={hubRevealRef}>
             {loadingActivity && filtered.length === 0 ? (
               <SkeletonCards count={3} className="pt-1" />
             ) : filtered.length === 0 ? (
