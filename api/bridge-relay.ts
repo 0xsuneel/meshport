@@ -966,6 +966,8 @@ const FEE_ROWS_TTL_MS = 20_000
 const GAS_PRICE_TTL_MS = 10_000
 const feeRowsCache = new Map<number, { at: number; rows: Promise<IrisFeeRow[]> }>()
 const gasPriceCache = new Map<string, { at: number; price: Promise<bigint> }>()
+/** The chain's USDC can't verify a signature we could make (see quote()). */
+class UsdcDomainError extends Error {}
 const usdcMetaCache = new Map<string, Promise<[string, string]>>()
 
 function cached<K, V>(map: Map<K, { at: number } & Record<string, any>>, key: K, field: string, ttl: number, load: () => Promise<V>): Promise<V> {
@@ -1073,8 +1075,10 @@ async function quote(chainKey: string, total: bigint) {
       const m = matchUsdcDomain(sep, c.id, c.usdc, { name, version })
       if (!m) {
         // What the token itself says, so the cause can be read from the logs.
+        // An all-zero separator means the token never set one (Linea Sepolia's
+        // test USDC): no EIP-712 signature can verify there.
         console.error(`[bridge-relay] ${chainKey} USDC domain mismatch: name()=${JSON.stringify(name)} version()=${JSON.stringify(version)} DOMAIN_SEPARATOR=${sep} chainId=${c.id} token=${c.usdc}`)
-        throw new Error(`${c.name}: USDC signing domain not recognised - bringing from here is paused`)
+        throw new UsdcDomainError(`${c.name} can't be used for gasless Bring yet: its USDC has no usable signing domain.`)
       }
       return [m.name, m.version]
     })
@@ -1805,7 +1809,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const total = String(req.query.amount || '')
       if (!CHAINS[chainKey] || !routers()[chainKey]) return res.status(400).json({ error: 'Gasless bridging is not available for this chain' })
       if (!isUint(total) || BigInt(total) < MIN_TOTAL_UNITS) return res.status(400).json({ error: 'Minimum is 1 USDC' })
-      const q = await quote(chainKey, BigInt(total))
+      let q: Awaited<ReturnType<typeof quote>>
+      try { q = await quote(chainKey, BigInt(total)) }
+      catch (e) {
+        if (e instanceof UsdcDomainError) { usdcMetaCache.delete(chainKey); return res.status(422).json({ error: e.message }) }
+        throw e
+      }
       // fee / maxFee: Circle's forwarder mints (what older app builds sign).
       // relayerMint: MeshPort's relayer mints on Arc - no forwarding fee.
       return res.status(200).json({
