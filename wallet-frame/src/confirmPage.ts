@@ -73,6 +73,8 @@ try { new ResizeObserver(tellSize).observe(document.body) } catch { /* sized onc
 
 // ── Visibility ──────────────────────────────────────────────────────────────
 let visible = true
+/** When the browser last confirmed the page fully in view (IntersectionObserver v2). */
+let lastVisibleAt = 0
 /** Whether the browser will say if the page is in view (false: input is simply accepted). */
 function watchVisibility(onChange: () => void): boolean {
   const IO = window.IntersectionObserver as unknown as (new (cb: (entries: Array<IntersectionObserverEntry & { isVisible?: boolean }>) => void, o: object) => IntersectionObserver) | undefined
@@ -82,8 +84,9 @@ function watchVisibility(onChange: () => void): boolean {
       const last = entries[entries.length - 1]
       if (!last || last.isVisible === undefined) return // v1 only: nothing to tell
       visible = last.isVisible
+      if (visible) lastVisibleAt = performance.now()
       onChange()
-    }, { threshold: [1], trackVisibility: true, delay: 100 })
+    }, { threshold: [0.98, 1], trackVisibility: true, delay: 100 })
     if (!('trackVisibility' in io)) { io.disconnect(); return false } // not v2
     visible = false // until the browser says so
     io.observe(document.body)
@@ -281,6 +284,11 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
   }
 
   let hiddenTimer: ReturnType<typeof setTimeout> | null = null
+  // Digits typed before a hide are kept this long (see refreshVisibility).
+  const HIDDEN_WIPE_MS = 1200
+  // Taps this soon after the last "visible" reading are kept (see press()).
+  const BLIP_MS = 700
+  let wipeTimer: ReturnType<typeof setTimeout> | null = null
   // The app keeps the sheet out of sight while this page gets ready, so being
   // hidden before it was ever shown is expected - said only after that.
   let everVisible = false
@@ -288,10 +296,19 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
     visKnown = true
     if (hiddenTimer) { clearTimeout(hiddenTimer); hiddenTimer = null }
     if (!visible) {
-      // Typed while something may have covered the page: not used.
-      if (!busy && digits) { digits = '' }
+      // IntersectionObserver v2 flickers to "not visible" for a moment on
+      // Android Chrome (any thin overlap, a gesture edge, a compositing
+      // change) and straight back. Wiping the digits on each blip made the
+      // dots fall back to 0 after 1-2 taps. Nothing is submitted while the
+      // page is hidden (trySubmit / press check `visible`), so the digits are
+      // kept through a short blip and dropped only if the page stays covered.
+      if (!busy && digits && !wipeTimer) wipeTimer = setTimeout(() => {
+        wipeTimer = null
+        if (!visible && !busy && digits) { digits = ''; paint() }
+      }, HIDDEN_WIPE_MS)
       if (!busy && everVisible) hiddenTimer = setTimeout(() => { if (!visible && !busy) sayIt(HIDDEN_SAY, false, true) }, 600)
     } else {
+      if (wipeTimer) { clearTimeout(wipeTimer); wipeTimer = null }
       everVisible = true
       if (earlyTimer) { clearTimeout(earlyTimer); earlyTimer = null }
       if (say.textContent === HIDDEN_SAY) sayIt('')
@@ -335,274 +352,4 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
       setTimeout(() => { sayIt(''); paint() }, (d.lockedForMs ?? 30_000) + 50)
     } else if (d.code === 'bad-passcode') sayIt('Incorrect passcode. Try again.', true)
     else if (d.code === 'expired') { sayIt(d.message ?? 'This request has expired', true); busy = true }
-    else sayIt(d.message || "Couldn't check the passcode - try again", true)
-    tellApp({ state: 'wrong' })
-    paint()
-  })
-
-  // Taps that land the instant the sheet appears, before the browser has
-  // said this page is in view (~0.1 s): kept, not lost - but only before the
-  // page was ever visible, and only if it is confirmed visible within 0.6 s of
-  // the first one (else dropped). Nothing is submitted until it is.
-  let earlyTimer: ReturnType<typeof setTimeout> | null = null
-  const press = (digit: string) => {
-    if (bioMode) { if (bioRunning) return; leaveBio() }
-    if (busy || lockedUntil > Date.now() || digits.length >= LENGTH) return
-    if (visKnown && !visible) {
-      if (everVisible) return
-      if (!earlyTimer) earlyTimer = setTimeout(() => { earlyTimer = null; if (!visible && !busy) { digits = ''; paint() } }, 600)
-    }
-    digits += digit
-    if (say.className.startsWith('say error')) sayIt('')
-    paint()
-    if (digits.length === LENGTH) setTimeout(trySubmit, 80)
-  }
-  const back = () => { if (!busy && digits) { digits = digits.slice(0, -1); paint() } }
-
-  const key = (label: string | Node, onTap: () => void, cls = 'key', aria?: string, onClick = false) => {
-    const b = el('button', cls); b.type = 'button'
-    if (typeof label === 'string') b.textContent = label; else b.append(label)
-    if (aria) b.setAttribute('aria-label', aria)
-    if (onClick) b.addEventListener('click', onTap) // WebAuthn needs the tap's activation (a touch pointerdown has none)
-    else {
-      // Digits respond on press, like a native keypad; click covers keyboard / AT.
-      b.addEventListener('pointerdown', (ev) => { if (ev.pointerType !== 'mouse' || ev.button === 0) { ev.preventDefault(); onTap() } })
-      b.addEventListener('click', (ev) => { if (ev.detail === 0) onTap() })
-    }
-    keys.push(b)
-    return b
-  }
-
-  // The fingerprint key: once the request (and with it the sealed passcode) is here.
-  // A tap while the page isn't confirmed visible yet - the sheet still sliding
-  // in, the first ~0.6 s - used to do nothing at all. It now waits up to 1 s
-  // for the page to be visible, then opens the prompt (the OS prompt itself
-  // needs the person's finger or face); still covered, it says so.
-  let bioWanted: { biometric: ConfirmBiometric; until: number } | null = null
-  const runFingerprint = async (biometric: ConfirmBiometric, keyEl: HTMLElement) => {
-    if (busy || lockedUntil > Date.now() || !req) return
-    if (!visKnown || !visible) {
-      bioWanted = { biometric, until: Date.now() + 1000 }
-      setTimeout(() => { if (bioWanted && Date.now() >= bioWanted.until && !busy) { bioWanted = null; sayIt(HIDDEN_SAY, false, true) } }, 1050)
-      return
-    }
-    bioWanted = null
-    const name = biometric.label || 'Fingerprint'
-    busy = true; keyEl.classList.add('trying'); paint(); sayIt(`Waiting for ${name.toLowerCase() === 'face id' ? name : name.toLowerCase()}…`)
-    let passcode: string | null = null
-    let cancelled = false
-    try { passcode = await passcodeFromFingerprint(biometric) } catch (e) {
-      // Cancelled or timed out (NotAllowedError / AbortError): a normal choice - no error, as on the lock screen.
-      cancelled = e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'AbortError')
-    }
-    busy = false; keyEl.classList.remove('trying')
-    if (passcode) submit(passcode, 'biometric')
-    else { sayIt(cancelled ? '' : `${name} didn't work - enter your passcode`, !cancelled); paint() }
-  }
-  const fingerprintKey = (biometric: ConfirmBiometric) => {
-    const k = key(fingerprintIcon(biometric.label), () => { void runFingerprint(biometric, k) }, 'key bio', `Use ${biometric.label || 'fingerprint'}`, true)
-    return k
-  }
-  const canFingerprint = (b: ConfirmBiometric | null): b is ConfirmBiometric => !!b && !!window.PublicKeyCredential
-
-  const pad = el('div', 'pad')
-  for (const n of ['1', '2', '3', '4', '5', '6', '7', '8', '9']) pad.append(key(n, () => press(n)))
-  let bioCell: HTMLElement = canFingerprint(req?.biometric ?? null) ? fingerprintKey(req!.biometric!) : Object.assign(el('span'), { ariaHidden: 'true' })
-  pad.append(bioCell, key('0', () => press('0')), key(deleteIcon(), back, 'key del', 'Delete'))
-
-  document.addEventListener('keydown', (e) => {
-    if (/^[0-9]$/.test(e.key)) { press(e.key); e.preventDefault() }
-    else if (e.key === 'Backspace') { back(); e.preventDefault() }
-  })
-
-  // A computer (data-desk): one line under the dots instead of the keys -
-  // "Type your passcode", or, when the keyboard is with the app around this
-  // page, a click here first (the app hands the keyboard over itself when the
-  // page shows; a click elsewhere takes it back).
-  const deskHint = el('p', 'desk-hint')
-  const paintDesk = () => {
-    const here = document.hasFocus()
-    deskHint.textContent = here ? 'Type your passcode' : 'Click here, then type your passcode'
-    deskHint.classList.toggle('away', !here)
-  }
-  paintDesk()
-  window.addEventListener('focus', paintDesk)
-  window.addEventListener('blur', paintDesk)
-  deskHint.addEventListener('pointerdown', () => window.focus())
-
-  const entry = el('div', 'entry')
-  entry.append(dots, say, deskHint, pad)
-
-  // ── Fingerprint / Face first ──────────────────────────────────────────────
-  // Biometric on: the page opens on a fingerprint panel, not the keypad, and
-  // the prompt opens by itself once the page is confirmed in view. Cancelled
-  // or failed - or "Use passcode" - and it switches to the keypad (which sits
-  // underneath all along, so the sheet keeps its height). A browser that only
-  // opens the prompt after a tap here (iPhone Safari refuses it at once) keeps
-  // the panel with "Tap to use …": one tap on the big key.
-  const bioFirst = el('div', 'bio-first')
-  const bioBtn = el('button', 'bio-big'); bioBtn.type = 'button'
-  const bioSay = el('p', 'bio-say', '')
-  bioSay.setAttribute('role', 'status')
-  const bioAlt = el('button', 'bio-alt', 'Use passcode'); bioAlt.type = 'button'
-  bioFirst.append(bioBtn, bioSay, bioAlt)
-  entry.append(bioFirst)
-  let bioMode = false
-  let bioRunning = false
-  let bioAutoDone = false
-  let bioOf: ConfirmBiometric | null = null
-  const bioName = (b: ConfirmBiometric) => b.label || 'Fingerprint'
-  const bioWord = (b: ConfirmBiometric) => (/face/i.test(bioName(b)) ? bioName(b) : bioName(b).toLowerCase())
-  function leaveBio(text = '', bad = false) {
-    if (!bioMode) return
-    bioMode = false
-    entry.classList.remove('bio')
-    sayIt(text, bad)
-    paint()
-    tellSize()
-  }
-  const enterBio = (b: ConfirmBiometric) => {
-    if (bioMode || digits || busy || held || lockedUntil > Date.now()) return
-    bioOf = b
-    bioMode = true
-    bioBtn.replaceChildren(fingerprintIcon(b.label))
-    bioBtn.setAttribute('aria-label', `Use ${bioWord(b)}`)
-    bioSay.textContent = `Use ${bioWord(b)} to approve`
-    entry.classList.add('bio')
-    maybeAutoBio()
-  }
-  async function bioAttempt(auto: boolean) {
-    const b = bioOf
-    if (!bioMode || bioRunning || busy || !req || !b || lockedUntil > Date.now()) return
-    // Only on a page confirmed in view (as the keypad): a tap before that waits for it.
-    if (!visKnown || !visible) {
-      if (!auto) { bioWanted = null; bioAutoDone = false; bioSay.textContent = 'One moment…' }
-      return
-    }
-    bioRunning = true
-    bioBtn.classList.add('trying')
-    bioSay.textContent = `Waiting for ${bioWord(b)}…`
-    const started = performance.now()
-    let passcode: string | null = null
-    let err: unknown = null
-    try { passcode = await passcodeFromFingerprint(b) } catch (e) { err = e }
-    bioRunning = false
-    bioBtn.classList.remove('trying')
-    if (!bioMode) return // switched to the passcode meanwhile
-    if (passcode) { bioSay.textContent = 'Checking…'; submit(passcode, 'biometric'); return }
-    const name = err instanceof DOMException ? err.name : ''
-    // Refused at once, with no prompt shown: this browser wants a tap here first.
-    if (auto && name === 'NotAllowedError' && performance.now() - started < 700) { bioSay.textContent = `Tap to use ${bioWord(b)}`; return }
-    const cancelled = name === 'NotAllowedError' || name === 'AbortError'
-    leaveBio(cancelled ? '' : `${bioName(b)} didn't work - enter your passcode`, !cancelled)
-  }
-  function maybeAutoBio() {
-    if (!bioMode || bioAutoDone || !req || !visKnown || !visible) return
-    bioAutoDone = true
-    void bioAttempt(true)
-  }
-  bioBtn.addEventListener('click', () => { void bioAttempt(false) }) // a tap: WebAuthn gets its activation
-  bioAlt.addEventListener('click', () => leaveBio())
-
-  show(cardBox, entry)
-  visKnown = !watchVisibility(refreshVisibility)
-  if (canFingerprint(req?.biometric ?? null)) enterBio(req!.biometric!)
-  paint()
-  tellApp({ state: 'ready' })
-
-  // The request, for a page opened by slot.
-  return {
-    arrived(next: Req) {
-      req = next
-      cardBox.replaceChildren(card(next.view, next.summary ?? appSummary))
-      if (canFingerprint(next.biometric)) { const k = fingerprintKey(next.biometric); bioCell.replaceWith(k); bioCell = k }
-      tellSize()
-      // Biometric on, nothing typed yet: the fingerprint panel, and its prompt.
-      if (canFingerprint(next.biometric) && !held && !digits) enterBio(next.biometric)
-      if (held) {
-        const h = held; held = null
-        if (agrees(next.view, appSummary)) send(h.passcode, h.via)
-        else { busy = false; digits = ''; sayIt('Check who gets paid, then enter your passcode', true); paint() }
-      }
-      paint()
-    },
-    failed(text: string) { show(el('p', 'error center', text)) },
-  }
-}
-
-/** The app's summary from the URL (its own words, kept short - as the frame does). */
-function appSummaryFrom(raw: string | null): ConfirmSummary | null {
-  try {
-    const r = JSON.parse(raw ?? 'null') as Record<string, unknown> | null
-    if (!r || typeof r !== 'object') return null
-    const clip = (v: unknown, n: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : undefined)
-    const label = clip(r.label, 40), name = clip(r.name, 80)
-    if (!label || !name) return null
-    return { label, name, detail: clip(r.detail, 80), amount: clip(r.amount, 32), unit: clip(r.unit, 16) }
-  } catch { return null }
-}
-
-/** Opened by slot (or handed one): the keypad now, the request when the wallet has it. */
-function startBySlot(ch: BroadcastChannel, slot: string, summaryRaw: string | null) {
-  const page = run(ch, null, appSummaryFrom(summaryRaw))
-  let done = false
-  const onRequest = (e: MessageEvent) => {
-    const d = e.data ?? {}
-    if (d.type !== 'request' || d.slot !== slot) return
-    done = true
-    ch.removeEventListener('message', onRequest)
-    if (d.error || typeof d.ticket !== 'string' || (!d.view && !d.summary)) page.failed('This request has expired. Close it and try again.')
-    else page.arrived({ ticket: d.ticket, view: d.view ?? null, summary: d.summary ?? null, biometric: d.biometric ?? null })
-  }
-  ch.addEventListener('message', onRequest)
-  const started = Date.now()
-  const ask = () => {
-    if (done) return
-    if (Date.now() - started > 15_000) { page.failed('The wallet is not open. Close this and try again.'); return }
-    ch.postMessage({ type: 'claim', slot })
-    setTimeout(ask, 150)
-  }
-  ask()
-}
-
-let channel: BroadcastChannel | null = null
-try { channel = new BroadcastChannel(CONFIRM_CHANNEL) } catch { /* below */ }
-if (!channel) {
-  show(el('p', 'error center', "This browser can't confirm here."))
-} else if (/^[0-9a-f]{32}$/.test(slotParam)) {
-  startBySlot(channel, slotParam, summaryParam)
-} else if (standby) {
-  // Waits, empty, for the app (only this page's own parent, from an app
-  // origin) to hand it its payment: the same slot and summary the address
-  // would have carried. Once only - a page is never used for two payments.
-  const ch = channel
-  let used = false
-  window.addEventListener('message', (e: MessageEvent) => {
-    if (used || e.source !== parent || parent === window || !PARENTS.includes(e.origin)) return
-    const d = (e.data ?? {}) as { type?: string; slot?: unknown; s?: unknown; theme?: unknown; short?: unknown; desk?: unknown }
-    if (d.type !== 'mp-confirm-assign' || typeof d.slot !== 'string' || !/^[0-9a-f]{32}$/.test(d.slot)) return
-    used = true
-    document.documentElement.dataset.theme = d.theme === 'light' ? 'light' : 'dark'
-    if (d.short === true) document.documentElement.dataset.short = ''
-    else delete document.documentElement.dataset.short
-    if (d.desk === true) document.documentElement.dataset.desk = ''
-    else delete document.documentElement.dataset.desk
-    startBySlot(ch, d.slot, typeof d.s === 'string' ? d.s : null)
-  })
-  tellApp({ state: 'standby' })
-} else if (/^0x[0-9a-f]{32}$/.test(ticketParam)) {
-  const ch = channel
-  const timer = setTimeout(() => show(el('p', 'error center', 'The wallet is not open. Close this and try again.')), 5000)
-  const onRequest = (e: MessageEvent) => {
-    const d = e.data ?? {}
-    if (d.type !== 'request' || d.ticket !== ticketParam) return
-    clearTimeout(timer)
-    ch.removeEventListener('message', onRequest)
-    if (d.error || (!d.view && !d.summary)) show(el('p', 'error center', 'This request has expired. Close it and try again.'))
-    else run(ch, { ticket: ticketParam, view: d.view ?? null, summary: d.summary ?? null, biometric: d.biometric ?? null }, null)
-  }
-  ch.addEventListener('message', onRequest)
-  ch.postMessage({ type: 'claim', ticket: ticketParam })
-} else {
-  show(el('p', 'error center', 'This link has expired. Close it and try again.'))
-}
+    else sayIt(
