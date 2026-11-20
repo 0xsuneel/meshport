@@ -1071,7 +1071,11 @@ async function quote(chainKey: string, total: bigint) {
     ]).then(([name, version, sep]): [string, string] => {
       if (!sep) return [name, version] // no separator to check against: as before
       const m = matchUsdcDomain(sep, c.id, c.usdc, { name, version })
-      if (!m) throw new Error(`${c.name}: USDC signing domain not recognised - bringing from here is paused`)
+      if (!m) {
+        // What the token itself says, so the cause can be read from the logs.
+        console.error(`[bridge-relay] ${chainKey} USDC domain mismatch: name()=${JSON.stringify(name)} version()=${JSON.stringify(version)} DOMAIN_SEPARATOR=${sep} chainId=${c.id} token=${c.usdc}`)
+        throw new Error(`${c.name}: USDC signing domain not recognised - bringing from here is paused`)
+      }
       return [m.name, m.version]
     })
     usdcMetaCache.set(chainKey, meta)
