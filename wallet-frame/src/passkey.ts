@@ -11,6 +11,7 @@
 import { PASSKEY_CHANNEL, type PasskeyOutcome, type PasskeyRequest } from '@/wallet/protocol'
 import { base64url, encodePasskeySignature, p256FromSpki } from '@/wallet/safe/passkeySignature'
 import { hexToBytes, toHex } from 'viem'
+import { watchVisible } from './visibleGate'
 
 const RP_NAME = 'MeshPort'
 // The passkey's relying party. Production: the app's site (e.g. meshport.xyz),
@@ -22,6 +23,10 @@ const ticket = params.get('t') ?? ''
 history.replaceState(null, '', location.pathname)
 document.documentElement.dataset.theme = params.get('theme') === 'light' ? 'light' : 'dark'
 const root = document.getElementById('root')!
+
+// A passkey prompt opens only from a tap made while this page is really in
+// view (not covered, faded or filtered by the embedding page).
+const gate = watchVisible()
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string) {
   const n = document.createElement(tag)
@@ -87,7 +92,13 @@ function run(channel: BroadcastChannel, request: PasskeyRequest) {
     channel.postMessage({ type: 'outcome', ticket, outcome })
     show(el('p', outcome.status === 'error' ? 'error' : 'muted', outcome.status === 'error' ? outcome.message : 'Done - you can close this.'))
   }
+  const label = button.textContent
   button.onclick = async () => {
+    if (!gate.ok()) {
+      button.textContent = 'Make sure nothing covers this page, then tap again.'
+      setTimeout(() => { button.textContent = label }, 2000)
+      return
+    }
     button.disabled = true
     try {
       finish(isCreate ? await create(request) : await sign(request as Extract<PasskeyRequest, { mode: 'sign' }>))
