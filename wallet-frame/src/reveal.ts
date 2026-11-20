@@ -10,6 +10,7 @@
 // The ticket rides in the fragment, which is never sent to a server.
 
 import { REVEAL_CHANNEL, parseOrigins } from '@/wallet/protocol'
+import { watchVisible } from './visibleGate'
 
 // The app origins allowed to embed this page (same list as main.ts).
 const PARENTS = parseOrigins(import.meta.env.VITE_WALLET_PARENT_ORIGINS as string | undefined
@@ -21,6 +22,11 @@ history.replaceState(null, '', location.pathname) // drop the ticket from the UR
 document.documentElement.dataset.theme = params.get('theme') === 'light' ? 'light' : 'dark'
 
 const root = document.getElementById('root')!
+
+// Taps count only while the browser says the page is in view (not covered,
+// faded or filtered by the embedding page) and has been for a moment.
+const gate = watchVisible()
+const BLOCKED = 'Make sure nothing covers this page, then tap again.'
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string) {
   const n = document.createElement(tag)
@@ -49,6 +55,7 @@ function copyButton(secret: string, label: string) {
   const b = el('button', 'copy outline', label)
   b.type = 'button'
   b.onclick = async () => {
+    if (!gate.ok()) { b.textContent = BLOCKED; setTimeout(() => { b.textContent = label }, 2000); return }
     try {
       await navigator.clipboard.writeText(secret)
       b.textContent = 'Copied'
@@ -92,9 +99,15 @@ function blurred(content: HTMLElement, copy: HTMLButtonElement, what: 'mnemonic'
   const cover = el('button', 'cover')
   cover.type = 'button'
   cover.setAttribute('aria-label', what === 'mnemonic' ? 'Tap to view your recovery phrase' : 'Tap to view your private key')
-  cover.append(eyeBadge(), el('span', 'cover-title', 'Tap to view'), el('span', 'cover-sub', 'Make sure nobody can see your screen'))
+  const sub = el('span', 'cover-sub', 'Make sure nobody can see your screen')
+  cover.append(eyeBadge(), el('span', 'cover-title', 'Tap to view'), sub)
   copy.disabled = true
   cover.onclick = () => {
+    if (!gate.ok()) {
+      sub.textContent = BLOCKED
+      setTimeout(() => { sub.textContent = 'Make sure nobody can see your screen' }, 2000)
+      return
+    }
     box.classList.remove('hidden')
     content.removeAttribute('aria-hidden')
     cover.remove()
@@ -152,6 +165,7 @@ function renderQuiz(words: string[], note?: string) {
     form.append(row)
   }
   confirm.onclick = () => {
+    if (!gate.ok()) { confirm.textContent = BLOCKED; setTimeout(() => { confirm.textContent = 'Confirm' }, 2000); return }
     const ok = asked.every(p => picked.get(p) === words[p])
     if (!ok) { renderQuiz(words, "That's not right. Check your written recovery phrase and try again."); return }
     root.replaceChildren(el('p', 'quiz-done', '✓ Backup checked - your recovery phrase is written down correctly.'))
