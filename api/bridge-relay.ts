@@ -58,6 +58,7 @@ import { relayerAccount, relayerAddress, keyRelayerAccount, relayerMode } from '
 import { CROSS_CHAIN_FEE, usdRule, meshportFee, feeAcceptable, arcWeiToUsdcUnits } from '../src/lib/feePolicy'
 import { waitUntil } from '@vercel/functions'
 import { hedgedTransport } from './_lib/hedgedTransport'
+import { matchUsdcDomain } from './_lib/usdcDomain'
 
 const ARC_DOMAIN = 26
 const FORWARD_HOOK = '0x636374702d666f72776172640000000000000000000000000000000000000000'
@@ -151,6 +152,7 @@ const ROUTER_ABI = [
 const USDC_ABI = [
   { type: 'function', name: 'name', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
   { type: 'function', name: 'version', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'DOMAIN_SEPARATOR', stateMutability: 'view', inputs: [], outputs: [{ type: 'bytes32' }] },
   { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'authorizationState', stateMutability: 'view', inputs: [{ type: 'address' }, { type: 'bytes32' }], outputs: [{ type: 'bool' }] },
 ] as const
@@ -1060,10 +1062,18 @@ async function quote(chainKey: string, total: bigint) {
   const { pub } = await clients(chainKey)
   let meta = usdcMetaCache.get(chainKey)
   if (!meta) {
+    // name()/version() are only a starting point: the signing domain is the
+    // one that hashes to the token's own DOMAIN_SEPARATOR (usdcDomain.ts).
     meta = Promise.all([
       pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'name' }) as Promise<string>,
       pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'version' }) as Promise<string>,
-    ])
+      pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'DOMAIN_SEPARATOR' }).catch(() => null) as Promise<string | null>,
+    ]).then(([name, version, sep]): [string, string] => {
+      if (!sep) return [name, version] // no separator to check against: as before
+      const m = matchUsdcDomain(sep, c.id, c.usdc, { name, version })
+      if (!m) throw new Error(`${c.name}: USDC signing domain not recognised - bringing from here is paused`)
+      return [m.name, m.version]
+    })
     usdcMetaCache.set(chainKey, meta)
     meta.catch(() => usdcMetaCache.delete(chainKey))
   }
