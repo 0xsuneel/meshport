@@ -3835,7 +3835,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               {successPhase === 'collapsed' && (
               <div style={{ margin: '0 -12px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <SuccessReceipt promo="multichain" page={{ gift: <ScratchGift />, chip: 'Sent',
-                  hero: { amount: <ReceiptAmount value={fmtTok(successInfo?.sentAmount || numAmount)} unit={tokenSym} />, line: <>Moved from Arc to {chain.name}</> } }}
+                  hero: { amount: <ReceiptAmount value={`${tokenChar}${fmtTok(successInfo?.sentAmount || numAmount)}`} unit={tokenSym} />, line: <>Moved from Arc to {chain.name}</> } }}
                   style={{ height: 'auto', flex: 1, minHeight: 0 }}
                   actions={[
                     { label: 'Done', onClick: () => navigate('/multichain'), primary: true },
