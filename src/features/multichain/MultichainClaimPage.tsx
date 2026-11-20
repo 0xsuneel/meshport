@@ -2438,7 +2438,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 return (
                 <div style={{ margin: '0 -12px', height: '100%' }}>
                 <SuccessReceipt promo="multichain" page={{ chip: 'Arrived',
-                  hero: { amount: <ReceiptAmount value={fmtCoin(displayTotal)} unit={coin} />, line: <>From {fromLabel}, now in your Arc wallet</> } }}
+                  hero: { amount: <ReceiptAmount value={`${coin === 'USDC' ? '$' : coin === 'EURC' ? '€' : ''}${fmtCoin(displayTotal)}`} unit={coin} />, line: <>From {fromLabel}, now in your Arc wallet</> } }}
                   actions={[
                     { label: 'Done', onClick: () => navigate('/multichain'), primary: true },
                   ]}
