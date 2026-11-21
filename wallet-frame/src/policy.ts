@@ -35,6 +35,27 @@ TOKENS.set(ARC_TOKENS.cirBTC.contract.toLowerCase(), { asset: 'cirBTC', decimals
 for (const c of Object.values(EXTERNAL_CHAINS)) TOKENS.set(c.usdc.toLowerCase(), { asset: 'USDC', decimals: c.decimals })
 TOKENS.set('0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', { asset: 'USDC', decimals: 6 }) // Ethereum mainnet
 
+/**
+ * EURC / cirBTC on the chains MeshPort brings them FROM (Bring signs a
+ * ReceiveWithAuthorization / Permit for the token on the SOURCE chain). Pinned
+ * here, never taken from the app: the frame must know the contract and its
+ * decimals itself to count the signature against the person's limit. Missing
+ * here, Bring of EURC/cirBTC was refused as "a signature this wallet can't
+ * read" and asked for the passcode a second time.
+ * EURC: Circle's published testnet addresses
+ * (developers.circle.com/stablecoins/eurc-contract-addresses).
+ * cirBTC: only Arc's deployment is published (ARC_TOKENS); add a source
+ * chain's cirBTC contract below once Circle's CCTPx registry
+ * (/v2/cctpx/tokens) lists it.
+ */
+const EXTERNAL_TOKEN_DEPLOYMENTS: ReadonlyArray<readonly [string, Asset, number]> = [
+  ['0x5E44db7996c682E92a960b65AC713a54AD815c6B', 'EURC', 6], // Avalanche Fuji
+  ['0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4', 'EURC', 6], // Ethereum Sepolia
+  ['0x808456652fdb597867f38412077A9182bf77359F', 'EURC', 6], // Base Sepolia
+  ['0xe479EcA5740Ac65d6E1823bea2f1C08Bc14e954F', 'EURC', 6], // World Chain Sepolia
+]
+for (const [address, asset, decimals] of EXTERNAL_TOKEN_DEPLOYMENTS) TOKENS.set(address.toLowerCase(), { asset, decimals })
+
 /** Circle's contracts MeshPort's flows call (App Kit's swap adapter, CCTP v2, Gateway). Named by this bundle. */
 export const CIRCLE_CONTRACTS = new Map<string, string>([
   ['0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b', 'Circle swap'],
@@ -53,6 +74,11 @@ export const CIRCLE_CONTRACTS = new Map<string, string>([
   // limit counts. Missing here, a CCTP transfer (Arc -> Solana, 13 Nov) asked
   // for the passcode a second time mid-burn: "A contract this wallet does
   // not recognise".
+  // Circle's CrossChainTokenService (CCTPx; testnet, the same address on every
+  // chain): an EURC / cirBTC transfer approves the token to it and calls
+  // crossChainTransfer with the fee as the chain's native coin. Missing here,
+  // those transfers were refused mid-way and asked for the passcode again.
+  ['0x63753e722bd2c2a5df6ee19c5106662208b81077', 'Circle CCTPx'],
   ['0xc5567a5e3370d4dbfb0540025078e283e36a363d', 'Circle Bridge Kit'],
   ['0xb3fa262d0fb521cc93be83d87b322b8a23daf3f0', 'Circle Bridge Kit'],
 ])

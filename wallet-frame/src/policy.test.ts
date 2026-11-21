@@ -95,6 +95,48 @@ describe('spend limit policy', () => {
     expect(classify(me, 'sign:typed-data', { typedData: { ...permit(me), domain: { verifyingContract: them } } }).ok).toBe(false)
   })
 
+  // Bring of EURC from Ethereum Sepolia (field report 21 Nov): the typed-data
+  // signature was "a signature this wallet can't read" and asked for the
+  // passcode again, because the frame only knew Arc's EURC.
+  it('a Bring authorization for EURC on its source chain is counted, not refused', () => {
+    const SEPOLIA_EURC = '0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4'
+    const ROUTER = '0x3010518F036eE1BF95Da787eEe3AafFAD95a1794'
+    const auth = { domain: { name: 'EURC', version: '2', chainId: 11155111, verifyingContract: SEPOLIA_EURC }, primaryType: 'ReceiveWithAuthorization', message: { from: me, to: ROUTER, value: 1_000_000n } }
+    expect(spends(classify(me, 'sign:typed-data', { typedData: auth }))).toEqual({ EURC: 10n ** 18n })
+    expect(describeRequest('sign:typed-data', { typedData: auth })).toMatchObject({ action: 'Authorise transfer', amount: '1', token: 'EURC' })
+    expect(describeRequest('sign:typed-data', { typedData: auth }).warnings).toEqual([])
+    // A 1 EURC limit (+5%) covers it; the same signature for another owner never.
+    const scope = parseScope({ limits: [{ asset: 'EURC', amount: '1.05' }] })
+    const c = classify(me, 'sign:typed-data', { typedData: auth })
+    expect(c.ok && fits(scope, scope.limits, c)).toBeTruthy()
+    expect(classify(me, 'sign:typed-data', { typedData: { ...auth, message: { ...auth.message, from: them } } }).ok).toBe(false)
+  })
+
+  // EURC / cirBTC out of Arc (CCTPx): approve the token to the service, then
+  // crossChainTransfer with the fee as native USDC value.
+  it("a CCTPx transfer's approval and its native-USDC fee call are covered by one limit", () => {
+    const SERVICE = '0x63753E722bd2C2A5DF6EE19C5106662208B81077'
+    const EURC = '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a'
+    const approve = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [SERVICE, 2_000_000n] })
+    const a = classify(me, 'sign:transaction', { transaction: tx({ to: EURC, data: approve }) })
+    const call = classify(me, 'sign:transaction', { transaction: tx({ to: SERVICE, value: 3n * 10n ** 16n, data: '0x12345678' }) })
+    expect(spends(a)).toEqual({ EURC: 2n * 10n ** 18n })
+    expect(spends(call)).toEqual({ USDC: 3n * 10n ** 16n })
+    const scope = parseScope({ limits: [{ asset: 'EURC', amount: '2.1' }, { asset: 'USDC', amount: '0.5' }] })
+    let left: ReturnType<typeof fits> = scope.limits
+    for (const c of [a, call]) { expect(c.ok).toBe(true); left = c.ok && left ? fits(scope, left, c) : null; expect(left).not.toBeNull() }
+  })
+
+  it('a batch payout through Multicall3 fits a limit that names it, and only then', () => {
+    const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11'
+    const call = classify(me, 'sign:transaction', { transaction: tx({ to: MULTICALL3, value: 5n * 10n ** 18n, data: '0x174dea71' }) })
+    expect(spends(call)).toEqual({ USDC: 5n * 10n ** 18n })
+    const bare = parseScope({ limits: [{ asset: 'USDC', amount: '6' }] })
+    const named = parseScope({ limits: [{ asset: 'USDC', amount: '6' }], contracts: [{ address: MULTICALL3, label: 'Multicall3' }] })
+    expect(call.ok && fits(bare, bare.limits, call)).toBeFalsy()
+    expect(call.ok && fits(named, named.limits, call)).toBeTruthy()
+  })
+
   it('a Gateway burn intent counts its value plus the most it may pay in fees', () => {
     const spec = { sourceToken: pad(SEPOLIA_USDC.toLowerCase() as `0x${string}`), destinationRecipient: pad(me), value: 4_000_000n }
     const set = { domain: { name: 'GatewayWallet', version: '1' }, primaryType: 'BurnIntentSet', message: { intents: [{ maxBlockHeight: 1n, maxFee: 500_000n, spec }, { maxBlockHeight: 1n, maxFee: 0n, spec }] } }
