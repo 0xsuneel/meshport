@@ -44,15 +44,16 @@ TOKENS.set('0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', { asset: 'USDC', decima
  * read" and asked for the passcode a second time.
  * EURC: Circle's published testnet addresses
  * (developers.circle.com/stablecoins/eurc-contract-addresses).
- * cirBTC: only Arc's deployment is published (ARC_TOKENS); add a source
- * chain's cirBTC contract below once Circle's CCTPx registry
- * (/v2/cctpx/tokens) lists it.
+ * cirBTC: Circle publishes Arc (ARC_TOKENS) and Ethereum Sepolia only; add
+ * another source chain's contract below once Circle lists it.
  */
 const EXTERNAL_TOKEN_DEPLOYMENTS: ReadonlyArray<readonly [string, Asset, number]> = [
   ['0x5E44db7996c682E92a960b65AC713a54AD815c6B', 'EURC', 6], // Avalanche Fuji
   ['0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4', 'EURC', 6], // Ethereum Sepolia
   ['0x808456652fdb597867f38412077A9182bf77359F', 'EURC', 6], // Base Sepolia
   ['0xe479EcA5740Ac65d6E1823bea2f1C08Bc14e954F', 'EURC', 6], // World Chain Sepolia
+  // cirBTC (8 decimals): developers.circle.com/assets/cirbtc-contract-addresses
+  ['0x3a3fe695F684Bf9b9e43CF43C2b895Ea5e392bB3', 'cirBTC', 8], // Ethereum Sepolia
 ]
 for (const [address, asset, decimals] of EXTERNAL_TOKEN_DEPLOYMENTS) TOKENS.set(address.toLowerCase(), { asset, decimals })
 
