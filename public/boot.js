@@ -50,22 +50,6 @@
         }
       })();
 
-// ── Circle wallet cold start: open the connection early ──
-      // A returning Google / email account (its wallet is a Circle wallet) loads
-      // Circle's wallet frame (pw-auth.circle.com) right after start. Opening
-      // that connection (DNS, TCP, TLS) now, while the app code downloads,
-      // takes that setup off the critical path. Other accounts and visitors
-      // never talk to Circle's frame, so they don't pay for it.
-      try {
-        var persisted = localStorage.getItem('meshport-auth-v4');
-        if (persisted && persisted.indexOf('"walletSource":"circle"') !== -1) {
-          var pc = document.createElement('link');
-          // No crossorigin: the frame is a page load (credentialed connection).
-          pc.rel = 'preconnect'; pc.href = 'https://pw-auth.circle.com';
-          document.head.appendChild(pc);
-        }
-      } catch (e) {}
-
 // ── Quiet splash on refresh ──
       // Only a real app open gets the teal opening screen; a refresh in the
       // same tab (App.tsx sets the flag once loaded) gets the quiet version.

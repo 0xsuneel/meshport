@@ -1,7 +1,7 @@
 // ── Wallet readiness: one answer to "can this wallet sign right now?" ───────
-// Kept apart on purpose - a stored address is not a signer, a Circle wallet
-// isn't one either until its session, backend check and SDK are ready, and
-// the app's own lock screen is not the wallet's state:
+// Kept apart on purpose - a stored address is not a signer (the key only
+// exists once the wallet frame has opened it), and the app's own lock screen
+// is not the wallet's state:
 //
 //   phase         idle               signed out
 //                 authenticated      signed in, no wallet address yet

@@ -138,8 +138,7 @@ let payStages: { prepare?: number; sign?: number; broadcast?: number; confirm?: 
 
 type PayToken = 'USDC' | 'EURC' | 'cirBTC'
 // feeCap: maxFeePerGas, read once here so the send signs exactly the
-// transaction prepared for it (a Circle wallet's signing request is made from
-// it while the PIN is typed - prepareCircleSignature).
+// transaction prepared for it.
 type Preflight = { intent: import('./payIntentService').CreatePayIntentResult; gas: bigint; balance?: number; feeCap: bigint }
 
 const PREFLIGHT_TTL_MS = 60_000
@@ -209,8 +208,8 @@ async function runPreflight(token: PayToken, sender: `0x${string}`, destination:
     publicClient.estimateGas({ account: sender, to: tx.to, value: tx.value, data: tx.data }),
     sendFeeCap(),
   ]).then(([intent, gas, feeCap]) => ({ intent, gas, feeCap }))
-  // The transaction is known as soon as these are: a Circle wallet's signing
-  // request can be asked for without waiting on the balance read.
+  // The transaction is known as soon as these are, so callers can use it
+  // without waiting on the balance read.
   if (onSendInputs) void sendInputsP.then(onSendInputs, () => {})
   const [balance, inputs] = await Promise.all([balanceP, sendInputsP])
   return { ...inputs, balance }
