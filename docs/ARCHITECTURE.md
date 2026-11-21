@@ -75,7 +75,7 @@ MeshPort collapses each of those steps:
 | Chat and payments are separate apps | Chat & Pay: payments are sent as first-class chat message types, with status shown inline |
 | Paying many people is many transactions | Bulk Pay batches every recipient into one Multicall3 transaction |
 | Managing multiple assets is confusing | A single Home balance view across USDC, EURC, and cirBTC, with an in-app Swap between them |
-| Onboarding requires understanding wallets first | Email OTP or Google sign-in auto-provisions a wallet server-side; a 6-digit passcode is the only secret the user manages day-to-day |
+| Onboarding requires understanding wallets first | Create a wallet in one step (or import one); a 6-digit passcode, with optional fingerprint / Face ID unlock, is the only secret the user manages day-to-day |
 
 ## Key Features
 
@@ -84,8 +84,7 @@ Grouped by how solid the implementation is, based on reading the actual code —
 ### Fully implemented
 - **Wallet creation** — BIP39 mnemonic generation, viem HD derivation (`src/lib/arc.ts`)
 - **Wallet import/recovery** — import via seed phrase or raw private key (`src/lib/restoreWallet.ts`)
-- **Social auth wallets** — Google / Email OTP sign-in creates a self-custodial wallet on the device, unlocked on other devices with a passkey (WebAuthn PRF) or an encrypted Recovery QR (`src/lib/socialWallet.ts`, `walletPasskey.ts`, `recoveryQr.ts`; see [SELF_CUSTODY.md](SELF_CUSTODY.md))
-- **Email OTP authentication** — Supabase Auth OTP flow (`src/features/auth/AuthPages.tsx`)
+- **Wallet-signature sign-in** — the wallet signs a short message and the server verifies it, so the same wallet gives the same account on any device (`supabase/functions/wallet-login`, `src/lib/supabase.ts`)
 - **6-digit passcode / app lock** — required for send, seed reveal, and private key export (`src/lib/security.ts`)
 - **MeshPort username system (`.arc`)** — unique handles resolved through Supabase, no on-chain registry (`src/lib/usernameRegistry.ts`)
 - **QR payments** — scan-to-pay and generate-to-receive (`src/features/scanner/ScannerPage.tsx`, `src/features/receive/ReceivePage.tsx`)
@@ -114,9 +113,9 @@ No other product surface in the codebase (no NFTs, no lending, no card issuance,
 ## Feature Guide (How It Works)
 
 ### Authentication & Onboarding
-1. User chooses Google, Email OTP, or "create/import a wallet directly."
-2. Social logins hit Supabase Auth. A new account's wallet key is generated on the device (`createLocalWallet`) and kept there sealed with the browser's non-extractable device key; the user then adds a passkey and/or saves a Recovery QR. A returning account on a new device unlocks with the passkey or the Recovery QR (`SecureWalletPage.tsx`). The server never receives the key.
-3. Every account — social or self-custodial — must set a 6-digit passcode (`PasscodeSetup.tsx`) before reaching the app. The passcode is used only to gate the local UI/actions; for self-custodial wallets it also derives the AES-GCM key that encrypts the private key at rest (`security.ts`).
+1. User chooses "create a wallet" or "import a wallet" (recovery phrase or private key).
+2. The wallet key is generated or imported inside the wallet frame (`src/wallet`) and never leaves the device. The server never receives it.
+3. Every account must set a 6-digit passcode (`PasscodeSetup.tsx`) before reaching the app. The passcode gates the local UI/actions and derives the AES-GCM key that encrypts the private key at rest (`security.ts`). Fingerprint / Face ID unlock is optional (`EnableBiometricPage.tsx`). The app then signs in to the server with a wallet signature (`supabase/functions/wallet-login`).
 4. The user claims a `.arc` username (`ClaimUsernamePage`, inside `AuthPages.tsx`), which is written to `users.username` in Supabase — usernames are not an on-chain registry.
 
 ### Send (Pay/Send)
@@ -319,7 +318,6 @@ meshport-main/
 │   │   ├── ledger-interpret/ activity-consumer/  # Ledger → Activity projection pipeline
 │   │   ├── bulkpay-intent/      #   Idempotent Bulk Pay intent tracking
 │   │   ├── pay-intent/ swap-intent/  # Idempotent intent tracking for Send/Swap
-│   │   ├── wallet-key/          #   Retired (answers 410) — wallets are self-custodial now
 │   │   ├── p2p-release-reconcile/  # Reconciles on-chain escrow release with trade state
 │   │   └── chain-transfer-webhook/ # Inbound webhook for chain-transfer events
 │   ├── migrations/               # SQL migrations — the real, applied database schema history
@@ -340,7 +338,7 @@ The `docs/` folder already contains a large set of detailed engineering document
 
 | Feature | Main files | Purpose |
 |---|---|---|
-| Auth (Google/Email OTP, passcode) | `src/features/auth/AuthPages.tsx`, `SecureWalletPage.tsx`, `PasscodeSetup.tsx`, `src/lib/socialWallet.ts`, `walletPasskey.ts`, `recoveryQr.ts`, `security.ts` | Sign-in, on-device wallet, passkey / Recovery QR, passcode lock |
+| Auth (create/import wallet, passcode) | `src/features/auth/AuthPages.tsx`, `PasscodeSetup.tsx`, `src/wallet`, `src/lib/security.ts`, `supabase/functions/wallet-login` | Create/import wallet, passcode lock, wallet-signature sign-in |
 | Send / Receive | `src/features/paysend/PaySendPage.tsx`, `src/features/receive/ReceivePage.tsx`, `src/lib/arcService.ts` | Core USDC/EURC/cirBTC transfer on Arc |
 | QR / Payment Links | `src/features/scanner/ScannerPage.tsx`, `api/og-pay.ts`, `api/og-image.tsx` | Scan-to-pay, shareable/previewable pay links |
 | Chat & Pay | `src/features/chat/ChatPage.tsx`, `src/lib/chatService.ts`, `src/lib/chatCrypto.ts`, `api/chat.ts` | E2E-encrypted chat with inline payments |
@@ -527,14 +525,11 @@ Cron-triggered functions (`claim-worker` in `sweep` mode, `deposit-scan-all`) re
 - **Passcode:** a 6-digit passcode is mandatory for every account. It is hashed with PBKDF2 (100,000 iterations, SHA-256) with an embedded salt (`security.ts`) for local verification, and gates sending funds, revealing the seed phrase, and exporting the private key.
 - **Every wallet is self-custodial:**
   - *Created/imported wallet*: the private key is encrypted **client-side** with an AES-GCM key derived from the user's passcode via PBKDF2, and stored locally. MeshPort's servers never see this key.
-  - *Social login* (Google/Email OTP): the key is generated on the device and sealed there with the browser's device key. Other devices unlock it with a passkey (WebAuthn PRF → HKDF → AES-256-GCM) or a Recovery QR (Argon2id + AES-256-GCM, password chosen by the user). The server stores only passkey-wrapped ciphertext and public metadata — never a private key, recovery password or decrypted QR. Details: [SELF_CUSTODY.md](SELF_CUSTODY.md).
-- **Wallet key retrieval is authorization-checked server-side**, re-verifying the caller's Supabase session JWT on every call rather than trusting a client-asserted user id, and is rate-limited per-user and per-IP.
 - **Client/server separation for secrets:** RPC provider API keys (`DRPC_KEY`, `ALCHEMY_KEY`, etc.) are never placed in `VITE_`-prefixed variables; the browser only ever talks to same-origin proxy endpoints (`/api/arc-rpc`, `/api/swap-proxy`, `/api/relay-*`) that hold the real credentials server-side.
 - **Transaction authorization:** every fund-moving action (send, swap, multichain transfer, bulk pay, escrow release) requires an explicit passcode confirmation step in the UI before a transaction is signed.
 - **P2P escrow contract hardening:** `P2PMeshportEscrowV2.sol` is a from-scratch security pass over the original escrow, fixing (with rationale documented in the contract's own comments): a first-depositor offer-hijack vulnerability, a `release()` call that trusted caller-supplied buyer/amount instead of on-chain state, and adds a proper INVESTIGATOR role alongside PAUSER/ADMIN. It uses OpenZeppelin's `ReentrancyGuard` and follows checks-effects-interactions throughout.
 - **What this repository does *not* claim:** there is no multi-party computation (MPC) key management, no hardware security module integration, and no independent third-party security audit report included in this repo. Treat this as testnet-grade security posture unless you've independently verified otherwise for your deployment.
 
-See `docs/SECURITY_ARCHITECTURE.md` for the full internal design this summary is drawn from.
 
 ## Transaction Lifecycle
 
@@ -560,7 +555,7 @@ DRAFT → REVIEWED → AUTHORIZING → SIGNED → SUBMITTED → CONFIRMING → C
 
 | Flow | Path |
 |---|---|
-| Authentication | Client → Supabase Auth (Google/Email OTP) → local key generation (every wallet) → passkey / Recovery QR (Google/email) → passcode setup |
+| Authentication | Create/import wallet → key stays in the wallet frame → passcode setup → wallet-signature sign-in (`wallet-login`) |
 | Send | Client signs → Arc RPC (`/api/arc-rpc`) → on-chain confirmation → `ActivityService` + ledger pipeline → Realtime push to sender's UI |
 | Receive | External/internal transfer lands on-chain → `deposit-scan-all` / `blockchain-indexer` detects it → ledger event → recipient's Activity row → Realtime push + notification |
 | Multichain Claim | Client → `claim-submit` → `claims` row → `claim-worker` (burn confirm → attestation → mint → arrival confirm) → Realtime updates client |
@@ -632,7 +627,6 @@ The `P2PMeshportEscrowV2` address above is the current, live contract the client
 | `pay-intent` | Idempotent intent tracking for Send | Client, before broadcasting a send |
 | `swap-intent` | Idempotent intent tracking for Swap | Client, before executing a swap |
 | `bulkpay-intent` | Idempotent intent tracking for Bulk Pay, plus nonce reservation | Client, before building the Multicall3 call |
-| `wallet-key` | Retired — answers 410 Gone for old cached clients | — |
 | `p2p-release-reconcile` | Reconciles on-chain escrow release events with `p2p_trades` rows | Scheduled |
 | `chain-transfer-webhook` | Inbound webhook endpoint for chain-transfer related events | External webhook call |
 
@@ -656,7 +650,6 @@ Schema history lives in `supabase/migrations/` (apply in filename order). Tables
 | `external_balance_snapshots` | Point-in-time external-chain balance snapshots |
 | `p2p_offers`, `p2p_trades` | P2P marketplace offers and trades |
 | `notifications`, `notification_events` | In-app notification rows and the events that generate them (including DB triggers that call `api/push`) |
-| `wallet_passkeys` | Per-account passkey credentials and the passkey-wrapped (encrypted) wallet key — no plaintext keys. Legacy `wallet_vault` / `wallet_audit_log` / `wallet_backups` are no longer written. |
 | `user_points`, `point_transactions`, `reward_claims`, `daily_tx_rewards` | Rewards accrual and claim history |
 | `admin_users`, `app_settings`, `settings_logs` | Admin accounts and feature-flag/config state with an audit log |
 | `support_tickets` | In-app support ticket submissions |
@@ -675,7 +668,7 @@ RLS (Row Level Security) policies are defined per-table in the migrations that c
 | Change Swap | `src/features/swap/SwapPage.tsx`, `api/swap-proxy.js` |
 | Change Bulk Pay | `src/features/bulkpayout/BulkPayoutPage.tsx`, `supabase/functions/bulkpay-intent` |
 | Change Chat | `src/features/chat/ChatPage.tsx`, `src/lib/chatService.ts`, `api/chat.ts` |
-| Change authentication / onboarding | `src/features/auth/AuthPages.tsx`, `SecureWalletPage.tsx`, `src/lib/socialWallet.ts`, `walletPasskey.ts`, `recoveryQr.ts`, `security.ts` |
+| Change authentication / onboarding | `src/features/auth/AuthPages.tsx`, `PasscodeSetup.tsx`, `src/wallet`, `src/lib/security.ts`, `supabase/functions/wallet-login` |
 | Change P2P trading or escrow | `src/features/p2p/*`, `src/lib/p2pService.ts`, `contracts/P2PMeshportEscrowV2.sol` |
 | Change the transaction ledger/state machine | `server/ledger/`, `server/transactionStateMachine/` (pure, unit-testable — change here first, then verify the Edge Functions that consume it) |
 | Change chain/token configuration | `src/blockchain/chains.ts` — and remember `api/*.js` and `supabase/functions/_shared` intentionally keep their own copies for runtime-isolation reasons documented at the top of that file |
@@ -699,7 +692,7 @@ These are drawn from the repository's inline code comments, not invented:
 ## Current Status
 
 - **Network:** Arc Testnet only. No mainnet configuration exists anywhere in this repository.
-- **Implemented and working:** authentication (Google/Email OTP + passcode), username system, Send/Receive, QR + payment links, Chat & Pay, Multichain Claim (CCTP), Multichain Transfer (CCTP + Unified Balance), Swap, Bulk Pay (Multicall3), Activity/history, notifications (in-app + push), P2P trading with on-chain escrow, rewards accrual + on-chain claim, admin panel.
+- **Implemented and working:** authentication (create/import wallet + passcode + wallet-signature sign-in), username system, Send/Receive, QR + payment links, Chat & Pay, Multichain Claim (CCTP), Multichain Transfer (CCTP + Unified Balance), Swap, Bulk Pay (Multicall3), Activity/history, notifications (in-app + push), P2P trading with on-chain escrow, rewards accrual + on-chain claim, admin panel.
 - **Dependent on external infrastructure that can bottleneck it:** Multichain Claim/Transfer depend on Circle's CCTP attestation service and a manually-funded relay wallet per external chain; Swap depends on Arc Testnet's own liquidity for EURC/cirBTC.
 - **Informational only, not a real backend feature:** the Treasury (staking) page.
 - **No independent external security audit** is included in this repo.

@@ -34,9 +34,6 @@ material:
 | `create`, `import`, `adopt` | address |
 | `unlock`, `status` | booleans, counts, lockout ms |
 | `sign:message`, `sign:typed-data`, `sign:transaction` | signature / signed bytes |
-| `passkey:wrap` | ciphertext to store (the frame encrypts) |
-| `passkey:open`, `recovery:open` | ok (the key stays in the frame) |
-| `recovery:create` | the Recovery QR payload (encrypted) |
 | `mnemonic:check` | ok + wrong word positions (never the words) |
 | `chat:seed` | the chat identity seed, a separate, domain-separated key |
 | `reveal:grant` | a one-time ticket for `reveal.html` |
@@ -79,7 +76,6 @@ frame-rendered summary of the transaction comes with the confirmation screen.
 |---|---|---|
 | Open key | memory | dropped on lock / logout / reload |
 | Session copy | frame `sessionStorage` | sealed with the frame origin's non-extractable AES key |
-| Device copy (Google / email) | frame `localStorage` | sealed the same way; deleted on logout |
 | Passcode copy (create / import) | frame `localStorage` | PBKDF2-SHA256 600k → AES-GCM, then device-sealed |
 | Recovery phrase | frame `localStorage` | same as the passcode copy |
 
@@ -87,9 +83,7 @@ Passcode guessing is limited **in the frame** (5 free tries, then 30 s
 doubling up to 1 h), because a script in the app could otherwise call
 `unlock` in a loop.
 
-The formats are the app's existing ones (`lib/security.ts`,
-`lib/passkeyWrap.ts`, `lib/recoveryQr.ts`). Passkey rows already on the
-server and Recovery QRs made before this change still open.
+The format is the app's existing one (`lib/security.ts`).
 
 ## Signers
 
@@ -140,8 +134,8 @@ can't open any wallet.
 
 ## Known limits (Phase 1)
 
-- The passcode, a typed seed phrase / key (import) and the Recovery QR
-  password are still typed into the app's UI and passed to the frame. A
+- The passcode and a typed seed phrase / key (import) are still typed into
+  the app's UI and passed to the frame. A
   script running in the app at that moment could capture them. Phase 3 moves
   these inputs into frame-rendered UI.
 - A script running in the app can still *ask* the frame to sign while the
