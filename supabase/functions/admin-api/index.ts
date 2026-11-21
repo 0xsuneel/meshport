@@ -12,6 +12,9 @@
 //             ledger_events, client_errors, and the chain itself (receipt)
 //   rpc.*     probes ARC_RPCS / ARC_PUBLIC_RPCS / CHAIN_RPCS (_shared/chains)
 //             and reads rpc_usage (written by /api/arc-rpc)
+//   relayer.gas  the relayer's native-coin (gas) balance on every chain it sends
+//             from. Needs the Supabase secrets RELAYER_ADDRESS (+ RELAYER_MODE,
+//             RELAYER_KEY_ADDRESS, CIRCLE_SIGN_UNSUPPORTED_CHAINS as on Vercel).
 //   logs.list admin_audit_log + settings_logs + admin_recovery_log +
 //             p2p_trade_audit_log, merged
 //   admins.*  admin_users (+ auth: last sign-in, 2FA set up)
@@ -19,6 +22,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { handleOptionsFor, jsonFor } from '../_shared/cors.ts'
 import { ARC_RPCS, ARC_PUBLIC_RPCS, CHAIN_RPCS } from '../_shared/chains.ts'
+import { RELAYER_GAS_CHAINS, approxUsd, formatNative, gasStatus, signerFor } from '../_shared/relayerGas.ts'
 
 function serviceKey(): string {
   const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -47,6 +51,7 @@ const CAN: Record<string, Role[]> = {
   'tx.detail':     ALL,
   'rpc.health':    ALL,
   'rpc.usage':     ALL,
+  'relayer.gas':   ALL,
   'errors.list':   ALL,
   'logs.list':     ALL,
   'admins.list':   ['owner'],
@@ -280,6 +285,47 @@ async function rpcHealth() {
   }
 }
 
+// ── Relayer gas ──────────────────────────────────────────────────────────
+/** eth_getBalance on the first endpoint that answers. */
+async function nativeBalance(urls: string[], address: string): Promise<bigint> {
+  let last = 'no endpoint'
+  for (const url of urls) {
+    if (!url || (url.includes('lb.drpc.live') && url.endsWith('/'))) continue // no key configured
+    try {
+      const r = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [address, 'latest'] }),
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!r.ok) { last = `HTTP ${r.status}`; continue }
+      const j = await r.json()
+      if (j.error) { last = String(j.error.message ?? 'RPC error').slice(0, 100); continue }
+      return BigInt(j.result)
+    } catch (e) { last = (e as Error).name === 'TimeoutError' ? 'timed out' : (e as Error).message }
+  }
+  throw new Error(last)
+}
+
+async function relayerGas() {
+  const env = {
+    mode: Deno.env.get('RELAYER_MODE') ?? '', address: Deno.env.get('RELAYER_ADDRESS') ?? '',
+    keyAddress: Deno.env.get('RELAYER_KEY_ADDRESS') ?? '', unsupported: Deno.env.get('CIRCLE_SIGN_UNSUPPORTED_CHAINS') ?? '',
+  }
+  const rpcs: Record<string, string[]> = { Arc_Testnet: [...new Set([...ARC_RPCS, ...ARC_PUBLIC_RPCS])], ...CHAIN_RPCS }
+  const chains = await Promise.all(RELAYER_GAS_CHAINS.map(async c => {
+    const signer = signerFor(c.chainId, env)
+    const base = { key: c.key, name: c.name, symbol: c.symbol, signer: signer?.address ?? null, signerKind: signer?.kind ?? null }
+    if (!signer) return { ...base, status: 'unknown' as const, balance: null, usd: null, error: 'No relayer address set for this chain' }
+    try {
+      const wei = await nativeBalance(rpcs[c.key] ?? [], signer.address)
+      return { ...base, status: gasStatus(wei, c.usd), balance: formatNative(wei), usd: Math.round(approxUsd(wei, c.usd) * 100) / 100, error: null }
+    } catch (e) {
+      return { ...base, status: 'unknown' as const, balance: null, usd: null, error: (e as Error).message }
+    }
+  }))
+  return { checkedAt: new Date().toISOString(), configured: chains.some(c => c.signer), chains }
+}
+
 async function rpcUsage(b: Record<string, unknown>) {
   const from = since(b.range, '24h')
   const { data, error } = await db.from('rpc_usage').select('*').gte('bucket', from).order('bucket').limit(20000)
@@ -416,6 +462,7 @@ Deno.serve(async (req: Request) => {
       case 'tx.detail':      return jsonFor(req, await txDetail(b))
       case 'rpc.health':     return jsonFor(req, await rpcHealth())
       case 'rpc.usage':      return jsonFor(req, await rpcUsage(b))
+      case 'relayer.gas':    return jsonFor(req, await relayerGas())
       case 'errors.list':    return jsonFor(req, await errorsList(b))
       case 'logs.list':      return jsonFor(req, await logsList(b))
       case 'admins.list':    return jsonFor(req, await adminsList())

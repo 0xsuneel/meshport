@@ -89,6 +89,19 @@ export type RpcEndpointHealth = {
 }
 export const adminRpcHealth = () => call<{ checkedAt: string; endpoints: RpcEndpointHealth[] }>('rpc.health')
 
+// ── System: the relayer's gas on every chain ────────────────────────────────
+export type RelayerGasRow = {
+  key: string; name: string; symbol: string | null
+  signer: string | null; signerKind: 'circle' | 'key' | null
+  status: 'ok' | 'low' | 'empty' | 'unknown'
+  /** The relayer's own coin on that chain, as text ("0.0123"). */
+  balance: string | null
+  /** About what that is worth, in USD (testnet coins are worth nothing - this sizes a refill). */
+  usd: number | null
+  error: string | null
+}
+export const adminRelayerGas = () => call<{ checkedAt: string; configured: boolean; chains: RelayerGasRow[] }>('relayer.gas')
+
 export type UsageSum = { calls: number; ok: number; errors: number; rate_limited: number; cancelled: number; latency_ms_total: number }
 export type RpcUsage = {
   from: string

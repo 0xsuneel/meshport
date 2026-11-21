@@ -14,11 +14,11 @@ import { AdminCard } from '@/components/admin/AdminCard'
 import { StatCard } from '@/components/admin/StatCard'
 import { chainName, ago, Pill, Chips, Notice, mono } from '@/components/admin/AdminUi'
 import {
-  adminRpcHealth, adminRpcUsage, adminAppErrors,
+  adminRpcHealth, adminRpcUsage, adminAppErrors, adminRelayerGas, type RelayerGasRow,
   type RpcEndpointHealth, type RpcUsage, type AppErrorGroup, type UsageSum,
 } from '@/lib/adminApi'
 
-type Tab = 'health' | 'usage' | 'errors'
+type Tab = 'health' | 'gas' | 'usage' | 'errors'
 type Range = '1h' | '24h' | '7d'
 
 const pct = (n: number, d: number) => (d ? `${((n / d) * 100).toFixed(1)}%` : '-')
@@ -109,6 +109,87 @@ function Health() {
         </AdminCard>
         )
       })}
+    </div>
+  )
+}
+
+const GAS_TONE: Record<RelayerGasRow['status'], { text: string; color: string }> = {
+  ok: { text: 'OK', color: 'var(--success-text)' },
+  low: { text: 'Low - top up soon', color: 'var(--warning-text)' },
+  empty: { text: 'Empty - top up now', color: 'var(--danger-text)' },
+  unknown: { text: "Couldn't check", color: 'var(--text-secondary)' },
+}
+const GAS_ORDER: Record<RelayerGasRow['status'], number> = { empty: 0, low: 1, unknown: 2, ok: 3 }
+
+/** The relayer's gas: how much of each chain's own coin it has to pay network fees. */
+function RelayerGas() {
+  const [data, setData] = useState<Awaited<ReturnType<typeof adminRelayerGas>> | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const check = useCallback(async () => {
+    setBusy(true); setErr('')
+    try { setData(await adminRelayerGas()) } catch (e) { setErr(e instanceof Error ? e.message : 'Check failed') }
+    setBusy(false)
+  }, [])
+  useEffect(() => { void check() }, [check])
+
+  const rows = data ? [...data.chains].sort((a, b) => GAS_ORDER[a.status] - GAS_ORDER[b.status] || a.name.localeCompare(b.name)) : []
+  const count = (s: RelayerGasRow['status']) => rows.filter(r => r.status === s).length
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Explain title="What is relayer gas?">
+        On most chains the <b>relayer</b> pays the network fee (gas) for a Bring or a transfer, in that chain's own coin (ETH, AVAX, POL…).
+        If its balance on a chain runs out, payments on that chain stop working. This reads the relayer's balance live on every chain.
+        <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+          <li><b>Balance</b>: the relayer's own coin on that chain. <b>≈ USD</b> is a rough size using approximate prices (testnet coins are worth nothing) - use it to compare chains and decide how much to top up.</li>
+          <li><b>OK</b> = about $5 or more. <b>Low</b> = under about $5. <b>Empty</b> = under about $1.</li>
+          <li><b>Sends from</b>: the relayer account for that chain - the Circle wallet where Circle signs, otherwise the key account.</li>
+        </ul>
+      </Explain>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 13, color: 'var(--text-secondary)' }}>
+        {data && <span>
+          {count('empty') > 0 && <b style={{ color: 'var(--danger-text)' }}>{count('empty')} empty · </b>}
+          {count('low') > 0 && <b style={{ color: 'var(--warning-text)' }}>{count('low')} low · </b>}
+          {count('unknown') > 0 && <span>{count('unknown')} couldn't check · </span>}
+          {count('empty') + count('low') + count('unknown') === 0 ? 'all chains have gas · ' : ''}checked {ago(data.checkedAt)}
+        </span>}
+        <button onClick={() => void check()} disabled={busy}
+          style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+          <RefreshCw size={13} /> {busy ? 'Checking…' : 'Check now'}
+        </button>
+      </div>
+      {err && <Notice tone="error">{err}</Notice>}
+      {data && !data.configured && (
+        <Notice tone="error">
+          The relayer's address isn't set on the server. Add the Supabase secret <b>RELAYER_ADDRESS</b> (the same address as on Vercel: the Circle wallet in circle mode, otherwise the key's)
+          - and <b>RELAYER_MODE</b>, <b>RELAYER_KEY_ADDRESS</b> (the key account, for chains Circle can't sign) and <b>CIRCLE_SIGN_UNSUPPORTED_CHAINS</b> if you use them.
+        </Notice>
+      )}
+      {data && (
+        <AdminCard padding={14}>
+          <div style={{ display: 'flex', gap: 10, padding: '6px 0', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>
+            <span style={{ flex: '1 1 150px' }}>Chain</span><span style={{ minWidth: 120 }}>Balance</span><span style={{ minWidth: 70 }}>≈ USD</span><span style={{ minWidth: 150 }}>Status</span>
+          </div>
+          {rows.map(r => {
+            const tone = GAS_TONE[r.status]
+            return (
+              <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: '1px solid var(--border)', fontSize: 13, flexWrap: 'wrap' }}>
+                <span style={{ flex: '1 1 150px', minWidth: 0 }}>
+                  <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{r.name}</span>
+                  {r.signer && <span style={{ display: 'block', ...mono, fontSize: 11, color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+                    Sends from {r.signer.slice(0, 8)}…{r.signer.slice(-6)} · {r.signerKind === 'circle' ? 'Circle wallet' : 'key account'}
+                  </span>}
+                </span>
+                <span style={{ minWidth: 120, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                  {r.balance != null ? `${r.balance} ${r.symbol ?? 'coin'}` : '-'}
+                </span>
+                <span style={{ minWidth: 70, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{r.usd != null ? `$${r.usd.toLocaleString()}` : '-'}</span>
+                <span style={{ minWidth: 150 }}><Pill color={tone.color}>{tone.text}</Pill>{r.error && <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)' }}>{r.error}</span>}</span>
+              </div>
+            )
+          })}
+        </AdminCard>
+      )}
     </div>
   )
 }
@@ -253,9 +334,10 @@ export function SystemPage() {
   const [range, setRange] = useState<Range>('24h')
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <Chips items={[{ key: 'health', label: 'RPC health' }, { key: 'usage', label: 'RPC usage' }, { key: 'errors', label: 'App errors' }]} value={tab} onChange={setTab} />
-      {tab !== 'health' && <Chips items={[{ key: '1h', label: 'Last hour' }, { key: '24h', label: '24 hours' }, { key: '7d', label: '7 days' }]} value={range} onChange={setRange} />}
+      <Chips items={[{ key: 'health', label: 'RPC health' }, { key: 'gas', label: 'Relayer gas' }, { key: 'usage', label: 'RPC usage' }, { key: 'errors', label: 'App errors' }]} value={tab} onChange={setTab} />
+      {tab !== 'health' && tab !== 'gas' && <Chips items={[{ key: '1h', label: 'Last hour' }, { key: '24h', label: '24 hours' }, { key: '7d', label: '7 days' }]} value={range} onChange={setRange} />}
       {tab === 'health' && <Health />}
+      {tab === 'gas' && <RelayerGas />}
       {tab === 'usage' && <Usage range={range} />}
       {tab === 'errors' && <Errors range={range} />}
     </div>
