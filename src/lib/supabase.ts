@@ -626,13 +626,14 @@ export async function fetchUserProfile(userId: string): Promise<DbUser | null> {
 }
 
 /**
- * The MeshPort account for the signed-in Supabase user (Google or email OTP).
+ * The MeshPort account for the signed-in Supabase user.
+ *
+ * Legacy: written for the retired Google / email sign-in; the app no longer
+ * calls it (accounts now sign in with the wallet - see walletSignIn above).
  *
  * Resolved ONLY through the account this session is bound to (users.auth_uid,
- * set server-side): Google and email logins reach the same account when
- * Supabase has linked them to the same auth user. An account that merely
- * has the same-looking email is never taken over - that's 'conflict', and
- * the user signs in with the method that account already uses.
+ * set server-side). An account that merely has the same-looking email is
+ * never taken over - that's 'conflict'.
  */
 export async function resolveAccountForSession(authUid: string, email: string | null | undefined): Promise<
   { kind: 'existing'; user: DbUser } | { kind: 'new' } | { kind: 'conflict' } | { kind: 'error' }
