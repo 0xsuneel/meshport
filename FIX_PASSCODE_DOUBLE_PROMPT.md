@@ -92,6 +92,6 @@ wallet can't read"):
 | Transfer / Bring cirBTC | Pages passed no spend limit at all for cirBTC | Pages now pass one (`cirBTC` gets no USDC-sized fee margin) |
 | Bulk Pay, Business payouts | Batch goes through Multicall3, which no limit named | New `batchPayScope` names Multicall3 |
 
-Still open: cirBTC on *source* chains (Bring) can't be pinned until Circle
-publishes those contract addresses (CCTPx registry `/v2/cctpx/tokens`); add
+cirBTC on Ethereum Sepolia is now pinned too. Other source chains:
+add a chain's cirBTC contract once Circle publishes it, to
 them to `EXTERNAL_TOKEN_DEPLOYMENTS` in `policy.ts`.

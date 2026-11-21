@@ -112,6 +112,15 @@ describe('spend limit policy', () => {
     expect(classify(me, 'sign:typed-data', { typedData: { ...auth, message: { ...auth.message, from: them } } }).ok).toBe(false)
   })
 
+  it('a Bring authorization for cirBTC from Ethereum Sepolia is counted in 8 decimals', () => {
+    const SEPOLIA_CIRBTC = '0x3a3fe695F684Bf9b9e43CF43C2b895Ea5e392bB3'
+    const ROUTER = '0x3010518F036eE1BF95Da787eEe3AafFAD95a1794'
+    const auth = { domain: { name: 'cirBTC', version: '2', chainId: 11155111, verifyingContract: SEPOLIA_CIRBTC }, primaryType: 'ReceiveWithAuthorization', message: { from: me, to: ROUTER, value: 7_500n } } // 0.000075
+    expect(spends(classify(me, 'sign:typed-data', { typedData: auth }))).toEqual({ cirBTC: 75n * 10n ** 12n })
+    expect(describeRequest('sign:typed-data', { typedData: auth })).toMatchObject({ action: 'Authorise transfer', amount: '0.000075', token: 'cirBTC' })
+    expect(describeRequest('sign:typed-data', { typedData: auth }).warnings).toEqual([])
+  })
+
   // EURC / cirBTC out of Arc (CCTPx): approve the token to the service, then
   // crossChainTransfer with the fee as native USDC value.
   it("a CCTPx transfer's approval and its native-USDC fee call are covered by one limit", () => {
