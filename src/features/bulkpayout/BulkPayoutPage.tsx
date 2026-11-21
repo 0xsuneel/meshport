@@ -784,12 +784,6 @@ export function BulkPayoutPage() {
           <p className="text-sm text-danger">Failed</p>
         </div>
       </div>
-      {/* A confirmed bulk payout wins a scratch card: the gift shows the cards waiting. */}
-      {successCount > 0 && (
-        <div className="flex justify-center items-center gap-1 text-sm font-semibold text-text-secondary">
-          <ScratchGift /> Your scratch cards
-        </div>
-      )}
       {/* The whole payout is one transaction (Multicall3): one link for it,
           not the same link on every row. */}
       {sharedTxHash && (
@@ -923,13 +917,16 @@ export function BulkPayoutPage() {
               <ArrowLeft className="w-5 h-5 text-text-primary" />
             </button>
           )}
+          {/* A confirmed bulk payout wins a scratch card: on the success screen the
+              gift (its badge = the cards waiting) sits top left, in place of "How it works?". */}
+          {step === 'results' && successCount > 0 && <ScratchGift />}
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-text-primary whitespace-nowrap">Bulk Payment</h1>
             <p className="text-xs text-text-secondary">Send USDC to multiple recipients in one transaction</p>
           </div>
-          <button onClick={() => setShowHowItWorks(true)} aria-label="How it works?" className="flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-2.5 min-[375px]:px-3 py-1.5 border border-brand/30 rounded-xl text-xs text-brand-text active:scale-95 transition-transform">
+          {step !== 'results' && <button onClick={() => setShowHowItWorks(true)} aria-label="How it works?" className="flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-2.5 min-[375px]:px-3 py-1.5 border border-brand/30 rounded-xl text-xs text-brand-text active:scale-95 transition-transform">
             <HelpCircle className="w-3.5 h-3.5" /> <span className="hidden min-[375px]:inline">How it works?</span>
-          </button>
+          </button>}
         </div>
       </div>
 
