@@ -75,7 +75,7 @@ Keep PRs focused on one feature or fix. A PR that touches Send, Swap, and P2P at
 
 Open an issue describing:
 - What you expected vs. what happened.
-- Steps to reproduce (chain, wallet type — social login vs. self-custodial — and asset involved, since MeshPort's behavior genuinely differs by both).
+- Steps to reproduce (chain and asset involved, since MeshPort's behavior genuinely differs by both).
 - Whether it's testnet-infrastructure-related (e.g. attestation delay, relay wallet gas) or an application bug — see [Troubleshooting](./README.md#troubleshooting) first, since some "bugs" are expected testnet behavior.
 
 ## Security issues

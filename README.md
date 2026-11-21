@@ -22,10 +22,10 @@ Self-custodial USDC payments and private chat, on Arc and 20+ chains.</p>
 ## What's inside
 
 ### 🔐 MeshPort Wallet
-A self-custodial wallet you can open with Google or an email code. The key is
-generated on your device, unlocked elsewhere with a **passkey** or a
-password-sealed **Recovery QR**, and never stored by MeshPort. Create or import
-a classic wallet with a recovery phrase if you prefer.
+A self-custodial wallet. Create a new wallet or import one with your recovery
+phrase or private key. The key is generated and kept on your device, locked
+behind a 6-digit passcode (with optional fingerprint / Face ID unlock), and
+never sent to or stored by MeshPort.
 → [How self-custody works](docs/SELF_CUSTODY.md)
 
 ### 💬 Chat & Pay
@@ -45,14 +45,13 @@ trading with on-chain escrow.
 ## Self-custody at a glance
 
 ```
-sign in ─► key made on your device ─► passkey      (Face ID / fingerprint)
-                                   └► Recovery QR  (a password only you know)
+create / import wallet ─► key kept on your device ─► passcode (+ optional biometric)
 ```
 
 | MeshPort stores | MeshPort never stores |
 |---|---|
 | Wallet address, username, profile | Private keys or seed phrases |
-| Passkey id + passkey-encrypted key | Recovery passwords or QR contents |
+| Public account data | Your passcode or the key it unlocks |
 
 ## Build
 
@@ -78,7 +77,7 @@ You'll need a Supabase project and a `.env` — see
 | Path | What it is |
 |---|---|
 | [`src/`](src) | React + Vite PWA — wallet, chat, pay, multichain, business, P2P |
-| [`src/lib/`](src/lib) | Wallet, passkey, Recovery QR and chat crypto; payment logic |
+| [`src/lib/`](src/lib) | Wallet security, chat crypto and payment logic |
 | [`src/blockchain/`](src/blockchain) | Balance readers, RPC providers, chain config |
 | [`api/`](api) | Vercel functions — link previews, relayer, profile, push |
 | [`supabase/functions/`](supabase/functions) | Edge Functions — claims, accounting ledger, business pay (`merchant-pay`), indexer |
@@ -107,7 +106,7 @@ that Activity is built from. It is never shown in the app.
 ## Tech
 
 React · TypeScript · Vite · Tailwind · viem · Supabase · Vercel · Circle
-Gateway & CCTP V2 · WebAuthn passkeys · Argon2id · X25519 / AES-256-GCM
+Gateway & CCTP V2 · WebAuthn biometric unlock · Argon2id · X25519 / AES-256-GCM
 
 ## Contributing & security
 
