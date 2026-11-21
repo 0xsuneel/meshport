@@ -1,5 +1,7 @@
 # Phase 1 — Canonical Transaction Data Model: Schema Design
 
+> **Historical note (Nov 2026):** this document was written when MeshPort still had Google/email sign-in with server-held keys (the `wallet-key` function). That function and those sign-in methods are retired; every wallet is now self-custodial (see [SELF_CUSTODY.md](SELF_CUSTODY.md)). References to `wallet-key`, social accounts and passkey/Recovery QR below describe the old design.
+
 Status: design + migration only. **No application code changed. No production writers
 redirected. No existing behavior changed.**
 

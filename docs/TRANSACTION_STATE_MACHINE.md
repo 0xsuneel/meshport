@@ -1,5 +1,7 @@
 # Transaction State Machine
 
+> **Historical note (Nov 2026):** this document was written when MeshPort still had Google/email sign-in with server-held keys (the `wallet-key` function). That function and those sign-in methods are retired; every wallet is now self-custodial (see [SELF_CUSTODY.md](SELF_CUSTODY.md)). References to `wallet-key`, social accounts and passkey/Recovery QR below describe the old design.
+
 Status: Phase 2 — **the shared state machine module only**. Nothing in Pay, Receive, Swap,
 Multichain Transfer/Claim, BulkPay, ChatPay, or P2P calls this yet. The indexer, `wallet-key`,
 and `swap-proxy` are untouched. See §9 for exactly what is (and isn't) wired up.

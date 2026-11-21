@@ -1,5 +1,7 @@
 # Claim-Recovery Sender-Classification Fix (interim mitigation)
 
+> **Historical note (Nov 2026):** this document was written when MeshPort still had Google/email sign-in with server-held keys (the `wallet-key` function). That function and those sign-in methods are retired; every wallet is now self-custodial (see [SELF_CUSTODY.md](SELF_CUSTODY.md)). References to `wallet-key`, social accounts and passkey/Recovery QR below describe the old design.
+
 Status: **Implemented and verified.** Narrow, focused change — CCTP claim detection/matching
 logic, the indexer, and `ActivityService` are all untouched.
 
