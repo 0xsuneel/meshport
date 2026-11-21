@@ -2435,8 +2435,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 })
                 // EURC / cirBTC: Circle's forwarder delivers - no Arc transaction of ours to link.
                 const mintPending = !token && chainProgress.some(p => !p.mintTxHash)
+                // The Hub's Bring page (pushScreens) wraps this screen in 8px of side padding
+                // on top of the 12px this margin cancels: take both, so the green header
+                // reaches the screen edges instead of leaving blank strips either side.
                 return (
-                <div style={{ margin: '0 -12px', height: '100%' }}>
+                <div style={{ margin: pushScreens ? '0 -20px' : '0 -12px', height: '100%' }}>
                 <SuccessReceipt promo="multichain" page={{ chip: 'Arrived',
                   hero: { amount: <ReceiptAmount value={`${coin === 'USDC' ? '$' : coin === 'EURC' ? '€' : ''}${fmtCoin(displayTotal)}`} unit={coin} />, line: <>From {fromLabel}, now in your Arc wallet</> } }}
                   actions={[
