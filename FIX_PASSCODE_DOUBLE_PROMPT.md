@@ -92,6 +92,6 @@ wallet can't read"):
 | Transfer / Bring cirBTC | Pages passed no spend limit at all for cirBTC | Pages now pass one (`cirBTC` gets no USDC-sized fee margin) |
 | Bulk Pay, Business payouts | Batch goes through Multicall3, which no limit named | New `batchPayScope` names Multicall3 |
 
-cirBTC on Ethereum Sepolia is now pinned too. Other source chains:
-add a chain's cirBTC contract once Circle publishes it, to
-them to `EXTERNAL_TOKEN_DEPLOYMENTS` in `policy.ts`.
+cirBTC on Ethereum Sepolia is now pinned too. For any other source chain, add
+its cirBTC contract to `EXTERNAL_TOKEN_DEPLOYMENTS` in `policy.ts` once Circle
+publishes it.
