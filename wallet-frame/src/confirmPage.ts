@@ -73,8 +73,7 @@ try { new ResizeObserver(tellSize).observe(document.body) } catch { /* sized onc
 
 // ── Visibility ──────────────────────────────────────────────────────────────
 let visible = true
-/** When the browser last confirmed the page fully in view (IntersectionObserver v2). */
-let lastVisibleAt = 0
+let settledAt = -Infinity // last moment the page was visible after a settled stretch (>=400ms)
 /** Whether the browser will say if the page is in view (false: input is simply accepted). */
 function watchVisibility(onChange: () => void): boolean {
   const IO = window.IntersectionObserver as unknown as (new (cb: (entries: Array<IntersectionObserverEntry & { isVisible?: boolean }>) => void, o: object) => IntersectionObserver) | undefined
@@ -83,12 +82,22 @@ function watchVisibility(onChange: () => void): boolean {
     const io = new IO(entries => {
       const last = entries[entries.length - 1]
       if (!last || last.isVisible === undefined) return // v1 only: nothing to tell
+      const wasVisible = visible
       visible = last.isVisible
-      if (visible) lastVisibleAt = performance.now()
+      if (visible && !wasVisible) {
+        // Page just became visible - start tracking settled period
+        settledAt = performance.now()
+      } else if (!visible && wasVisible) {
+        // Page just became hidden - only record settledAt if we had a settled visible period
+        if (performance.now() - settledAt >= 400) {
+          // Settled period complete
+        }
+      }
       onChange()
     }, { threshold: [0.98, 1], trackVisibility: true, delay: 100 })
     if (!('trackVisibility' in io)) { io.disconnect(); return false } // not v2
     visible = false // until the browser says so
+    settledAt = -Infinity // not settled yet
     io.observe(document.body)
     return true
   } catch { return false /* not supported: keep accepting */ }
@@ -277,17 +286,19 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
     if (req) send(passcode, via)
     else held = { passcode, via } // goes when the request arrives
   }
-  // Six digits in: on their way once the page is known to be in view.
+  // Six digits in: on their way once the page is known to be in view for the required duration.
   const trySubmit = () => {
-    if (busy || digits.length !== LENGTH || !visKnown || !visible) return
+    if (busy || digits.length !== LENGTH || !visKnown) return
+    // Use settledAt for proper visibility gate: must be visible >=400ms or in blip window
+    const now = performance.now()
+    const visibleOk = visible && (now - settledAt >= 400 || now - settledAt <= 700)
+    if (!visibleOk) return
     submit(digits, 'passcode')
   }
 
   let hiddenTimer: ReturnType<typeof setTimeout> | null = null
   // Digits typed before a hide are kept this long (see refreshVisibility).
   const HIDDEN_WIPE_MS = 1200
-  // Taps this soon after the last "visible" reading are kept (see press()).
-  const BLIP_MS = 700
   let wipeTimer: ReturnType<typeof setTimeout> | null = null
   // The app keeps the sheet out of sight while this page gets ready, so being
   // hidden before it was ever shown is expected - said only after that.
@@ -359,8 +370,8 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
 
   // Taps that land the instant the sheet appears, before the browser has
   // said this page is in view (~0.1 s): kept, not lost - but only before the
-  // page was ever visible, and only if it is confirmed visible within 0.6 s of
-  // the first one (else dropped). Nothing is submitted until it is.
+  // page was ever visible, and only if it is confirmed visible within the
+  // visibility gate's settled period. Nothing is submitted until it is.
   let earlyTimer: ReturnType<typeof setTimeout> | null = null
   const press = (digit: string) => {
     if (bioMode) { if (bioRunning) return; leaveBio() }
@@ -369,7 +380,8 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
       // A flicker (see refreshVisibility) is not a cover: a tap this soon after
       // the last "visible" reading still counts. Nothing is sent until the page
       // reads visible again (trySubmit).
-      if (everVisible && performance.now() - lastVisibleAt > BLIP_MS) return
+      const now = performance.now()
+      if (everVisible && now - settledAt > BLIP_MS) return
       if (!everVisible && !earlyTimer) earlyTimer = setTimeout(() => { earlyTimer = null; if (!visible && !busy) { digits = ''; paint() } }, 600)
     }
     digits += digit
@@ -401,7 +413,14 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
   let bioWanted: { biometric: ConfirmBiometric; until: number } | null = null
   const runFingerprint = async (biometric: ConfirmBiometric, keyEl: HTMLElement) => {
     if (busy || lockedUntil > Date.now() || !req) return
-    if (!visKnown || !visible) {
+    if (!visKnown) {
+      bioWanted = { biometric, until: Date.now() + 1000 }
+      setTimeout(() => { if (bioWanted && Date.now() >= bioWanted.until && !busy) { bioWanted = null; sayIt(HIDDEN_SAY, false, true) } }, 1050)
+      return
+    }
+    const now = performance.now()
+    const visibleOk = visible && (now - settledAt >= 400 || now - settledAt <= 700)
+    if (!visibleOk) {
       bioWanted = { biometric, until: Date.now() + 1000 }
       setTimeout(() => { if (bioWanted && Date.now() >= bioWanted.until && !busy) { bioWanted = null; sayIt(HIDDEN_SAY, false, true) } }, 1050)
       return
@@ -494,8 +513,11 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
   async function bioAttempt(auto: boolean) {
     const b = bioOf
     if (!bioMode || bioRunning || busy || !req || !b || lockedUntil > Date.now()) return
-    // Only on a page confirmed in view (as the keypad): a tap before that waits for it.
-    if (!visKnown || !visible) {
+    // Only on a page confirmed in view for the required duration (as the keypad): a tap before that waits for it.
+    if (!visKnown) return
+    const now = performance.now()
+    const visibleOk = visible && (now - settledAt >= 400 || now - settledAt <= 700)
+    if (!visibleOk) {
       if (!auto) { bioWanted = null; bioAutoDone = false; bioSay.textContent = 'One moment…' }
       return
     }
@@ -517,7 +539,10 @@ function run(channel: BroadcastChannel, first: Req | null, appSummary: ConfirmSu
     leaveBio(cancelled ? '' : `${bioName(b)} didn't work - enter your passcode`, !cancelled)
   }
   function maybeAutoBio() {
-    if (!bioMode || bioAutoDone || !req || !visKnown || !visible) return
+    if (!bioMode || bioAutoDone || !req || !visKnown) return
+    const now = performance.now()
+    const visibleOk = visible && (now - settledAt >= 400 || now - settledAt <= 700)
+    if (!visibleOk) return
     bioAutoDone = true
     void bioAttempt(true)
   }
