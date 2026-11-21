@@ -359,7 +359,8 @@ export function deriveActivityRow(record: ActivityRecord) {
               : 'Transaction'
 
   // Failed: nothing moved, so the amount is neither + nor - (muted, struck).
-  const amountColor = isRecovery ? 'var(--warning)' : isFailed ? 'var(--text-muted)' : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'var(--success)' : 'var(--danger)'
+  // Money going out is plain text (black in light mode, white in dark) - not red.
+  const amountColor = isRecovery ? 'var(--warning)' : isFailed ? 'var(--text-muted)' : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'var(--success)' : 'var(--text-primary)'
   const amountPrefix = isFailed ? '' : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? '+' : '-'
 
   return {
@@ -659,7 +660,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
               : isP2PSellOrder ? (metadata?.kind === 'offer_topped_up' ? 'Escrow Top-up' : 'P2P Sell Order Created') : isP2PRefund ? 'P2P Sell Order Cancelled' : isP2PPurchase ? 'P2P Purchase'
               : 'Transaction'
 
-  const amountColor = isFailed ? 'var(--danger)' : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'var(--success)' : 'var(--danger)'
+  // Same as the list row: out = plain text (black / white by theme), failed = muted.
+  const amountColor = isFailed ? 'var(--text-muted)' : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'var(--success)' : 'var(--text-primary)'
   const amountPrefix = isFailed ? '' : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? '+' : '-'
 
   // Claims: source = the external chain's burn (sourceChain + txHash);

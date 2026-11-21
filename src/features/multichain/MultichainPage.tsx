@@ -1149,7 +1149,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
                   {/* Amount */}
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700,
-                      color: isRecovery ? 'var(--warning-text)' : isFailed ? 'var(--text-muted)' : item.ownReceipt || item.ownClaim ? 'var(--text-secondary)' : isClaim ? 'var(--success-text)' : 'var(--danger-text)' }}>
+                      color: isRecovery ? 'var(--warning-text)' : isFailed ? 'var(--text-muted)' : item.ownReceipt || item.ownClaim ? 'var(--text-secondary)' : isClaim ? 'var(--success-text)' : 'var(--text-primary)' }}>
                       {/* Own transfer arriving on another chain: the same money as the
                           "Transfer to …" row (already −), so no sign - not new income. */}
                       {isFailed || item.ownReceipt || item.ownClaim
