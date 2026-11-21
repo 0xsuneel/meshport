@@ -2,7 +2,7 @@ import { type ComponentProps, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { DesktopDialogFrame } from './DesktopDialogFrame'
-import { SuccessReceipt } from './SuccessReceipt'
+import { SuccessReceipt, InstantReveal } from './SuccessReceipt'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useBackLayer } from '@/lib/backLayers'
 import { DESKTOP_QUERY, PAGE_TRANSITION } from '@/lib/motion'
@@ -81,16 +81,19 @@ function ReceiptPage({ onClose, onPrimary, pageTitle, sections, person, rows, re
       onMouseDown={stop} onTouchStart={stop}
       initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={PAGE_TRANSITION}
       style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)', display: 'flex', flexDirection: 'column', willChange: 'transform' }}>
-      <SuccessReceipt
-        celebrate={false}
-        promo
-        {...receipt}
-        revealed
-        onPrimary={onPrimary ?? onClose}
-        actions={actions}
-        page={{ title: pageTitle, onBack: onClose, sections, noDone: !hasAction, person, rows }}
-        style={{ flex: 1, minHeight: 0, height: 'auto', ...receipt.style }}
-      />
+      {/* Opening a history record on a phone: no staggered reveal, it is all just there. */}
+      <InstantReveal.Provider value>
+        <SuccessReceipt
+          celebrate={false}
+          promo
+          {...receipt}
+          revealed
+          onPrimary={onPrimary ?? onClose}
+          actions={actions}
+          page={{ title: pageTitle, onBack: onClose, sections, noDone: !hasAction, person, rows }}
+          style={{ flex: 1, minHeight: 0, height: 'auto', ...receipt.style }}
+        />
+      </InstantReveal.Provider>
     </motion.div>,
     document.body,
   )

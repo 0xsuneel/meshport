@@ -110,6 +110,9 @@ function StatusMark({ status }: { status: TxDetail['status'] }) {
 // content (amount, check, pill) comes in with the page. Off with reduce motion.
 function Rv({ i, children }: { i: number; children: ReactNode }) {
   const reduce = useReducedMotion()
+  // Phone: no reveal - the record opens with everything in place. Computer keeps it.
+  const desktop = useMediaQuery(DESKTOP_QUERY)
+  if (!desktop) return <div>{children}</div>
   return (
     <motion.div initial={reduce ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
       // A tween, not a spring (a spring's slow start made rows look late),
@@ -316,7 +319,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                     <div style={{ position: 'relative', padding: '6px 0 8px', marginBottom: 6, borderBottom: '1px solid var(--border)' }}>
                       <span aria-hidden style={{ position: 'absolute', left: 11, top: 20, bottom: 22, width: 2, background: 'color-mix(in srgb, var(--success) 35%, transparent)' }} />
                       {d.steps.map((st, i) => (
-                        <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, ease: EASE_OUT, delay: i * 0.09 }}
+                        <motion.div key={i} initial={desktop ? { opacity: 0, x: -10 } : false} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, ease: EASE_OUT, delay: desktop ? i * 0.09 : 0 }}
                           style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '7px 0', fontSize: 14 }}>
                           {stepMark(i)}<span style={{ minWidth: 0 }}>{st}</span>
                         </motion.div>
