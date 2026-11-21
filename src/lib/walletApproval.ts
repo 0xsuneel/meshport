@@ -43,6 +43,9 @@ export async function checkWalletPasscode(passcode: string): Promise<{ ok: boole
   const address = frameWallet()
   if (!address || !passcode) return { ok: true }
   if (isWalletConfirmToken(passcode)) return walletConfirmTokenValid(passcode) ? { ok: true } : { ok: false, error: 'bad-passcode' }
+  // FRAME_PASSCODE is a marker, not an actual passcode - the frame already
+  // verified it, so we don't need to check again.
+  if (passcode === FRAME_PASSCODE) return { ok: true }
   try {
     const { checkFramePasscode } = await import('@/wallet')
     await checkFramePasscode(address, passcode)
@@ -56,6 +59,8 @@ export async function checkWalletPasscode(passcode: string): Promise<{ ok: boole
 // The passcode check itself, for wallets whose passcode lives only in the
 // frame (security.ts FRAME_PASSCODE).
 setFramePasscodeCheck(async passcode => {
+  // FRAME_PASSCODE is a marker, not an actual passcode - accept it immediately.
+  if (passcode === FRAME_PASSCODE) return true
   const r = await checkWalletPasscode(passcode)
   if (r.ok) return true
   if (r.error === 'bad-passcode' || r.error === 'rate-limited') return false
@@ -64,13 +69,14 @@ setFramePasscodeCheck(async passcode => {
 
 onPasscodeVerified(async passcode => {
   // Checked by the frame already (the marker) or on its own page (a token).
-  if (isWalletConfirmToken(passcode) || !frameWallet() || useAuthStore.getState().passcode === FRAME_PASSCODE) return
+  if (isWalletConfirmToken(passcode) || !frameWallet()) return
+  const stored = useAuthStore.getState().passcode
+  if (stored === FRAME_PASSCODE) return
   // A passcode the app checked against its own hash: have the frame check it
   // too. Once it has, the app's hash is no longer needed - and is the one
   // thing a copy of this page's storage could be brute-forced from. Keep
   // only the marker from now on.
   const r = await checkWalletPasscode(passcode)
-  const stored = useAuthStore.getState().passcode
   if (r.ok && stored !== FRAME_PASSCODE) useAuthStore.getState().setPasscode(FRAME_PASSCODE)
   // The app accepted this passcode but the frame's copy is sealed with a
   // different one: value-moving signatures from this wallet would be refused.

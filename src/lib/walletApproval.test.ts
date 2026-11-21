@@ -143,4 +143,10 @@ describe('wallet approval', () => {
     expect(await approval.checkWalletPasscode('000000')).toEqual({ ok: true })
     expect(checkFramePasscode).not.toHaveBeenCalled()
   })
+
+  it('FRAME_PASSCODE marker does not trigger frame check (prevents double prompt)', async () => {
+    auth.walletSource = 'create'
+    expect(await approval.checkWalletPasscode(security.FRAME_PASSCODE)).toEqual({ ok: true })
+    expect(checkFramePasscode).not.toHaveBeenCalled()
+  })
 })
