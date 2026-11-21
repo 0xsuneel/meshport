@@ -1,5 +1,7 @@
 # ADR: Transaction State Machine — Service-Role Boundary
 
+> **Historical note (Nov 2026):** this document was written when MeshPort still had Google/email sign-in with server-held keys (the `wallet-key` function). That function and those sign-in methods are retired; every wallet is now self-custodial (see [SELF_CUSTODY.md](SELF_CUSTODY.md)). References to `wallet-key`, social accounts and passkey/Recovery QR below describe the old design.
+
 Status: **Decided.** Documentation + location/config checkpoint only — no state-machine
 transition logic changed. Pay, Receive, Swap, the indexer, Activity, and `wallet-key` remain
 untouched, exactly as scoped.

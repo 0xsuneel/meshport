@@ -1,5 +1,7 @@
 # MeshPort — Production Blockchain Architecture Audit & Redesign
 
+> **Historical note (Nov 2026):** this document was written when MeshPort still had Google/email sign-in with server-held keys (the `wallet-key` function). That function and those sign-in methods are retired; every wallet is now self-custodial (see [SELF_CUSTODY.md](SELF_CUSTODY.md)). References to `wallet-key`, social accounts and passkey/Recovery QR below describe the old design.
+
 Status: **proposal, not implemented.** No production code has been changed.
 Scope: every blockchain-touching path in the repository (client, `api/`, `supabase/functions/`).
 Basis: full read of `src/`, `api/`, `supabase/`, `contracts/`, `scripts/` at v57.0.0 (57,374 LOC).
@@ -968,7 +970,7 @@ most of the cost reduction. Phase 5 is highest-risk and deliberately last.
 - Claim state machine semantics (`claim-worker` stages, locking, budgets)
 - Circle AppKit / CCTP integration logic
 - Wallet derivation, BIP39/BIP44, `wallet-key`, biometric, passcode
-- RLS policies and the security model of `docs/SECURITY_ARCHITECTURE.md`
+- RLS policies and the RLS security model
 - Chat, P2P, rewards, bulk payout, admin business logic
 - Any user-visible feature — this is an infrastructure change only
 
