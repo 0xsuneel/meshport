@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from 'react'
 import { UserPhoto } from './PhotoFill'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, Check, ChevronDown, Clock, Copy, ExternalLink, Share2, X, Zap } from 'lucide-react'
@@ -147,7 +147,16 @@ function Row({ row, i, revealed }: { row: ReceiptRow; i?: number; revealed?: boo
   return <Reveal i={i} revealed={!!revealed} style={style}>{body}</Reveal>
 }
 
+/**
+ * A record reopened from history on a phone (ReceiptPopup's page) has no
+ * reveal: every part is simply there. Success screens right after a payment,
+ * and the computer's card, keep the rise-in-turn.
+ */
+export const InstantReveal = createContext(false)
+
 function Reveal({ i, revealed, children, style }: { i: number; revealed: boolean; children: ReactNode; style?: CSSProperties }) {
+  const instant = useContext(InstantReveal)
+  if (instant) return <div style={style}>{children}</div>
   return (
     <motion.div initial={false} animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
       // Each row rises on a spring, 70 ms after the one above (17 Nov).
