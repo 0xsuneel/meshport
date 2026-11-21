@@ -112,6 +112,27 @@ describe('spend limit policy', () => {
     expect(classify(me, 'sign:typed-data', { typedData: { ...auth, message: { ...auth.message, from: them } } }).ok).toBe(false)
   })
 
+  it('EURC Bring on every pinned source chain is counted, by authorization or by permit', () => {
+    const ROUTER = '0x3010518F036eE1BF95Da787eEe3AafFAD95a1794'
+    const chains: Array<[string, number, string]> = [
+      ['Avalanche Fuji', 43113, '0x5E44db7996c682E92a960b65AC713a54AD815c6B'],
+      ['Ethereum Sepolia', 11155111, '0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4'],
+      ['Base Sepolia', 84532, '0x808456652fdb597867f38412077A9182bf77359F'],
+      ['World Chain Sepolia', 4801, '0xe479EcA5740Ac65d6E1823bea2f1C08Bc14e954F'],
+    ]
+    const scope = parseScope({ limits: [{ asset: 'EURC', amount: '10.5' }], contracts: [{ address: ROUTER, label: 'MeshPort router' }] })
+    for (const [name, chainId, eurc] of chains) {
+      const domain = { name: 'EURC', version: '2', chainId, verifyingContract: eurc }
+      const auth = classify(me, 'sign:typed-data', { typedData: { domain, primaryType: 'ReceiveWithAuthorization', message: { from: me, to: ROUTER, value: 10_000_000n } } })
+      expect(auth.ok && fits(scope, scope.limits, auth), name + ' authorization').toBeTruthy()
+      const permit = classify(me, 'sign:typed-data', { typedData: { domain, primaryType: 'Permit', message: { owner: me, spender: ROUTER, value: 10_000_000n, nonce: 0n, deadline: 1n } } })
+      expect(permit.ok && fits(scope, scope.limits, permit), name + ' permit').toBeTruthy()
+    }
+    // ...and the router's own BridgePermit that pairs with a permit.
+    const bp = classify(me, 'sign:typed-data', { typedData: { domain: { name: 'MeshPortRouter', version: '1', chainId: 11155111, verifyingContract: ROUTER }, primaryType: 'BridgePermit', message: { from: me, value: 1n, deadline: 1n, nonce: '0x' + '00'.repeat(32) } } })
+    expect(bp.ok && fits(scope, scope.limits, bp)).toBeTruthy()
+  })
+
   it('a Bring authorization for cirBTC from Ethereum Sepolia is counted in 8 decimals', () => {
     const SEPOLIA_CIRBTC = '0x3a3fe695F684Bf9b9e43CF43C2b895Ea5e392bB3'
     const ROUTER = '0x3010518F036eE1BF95Da787eEe3AafFAD95a1794'
