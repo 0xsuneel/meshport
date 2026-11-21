@@ -31,6 +31,10 @@ never sent to or stored by MeshPort.
 ### 💬 Chat & Pay
 Message anyone by their `.arc` username and send money in the same thread.
 Chats are **end-to-end encrypted**, with every chat key signed by its wallet.
+Messages, photos and files are stored only on your phone (no cloud backup); the
+server just relays them and deletes each one once the other phone has it, or
+after 30 days if never delivered. Payment cards stay, so payment history shows
+on every device.
 → [How chat encryption works](docs/CHAT_ENCRYPTION.md)
 
 ### 🌐 Multichain Hub
