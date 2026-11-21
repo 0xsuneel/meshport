@@ -88,7 +88,7 @@ Grouped by how solid the implementation is, based on reading the actual code —
 - **6-digit passcode / app lock** — required for send, seed reveal, and private key export (`src/lib/security.ts`)
 - **MeshPort username system (`.arc`)** — unique handles resolved through Supabase, no on-chain registry (`src/lib/usernameRegistry.ts`)
 - **QR payments** — scan-to-pay and generate-to-receive (`src/features/scanner/ScannerPage.tsx`, `src/features/receive/ReceivePage.tsx`)
-- **Payment links** (`meshport.xyz/pay/:username`) with rich link-preview cards (`api/og-pay.ts`, `api/og-image.tsx`)
+- **Payment links** (`meshport.xyz/paylink/:username`) with rich link-preview cards (`api/og-pay.ts`, `api/og-image.tsx`)
 - **Send / Receive** — USDC, EURC, cirBTC on Arc (`src/features/paysend/PaySendPage.tsx`, `src/features/receive/ReceivePage.tsx`)
 - **Chat & Pay** — end-to-end encrypted, device-only chat with in-line payments (`src/features/chat/ChatPage.tsx`, `src/lib/chatCrypto.ts`, `src/lib/localChat.ts`; see [CHAT_ENCRYPTION.md](CHAT_ENCRYPTION.md))
 - **Multichain Claim** — bring USDC from 20+ external testnets to Arc via CCTP V2, driven by a server-side worker (`src/features/multichain/MultichainClaimPage.tsx`, `supabase/functions/claim-worker`)
@@ -137,8 +137,8 @@ No other product surface in the codebase (no NFTs, no lending, no card issuance,
 2. On successful decode, the app routes straight into the Send flow with the recipient pre-filled.
 
 ### Payment Links
-1. Every user has a permanent link at `meshport.xyz/pay/:username`.
-2. Because MeshPort is a client-rendered SPA, link-preview bots (iMessage, WhatsApp, Slack, Telegram) would otherwise see an empty shell. `vercel.json` rewrites `/pay/:username` to the `api/og-pay` serverless function for **bot** user agents, which returns real HTML with Open Graph tags pointing at a dynamically generated PNG (`api/og-image.tsx`, built with `@vercel/og`) showing that user's name, handle, and avatar.
+1. Every user has a permanent link at `meshport.xyz/paylink/:username`.
+2. Because MeshPort is a client-rendered SPA, link-preview bots (iMessage, WhatsApp, Slack, Telegram) would otherwise see an empty shell. `vercel.json` rewrites `/paylink/:username` (and the older `/pay/:username`, which the app redirects) to the `api/og-pay` serverless function for **bot** user agents, which returns real HTML with Open Graph tags pointing at a dynamically generated PNG (`api/og-image.tsx`, built with `@vercel/og`) showing that user's name, handle, and avatar.
 3. A human visiting the same URL in a real browser gets the normal SPA, landing on the Send flow pre-filled with that username.
 
 ### Chat & Pay
@@ -503,7 +503,7 @@ MeshPort is configured for **Vercel** (`vercel.json`):
 - **Output directory:** `dist`
 - **Rewrites:**
   - `/api/(.*)` → the corresponding serverless function in `api/`
-  - `/pay/:username` → `api/og-pay` (serves bot-friendly HTML for link previews; humans still land in the SPA)
+  - `/paylink/:username` (and old `/pay/:username`) → `api/og-pay` (serves bot-friendly HTML for link previews; humans still land in the SPA)
   - everything else → `index.html` (SPA fallback for client-side routing)
 - **Function overrides:** `api/swap-proxy.js` and `api/relay-rpc.js` are given a 60s `maxDuration` — both can involve multi-step RPC/attestation work that exceeds Vercel's default function timeout.
 - **Headers:** `sw.js` and `index.html` are set to `no-cache`/`must-revalidate` so PWA users always get the latest service worker and shell instead of a stale cached one.
@@ -613,7 +613,7 @@ The `P2PMeshportEscrowV2` address above is the current, live contract the client
 | `/api/profile` | GET, POST | Fetch/update a user's public profile | `SUPABASE_SERVICE_ROLE_KEY` |
 | `/api/chat` | POST (`?action=create\|send\|touch`) | Conversation create/send/touch, merged into one function to stay under Vercel's function-count limit | `SUPABASE_SERVICE_KEY` |
 | `/api/push` | POST (`?action=subscribe\|unsubscribe\|send\|send-internal\|broadcast\|feed`) | Web Push subscription management and dispatch | `VAPID_*`, `PUSH_INTERNAL_SECRET` |
-| `/api/og-pay` | GET | Bot-facing HTML with Open Graph tags for `/pay/:username` links | none (public data only) |
+| `/api/og-pay` | GET | Bot-facing HTML with Open Graph tags for `/paylink/:username` links | none (public data only) |
 | `/api/og-image` | GET (Edge runtime) | Renders the PNG used as `og:image` for payment link previews | none |
 
 ### Supabase Edge Functions (`supabase/functions/`)
