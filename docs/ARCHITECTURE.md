@@ -90,7 +90,7 @@ Grouped by how solid the implementation is, based on reading the actual code —
 - **QR payments** — scan-to-pay and generate-to-receive (`src/features/scanner/ScannerPage.tsx`, `src/features/receive/ReceivePage.tsx`)
 - **Payment links** (`meshport.xyz/pay/:username`) with rich link-preview cards (`api/og-pay.ts`, `api/og-image.tsx`)
 - **Send / Receive** — USDC, EURC, cirBTC on Arc (`src/features/paysend/PaySendPage.tsx`, `src/features/receive/ReceivePage.tsx`)
-- **Chat & Pay** — end-to-end encrypted chat with in-line payments (`src/features/chat/ChatPage.tsx`, `src/lib/chatCrypto.ts`)
+- **Chat & Pay** — end-to-end encrypted, device-only chat with in-line payments (`src/features/chat/ChatPage.tsx`, `src/lib/chatCrypto.ts`, `src/lib/localChat.ts`; see [CHAT_ENCRYPTION.md](CHAT_ENCRYPTION.md))
 - **Multichain Claim** — bring USDC from 20+ external testnets to Arc via CCTP V2, driven by a server-side worker (`src/features/multichain/MultichainClaimPage.tsx`, `supabase/functions/claim-worker`)
 - **Multichain Transfer** — send Arc USDC out to external chains via CCTP V2 or Circle Gateway Unified Balance (`src/features/multichain/MultichainTransferPage.tsx`)
 - **Swap** — USDC ↔ EURC ↔ cirBTC (`src/features/swap/SwapPage.tsx`, `api/swap-proxy.js`)
@@ -265,9 +265,11 @@ MeshPort provides **two independent, genuinely different mechanisms** for moving
 ## Chat & Pay
 
 - **Supported assets:** USDC, EURC, cirBTC (`ChatPage.cirbtc.test.ts` covers cirBTC specifically).
-- **Encryption:** chat messages, images, and files are end-to-end encrypted using X25519 key pairs. Each user's chat key pair is **deterministically derived from their wallet's private key** (`chatCrypto.ts`), not randomly generated — re-importing the same wallet on a new device reproduces the same chat identity, with nothing extra to back up. Public keys are published to `users.chat_public_key` so a counterparty can look them up.
-- **Payments in chat:** a payment sent from within a conversation is a distinct message type carrying `amount`, `currency`, and `transaction_id`, rendered inline with its live status and an explorer link — the chat message *references* the transaction, it is never the source of truth for whether the payment happened (that's still Arc + the ledger/Activity pipeline).
-- **Where it lives:** `src/features/chat/ChatPage.tsx` (conversation UI + payment composer), `src/lib/chatService.ts` (message CRUD + realtime), `src/lib/chatCrypto.ts` (E2E crypto), `api/chat.ts` (server-side conversation create/send/touch, merged into one endpoint to stay under Vercel's function-count limit).
+- **Encryption:** messages, images and files are end-to-end encrypted. Every message gets its own random key (AES-256-GCM, format `e2e:v2`), and that key is sealed for the two people in the chat using X25519 + HKDF. Each user's chat key pair is **derived from their wallet key inside the wallet frame** (`chatIdentity.ts`, `chatWrap.ts`), so the app never holds the chat private key, and importing the same wallet on a new device gives the same chat identity. The public key is published to `users.chat_public_key` together with a wallet signature over it (`users.chat_key_sig`); a key is used only if that signature recovers to the user's wallet address, and each device remembers contacts' wallet + key and holds messages and Pay until you confirm if either changes. If the other person has no key yet, the message is sealed for the sender only (`e2e:q2`) and re-sealed once their key appears. Full details: [CHAT_ENCRYPTION.md](CHAT_ENCRYPTION.md).
+- **Device-only storage, no backup:** text, photos and files are saved on the phone (IndexedDB, one database per account — `src/lib/localChat.ts`). The server is only a relay: a sealed message waits in `messages` until the recipient's phone picks it up (`chat_peek_mail` → saved locally → `chat_ack_mail`), then it is deleted from the server (`src/lib/chatMailbox.ts`). Anything never delivered is dropped after 30 days by the daily `chat-expiry` function. A new phone, reinstall or cleared site data starts with no old messages. Delivered / read receipts and "delete for everyone" travel as small content-free `signal` rows.
+- **Payments in chat:** a payment sent from within a conversation is a distinct message type (`payment_sent` / `payment_received`) carrying `amount`, `currency`, and `transaction_id`, rendered inline with its live status and an explorer link — the chat message *references* the transaction, it is never the source of truth for whether the payment happened (that's still Arc + the ledger/Activity pipeline). Payment cards are the one thing kept in Supabase, so payment history shows on every device.
+- **Privacy controls:** `users.msg_privacy` (`everyone` / `contacts` — messages from people you don't know go to Requests until accepted), `users.stranger_payments` (`allow` / `block`), and per-user blocking (`chat_blocks`; `src/lib/privacy.ts`).
+- **Where it lives:** `src/features/chat/ChatPage.tsx` (conversation UI + payment composer), `src/lib/chatService.ts` (send + realtime), `src/lib/chatMailbox.ts` / `chatDelivery.ts` (pickup and receipts), `src/lib/localChat.ts` (on-device store), `src/lib/chatCrypto.ts` / `chatWrap.ts` (E2E crypto; the private-key steps run in the wallet frame), `api/chat.ts` (server-side conversation create/send/touch, merged into one endpoint to stay under Vercel's function-count limit), `supabase/functions/chat-expiry`.
 
 ---
 
@@ -319,6 +321,7 @@ meshport-main/
 │   │   ├── bulkpay-intent/      #   Idempotent Bulk Pay intent tracking
 │   │   ├── pay-intent/ swap-intent/  # Idempotent intent tracking for Send/Swap
 │   │   ├── p2p-release-reconcile/  # Reconciles on-chain escrow release with trade state
+│   │   ├── chat-expiry/         #   Daily cleanup of undelivered chat messages / files (30 days)
 │   │   └── chain-transfer-webhook/ # Inbound webhook for chain-transfer events
 │   ├── migrations/               # SQL migrations — the real, applied database schema history
 │   └── scripts/                  # One-off operational SQL
@@ -341,7 +344,7 @@ The `docs/` folder already contains a large set of detailed engineering document
 | Auth (create/import wallet, passcode) | `src/features/auth/AuthPages.tsx`, `PasscodeSetup.tsx`, `src/wallet`, `src/lib/security.ts`, `supabase/functions/wallet-login` | Create/import wallet, passcode lock, wallet-signature sign-in |
 | Send / Receive | `src/features/paysend/PaySendPage.tsx`, `src/features/receive/ReceivePage.tsx`, `src/lib/arcService.ts` | Core USDC/EURC/cirBTC transfer on Arc |
 | QR / Payment Links | `src/features/scanner/ScannerPage.tsx`, `api/og-pay.ts`, `api/og-image.tsx` | Scan-to-pay, shareable/previewable pay links |
-| Chat & Pay | `src/features/chat/ChatPage.tsx`, `src/lib/chatService.ts`, `src/lib/chatCrypto.ts`, `api/chat.ts` | E2E-encrypted chat with inline payments |
+| Chat & Pay | `src/features/chat/ChatPage.tsx`, `src/lib/chatService.ts`, `src/lib/chatMailbox.ts`, `src/lib/localChat.ts`, `src/lib/chatCrypto.ts`, `api/chat.ts` | E2E-encrypted, device-only chat with inline payments |
 | Multichain Claim | `src/features/multichain/MultichainClaimPage.tsx`, `src/lib/claimService.ts`, `supabase/functions/claim-worker`, `claim-submit`, `claim-recovery-scan` | External chain → Arc via CCTP V2, server-driven |
 | Multichain Transfer | `src/features/multichain/MultichainTransferPage.tsx`, `src/lib/backgroundBridge.ts` | Arc → external chain via CCTP V2 or Unified Balance |
 | Unified Balance (Gateway) | `MultichainTransferPage.tsx` (`ub` code paths), `api/relay-deposit.js` | Circle Gateway deposit/spend fast path |
@@ -563,7 +566,7 @@ DRAFT → REVIEWED → AUTHORIZING → SIGNED → SUBMITTED → CONFIRMING → C
 | Multichain Transfer (Unified Balance) | Client deposits into Gateway → Gateway spend to destination → Activity update |
 | Swap | Client → `/api/swap-proxy` (quote, then execute) → Arc RPC → `recordSwapActivity` → Activity update |
 | Bulk Pay | Client → `bulkpay-intent` (idempotent intent) → Multicall3 tx on Arc → per-recipient Activity rows via indexer |
-| Chat & Pay | Client encrypts (X25519) → `api/chat.ts` / Supabase → Realtime delivery; payment sub-messages reference a real transaction id |
+| Chat & Pay | Client seals (per-message key + X25519) → `api/chat.ts` / Supabase relay → recipient's phone picks it up, saves it locally, and the server deletes it; payment sub-messages reference a real transaction id and stay in Supabase |
 | P2P | Offer/trade rows in Supabase ↔ on-chain escrow deposit/release ↔ `p2p-release-reconcile` keeps both in sync |
 | Activity | `blockchain-indexer` + `ledger-interpret` + `activity-consumer` → canonical `ledger_events`/`activity` rows → Realtime → `ActivityPage.tsx` |
 
@@ -621,6 +624,7 @@ The `P2PMeshportEscrowV2` address above is the current, live contract the client
 | `claim-worker` | Full CCTP claim state machine: burn confirm → attestation → mint → arrival confirm | `claim-submit` (immediate) + `pg_cron` sweep |
 | `claim-recovery-scan` | Per-wallet scan for external deposits/mints missed by the normal flow | App foreground/visibility change |
 | `deposit-scan-all` | Scheduled, all-wallet scan for plain incoming transfers with no activity row yet | `pg_cron` |
+| `chat-expiry` | Daily: drops undelivered chat messages and chat files older than 30 days (payment cards are kept) | `pg_cron` |
 | `blockchain-indexer` | Canonical chain-event ingestion feeding the ledger | Scheduled/triggered indexing pass |
 | `ledger-interpret` | Classifies raw chain events into ledger events | `blockchain-indexer` output |
 | `activity-consumer` | Projects ledger events into user-facing Activity rows | `ledger-interpret` output |
@@ -638,8 +642,8 @@ Schema history lives in `supabase/migrations/` (apply in filename order). Tables
 
 | Table | Used for |
 |---|---|
-| `users` | Account profile: username (`.arc` handle), wallet address, avatar, `chat_public_key`, `login_type` |
-| `messages`, `conversations`, `attachments` | Chat: conversations, individual messages (including payment sub-type), file/image attachments |
+| `users` | Account profile: username (`.arc` handle), wallet address, avatar, `chat_public_key` + `chat_key_sig`, `msg_privacy`, `stranger_payments` |
+| `messages`, `conversations`, `attachments` | Chat relay: conversations, sealed messages waiting for delivery (deleted once the recipient's phone has them, or after 30 days), payment cards (kept), and chat files (same rules) |
 | `contacts` | Saved/recent contacts per user |
 | `activity`, `transactions`, `multichain_transactions`, `bulk_payments` | User-facing transaction history across send/receive, multichain, and bulk pay |
 | `transaction_intents`, `transaction_attempts` | Idempotent intent + attempt tracking feeding the transaction state machine |
