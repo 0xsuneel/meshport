@@ -39,7 +39,7 @@ This codebase has an explicit convention (see the project's own `meshport-transa
    - Never let a receipt-wait timeout become an automatic `FAILED` state — that's `SUBMITTED_UNKNOWN`, reconciled before any retry.
    - Never let a sender's client create the receiver's confirmed Activity row — receive is indexer-driven, not sender-driven.
    - Every user-triggered financial operation needs an idempotency key (see `pay-intent`/`swap-intent`/`bulkpay-intent` for the existing pattern).
-   - Never send a private key, seed phrase, or mnemonic to any server, API, Edge Function, database, or log. Signing happens client-side except through the explicitly-designed server-custodial `wallet-key` envelope-encryption flow for social-login accounts.
+   - Never send a private key, seed phrase, or mnemonic to any server, API, Edge Function, database, or log. Every wallet is self-custodial: signing happens client-side, inside the wallet frame.
 5. **Database changes:** check existing migrations and tables under `supabase/migrations/` before adding a new table or column — prefer extending an existing canonical structure over creating a duplicate. Add a new, timestamped migration file; don't edit a migration that's already been applied elsewhere.
 6. **Edge Functions:** several functions are deliberately self-contained (no shared imports) because of a Supabase dashboard deployment limitation — see the comment at the top of `supabase/functions/claim-worker/index.ts`. If your change touches logic that's duplicated across functions for this reason, update every copy.
 
@@ -80,7 +80,7 @@ Open an issue describing:
 
 ## Security issues
 
-This repository has no external bug bounty program on record. If you find a security issue — especially anything touching private key handling, the `wallet-key` envelope-encryption flow, or the P2P escrow contract — report it privately to the maintainers rather than opening a public issue, and give them a chance to respond before any public disclosure.
+This repository has no external bug bounty program on record. If you find a security issue — especially anything touching private key handling, the wallet frame, or the P2P escrow contract — report it privately to the maintainers rather than opening a public issue, and give them a chance to respond before any public disclosure.
 
 ## License
 
