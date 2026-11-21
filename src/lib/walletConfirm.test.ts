@@ -19,7 +19,7 @@ vi.mock('@/wallet/frameClient', () => ({
   walletOrigin: () => 'http://localhost:5174',
 }))
 
-const { payConfirmIntent } = await import('./walletConfirm')
+const { payConfirmIntent, batchPayScope, tokenBridgeScope } = await import('./walletConfirm')
 const { parseIntent, matchesIntent } = await import('../../wallet-frame/src/intent')
 const { ARC_MEMO_CONTRACT } = await import('./arcMemo')
 const to = privateKeyToAccount(generatePrivateKey()).address
@@ -82,5 +82,19 @@ describe('spendScope', () => {
     expect(spendScope([{ asset: 'EURC', amount: 1 }], [{ address: '', label: 'x' }, { address: '0x4444444444444444444444444444444444444444', label: 'Escrow' }]))
       .toEqual({ limits: [{ asset: 'EURC', amount: '1.05' }], contracts: [{ address: '0x4444444444444444444444444444444444444444', label: 'Escrow' }] })
     expect(p2pScope(0)?.limits).toEqual([{ asset: 'USDC', amount: '0' }])
+  })
+})
+
+describe('scopes for EURC / cirBTC transfers and batch payouts', () => {
+  it('a token transfer limits the token and, separately, the USDC fee; cirBTC never gets a USDC-sized token margin', () => {
+    const eurc = tokenBridgeScope('EURC', 10, 1.5)
+    expect(eurc?.limits).toEqual([{ asset: 'EURC', amount: '10.5' }, { asset: 'USDC', amount: '1.5' }])
+    const btc = tokenBridgeScope('cirBTC', 0.01, 1.5)
+    expect(btc?.limits).toEqual([{ asset: 'cirBTC', amount: '0.0105' }, { asset: 'USDC', amount: '1.5' }])
+  })
+  it('a batch payout names Multicall3 so the wallet lets it through', () => {
+    const s = batchPayScope(20)
+    expect(s?.limits).toEqual([{ asset: 'USDC', amount: '21' }])
+    expect(s?.contracts?.map(c => c.address.toLowerCase())).toEqual(['0xca11bde05977b3631167028862be2a173976ca11'])
   })
 })

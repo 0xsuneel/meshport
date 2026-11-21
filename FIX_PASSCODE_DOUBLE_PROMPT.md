@@ -77,3 +77,21 @@ The fix ensures:
 - `src/lib/security.ts` - Contains `FRAME_PASSCODE` constant and `verifyPasscode()` function
 - `wallet-frame/src/main.ts` - Wallet frame's `passcode:check` handler
 - `src/wallet/index.ts` - `checkFramePasscode()` function that makes the PostMessage call
+
+## Follow-up (21 Nov): EURC / cirBTC Transfer & Bring, Bulk Pay still asked twice
+
+The first fix only removed a duplicate check in the app. These flows were
+asked again because the wallet frame itself refused a signature mid-flow
+(`approval-required`) and opened its own confirm page ("A signature this
+wallet can't read"):
+
+| Flow | Why the frame refused it | Fix |
+| --- | --- | --- |
+| Bring EURC (gasless) | `ReceiveWithAuthorization` is for EURC on the *source* chain; the frame only knew Arc's EURC | Pinned Circle's published EURC testnet addresses in `wallet-frame/src/policy.ts` |
+| Transfer EURC / cirBTC (CCTPx) | `CrossChainTokenService` not a known contract, and its fee is native USDC `value` with no USDC limit | Added it to `CIRCLE_CONTRACTS`; new `tokenBridgeScope` limits the token and the USDC fee |
+| Transfer / Bring cirBTC | Pages passed no spend limit at all for cirBTC | Pages now pass one (`cirBTC` gets no USDC-sized fee margin) |
+| Bulk Pay, Business payouts | Batch goes through Multicall3, which no limit named | New `batchPayScope` names Multicall3 |
+
+Still open: cirBTC on *source* chains (Bring) can't be pinned until Circle
+publishes those contract addresses (CCTPx registry `/v2/cctpx/tokens`); add
+them to `EXTERNAL_TOKEN_DEPLOYMENTS` in `policy.ts`.

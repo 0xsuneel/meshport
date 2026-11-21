@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useStepDirection } from '@/hooks/useStepDirection'
 import { useNavigate } from 'react-router-dom'
 import { PinSheet } from '@/components/ui/PinSheet'
-import { spendScope } from '@/lib/walletConfirm'
+import { batchPayScope } from '@/lib/walletConfirm'
 import {
   ArrowLeft, Plus, Trash2, Upload, CheckCircle, XCircle,
   Send, ExternalLink, Search, Loader2, User, Download,
@@ -1074,7 +1074,7 @@ export function BulkPayoutPage() {
 
       {/* ── Review step: the passcode step - opens only when Pay is tapped.
           Can't be closed while the payout is sending. ── */}
-      <PinSheet walletConfirm={{ scope: spendScope([{ asset: 'USDC', amount: totalAmount }]) }}
+      <PinSheet walletConfirm={{ scope: batchPayScope(totalAmount) }}
         open={showReviewPinSheet}
         onClose={() => { setShowReviewPinSheet(false); setPassEntry(''); setPassError('') }}
         locked={processing}

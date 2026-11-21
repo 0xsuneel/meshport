@@ -116,6 +116,35 @@ export function bridgeScope(asset: Asset, amount: number, fee: number): ConfirmS
   return spendScope([{ asset, amount, extra: fee }], routers)
 }
 
+/**
+ * A cross-chain send of EURC / cirBTC (Circle CCTPx). Unlike USDC, the fee is
+ * not taken out of the token: CrossChainTokenService.crossChainTransfer takes
+ * it as the chain's native coin - USDC on Arc - sent as the call's value. So
+ * the limit covers the token amount and, separately, that USDC fee; without
+ * the USDC limit the wallet refused the transfer's last call and asked for
+ * the passcode again.
+ */
+export function tokenBridgeScope(asset: Asset, amount: number, nativeFeeUsdc: number): ConfirmScope | null {
+  if (asset === 'USDC') return bridgeScope(asset, amount, nativeFeeUsdc)
+  const arc = String((import.meta.env.VITE_ARC_ROUTER as string | undefined) ?? '').trim()
+  const routers = [arc, ...Object.values(routerAddressesRaw())].map(address => ({ address, label: 'MeshPort router' }))
+  return spendScope([{ asset, amount }, { asset: 'USDC', amount: 0, extra: Math.max(0, nativeFeeUsdc) }], routers)
+}
+
+/** Multicall3 (the same address on every chain): Bulk Pay / Pay staff send every payment through one aggregate3Value call. */
+const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11'
+
+/**
+ * A batch payout of `amount` USDC (+ fee) through Multicall3. The wallet counts
+ * the call's value as USDC; Multicall3 holds no allowance from the wallet, so
+ * naming it lets the limit cover the call without covering anything more.
+ * Without it the wallet refused the batch as "a contract it doesn't know" and
+ * asked for the passcode a second time.
+ */
+export function batchPayScope(amount: number): ConfirmScope | null {
+  return spendScope([{ asset: 'USDC', amount }], [{ address: MULTICALL3, label: 'Multicall3 (batch payments)' }])
+}
+
 // A Pay send's fees stay far under this (≈0.002 USDC on Arc); the wallet
 // shows it as the most the payment may spend on fees.
 const PAY_MAX_FEE = 50_000_000_000_000_000n // 0.05 USDC
