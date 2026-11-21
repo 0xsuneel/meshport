@@ -183,7 +183,6 @@ This repository's `docs/` folder is unusually thorough and is the authoritative 
 
 - `docs/TRANSACTION_STATE_MACHINE.md`, `docs/TRANSACTION_SERVICE_BOUNDARY.md` — state machine contract and boundaries
 - `docs/LEDGER_CANONICAL_EVENT_DESIGN.md`, `docs/LEDGER_SCHEMA_GAP_AUDIT.md` — ledger schema and design gaps found along the way
-- `docs/SECURITY_ARCHITECTURE.md` — security model
 - `docs/BLOCKCHAIN_ARCHITECTURE_PROPOSAL.md` — the original proposal that led to consolidating `chains.ts`
 
 ## 10. One account on any device (wallet sign-in)
