@@ -117,7 +117,6 @@ function requireApproval(address: string, method: string, params: Record<string,
   // "confirm again" in the middle of a transfer can be traced to its cause.
   let reason = 'no-limit'
   if (w && w.until <= Date.now()) reason = 'expired'
-  else if (w && !vault.hasPasscode(address)) reason = 'no-passcode'
   else if (w) {
     const c = classify(a, method, params)
     const next = c.ok ? fits(w.scope, w.remaining, c) : null
