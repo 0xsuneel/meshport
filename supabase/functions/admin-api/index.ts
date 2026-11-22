@@ -13,7 +13,7 @@
 //   rpc.*     probes ARC_RPCS / ARC_PUBLIC_RPCS / CHAIN_RPCS (_shared/chains)
 //             and reads rpc_usage (written by /api/arc-rpc)
 //   relayer.gas  the relayer's native-coin (gas) balance on every chain it sends
-//             from. Needs the Supabase secrets RELAYER_ADDRESS (+ RELAYER_MODE,
+//             from. Needs the Supabase secrets RELAYER_ADDRESS (or CIRCLE_RELAYER_ADDRESS, as on Vercel) (+ RELAYER_MODE,
 //             RELAYER_KEY_ADDRESS, CIRCLE_SIGN_UNSUPPORTED_CHAINS as on Vercel).
 //   logs.list admin_audit_log + settings_logs + admin_recovery_log +
 //             p2p_trade_audit_log, merged
@@ -308,7 +308,7 @@ async function nativeBalance(urls: string[], address: string): Promise<bigint> {
 
 async function relayerGas() {
   const env = {
-    mode: Deno.env.get('RELAYER_MODE') ?? '', address: Deno.env.get('RELAYER_ADDRESS') ?? '',
+    mode: Deno.env.get('RELAYER_MODE') ?? '', address: Deno.env.get('RELAYER_ADDRESS') ?? Deno.env.get('CIRCLE_RELAYER_ADDRESS') ?? '',
     keyAddress: Deno.env.get('RELAYER_KEY_ADDRESS') ?? '', unsupported: Deno.env.get('CIRCLE_SIGN_UNSUPPORTED_CHAINS') ?? '',
   }
   const rpcs: Record<string, string[]> = { Arc_Testnet: [...new Set([...ARC_RPCS, ...ARC_PUBLIC_RPCS])], ...CHAIN_RPCS }
