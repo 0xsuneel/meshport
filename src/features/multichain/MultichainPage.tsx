@@ -1309,7 +1309,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
               </div>
             )}>
             {sheetClaimChain && (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 8px' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <Suspense fallback={<InlineSpinner />}>
                   <ClaimSheetBody key={sheetClaimChain} embedded pushScreens initialChain={sheetClaimChain}
                     initialBalance={bringRows.find(c => c.id === sheetClaimChain)?.balance}
@@ -1330,7 +1330,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
           )}>
           {/* The same Bring screens as USDC, for the token. */}
           {sheetTokenBring && bringToken !== 'USDC' && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 8px' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               <Suspense fallback={<InlineSpinner />}>
                 <ClaimSheetBody key={`${bringToken}-${sheetTokenBring.chainId}`} embedded pushScreens
                   initialChain={sheetTokenBring.chainId} initialBalance={sheetTokenBring.balance}

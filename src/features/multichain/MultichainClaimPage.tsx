@@ -1842,7 +1842,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       // The success receipt (green header, Done) runs to the screen edges, past the
       // Hub page's 8px side padding - so this box must not clip it sideways then
       // (it did: blank strips each side). The Hub page's own body still clips at the screen.
-      overflowX: pushScreens && confirmPhase === 'done' && successPhase === 'collapsed' ? 'visible' : 'clip' }}>
+      overflowX: pushScreens && confirmPhase === 'done' && successPhase === 'collapsed' ? 'visible' : 'clip',
+      // Inside the Hub the page keeps its 8px sides itself (the Hub wrapper has none), so the
+      // success receipt - like Pay's - simply gets the full width: no negative-margin trick.
+      padding: pushScreens && !(confirmPhase === 'done' && successPhase === 'collapsed') ? '0 8px' : 0, boxSizing: 'border-box' }}>
 
       {/* LOADING STATE - chains scroll horizontally through a fixed scan
           line, like a barcode scanner, using real chain logos rather than
@@ -2439,10 +2442,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 })
                 // EURC / cirBTC: Circle's forwarder delivers - no Arc transaction of ours to link.
                 const mintPending = !token && chainProgress.some(p => !p.mintTxHash)
-                // Inside the Hub's Bring page (pushScreens) the side padding is 8px, not the
-                // 12px of a full page: cancel exactly that, so the green header reaches the edges.
+                // Inside the Hub (pushScreens) `flow` drops its 8px side padding for this screen, so
+                // the header is full width as in Pay; a full page's 12px is cancelled here.
                 return (
-                <div style={{ margin: pushScreens ? '0 -8px' : '0 -12px', height: '100%' }}>
+                <div style={{ margin: pushScreens ? 0 : '0 -12px', height: '100%' }}>
                 <SuccessReceipt promo="multichain" page={{ chip: 'Arrived',
                   hero: { amount: <ReceiptAmount value={`${coin === 'USDC' ? '$' : coin === 'EURC' ? '€' : ''}${fmtCoin(displayTotal)}`} unit={coin} />, line: <>From {fromLabel}, now in your Arc wallet</> } }}
                   actions={[
