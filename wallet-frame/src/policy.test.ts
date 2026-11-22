@@ -272,3 +272,13 @@ describe('spend limit of nothing', () => {
     expect(v).toMatchObject({ action: 'No money leaves your wallet', amount: '' })
   })
 })
+
+describe('Solana allowance in a scope', () => {
+  it('parses a count, defaults to none, rejects junk', () => {
+    const base = { limits: [{ asset: 'USDC', amount: '0' }] }
+    expect(parseScope(base).solana).toBe(0)
+    expect(parseScope({ ...base, solana: 1 }).solana).toBe(1)
+    expect(() => parseScope({ ...base, solana: 9 })).toThrow()
+    expect(() => parseScope({ ...base, solana: -1 })).toThrow()
+  })
+})

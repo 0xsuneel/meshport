@@ -117,6 +117,17 @@ export function bridgeScope(asset: Asset, amount: number, fee: number): ConfirmS
 }
 
 /**
+ * Bring from Solana: the account's Solana wallet signs the burn, a signature the
+ * wallet can't read (it moves Solana USDC, not anything counted here). So the
+ * limit names it - one signature in the 2 minutes - or the wallet asks again.
+ */
+export function withSolana(scope: ConfirmScope | null, isSolana: boolean): ConfirmScope | null {
+  if (!isSolana) return scope
+  const base = scope ?? spendScope([{ asset: 'USDC', amount: 0 }])
+  return base ? { ...base, solana: 1 } : null
+}
+
+/**
  * A cross-chain send of EURC / cirBTC (Circle CCTPx). Unlike USDC, the fee is
  * not taken out of the token: CrossChainTokenService.crossChainTransfer takes
  * it as the chain's native coin - USDC on Arc - sent as the call's value. So

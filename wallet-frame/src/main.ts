@@ -98,7 +98,7 @@ const signer = (address: string) => privateKeyToAccount(vault.keyFor(address) as
 // A wallet with no passcode on this device signs nothing that needs approval
 // until 'passcode:check' gives it one and confirm.html approves.
 const APPROVAL_MS = 2 * 60_000
-interface SpendWindow { scope: Scope; remaining: Spends; until: number }
+interface SpendWindow { scope: Scope; remaining: Spends; until: number; solanaLeft: number }
 const spendWindows = new Map<string, SpendWindow>()
 function requireApproval(address: string, method: string, params: Record<string, unknown>) {
   const a = address.toLowerCase()
@@ -117,6 +117,7 @@ function requireApproval(address: string, method: string, params: Record<string,
   // "confirm again" in the middle of a transfer can be traced to its cause.
   let reason = 'no-limit'
   if (w && w.until <= Date.now()) reason = 'expired'
+  else if (w && method === 'solana:sign' && w.solanaLeft > 0) { w.solanaLeft--; return }
   else if (w) {
     const c = classify(a, method, params)
     const next = c.ok ? fits(w.scope, w.remaining, c) : null
@@ -357,7 +358,7 @@ try {
         await vault.checkPasscode(c.address, passcode)
         await vault.unlock(c.address, passcode)
         c.signUntil = Date.now() + APPROVAL_MS
-        if (c.scope) spendWindows.set(c.address, { scope: c.scope, remaining: { ...c.scope.limits }, until: c.signUntil })
+        if (c.scope) spendWindows.set(c.address, { scope: c.scope, remaining: { ...c.scope.limits }, until: c.signUntil, solanaLeft: c.scope.solana })
         c.outcome = { status: 'approved', viaBiometric: d.via === 'biometric' }
         channel.postMessage({ type: 'checked', ticket: d.ticket, ok: true })
       } catch (err) {

@@ -98,3 +98,13 @@ describe('scopes for EURC / cirBTC transfers and batch payouts', () => {
     expect(s?.contracts?.map(c => c.address.toLowerCase())).toEqual(['0xca11bde05977b3631167028862be2a173976ca11'])
   })
 })
+
+describe('withSolana', () => {
+  it('adds one Solana signature only for a Solana bring', async () => {
+    const { withSolana, bridgeScope } = await import('./walletConfirm')
+    const s = bridgeScope('USDC', 1, 1)
+    expect(withSolana(s, false)).toBe(s)
+    expect(withSolana(s, true)?.solana).toBe(1)
+    expect(withSolana(null, true)?.solana).toBe(1)
+  })
+})

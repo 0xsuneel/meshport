@@ -423,10 +423,10 @@ export function canonical(method: string, params: Record<string, unknown>): stri
 }
 
 /** A scope from the app, checked: limits per asset (18-decimal units), extra contracts it may call. */
-export interface Scope { limits: Spends; contracts: Map<string, string> }
+export interface Scope { limits: Spends; contracts: Map<string, string>; solana: number }
 const DECIMAL = /^(0|[1-9][0-9]{0,15})(\.[0-9]{1,18})?$/
 export function parseScope(raw: unknown): Scope {
-  const r = (raw ?? {}) as { limits?: unknown; contracts?: unknown }
+  const r = (raw ?? {}) as { limits?: unknown; contracts?: unknown; solana?: unknown }
   const limits: Spends = {}
   if (!Array.isArray(r.limits) || r.limits.length === 0 || r.limits.length > ASSETS.length) throw new Error('No spend limit')
   for (const l of r.limits as Array<{ asset?: unknown; amount?: unknown }>) {
@@ -443,7 +443,9 @@ export function parseScope(raw: unknown): Scope {
       contracts.set(c.address.toLowerCase(), clean(c.label, 40) || 'Contract')
     }
   }
-  return { limits, contracts }
+  const solana = r.solana == null ? 0 : Number(r.solana)
+  if (!Number.isInteger(solana) || solana < 0 || solana > 4) throw new Error('Bad Solana allowance')
+  return { limits, contracts, solana }
 }
 
 /** confirm.html's lines for a spend limit. */
@@ -455,6 +457,7 @@ export function describeScope(scope: Scope): IntentView {
   const source = 'Your wallet counts what every signature in that time moves; anything more, or anything it can\'t read, asks you again.'
   // A limit of nothing (a P2P order or release: the money moves from the
   // escrow, not this wallet) - say so, not a "Nothing" where an amount goes.
+  if (scope.solana) rows.push({ label: 'Solana', value: `${scope.solana} signature${scope.solana > 1 ? 's' : ''} from your own Solana wallet (can't be read here)` })
   if (!parts.length) return { action: 'No money leaves your wallet', amount: '', token: '', to: '', rows, warnings: [], source }
   return { action: 'Up to', amount: parts.join(' + '), token: '', to: 'may leave your wallet', rows, warnings: [], source }
 }

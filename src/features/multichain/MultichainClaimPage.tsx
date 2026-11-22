@@ -24,7 +24,7 @@ import {
   } from 'lucide-react'
 import { ActionIcon } from '@/components/ui/ActionIcon'
 import { PinSheet } from '@/components/ui/PinSheet'
-import { bridgeScope } from '@/lib/walletConfirm'
+import { bridgeScope, withSolana } from '@/lib/walletConfirm'
 import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
@@ -2277,7 +2277,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           {/* Passcode - the app's passcode step (PinSheet), on this same page,
               no navigation: phone = bottom sheet, desktop = the authorize
               dialog in the right-hand panel. */}
-          <PinSheet walletConfirm={{ scope: bridgeScope(coin as 'USDC' | 'EURC' | 'cirBTC', selectedTotal, coin === 'cirBTC' ? 0 : 1) }} open={showPasscodeSheet} id="mc-pass"
+          <PinSheet walletConfirm={{ scope: withSolana(bridgeScope(coin as 'USDC' | 'EURC' | 'cirBTC', selectedTotal, coin === 'cirBTC' ? 0 : 1), !!selectedChain && isSolanaChain(selectedChain.chainId)) }} open={showPasscodeSheet} id="mc-pass"
             onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
             title={desktopInput ? 'Authorize Claim' : 'Confirm claim'}
             subtitle={desktopInput ? `From ${selectedChain ? getMeta(selectedChain.chainId).label : 'Multichain'}` : `Confirm claim of ${coinChar}${fmtCoin(selectedTotal)} ${coin}`}

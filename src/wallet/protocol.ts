@@ -168,6 +168,8 @@ export interface ConfirmIntent { chainId: number; to: string; value: string; dat
 export interface ConfirmScope {
   limits: Array<{ asset: 'USDC' | 'EURC' | 'cirBTC'; amount: string }>
   contracts?: Array<{ address: string; label?: string }>
+  /** Solana signatures (this account's own Solana wallet) the next 2 minutes may include: they can't be read, so the app names how many it expects. */
+  solana?: number
 }
 
 /** One exact signature request (the params it will be sent with, minus `confirmation`). */
