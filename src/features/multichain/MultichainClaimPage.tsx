@@ -1383,14 +1383,19 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             // Circle's forwarder finishes it from here - the screen can be left.
             setConfirmPhase(phase => phase === 'processing' ? 'submitted' : phase)
             const { user } = useAuthStore.getState()
-            import('@/lib/ActivityService').then(({ Activity }) => Activity.claim({
+            const activitySaved = import('@/lib/ActivityService').then(({ Activity }) => Activity.claim({
               walletAddress: wallet.addr, userId: user?.id, txHash: r.txHash, amount: r.receive, sourceChain: chain.chainId,
               tokenSymbol: token, status: 'pending', meshportFee: r.fee,
             })).catch(() => {})
             // There's no claims row for this route, so ask Circle for the delivery
-            // transaction on Arc: it gives the success screen its ArcScan link.
-            void waitForForwardTx(chain.chainId, r.txHash).then(mint => {
-              if (mint) setChainProgress(prev => prev.map(p => p.chainId === chain.chainId ? { ...p, mintTxHash: mint } : p))
+            // transaction on Arc: it gives the success screen its ArcScan link and,
+            // saved on the Activity row, the link on every history card.
+            void waitForForwardTx(chain.chainId, r.txHash).then(async mint => {
+              if (!mint) return
+              setChainProgress(prev => prev.map(p => p.chainId === chain.chainId ? { ...p, mintTxHash: mint } : p))
+              await activitySaved
+              const { setActivityDestinationTx } = await import('@/lib/ActivityService')
+              await setActivityDestinationTx(r.txHash, wallet.addr, mint)
             }).catch(() => {})
             const startedAt = Date.now()
             void waitForArc(token, wallet.addr, before, r.receive, () => true).then(async landed => {

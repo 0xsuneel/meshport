@@ -16,6 +16,7 @@ import { moveBreakdown, moveLabels, formatFee, formatMoveAmount, type MoveBreakd
 import { backfillP2PActivity } from '@/lib/p2pService'
 import { cn, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
+import { backfillDeliveryHash } from '@/lib/deliveryBackfill'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { TxDetailPage, type TxDetail, type TxParty } from '@/components/ui/TxDetailPage'
 import { SearchField } from '@/components/ui/SearchField'
@@ -575,7 +576,16 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const isRecovery = needsRecovery(record)
   const failReason = record.status === 'failed' ? (failureReason(record) ?? (record.activityType === 'swap' ? SWAP_FAILED_FALLBACK : null)) : null
   const [rowCopied, setRowCopied] = useState<string | null>(null)
-  const { activityType: type, status, sourceChain, destinationChain, createdAt, amount, tokenSymbol, txHash, destinationTxHash, metadata } = record
+  const { activityType: type, status, sourceChain, destinationChain, createdAt, amount, tokenSymbol, txHash, metadata } = record
+  // A EURC / cirBTC bring saved before Circle's Arc delivery hash was recorded: look it up once for the link.
+  const [lateDelivery, setLateDelivery] = useState<string | null>(null)
+  useEffect(() => {
+    void backfillDeliveryHash({
+      txHash: record.txHash, sourceChain: record.sourceChain, tokenSymbol: record.tokenSymbol, walletAddress: record.walletAddress,
+      destinationTxHash: record.destinationTxHash, completed: record.activityType === 'claim' && record.status === 'completed',
+    }).then(h => { if (h) setLateDelivery(h) })
+  }, [record.txHash, record.destinationTxHash]) // eslint-disable-line react-hooks/exhaustive-deps -- one look per row
+  const destinationTxHash = record.destinationTxHash ?? lateDelivery ?? undefined
 
   const isClaim    = type === 'claim'
   const isTransfer = type === 'bridge'

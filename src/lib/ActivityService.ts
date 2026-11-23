@@ -261,6 +261,29 @@ export async function updateActivityStatus(txHash: string, walletAddress: string
 }
 
 /**
+ * Fills in the destination (delivery / mint) transaction of an existing row
+ * that has none yet - it never replaces one. For a Bring of EURC / cirBTC,
+ * whose Arc delivery hash only comes from Circle after the row was saved.
+ */
+export async function setActivityDestinationTx(txHash: string, walletAddress: string, destinationTxHash: string): Promise<void> {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(destinationTxHash)) return
+  const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
+  try {
+    const { authHeaders } = await import('./chatService')
+    await fetch(
+      `${SUPA_URL}/rest/v1/activity?tx_hash=eq.${encodeURIComponent(txHash.toLowerCase())}&wallet_address=eq.${encodeURIComponent(walletAddress.toLowerCase())}&destination_tx_hash=is.null`,
+      {
+        method: 'PATCH',
+        headers: { ...(await authHeaders()), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ destination_tx_hash: destinationTxHash.toLowerCase() }),
+      },
+    )
+  } catch (e) {
+    console.error('[ActivityService] setActivityDestinationTx failed:', txHash, e instanceof Error ? e.message : e)
+  }
+}
+
+/**
  * Whether ANY activity row already exists for this wallet under EITHER the
  * plain or `recv_`-prefixed form of a tx hash - i.e. "has this blockchain
  * transaction already been represented in this wallet's history, under any

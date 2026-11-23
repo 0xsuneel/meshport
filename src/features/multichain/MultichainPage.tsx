@@ -55,6 +55,7 @@ import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { HubPage, HubPageBack } from '@/components/multichain/HubPage'
 import { TrackedMove, type TrackedMoveInfo } from '@/components/multichain/TrackedMove'
 import { fetchCctpProgress } from '@/lib/cctpTracker'
+import { backfillDeliveryHash, deliveryLookedUp } from '@/lib/deliveryBackfill'
 import { isLeaveGuarded, requestLeave, useLeaveGuardStore } from '@/lib/leaveGuard'
 import { Skeleton, SkeletonCards } from '@/components/ui/Skeleton'
 
@@ -479,6 +480,8 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   const [arrived, setArrived] = useState<Record<string, string | undefined>>({})
   const markArrived = (id: string, mintTxHash?: string) =>
     setArrived(prev => (id in prev ? prev : { ...prev, [id]: mintTxHash }))
+  // EURC / cirBTC brings saved before their Arc delivery hash was recorded: Circle's, once looked up.
+  const [delivered, setDelivered] = useState<Record<string, string>>({})
   const bringSubOpen = (hubTab === 'bring' && (!!claimChain || !!tokenBring)) || !!(trackClaim || trackUb || trackCctp)
   useEffect(() => {
     if (!bringSubOpen) return
@@ -804,6 +807,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
             chainLabel: CHAIN_LABELS[item.sourceChain] ?? String(item.sourceChain || 'Chain').replace(/_(Sepolia|Testnet|Fuji)$/,'').replace(/_/g, ' '),
             timestamp:  new Date(item.createdAt).getTime(),
             sourceTxHash: item.txHash,
+            destinationTxHash: item.destinationTxHash ?? undefined,
             error:      item.error || undefined,
           }))
 
@@ -937,7 +941,19 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
     .map(i => (i.status === 'pending' && i.id in arrived
       ? { ...i, status: 'success' as const, destinationTxHash: i.destinationTxHash || arrived[i.id] }
       : i))
+    .map(i => (!i.destinationTxHash && delivered[i.id] ? { ...i, destinationTxHash: delivered[i.id] } : i))
     .sort((a, b) => b.timestamp - a.timestamp)
+
+  // Finished EURC / cirBTC brings with no Arc delivery hash: ask Circle (a few at a time, newest first).
+  useEffect(() => {
+    if (!walletAddress) return
+    const rows = dbActivity.filter(i => i.type === 'claim' && i.route === 'cctpx' && i.status === 'success' && !i.destinationTxHash
+      && !(i.id in delivered) && !deliveryLookedUp(i.sourceTxHash)).slice(0, 5)
+    for (const i of rows) {
+      void backfillDeliveryHash({ txHash: i.sourceTxHash, sourceChain: i.chain, tokenSymbol: i.tokenSymbol, walletAddress, completed: true })
+        .then(h => { if (h) setDelivered(prev => ({ ...prev, [i.id]: h })) })
+    }
+  }, [dbActivity, walletAddress]) // eslint-disable-line react-hooks/exhaustive-deps -- `delivered` only gates repeats
 
   // Follow pending CCTP moves in the background while the Hub is open, so
   // the list flips to Completed on its own (no need to open each one).
