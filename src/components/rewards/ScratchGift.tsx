@@ -14,8 +14,13 @@ import { useBusinessTab } from '@/lib/merchant'
 import { fetchScratchCards, onCardCount } from '@/lib/scratchCards'
 
 const SEEN_KEY = 'mp-scratch-seen'
-const POLL_MS = 2500
-const WATCH_MS = 40_000
+// The server creates the card when its indexer confirms the payment (a
+// every-minute job), so look often right after the payment and keep looking
+// long enough to cover that job - the pop-up shows the moment the card exists.
+const WATCH_MS = 150_000
+function pollDelay(elapsedMs: number): number {
+  return elapsedMs < 10_000 ? 700 : elapsedMs < 40_000 ? 1500 : 3000
+}
 // A card this recent that hasn't popped up yet is this payment's.
 const RECENT_MS = 90_000
 
@@ -47,13 +52,19 @@ export function ScratchGift({ watch = true, light = false }: { watch?: boolean; 
     let timer: ReturnType<typeof setTimeout> | undefined
     const started = Date.now()
     let first = true
+    let busy = false
+    let celebrating = false
     const check = async () => {
+      if (busy || celebrating) return
+      busy = true
       let list: { id: string; createdAt: string }[]
       try { list = await fetchScratchCards() } catch { list = [] }
+      busy = false
       if (!live) return
       const seen = seenIds()
       const fresh = list.filter(c => !seen.has(c.id) && Date.now() - Date.parse(c.createdAt) < RECENT_MS)
       if (fresh.length) {
+        celebrating = true
         markSeen(fresh.map(c => c.id))
         // The badge counts the new card only once it has landed in the gift.
         setCount(list.length - fresh.length)
@@ -61,8 +72,17 @@ export function ScratchGift({ watch = true, light = false }: { watch?: boolean; 
         return
       }
       if (first) { first = false; setCount(list.length); markSeen(list.map(c => c.id)) }
-      if (watch && Date.now() - started < WATCH_MS) timer = setTimeout(check, POLL_MS)
+      const elapsed = Date.now() - started
+      if (watch && elapsed < WATCH_MS) timer = setTimeout(check, pollDelay(elapsed))
     }
+    // Coming back to the app (a phone that slept during the payment): look right away.
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || !watch || celebrating || busy) return
+      if (Date.now() - started >= WATCH_MS) return
+      if (timer) clearTimeout(timer)
+      void check()
+    }
+    document.addEventListener('visibilitychange', onVisible)
     const celebrate = (total: number) => {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setCount(total); pulse(); return }
       setWon(true)
@@ -87,7 +107,7 @@ export function ScratchGift({ watch = true, light = false }: { watch?: boolean; 
       }, 1500)
     }
     void check()
-    return () => { live = false; if (timer) clearTimeout(timer) }
+    return () => { live = false; document.removeEventListener('visibilitychange', onVisible); if (timer) clearTimeout(timer) }
   }, [on, watch])
 
   if (!on) return null
