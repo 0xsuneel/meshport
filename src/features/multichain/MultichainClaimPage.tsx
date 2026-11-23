@@ -59,7 +59,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForBring, bringRoutes, bringKeys } from '@/lib/featureFilters'
 import { useAccountKind } from '@/lib/merchant'
 import { readExternalBalances, refreshScope, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
-import { mintedOnArc as isMintedOnArc, useCctpProgress } from '@/lib/cctpTracker'
+import { mintedOnArc as isMintedOnArc, useCctpProgress, waitForForwardTx } from '@/lib/cctpTracker'
 import { ARC_RPCS } from '@/lib/arc'
 import { UB_CLAIM_CHAINS, runUbClaim, ubBringTime, ubClaimEta, estimateUbClaimFee, ubConfirmedOn } from '@/lib/ubClaim'
 import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
@@ -1387,6 +1387,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               walletAddress: wallet.addr, userId: user?.id, txHash: r.txHash, amount: r.receive, sourceChain: chain.chainId,
               tokenSymbol: token, status: 'pending', meshportFee: r.fee,
             })).catch(() => {})
+            // There's no claims row for this route, so ask Circle for the delivery
+            // transaction on Arc: it gives the success screen its ArcScan link.
+            void waitForForwardTx(chain.chainId, r.txHash).then(mint => {
+              if (mint) setChainProgress(prev => prev.map(p => p.chainId === chain.chainId ? { ...p, mintTxHash: mint } : p))
+            }).catch(() => {})
             const startedAt = Date.now()
             void waitForArc(token, wallet.addr, before, r.receive, () => true).then(async landed => {
               if (!landed) return
@@ -2437,11 +2442,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   const mintHref = arcExplorerTxUrl(p.mintTxHash)
                   return [
                     ...(burnHref && p.txHash ? [{ title: token ? `View Send on ${label}` : `View Burn on ${label}`, explorer: label, hash: p.txHash, href: burnHref }] : []),
-                    ...(mintHref && p.mintTxHash ? [{ title: 'View Mint on Arc Explorer', explorer: 'ArcScan', hash: p.mintTxHash, href: mintHref }] : []),
+                    ...(mintHref && p.mintTxHash ? [{ title: token ? 'View Delivery on Arc Explorer' : 'View Mint on Arc Explorer', explorer: 'ArcScan', hash: p.mintTxHash, href: mintHref }] : []),
                   ]
                 })
-                // EURC / cirBTC: Circle's forwarder delivers - no Arc transaction of ours to link.
-                const mintPending = !token && chainProgress.some(p => !p.mintTxHash)
+                // EURC / cirBTC: Circle's forwarder delivers on Arc; its transaction comes from Circle (waitForForwardTx).
+                const mintPending = chainProgress.some(p => !p.mintTxHash)
                 // Inside the Hub (pushScreens) `flow` drops its 8px side padding for this screen, so
                 // the header is full width as in Pay; a full page's 12px is cancelled here.
                 return (
@@ -2473,7 +2478,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     { label: 'Total Fees', value: hasFees ? totalFeesLabel : usdc(0) },
                   ]}
                   links={links}
-                  linksNote={mintPending && links.length > 0 ? 'The Arc mint link appears once the mint lands on Arc.' : undefined}
+                  linksNote={mintPending && links.length > 0 ? (token ? 'The Arc delivery link appears once Circle reports it.' : 'The Arc mint link appears once the mint lands on Arc.') : undefined}
                   onPrimary={() => navigate('/multichain')}
                   checkRef={heroCheckCallback}
                   revealed={travelDone}

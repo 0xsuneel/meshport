@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { progressFromIris, CCTP_DOMAINS, fetchCctpProgress, IRIS, IRIS_SANDBOX } from './cctpTracker'
+import { progressFromIris, CCTP_DOMAINS, fetchCctpProgress, IRIS, IRIS_SANDBOX, forwardTxOf, waitForForwardTx } from './cctpTracker'
 
 describe('progressFromIris - CCTP progress read from Circle', () => {
   it('no Iris record yet → still burning', () => {
@@ -31,6 +31,30 @@ describe('progressFromIris - CCTP progress read from Circle', () => {
   })
 })
 
+describe('forwardTxOf / waitForForwardTx - the forwarder\'s delivery tx on Arc', () => {
+  const MINT = '0x' + 'cd'.repeat(32)
+  it('a real hash counts as soon as the forwarder has sent it, even before COMPLETE', () => {
+    expect(forwardTxOf({ forwardState: 'PENDING', forwardTxHash: MINT })).toBe(MINT)
+    expect(forwardTxOf({ forwardState: 'COMPLETE', forwardTxHash: MINT })).toBe(MINT)
+  })
+  it('none, malformed or a failed forward gives null', () => {
+    expect(forwardTxOf(null)).toBeNull()
+    expect(forwardTxOf({ forwardState: 'PENDING' })).toBeNull()
+    expect(forwardTxOf({ forwardState: 'COMPLETE', forwardTxHash: '0xmint' })).toBeNull()
+    expect(forwardTxOf({ forwardState: 'FAILED', forwardTxHash: MINT })).toBeNull()
+  })
+  it('gives up with null when Circle never names it', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ messages: [{ status: 'pending_confirmations' }] }) })))
+    expect(await waitForForwardTx('Base_Sepolia', '0x' + 'ab'.repeat(32), () => true, 30, 10)).toBeNull()
+    vi.unstubAllGlobals()
+  })
+  it('returns the hash once Iris reports it', async () => {
+    let n = 0
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ messages: [++n < 2 ? { status: 'pending_confirmations' } : { status: 'complete', forwardState: 'COMPLETE', forwardTxHash: MINT }] }) })))
+    expect(await waitForForwardTx('Base_Sepolia', '0x' + 'ab'.repeat(32), () => true, 2000, 10)).toBe(MINT)
+    vi.unstubAllGlobals()
+  })
+})
 
 describe('fetchCctpProgress - which Iris answers', () => {
   const HASH = '0x' + 'ab'.repeat(32)

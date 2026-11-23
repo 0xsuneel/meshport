@@ -72,6 +72,35 @@ export function forwardDone(msg: IrisMessage | null | undefined): boolean {
   return (f === 'COMPLETE' || f === 'CONFIRMED') && !!msg?.forwardTxHash
 }
 
+/**
+ * The delivery transaction Circle's forwarder submitted on the destination
+ * (a real tx hash), or null: none yet, malformed, or the forward failed. Pure.
+ * Unlike forwardDone it doesn't wait for Iris to say COMPLETE - the hash is
+ * known as soon as the forwarder has sent it.
+ */
+export function forwardTxOf(msg: IrisMessage | null | undefined): string | null {
+  const h = msg?.forwardTxHash
+  if (!h || !/^0x[0-9a-fA-F]{64}$/.test(h)) return null
+  return (msg?.forwardState ?? '').toUpperCase() === 'FAILED' ? null : h
+}
+
+/**
+ * Polls Iris until it names the forwarder's delivery transaction for this
+ * burn (a Bring of EURC / cirBTC has no claims row to read it from). null
+ * after the timeout or when `live()` turns false. Never throws.
+ */
+export async function waitForForwardTx(
+  srcChain: string, burnTxHash: string, live: () => boolean = () => true, timeoutMs = 180_000, pollMs = 3000,
+): Promise<string | null> {
+  const end = Date.now() + timeoutMs
+  while (live() && Date.now() < end) {
+    const hash = forwardTxOf(await fetchIrisMessage(srcChain, burnTxHash).catch(() => null))
+    if (hash) return hash
+    await new Promise(r => setTimeout(r, pollMs))
+  }
+  return null
+}
+
 /** Maps an Iris record (or none yet) to a progress stage. Pure - unit tested. */
 export function progressFromIris(msg: IrisMessage | null | undefined, knownMintTx?: string): CctpProgress {
   if (knownMintTx) return { stage: 'done', mintTxHash: knownMintTx }
