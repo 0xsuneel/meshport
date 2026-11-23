@@ -26,7 +26,7 @@
 import { encodeAbiParameters, keccak256, toHex, pad, getAddress, type Hex } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
-import { hasGaslessRouter } from './gaslessRouters'
+import { hasGaslessRouter, NO_SIGNING_DOMAIN } from './gaslessRouters'
 import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 export const ARC_DOMAIN = 26
@@ -69,7 +69,7 @@ function configuredRouters(): Record<string, Hex> {
     if (!raw) return {}
     const parsed = JSON.parse(raw) as Record<string, string>
     const out: Record<string, Hex> = {}
-    for (const [k, v] of Object.entries(parsed)) if (GASLESS_CHAINS[k] && /^0x[0-9a-fA-F]{40}$/.test(v)) out[k] = getAddress(v)
+    for (const [k, v] of Object.entries(parsed)) if (GASLESS_CHAINS[k] && !NO_SIGNING_DOMAIN.has(k) && /^0x[0-9a-fA-F]{40}$/.test(v)) out[k] = getAddress(v)
     return out
   } catch { return {} }
 }

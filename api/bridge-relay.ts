@@ -165,11 +165,14 @@ const isHex = (v: unknown, bytes?: number): v is `0x${string}` =>
   typeof v === 'string' && (bytes ? new RegExp(`^0x[0-9a-fA-F]{${bytes * 2}}$`) : /^0x([0-9a-fA-F]{2})*$/).test(v)
 const isUint = (v: unknown): v is string => typeof v === 'string' && /^\d{1,30}$/.test(v)
 
+// Chains whose test USDC has no EIP-712 domain separator (Linea Sepolia): no signature verifies there.
+// Same list as NO_SIGNING_DOMAIN in src/lib/gaslessRouters.ts.
+const NO_SIGNING_DOMAIN = new Set(['Linea_Sepolia'])
 function routers(): Record<string, `0x${string}`> {
   try {
     const parsed = JSON.parse(process.env.BRIDGE_ROUTERS || '{}') as Record<string, string>
     const out: Record<string, `0x${string}`> = {}
-    for (const [k, v] of Object.entries(parsed)) if (CHAINS[k] && isHex(v, 20)) out[k] = v
+    for (const [k, v] of Object.entries(parsed)) if (CHAINS[k] && !NO_SIGNING_DOMAIN.has(k) && isHex(v, 20)) out[k] = v
     return out
   } catch { return {} }
 }
