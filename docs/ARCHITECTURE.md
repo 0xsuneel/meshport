@@ -525,7 +525,7 @@ Cron-triggered functions (`claim-worker` in `sweep` mode, `deposit-scan-all`) re
 
 ## Security
 
-- **Passcode:** a 6-digit passcode is mandatory for every account. It is hashed with PBKDF2 (100,000 iterations, SHA-256) with an embedded salt (`security.ts`) for local verification, and gates sending funds, revealing the seed phrase, and exporting the private key.
+- **Passcode:** a 6-digit passcode is mandatory for every account. It is hashed with PBKDF2-SHA256 (600,000 iterations for current records; legacy records at 100,000 are still readable) with an embedded salt (`security.ts`) for local verification, and gates sending funds, revealing the seed phrase, and exporting the private key.
 - **Every wallet is self-custodial:**
   - *Created/imported wallet*: the private key is encrypted **client-side** with an AES-GCM key derived from the user's passcode via PBKDF2, and stored locally. MeshPort's servers never see this key.
 - **Client/server separation for secrets:** RPC provider API keys (`DRPC_KEY`, `ALCHEMY_KEY`, etc.) are never placed in `VITE_`-prefixed variables; the browser only ever talks to same-origin proxy endpoints (`/api/arc-rpc`, `/api/swap-proxy`, `/api/relay-*`) that hold the real credentials server-side.

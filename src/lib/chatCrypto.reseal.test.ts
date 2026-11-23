@@ -11,7 +11,7 @@ const BOB_PK = '0x' + '22'.repeat(32)
 
 type Op = { table: string; op: string; args: unknown[] }
 const ops: Op[] = []
-const state: { waiting: any[]; bobRow: any } = { waiting: [], bobRow: null }
+const state: { waiting: any[]; bobRow: any; stillWaiting: boolean } = { waiting: [], bobRow: null, stillWaiting: true }
 
 function builder(table: string) {
   const calls: Op[] = []
@@ -19,7 +19,8 @@ function builder(table: string) {
     get(_t, prop: string) {
       if (prop === 'then') {
         const isUpdate = calls.some(c => c.op === 'update')
-        const result = isUpdate ? { error: null }
+        // An update that still matched a waiting row returns it (.select('id')); [] = another device got there first.
+        const result = isUpdate ? { data: state.stillWaiting ? [{ id: 'm1' }] : [], error: null }
           : table === 'messages' ? { data: state.waiting }
           : table === 'conversations' ? { data: [{ id: 'c1', participant_a: 'alice', participant_b: 'bob' }] }
           : { data: null }
@@ -85,6 +86,40 @@ describe('resealWaitingMessages', () => {
     // No chat text is written to the conversation row any more.
     expect(ops.filter(o => o.table === 'conversations')).toEqual([])
     expect(patchMessages).toHaveBeenCalledWith('alice', ['m1'], { content: sealed })
+  })
+
+  it('does not count or patch a message another device already handed over', async () => {
+    const alice = deriveMyChatIdentity(ALICE_PK)
+    const bob = deriveMyChatIdentity(BOB_PK)
+    const aliceAddr = privateKeyToAccount(ALICE_PK as `0x${string}`).address
+    const bobAddr = privateKeyToAccount(BOB_PK as `0x${string}`).address
+    const bobPub = b64(bob.publicKey)
+    const sig = await privateKeyToAccount(BOB_PK as `0x${string}`).signMessage({ message: chatKeyStatement(bobAddr, bobPub) })
+    state.bobRow = { chat_public_key: bobPub, chat_key_sig: sig, wallet_address: bobAddr }
+    state.waiting = [{ id: 'm1', conversation_id: 'c1', content: await encryptText('hi again', await makeChatKeys(alice.privateKey, null)) }]
+    state.stillWaiting = false
+    patchMessages.mockClear()
+    try {
+      expect(await resealWaitingMessages(aliceAddr, 'alice')).toBe(0)
+      expect(patchMessages).not.toHaveBeenCalled()
+    } finally { state.stillWaiting = true }
+  })
+
+  it('keeps going after one message cannot be handed over', async () => {
+    const alice = deriveMyChatIdentity(ALICE_PK)
+    const bob = deriveMyChatIdentity(BOB_PK)
+    const aliceAddr = privateKeyToAccount(ALICE_PK as `0x${string}`).address
+    const bobAddr = privateKeyToAccount(BOB_PK as `0x${string}`).address
+    const bobPub = b64(bob.publicKey)
+    const sig = await privateKeyToAccount(BOB_PK as `0x${string}`).signMessage({ message: chatKeyStatement(bobAddr, bobPub) })
+    state.bobRow = { chat_public_key: bobPub, chat_key_sig: sig, wallet_address: bobAddr }
+    const good = await encryptText('second one', await makeChatKeys(alice.privateKey, null))
+    // The first row is garbage that makes the reseal throw or return null.
+    state.waiting = [
+      { id: 'bad', conversation_id: 'c1', content: 'e2e:q2:not-a-valid-payload' },
+      { id: 'm1', conversation_id: 'c1', content: good },
+    ]
+    expect(await resealWaitingMessages(aliceAddr, 'alice')).toBe(1)
   })
 })
 

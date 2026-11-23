@@ -163,6 +163,8 @@ const PUB_PREFIX = 'meshport_chat_vpub_' // verified (wallet-signed) keys only
 export function clearChatSessionSeeds() {
   purgeOldSeedCopies()
   _keysCache.clear()
+  _keysInflight.clear()
+  _keysGen.clear()
 }
 
 /**
@@ -231,7 +233,7 @@ export function trustNewIdentity(myWalletAddress: string, userId: string): void 
   const c = readJson(CHANGED_PREFIX + k)
   if (c) writeJson(PIN_PREFIX + k, c)
   writeJson(CHANGED_PREFIX + k, null)
-  _keysCache.delete(k)
+  invalidateKeys(k)
   dropPub(userId)
 }
 
@@ -300,6 +302,19 @@ type AnyKey = ChatKeys | CryptoKey | null | undefined
 const isChatKeys = (k: AnyKey): k is ChatKeys => !!k && (k as ChatKeys).kind === 'chat-keys'
 
 const _keysCache = new Map<string, ChatKeys>()
+// A lookup that started before an invalidation must not write its (possibly
+// stale) answer into the cache or the remembered-key storage afterwards:
+// every invalidation bumps the chat's generation, and a lookup only persists
+// while its generation is still current. Concurrent callers share one lookup.
+const _keysGen = new Map<string, number>()
+const _keysInflight = new Map<string, Promise<ChatKeys | null>>()
+
+/** Forget what is cached for this chat and make any lookup already running unable to restore it. */
+function invalidateKeys(cacheKey: string): void {
+  _keysCache.delete(cacheKey)
+  _keysInflight.delete(cacheKey)
+  _keysGen.set(cacheKey, (_keysGen.get(cacheKey) ?? 0) + 1)
+}
 
 /** Keys for one chat from a local seed and their public key - tests only (exported for them). */
 export async function makeChatKeys(seed: Uint8Array, otherPub: Uint8Array | null): Promise<ChatKeys> {
@@ -323,6 +338,17 @@ export async function getConversationKey(myWalletAddress: string, otherUserId: s
   const cacheKey = `${myWalletAddress.toLowerCase()}:${otherUserId}`
   const cached = _keysCache.get(cacheKey)
   if (cached) return cached
+  const pending = _keysInflight.get(cacheKey)
+  if (pending) return pending
+  const p: Promise<ChatKeys | null> = loadConversationKey(myWalletAddress, otherUserId, cacheKey)
+    .finally(() => { if (_keysInflight.get(cacheKey) === p) _keysInflight.delete(cacheKey) })
+  _keysInflight.set(cacheKey, p)
+  return p
+}
+
+async function loadConversationKey(myWalletAddress: string, otherUserId: string, cacheKey: string): Promise<ChatKeys | null> {
+  const gen = _keysGen.get(cacheKey) ?? 0
+  const current = () => (_keysGen.get(cacheKey) ?? 0) === gen
   try {
     const me = await getMyIdentity(myWalletAddress)
     if (!me) return null
@@ -341,19 +367,22 @@ export async function getConversationKey(myWalletAddress: string, otherUserId: s
     if (!fromMemory) {
       const fresh = await fetchPub()
       pubStr = fresh ?? null
-      if (parsePublicKey(pubStr)) savePub(otherUserId, pubStr as string); else dropPub(otherUserId)
+      // Persist only while nothing invalidated this chat during the lookup.
+      if (current()) { if (parsePublicKey(pubStr)) savePub(otherUserId, pubStr as string); else dropPub(otherUserId) }
     }
     const otherPub = parsePublicKey(pubStr)
     const keys: ChatKeys = { kind: 'chat-keys', myPub: me.pub, otherPub, ops: me.ops }
     // Only cache a complete answer: a missing key is looked up again next time.
-    if (otherPub) _keysCache.set(cacheKey, keys)
+    // A lookup that was invalidated meanwhile still answers its caller, but
+    // leaves the cache alone so the next call looks again.
+    if (otherPub && current()) _keysCache.set(cacheKey, keys)
     // The background check starts only after caching, so a fast answer that
     // drops the remembered key can't land first and be undone by the set above.
     if (fromMemory) {
       void fetchPub().then(fresh => {
-        if (fresh === undefined || fresh === pubStr) return
+        if (fresh === undefined || fresh === pubStr || !current()) return
         if (parsePublicKey(fresh)) savePub(otherUserId, fresh as string); else dropPub(otherUserId)
-        if (_keysCache.get(cacheKey) === keys) _keysCache.delete(cacheKey)
+        invalidateKeys(cacheKey)
       }).catch(() => {})
     }
     return keys
@@ -562,18 +591,27 @@ export async function resealWaitingMessages(walletAddress: string, myUserId: str
     let done = 0
     for (const c of convs ?? []) {
       const other = c.participant_a === myUserId ? c.participant_b : c.participant_a
-      _keysCache.delete(`${walletAddress.toLowerCase()}:${other}`)
+      invalidateKeys(`${walletAddress.toLowerCase()}:${other}`)
       dropPub(other) // re-read: their key may have just been published
       const keys = await getConversationKey(walletAddress, other)
       if (!keys?.otherPub) continue
       for (const r of rows.filter(r => r.conversation_id === c.id)) {
-        const sealed = await resealWaiting(r.content as string, keys)
-        if (!sealed) continue
-        const { error } = await supabase.from('messages').update({ content: sealed }).eq('id', r.id)
-        if (!error) {
-          done++
-          // My copy on this phone shows it as handed over too.
-          await import('@/lib/localChat').then(l => l.patchMessages(myUserId, [r.id as string], { content: sealed })).catch(() => {})
+        // One message that can't be handed over (the wallet frame refused, a
+        // photo key won't open) must not stop the others: it stays waiting
+        // and is tried again on the next run.
+        try {
+          const sealed = await resealWaiting(r.content as string, keys)
+          if (!sealed) continue
+          // Only while it is still waiting: another device may have handed it over already.
+          const { data: updated, error } = await supabase.from('messages').update({ content: sealed })
+            .eq('id', r.id).like('content', Q2_PREFIX + '%').select('id')
+          if (!error && updated?.length) {
+            done++
+            // My copy on this phone shows it as handed over too.
+            await import('@/lib/localChat').then(l => l.patchMessages(myUserId, [r.id as string], { content: sealed })).catch(() => {})
+          }
+        } catch (e) {
+          console.error('[chatCrypto] reseal of one message failed:', e instanceof Error ? e.message : e)
         }
       }
     }

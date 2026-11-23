@@ -110,7 +110,7 @@ that Activity is built from. It is never shown in the app.
 ## Tech
 
 React · TypeScript · Vite · Tailwind · viem · Supabase · Vercel · Circle
-Gateway & CCTP V2 · WebAuthn biometric unlock · Argon2id · X25519 / AES-256-GCM
+Gateway & CCTP V2 · WebAuthn biometric unlock · PBKDF2-SHA256 (600k) · X25519 / AES-256-GCM
 
 ## Contributing & security
 
