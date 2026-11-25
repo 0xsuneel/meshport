@@ -757,7 +757,7 @@ export function AppLayout() {
           </div>
         </div>
         <Toast />
-        <PushPermissionBanner desktop bottom={24} />
+        <PushPermissionBanner />
         <DeviceKeyNotice />
         <LeaveGuardHost />
         <Suspense fallback={null}><PaymentReceivedWatcher /></Suspense>
@@ -831,7 +831,7 @@ export function AppLayout() {
         </div>
         {navVisible && !navHidden && <BottomNav />}
         <Toast />
-        <PushPermissionBanner onScreen={location.pathname === '/'} bottom={navVisible && !navHidden ? 'calc(77px + var(--safe-bottom))' : 'calc(12px + var(--safe-bottom))'} />
+        <PushPermissionBanner />
         <DeviceKeyNotice />
         <LeaveGuardHost />
         <Suspense fallback={null}><PaymentReceivedWatcher /></Suspense>

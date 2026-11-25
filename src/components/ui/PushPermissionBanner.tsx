@@ -1,118 +1,65 @@
-import { useEffect, useState } from 'react'
-import { Bell, X } from 'lucide-react'
+import { useEffect } from 'react'
 import { useAuthStore } from '@/store'
 import { enablePushNotifications, getNotificationPermission, isPushSupported } from '@/lib/pushNotifications'
-import { useAnyPopupOpen } from '@/hooks/usePopupOpen'
 
-// "Turn on notifications" - shown when this device isn't set up to receive
-// push. Chrome on Android ignores a permission request that doesn't come
-// from a tap, so the automatic attempt on app start never succeeds on a
-// fresh install; this gives the user the tap. It also re-subscribes from
-// scratch, replacing a subscription the push service has revoked.
-const SNOOZE_KEY = 'mp_push_banner_snooze'
+// No in-app banner: notification permission is asked with the device's own
+// system dialog (Android / iOS / desktop browser), like any other app.
+// Browsers only show that dialog in response to a user gesture - Chrome on
+// Android and Safari on iOS ignore a request made on app start - so this arms
+// a one-shot listener and asks on the user's first tap after sign-in.
+// If they dismiss the system dialog it isn't asked again for a few days; if
+// they block it, it's never asked again (their choice, changeable in settings).
+const SNOOZE_KEY = 'mp_push_prompt_snooze'
 const SNOOZE_MS = 3 * 24 * 3600_000
-// Blocked in the phone's settings: the user chose that - say it once, briefly,
-// then not again for a month.
-const DENIED_SNOOZE_MS = 30 * 24 * 3600_000
-const DENIED_SHOW_MS = 8000
+const ARM_DELAY_MS = 1500
 
-// It sits at the bottom - above the bottom nav on a phone, in the corner on
-// a desktop - so it never covers a page title or the search bar. While a
-// popup, sheet or Hub page is open it steps aside: it sits above them
-// (z-index 60), right where their buttons are - it hid Transfer's Review
-// button on desktop.
-/** onScreen: false keeps it (and its state) but draws nothing - on phones it
- *  shows on Home only, where it sits over a scrolling page. Elsewhere it
- *  covered a screen's own controls (Swap's button, Chats' New chat, Security's
- *  options) - on a small phone a fifth of the screen. */
-export function PushPermissionBanner({ bottom = 12, desktop = false, onScreen = true }: { bottom?: number | string; desktop?: boolean; onScreen?: boolean }) {
+export function PushPermissionBanner() {
   const userId = useAuthStore(s => s.user?.id)
-  const [show, setShow] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [denied, setDenied] = useState(false)
-  const popupOpen = useAnyPopupOpen()
 
   useEffect(() => {
     if (!userId || !isPushSupported()) return
     const perm = getNotificationPermission()
-    let snoozed = false
-    try { snoozed = Date.now() - Number(localStorage.getItem(SNOOZE_KEY) || 0) < (perm === 'denied' ? DENIED_SNOOZE_MS : SNOOZE_MS) } catch { /* ignore */ }
-    if (snoozed) return
-    if (perm === 'denied') { setDenied(true); setShow(true); return }
-    if (perm !== 'granted') { setShow(true); return }
-    // Granted - give the automatic setup (App.tsx) a moment, then make sure
-    // this device really ended up with a subscription. Missing (dropped by the
-    // push service, site data cleared...): permission is already given, so
-    // subscribe again quietly - no tap needed. Only a failed repair asks.
+    if (perm === 'denied' || perm === 'unsupported') return
+
     let cancelled = false
-    const t = setTimeout(() => {
-      navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(async sub => {
-        if (sub || cancelled) return
-        const r = await enablePushNotifications(userId)
-        if (!r.ok && !cancelled) setShow(true)
-      }).catch(() => { if (!cancelled) setShow(true) })
-    }, 5000)
-    return () => { cancelled = true; clearTimeout(t) }
+
+    if (perm === 'granted') {
+      // Permission already given - make sure this device really has a
+      // subscription (dropped by the push service, site data cleared...) and
+      // quietly re-subscribe if not. No prompt needed.
+      const t = setTimeout(() => {
+        navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(sub => {
+          if (!sub && !cancelled) enablePushNotifications(userId).catch(() => {})
+        }).catch(() => {})
+      }, 5000)
+      return () => { cancelled = true; clearTimeout(t) }
+    }
+
+    // perm === 'default': ask with the native dialog on the first tap.
+    try { if (Date.now() - Number(localStorage.getItem(SNOOZE_KEY) || 0) < SNOOZE_MS) return } catch { /* ignore */ }
+
+    const onGesture = () => {
+      remove()
+      if (cancelled || getNotificationPermission() !== 'default') return
+      // Must be called synchronously inside the gesture: enablePushNotifications
+      // calls Notification.requestPermission() before any await.
+      enablePushNotifications(userId, { fresh: true }).then(r => {
+        if (!r.ok && getNotificationPermission() === 'default') {
+          try { localStorage.setItem(SNOOZE_KEY, String(Date.now())) } catch { /* ignore */ }
+        }
+      }).catch(() => {})
+    }
+    const remove = () => {
+      document.removeEventListener('click', onGesture, true)
+      document.removeEventListener('keydown', onGesture, true)
+    }
+    const armT = setTimeout(() => {
+      if (cancelled) return
+      document.addEventListener('click', onGesture, true)
+      document.addEventListener('keydown', onGesture, true)
+    }, ARM_DELAY_MS)
+    return () => { cancelled = true; clearTimeout(armT); remove() }
   }, [userId])
 
-  // Blocked: goes away by itself (and counts as seen).
-  useEffect(() => {
-    // The few seconds a "blocked" notice stays count only while it's on screen.
-    if (!show || !denied || !onScreen) return
-    const t = setTimeout(() => {
-      try { localStorage.setItem(SNOOZE_KEY, String(Date.now())) } catch { /* ignore */ }
-      setShow(false)
-    }, DENIED_SHOW_MS)
-    return () => clearTimeout(t)
-  }, [show, denied, onScreen])
-
-  if (!show || popupOpen || !onScreen) return null
-
-  const enable = async () => {
-    if (!userId) return
-    setBusy(true)
-    const r = await enablePushNotifications(userId, { fresh: true })
-    setBusy(false)
-    if (r.ok) setShow(false)
-    else if (getNotificationPermission() === 'denied') setDenied(true)
-  }
-  const snooze = () => {
-    try { localStorage.setItem(SNOOZE_KEY, String(Date.now())) } catch { /* ignore */ }
-    setShow(false)
-  }
-
-  return (
-    <div role="region" aria-label="Notifications" style={{
-      position: 'fixed', zIndex: 60, bottom,
-      ...(desktop ? { right: 24, width: 400 } : { left: 12, right: 12, maxWidth: 460, margin: '0 auto' }), display: 'flex', alignItems: 'center', gap: 12,
-      padding: '12px 12px 12px 14px', borderRadius: 16, background: 'var(--surface)',
-      border: '1px solid var(--border)', boxShadow: 'var(--shadow-2)',
-    }}>
-      <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'color-mix(in srgb, var(--brand) 15%, transparent)', color: 'var(--brand-text)' }}>
-        <Bell size={18} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-          {denied ? 'Notifications are blocked' : 'Turn on notifications'}
-        </p>
-        <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.35 }}>
-          {denied
-            ? desktop
-              ? "Allow them for MeshPort in your browser's site settings (the icon next to the web address)."
-              : 'Allow them for MeshPort in your phone settings → Apps → MeshPort → Notifications.'
-            : 'Get alerted when you receive money, even when the app is closed.'}
-        </p>
-      </div>
-      {!denied && (
-        <button onClick={enable} disabled={busy}
-          style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 10, border: 'none', background: 'var(--brand)', color: '#fff', fontSize: 13, fontWeight: 600, opacity: busy ? 0.6 : 1 }}>
-          {busy ? '…' : 'Turn on'}
-        </button>
-      )}
-      <button onClick={snooze} aria-label="Not now" className="mp-hit" style={{ flexShrink: 0, background: 'none', border: 'none', padding: 4, color: 'var(--text-secondary)' }}>
-        <X size={16} />
-      </button>
-    </div>
-  )
+  return null
 }
