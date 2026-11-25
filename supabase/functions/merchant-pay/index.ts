@@ -776,7 +776,7 @@ async function readOpenOrders(): Promise<OpenOrders> {
   const { data: open, error } = await db.from('merchant_payment_intents').select('*')
     .in('status', ['pending', 'partially_paid', 'expired', 'cancelled'])
     .gt('created_at', new Date(Date.now() - 30 * 86400_000).toISOString())
-    .or(`and(status.eq.cancelled,updated_at.gt.${dayAgoIso}),and(status.eq.cancelled,updated_at.is.null,created_at.gt.${dayAgoIso}),and(status.neq.cancelled,expires_at.is.null),and(status.neq.cancelled,expires_at.gt.${dayAgoIso})`)
+    .or(`and(status.eq.cancelled,updated_at.gt."${dayAgoIso}"),and(status.eq.cancelled,updated_at.is.null,created_at.gt."${dayAgoIso}"),and(status.neq.cancelled,expires_at.is.null),and(status.neq.cancelled,expires_at.gt."${dayAgoIso}")`)
   if (error) throw new Error(`open orders read failed: ${error.message}`)
   const intents = (open ?? []).filter((i: any) => i.status === 'cancelled'
     ? new Date(i.updated_at ?? i.created_at).getTime() > dayAgo
