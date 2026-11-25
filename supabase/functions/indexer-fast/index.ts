@@ -19,7 +19,7 @@
 import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { enabledChains } from '../blockchain-indexer/chains.ts'
-import { indexChain, anyKnownWallet, sqlWalletMatcher } from '../blockchain-indexer/indexChain.ts'
+import { indexChain, cachedKnownWallets } from '../blockchain-indexer/indexChain.ts'
 import { createCursorCache } from '../blockchain-indexer/cursorCache.ts'
 import { cursorDb } from '../blockchain-indexer/cursors.ts'
 
@@ -82,18 +82,18 @@ Deno.serve(async (req: Request) => {
       // Each chain loops on its own: a pass waits on every RPC endpoint of
       // its chain (up to 8s for a slow one), so one slow chain must not hold
       // the others back.
-      // Recipients are matched in SQL per pass (only addresses seen on
-      // chain), so this no longer reloads every user's wallet every 15 s.
-      if (!(await anyKnownWallet(supabase))) return
-      const wallets = sqlWalletMatcher(supabase)
+      // The wallet set lives in this worker's memory and is reloaded only
+      // when it changes (cachedKnownWallets) - not every 15 s.
+      let wallets = await cachedKnownWallets(supabase)
       // Every chain's cursor in one read.
       await cursors.preload(chains.map(c => c.id))
       const end = callStart + LOOP_MS
       await Promise.all(chains.map(async chain => {
         for (;;) {
           const t0 = Date.now()
+          wallets = await cachedKnownWallets(supabase)
           const rest = chainRest.get(chain.id)
-          if (!(rest && rest.until > t0)) {
+          if (wallets.size && !(rest && rest.until > t0)) {
             const r = await indexChain(supabase, chain, wallets, cursors)
             const took = Date.now() - t0
             if (took > 2 * PASS_MS) console.info(`[indexer-fast] ${chain.id} pass ${took}ms`, r.error ?? r.action ?? r.window ?? '')

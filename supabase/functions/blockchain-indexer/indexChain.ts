@@ -82,6 +82,39 @@ export async function anyKnownWallet(supabase: SupabaseClient): Promise<boolean>
   return (data?.length ?? 0) > 0
 }
 
+/**
+ * The watched wallet set, kept in this worker's memory between calls and
+ * reloaded only when it changes. A cheap version check (count + newest
+ * sign-up) replaces reloading every user's address several times a minute;
+ * a full reload happens on a new wallet, or every 10 minutes regardless (a
+ * wallet changed in place).
+ */
+const walletCache: { version: string | null; set: Set<string>; loadedAt: number; checkedAt: number } =
+  { version: null, set: new Set(), loadedAt: 0, checkedAt: 0 }
+const WALLETS_CHECK_MS = 30_000
+const WALLETS_FORCE_RELOAD_MS = 10 * 60_000
+
+export async function cachedKnownWallets(supabase: SupabaseClient): Promise<Set<string>> {
+  const now = Date.now()
+  if (walletCache.version !== null && now - walletCache.checkedAt < WALLETS_CHECK_MS) return walletCache.set
+  walletCache.checkedAt = now
+  const { data: version, error } = await supabase.rpc('indexer_wallets_version')
+  if (error) {
+    console.error('[blockchain-indexer] wallet version check failed:', error.message)
+    return walletCache.set   // keep watching the last known set
+  }
+  if (version === walletCache.version && now - walletCache.loadedAt < WALLETS_FORCE_RELOAD_MS) return walletCache.set
+  const { data: list, error: listErr } = await supabase.rpc('indexer_wallets')
+  if (listErr) {
+    console.error('[blockchain-indexer] wallet load failed:', listErr.message)
+    return walletCache.set
+  }
+  walletCache.set = new Set(((list as string[] | null) ?? []).map(a => a.toLowerCase()))
+  walletCache.version = String(version)
+  walletCache.loadedAt = now
+  return walletCache.set
+}
+
 // The scan keeps every transfer; the matcher then keeps ours. Every check in
 // scanRange that uses the wallet set is per (tx, recipient), so filtering the
 // events afterwards gives exactly what scanning with the full set gave.

@@ -22,7 +22,7 @@
 import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { enabledChains, INDEXED_CHAINS, chainById } from './chains.ts'
-import { indexChain, anyKnownWallet, sqlWalletMatcher } from './indexChain.ts'
+import { indexChain, cachedKnownWallets } from './indexChain.ts'
 import { createCursorCache } from './cursorCache.ts'
 import { cursorDb } from './cursors.ts'
 import { runCompare, runMetrics } from './monitor.ts'
@@ -413,12 +413,12 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, mode, note: 'no chains enabled or no RPC configured', chains: [] })
   }
 
-  if (!(await anyKnownWallet(supabase))) {
+  const knownWallets = await cachedKnownWallets(supabase)
+  if (knownWallets.size === 0) {
     return json({ ok: true, mode, note: 'no wallets to watch', walletCount: 0 })
   }
-  // Recipients matched in SQL; cursors read in one request and saved in one
-  // at the end (each pass's cursor save is a 'lazy' one: kept until flushAll).
-  const knownWallets = sqlWalletMatcher(supabase)
+  // Cursors read in one request and saved in one at the end (each pass's
+  // cursor save is a 'lazy' one: kept until flushAll).
   const cursors = createCursorCache(cursorDb(supabase), { flushMs: Number.POSITIVE_INFINITY })
   await cursors.preload(chains.map(c => c.id))
 
@@ -444,6 +444,7 @@ Deno.serve(async (req: Request) => {
     ok: true,
     mode,
     shadowMode: true,
+    walletCount: knownWallets.size,
     note: 'events published to chain_events; no consumer wired (Phase 4)',
     elapsedMs: Date.now() - started,
     chains: reports,

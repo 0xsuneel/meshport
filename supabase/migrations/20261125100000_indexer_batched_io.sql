@@ -69,3 +69,30 @@ revoke all on function public.indexer_cursors_save(jsonb) from public, anon, aut
 revoke all on function public.indexer_match_wallets(text[]) from public, anon, authenticated;
 grant execute on function public.indexer_cursors_save(jsonb) to service_role;
 grant execute on function public.indexer_match_wallets(text[]) to service_role;
+
+-- The indexers keep the wallet set in memory and reload it only when this
+-- changes (a sign-up, or a wallet set on an account).
+create or replace function public.indexer_wallets_version()
+returns text
+language sql
+stable
+set search_path = public
+as $$
+  select count(*)::text || ':' || coalesce(max(created_at)::text, '')
+  from users where coalesce(wallet_address, '') <> ''
+$$;
+
+create or replace function public.indexer_wallets()
+returns text[]
+language sql
+stable
+set search_path = public
+as $$
+  select coalesce(array_agg(lower(wallet_address)), '{}')
+  from users where coalesce(wallet_address, '') <> ''
+$$;
+
+revoke all on function public.indexer_wallets_version() from public, anon, authenticated;
+revoke all on function public.indexer_wallets() from public, anon, authenticated;
+grant execute on function public.indexer_wallets_version() to service_role;
+grant execute on function public.indexer_wallets() to service_role;
