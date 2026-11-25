@@ -52,11 +52,46 @@ export async function loadKnownWallets(supabase: SupabaseClient): Promise<Set<st
   return wallets
 }
 
+/**
+ * Which on-chain recipients are MeshPort users, asked of the database with
+ * only the addresses a pass actually saw. Loading every user's address
+ * several times a minute cost more with every sign-up (and was most of the
+ * project's egress); this costs one small call per pass that found transfers.
+ */
+export interface WalletMatcher {
+  match(addresses: string[]): Promise<Set<string>>
+}
+export type WalletFilter = Set<string> | WalletMatcher
+
+export function sqlWalletMatcher(supabase: SupabaseClient): WalletMatcher {
+  return {
+    async match(addresses) {
+      const { data, error } = await supabase.rpc('indexer_match_wallets', { p_addrs: addresses })
+      // Throw, never "no matches": a failed lookup must fail the pass so the
+      // cursor stays put and the range is scanned again.
+      if (error) throw new Error(`wallet match failed: ${error.message}`)
+      return new Set(((data as string[] | null) ?? []).map(a => a.toLowerCase()))
+    },
+  }
+}
+
+/** Is any wallet registered at all (one tiny read). */
+export async function anyKnownWallet(supabase: SupabaseClient): Promise<boolean> {
+  const { data, error } = await supabase.from('users').select('id').not('wallet_address', 'is', null).limit(1)
+  if (error) { console.error('[blockchain-indexer] wallet check failed:', error.message); return false }
+  return (data?.length ?? 0) > 0
+}
+
+// The scan keeps every transfer; the matcher then keeps ours. Every check in
+// scanRange that uses the wallet set is per (tx, recipient), so filtering the
+// events afterwards gives exactly what scanning with the full set gave.
+const ACCEPT_ALL = { has: () => true } as unknown as Set<string>
+
 /** One full pass for one chain. Never throws -- a chain failing is isolated. */
 export async function indexChain(
   supabase: SupabaseClient,
   chain: IndexedChain,
-  knownWallets: Set<string>,
+  knownWallets: WalletFilter,
   /** indexer-fast passes its in-memory cache (cursorCache.ts); default: the database directly. */
   store: CursorStore = directStore(supabase),
 ): Promise<Record<string, unknown>> {
@@ -142,7 +177,12 @@ export async function indexChain(
     report.window = `${win.fromBlock}..${win.toBlock}`
 
     // -- 4. Scan ------------------------------------------------------------
-    const outcome = await scanRange(chain, win.fromBlock, win.toBlock, knownWallets)
+    let outcome = await scanRange(chain, win.fromBlock, win.toBlock, knownWallets instanceof Set ? knownWallets : ACCEPT_ALL)
+    if (!(knownWallets instanceof Set)) {
+      const seen = [...new Set(outcome.events.map(e => String(e.wallet_address ?? '').toLowerCase()).filter(Boolean))]
+      const ours = seen.length ? await knownWallets.match(seen) : new Set<string>()
+      outcome = { ...outcome, events: outcome.events.filter(e => ours.has(String(e.wallet_address ?? '').toLowerCase())) }
+    }
     report.eventsFound = outcome.events.length
     report.safeUpTo = outcome.safeUpTo
 

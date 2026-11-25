@@ -750,8 +750,8 @@ const newWatchCursors = (): WatchCursors => ({ loaded: null, dirty: new Map(), s
 // wallets change only when an account is approved or switched: re-read every
 // MERCHANTS_REFRESH_MS, the same delay as the indexer's new sign-ups. A
 // failed read is not kept, so the next pass reads again.
-const ORDERS_SHARE_MS = 1_500
-const MERCHANTS_REFRESH_MS = 15_000
+const ORDERS_SHARE_MS = 4_000
+const MERCHANTS_REFRESH_MS = 60_000
 type OpenOrders = { intents: any[]; custWallet: Map<string, string> }
 type Shared<T> = { at: number; p: Promise<T> } | null
 const watchShared = new WeakMap<WatchCursors, { orders: Shared<OpenOrders>; merchants: Shared<Set<string>> }>()
@@ -769,11 +769,15 @@ function sharedRead<T>(mem: WatchCursors | undefined, key: 'orders' | 'merchants
 async function readOpenOrders(): Promise<OpenOrders> {
   // Open orders, plus orders that expired or were cancelled within the last
   // day: a payment for one of those is still recorded against it (late).
+  // The late-window rule is applied in SQL too, so only orders that can still
+  // be paid are read - not every order of the last 30 days on every pass.
+  const dayAgo = Date.now() - LATE_WINDOW_MS
+  const dayAgoIso = new Date(dayAgo).toISOString()
   const { data: open, error } = await db.from('merchant_payment_intents').select('*')
     .in('status', ['pending', 'partially_paid', 'expired', 'cancelled'])
     .gt('created_at', new Date(Date.now() - 30 * 86400_000).toISOString())
+    .or(`and(status.eq.cancelled,updated_at.gt.${dayAgoIso}),and(status.eq.cancelled,updated_at.is.null,created_at.gt.${dayAgoIso}),and(status.neq.cancelled,expires_at.is.null),and(status.neq.cancelled,expires_at.gt.${dayAgoIso})`)
   if (error) throw new Error(`open orders read failed: ${error.message}`)
-  const dayAgo = Date.now() - LATE_WINDOW_MS
   const intents = (open ?? []).filter((i: any) => i.status === 'cancelled'
     ? new Date(i.updated_at ?? i.created_at).getTime() > dayAgo
     : !i.expires_at || new Date(i.expires_at).getTime() > dayAgo)
@@ -1173,7 +1177,7 @@ Deno.serve(async (req: Request) => {
       while (!got && Date.now() - callStart < WATCH_HANDOVER_MS) {
         const { data } = await db.rpc('merchant_watch_lock_acquire', { p_seconds: 70 })
         got = data === true
-        if (!got) await new Promise(r => setTimeout(r, 1_000))
+        if (!got) await new Promise(r => setTimeout(r, 3_000))
       }
       if (!got) { console.warn('[merchant-pay/watch] previous loop still running - skipped'); return }
       const cursors = newWatchCursors()

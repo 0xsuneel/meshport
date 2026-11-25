@@ -155,6 +155,15 @@ export async function markEventsReorged(supabase: SupabaseClient, chainId: strin
 export function cursorDb(supabase: SupabaseClient): import('./cursorCache.ts').CursorDb {
   return {
     read: chainId => getCursor(supabase, chainId),
+    async readMany(chainIds) {
+      const { data, error } = await supabase.from('chain_cursors').select('*').in('chain_id', chainIds)
+      if (error) { console.error('[blockchain-indexer] cursor bulk read failed:', error.message); return [] }
+      return (data ?? []) as CursorRow[]
+    },
+    async writeMany(rows) {
+      const { error } = await supabase.rpc('indexer_cursors_save', { p_rows: rows })
+      if (error) console.error(`[blockchain-indexer] cursor bulk save failed (${rows.length}):`, error.message)
+    },
     async write(chainId, row, notBackwards) {
       const full = { ...row, chain_id: chainId, updated_at: new Date().toISOString() }
       if (!notBackwards || typeof row.last_indexed_block !== 'number') {

@@ -77,19 +77,18 @@ function logEvent(event: string, fields: Record<string, unknown> = {}): void {
   console.log(JSON.stringify({ fn: 'activity-consumer', event, ts: new Date().toISOString(), ...fields }))
 }
 
-/** Registered wallets, lowercased. Mirrors the indexer's loadKnownWallets. */
-async function loadRegisteredWallets(supabase: SupabaseClient): Promise<Set<string>> {
-  const out = new Set<string>()
-  const { data, error } = await supabase.from('users').select('wallet_address')
-  if (error) {
-    console.error('[activity-consumer] loadRegisteredWallets failed:', error.message)
-    return out
-  }
-  for (const r of data ?? []) {
-    const a = (r.wallet_address as string | null)?.toLowerCase()
-    if (a) out.add(a)
-  }
-  return out
+/**
+ * Which of these wallets are registered, lowercased. Asks only about the
+ * wallets in this pass's events (indexer_match_wallets) - reading every
+ * user's address each pass cost more with every sign-up.
+ */
+async function loadRegisteredWallets(supabase: SupabaseClient, wallets: string[]): Promise<Set<string>> {
+  const uniq = [...new Set(wallets.map(w => String(w ?? '').toLowerCase()).filter(Boolean))]
+  if (uniq.length === 0) return new Set()
+  const { data, error } = await supabase.rpc('indexer_match_wallets', { p_addrs: uniq })
+  // Throw (abort the pass) rather than treat every wallet as unregistered.
+  if (error) throw new Error(`registered wallets read failed: ${error.message}`)
+  return new Set(((data as string[] | null) ?? []).map(a => a.toLowerCase()))
 }
 
 /**
@@ -175,7 +174,7 @@ async function runPass(supabase: SupabaseClient) {
   logEvent('pass_start', { candidates: rows.length, sinceIso, lookbackHours: LOOKBACK_HOURS })
   if (rows.length === 0) return { candidates: 0, credited: 0, skipped: 0, reasons: {} as Record<string, number> }
 
-  const registered = await loadRegisteredWallets(supabase)
+  const registered = await loadRegisteredWallets(supabase, rows.map(r => String(r.wallet_address ?? '')))
   const hashes = rows.map(r => String(r.tx_hash ?? '').toLowerCase()).filter(Boolean)
   const existing = await loadExistingActivity(supabase, hashes)   // throws => abort pass
   const swaps = await recentSwapOutputsByWallet(supabase, rows.map(r => String(r.wallet_address ?? '')))
@@ -263,7 +262,7 @@ Deno.serve(async (req: Request) => {
       if (error) throw new Error(error.message)
 
       const rows = (events ?? []) as ChainEventRow[]
-      const registered = await loadRegisteredWallets(supabase)
+      const registered = await loadRegisteredWallets(supabase, rows.map(r => String(r.wallet_address ?? '')))
       const existing = await loadExistingActivity(supabase, rows.map(r => String(r.tx_hash ?? '').toLowerCase()).filter(Boolean))
       const swaps = await recentSwapOutputsByWallet(supabase, rows.map(r => String(r.wallet_address ?? '')))
 

@@ -39,6 +39,10 @@ export interface CursorDb {
   read(chainId: string): Promise<CursorRow | null>
   /** Upsert. With notBackwards, an existing row whose last_indexed_block is ahead is left alone. */
   write(chainId: string, row: Partial<CursorRow>, notBackwards: boolean): Promise<void>
+  /** Optional bulk forms: one request for many chains instead of one each. */
+  readMany?(chainIds: string[]): Promise<CursorRow[]>
+  /** Bulk not-backwards save of full rows. */
+  writeMany?(rows: CursorRow[]): Promise<void>
 }
 
 export const FLUSH_MS = 30_000
@@ -46,6 +50,8 @@ export const FLUSH_MS = 30_000
 export interface CursorCache extends CursorStore {
   /** Save every chain with unsaved changes (end of run). */
   flushAll(): Promise<void>
+  /** Read these chains' cursors in one request (when the db supports it). */
+  preload(chainIds: string[]): Promise<void>
   /** For tests / logs: database writes made so far. */
   readonly writes: number
 }
@@ -57,6 +63,16 @@ export function createCursorCache(db: CursorDb, opts: { flushMs?: number; now?: 
   const savedAt = new Map<string, number>()
   const dirty = new Set<string>()
   let writes = 0
+
+  // Every dirty chain in one request when the db can, else one each.
+  const saveDirty = async () => {
+    const ids = [...dirty].filter(id => rows.has(id))
+    if (!ids.length) return
+    if (!db.writeMany) { await Promise.all(ids.map(id => save(id, true))); return }
+    for (const id of ids) { dirty.delete(id); savedAt.set(id, now()) }
+    writes++
+    await db.writeMany(ids.map(id => ({ ...rows.get(id)! })))
+  }
 
   const save = async (chainId: string, notBackwards: boolean) => {
     const row = rows.get(chainId)
@@ -82,11 +98,22 @@ export function createCursorCache(db: CursorDb, opts: { flushMs?: number; now?: 
       if (how === 'lazy') {
         dirty.add(chainId)
         if (now() - (savedAt.get(chainId) ?? 0) < flushMs) return
+        // Due: save it together with every other chain waiting to be saved.
+        await saveDirty()
+        return
       }
       await save(chainId, how !== 'force')
     },
     async flushAll() {
-      await Promise.all([...dirty].map(id => save(id, true)))
+      await saveDirty()
+    },
+    async preload(chainIds) {
+      if (!db.readMany) return
+      const missing = chainIds.filter(id => !rows.has(id))
+      if (!missing.length) return
+      for (const row of await db.readMany(missing)) {
+        rows.set(row.chain_id, { ...row }); savedAt.set(row.chain_id, now())
+      }
     },
   }
 }

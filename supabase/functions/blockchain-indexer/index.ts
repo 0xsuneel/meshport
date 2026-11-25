@@ -22,7 +22,9 @@
 import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { enabledChains, INDEXED_CHAINS, chainById } from './chains.ts'
-import { indexChain, loadKnownWallets } from './indexChain.ts'
+import { indexChain, anyKnownWallet, sqlWalletMatcher } from './indexChain.ts'
+import { createCursorCache } from './cursorCache.ts'
+import { cursorDb } from './cursors.ts'
 import { runCompare, runMetrics } from './monitor.ts'
 import { runBulkpayReconciliation } from './bulkpayReconcile.ts'
 import { makeLiveBulkpayReconcileRepository, makeLiveArcReceiptFetcher } from './bulkpayReconcileLive.ts'
@@ -411,10 +413,14 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, mode, note: 'no chains enabled or no RPC configured', chains: [] })
   }
 
-  const knownWallets = await loadKnownWallets(supabase)
-  if (knownWallets.size === 0) {
+  if (!(await anyKnownWallet(supabase))) {
     return json({ ok: true, mode, note: 'no wallets to watch', walletCount: 0 })
   }
+  // Recipients matched in SQL; cursors read in one request and saved in one
+  // at the end (each pass's cursor save is a 'lazy' one: kept until flushAll).
+  const knownWallets = sqlWalletMatcher(supabase)
+  const cursors = createCursorCache(cursorDb(supabase), { flushMs: Number.POSITIVE_INFINITY })
+  await cursors.preload(chains.map(c => c.id))
 
   const started = Date.now()
   // Chains run a few at a time. They used to run one after another, so one
@@ -428,16 +434,17 @@ Deno.serve(async (req: Request) => {
   await Promise.all(Array.from({ length: Math.min(CHAIN_CONCURRENCY, chains.length) }, async () => {
     while (nextChain < chains.length) {
       const k = nextChain++
-      reports[k] = await indexChain(supabase, chains[k], knownWallets)
+      reports[k] = await indexChain(supabase, chains[k], knownWallets, cursors)
     }
   }))
+
+  await cursors.flushAll().catch(e => console.error('[blockchain-indexer] cursor flush failed:', e instanceof Error ? e.message : e))
 
   return json({
     ok: true,
     mode,
     shadowMode: true,
     note: 'events published to chain_events; no consumer wired (Phase 4)',
-    walletCount: knownWallets.size,
     elapsedMs: Date.now() - started,
     chains: reports,
   })
