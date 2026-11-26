@@ -755,11 +755,10 @@ function OwnerBusinessPage() {
         value={pinValue} onChange={v => { setPinValue(v); setPinError(undefined) }}
         error={pinError} onComplete={code => { void onPin(code) }} onClose={() => setPin(null)} />
 
-      <VoiceSheet open={voiceOpen} enabled={voice.enabled} vibrate={voice.vibrate} bigCard={voice.bigCard}
+      <VoiceSheet open={voiceOpen} enabled={voice.enabled} vibrate={voice.vibrate}
         minAmount={voice.minAmount} minChoices={MIN_AMOUNTS} testLine={spokenLine(24.5)} today={alertsToday}
         onToggle={() => setVoiceAlerts({ enabled: !voice.enabled })}
         onVibrate={() => setVoiceAlerts({ vibrate: !voice.vibrate })}
-        onBigCard={() => setVoiceAlerts({ bigCard: !voice.bigCard })}
         onMinAmount={n => setVoiceAlerts({ minAmount: n })}
         onTest={() => speakPayment(24.5, { test: true })} onClose={() => setVoiceOpen(false)} />
 
@@ -779,7 +778,7 @@ function OwnerBusinessPage() {
             ] },
             { title: 'Settings', rows: [
               { id: 'profile', label: 'Business profile', hint: `${headerStatus === 'verified' ? 'Verified' : 'Complete your application'} · name, logo, payment limits` },
-              { id: 'voice', label: 'Payment alerts', hint: voice.enabled ? `Voice on${voice.minAmount ? ` · above $${voice.minAmount}` : ''}${voice.bigCard ? ' · alert card' : ''}` : 'Voice off' },
+              { id: 'voice', label: 'Payment alerts', hint: voice.enabled ? `Voice on${voice.minAmount ? ` · above $${voice.minAmount}` : ''}` : 'Voice off' },
               { id: 'help', label: 'Help & disputes', hint: 'Customer says they paid' },
             ] },
           ]} />

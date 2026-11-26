@@ -54,11 +54,9 @@ export function PaymentReceivedWatcher() {
   // reload, on this phone - so none is said twice (lives across restarts).
   const announced = useRef<Set<string>>(new Set())
   const voice = useVoiceAlerts()
-  // The settings as of now, read inside the long-lived effect below.
-  const bigCardRef = useRef(voice.bigCard); bigCardRef.current = voice.bigCard
   const keyOf = (p: MerchantPayment) => `${p.chain}:${p.txHash.toLowerCase()}`
   const showCards = (list: MerchantPayment[]) => {
-    if (!bigCardRef.current || !list.length) return
+    if (!list.length) return
     const inOrder = [...list].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
     setCards(c => [...c, ...inOrder.filter(p => !c.some(x => keyOf(x) === keyOf(p)))])
   }
@@ -92,8 +90,8 @@ export function PaymentReceivedWatcher() {
       if (!visible()) { waiting.set(k, { amount, createdAt, payment: payment ?? waiting.get(k)?.payment }); return }
       announced.current.add(k)
       writeAnnounced(wallet, announced.current)
-      // It gets a card: said when that card comes up (below), not now.
-      if (payment && bigCardRef.current) { speakOnShow.current.add(k); return }
+      // It gets a card (always): said when that card comes up (below), not now.
+      if (payment) { speakOnShow.current.add(k); return }
       speakPayment(amount)
     }
     const sayWaiting = () => {
@@ -151,17 +149,9 @@ export function PaymentReceivedWatcher() {
       seen.current = new Set(list.map(key))
     }
     void check()
-    // A new payment row: speak at once from the live feed (the reload that
-    // follows shows the card). Only once the first load has run - before that
-    // every row counts as old - and only a payment of the last 10 minutes.
-    const stopOrders = subscribeMerchantPayments(wallet, () => { void check() }, p => {
-      const k = `${p.chain}:${p.txHash.toLowerCase()}`
-      if (!seen.current || seen.current.has(k) || !isFresh(p.createdAt)) return
-      // With the big card on, the reload this row starts shows its card and
-      // says it together; speaking here first put the voice ahead of the card.
-      if (bigCardRef.current) return
-      announce(k, p.amount, p.createdAt)
-    })
+    // A new payment row: the reload it starts shows its big card and says it
+    // together (speaking from the live row first put the voice ahead of the card).
+    const stopOrders = subscribeMerchantPayments(wallet, () => { void check() })
     const stopReceipts = subscribeChainReceipts(wallet, () => { void check() })
     const stop = () => { stopOrders(); stopReceipts() }
     // A fallback if the live feed drops - look every 20 s.
@@ -195,12 +185,6 @@ export function PaymentReceivedWatcher() {
     return () => { live = false; clearTimeout(t) }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- runs per card shown
   }, [shown])
-  // Big alert card turned off: nothing more shows (their voices, still due, play now).
-  useEffect(() => {
-    if (voice.bigCard) return
-    setCards(c => { for (const p of c) if (speakOnShow.current.delete(keyOf(p)) && voiceFor.current?.key !== keyOf(p)) void speakPayment(p.amount); return [] })
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- only on the setting
-  }, [voice.bigCard])
 
   // The last payment shown stays drawn while the popup animates away -
   // clearing it with the popup still on screen blanked it mid-close (flicker).

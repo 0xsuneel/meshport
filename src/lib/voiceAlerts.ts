@@ -31,11 +31,10 @@ type Settings = {
   vibrate: boolean
   /** Payments below this only chime (0: every payment is said). */
   minAmount: number
-  /** The "Payment received" card over the app (off: voice and buzz only). */
-  bigCard: boolean
 }
+// (The big "Payment received" card is always shown - no setting.)
 const KEY = 'meshport_voice_alerts'
-const DEFAULTS: Settings = { enabled: true, vibrate: true, minAmount: 0, bigCard: true }
+const DEFAULTS: Settings = { enabled: true, vibrate: true, minAmount: 0 }
 /** The choices offered for "Only say payments above". */
 export const MIN_AMOUNTS = [0, 1, 5, 10] as const
 
@@ -47,7 +46,6 @@ function read(): Settings {
       enabled: bool(s.enabled, DEFAULTS.enabled),
       vibrate: bool(s.vibrate, DEFAULTS.vibrate),
       minAmount: typeof s.minAmount === 'number' && s.minAmount >= 0 ? s.minAmount : DEFAULTS.minAmount,
-      bigCard: bool(s.bigCard, DEFAULTS.bigCard),
     }
   } catch { return DEFAULTS }
 }

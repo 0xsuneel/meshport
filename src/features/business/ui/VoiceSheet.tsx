@@ -1,7 +1,8 @@
 /**
  * VoiceSheet — Business → Payment alerts: voice alerts on/off, a test that
- * plays the real voice, the smallest payment said out loud, vibrate, the big
- * "Payment received" card, and today's payments. English only (one voice).
+ * plays the real voice, the smallest payment said out loud, vibrate, and
+ * today's payments. English only (one voice). The big "Payment received"
+ * card always shows - there is no switch for it.
  */
 import React from 'react'
 import { X, Play } from 'lucide-react'
@@ -15,7 +16,6 @@ export interface VoiceSheetProps {
   open: boolean
   enabled: boolean
   vibrate: boolean
-  bigCard: boolean
   /** Payments below this only chime. */
   minAmount: number
   minChoices: readonly number[]
@@ -25,7 +25,6 @@ export interface VoiceSheetProps {
   today?: { total: string; list: TodayAlert[] }
   onToggle: () => void
   onVibrate: () => void
-  onBigCard: () => void
   onMinAmount: (n: number) => void
   onTest: () => void
   onClose: () => void
@@ -53,8 +52,8 @@ function Row({ title, sub, children, dim }: { title: string; sub: string; childr
 }
 
 export function VoiceSheet({
-  open, enabled, vibrate, bigCard, minAmount, minChoices, testLine, today,
-  onToggle, onVibrate, onBigCard, onMinAmount, onTest, onClose,
+  open, enabled, vibrate, minAmount, minChoices, testLine, today,
+  onToggle, onVibrate, onMinAmount, onTest, onClose,
 }: VoiceSheetProps) {
   return (
     <Sheet open={open} onClose={onClose}>
@@ -94,9 +93,6 @@ export function VoiceSheet({
           </div>
           <Row title="Vibrate too" sub="For when the phone is on silent">
             <Switch on={vibrate} label="Vibrate with alerts" onClick={onVibrate} />
-          </Row>
-          <Row title="Big alert card" sub="Show it over the app">
-            <Switch on={bigCard} label="Big alert card" onClick={onBigCard} />
           </Row>
         </div>
 
