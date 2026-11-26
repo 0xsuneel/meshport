@@ -153,7 +153,8 @@ function card(view: IntentView | null, summary: ConfirmSummary | null): HTMLElem
     // app's word for it).
     const detail = scope
       ? (limit ? `Up to ${limit} with fees` : same ? summary?.detail : `Up to ${view.amount} for 2 minutes`)
-      : [order ? `Order ${order}` : summary?.detail, view.to ? shortAddress(view.to) : ''].filter(Boolean).join(' · ') || undefined
+      // A Shop QR payment's memo is "Shop Payment" (no order number): shown as is.
+      : [order ? (/^shop payment$/i.test(order) ? order : `Order ${order}`) : summary?.detail, view.to ? shortAddress(view.to) : ''].filter(Boolean).join(' · ') || undefined
     // The app's figure, exactly as the app's sheet showed it ("$5"), only
     // when it is what the wallet read - otherwise the wallet's own figure,
     // since that is what gets signed.

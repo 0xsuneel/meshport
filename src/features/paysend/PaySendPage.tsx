@@ -213,8 +213,10 @@ export function PaySendPage() {
   // can't be edited; the payment is confirmed against both.
   const [merchantOrderNumber, setMerchantOrderNumber] = useState<string | null>(() => searchParams.get('order'))
   // Paying an order in USDC: the order rides along on-chain (Arc memo).
+  // A Shop QR payment has no order number: its memo just says "Shop Payment"
+  // (the code still goes in the memo id, which the server matches on).
   const orderMemo = (t: string) => merchantPayCode && t === 'USDC'
-    ? { code: merchantPayCode, label: displayOrderNumber(merchantOrderNumber || merchantPayCode.slice(0, 6).toUpperCase()) }
+    ? { code: merchantPayCode, label: merchantOrderKind === 'shop' ? 'Shop Payment' : displayOrderNumber(merchantOrderNumber || merchantPayCode.slice(0, 6).toUpperCase()) }
     : null
   // The order handed over by the shop page (in-app navigation state - a link
   // can't set it), so its kind and checks don't wait on a second fetch.
@@ -226,6 +228,9 @@ export function PaySendPage() {
   // The order's requester (for the chat card when the recipient came from a
   // link or QR without a username).
   const [merchantUsername, setMerchantUsername] = useState<string | null>(null)
+  // The Shop QR's store (branch), kept on the payment so "Pay again" reopens it.
+  // (Only a Shop QR's own page sets it; it names a branch and moves no money.)
+  const merchantStoreId = searchParams.get('store')
   // Order payments: amount, order number and recipient come from the order on
   // the server - not from the link - so they can't be changed by editing it.
   const recipientRef = useRef(recipient)
@@ -960,7 +965,7 @@ export function PaySendPage() {
       const noteFailed = (err: unknown, txHash?: string) => void recordFailure({
         feature: 'pay', walletAddress: useAuthStore.getState().walletAddress, amount: numAmount, token,
         counterparty: toAddr, txHash, failure: classifyFailure(err, { reverted: !!txHash }),
-        metadata: { toUsername: recipient?.isUsername ? recipient.display : undefined, ...(merchantPayCode ? { merchantOrder: merchantOrderNumber ?? undefined, merchantOrderKind: merchantOrderKind === 'bill' ? 'invoice' : 'request', merchantPersonal: merchantOrderKind === 'bill' ? undefined : merchantOrderKind === 'request', merchantVia: merchantOrderKind === 'shop' ? 'shop_qr' : undefined } : {}) },
+        metadata: { toUsername: recipient?.isUsername ? recipient.display : undefined, ...(merchantPayCode ? { merchantOrder: merchantOrderNumber ?? undefined, merchantOrderKind: merchantOrderKind === 'bill' ? 'invoice' : 'request', merchantPersonal: merchantOrderKind === 'bill' ? undefined : merchantOrderKind === 'request', merchantVia: merchantOrderKind === 'shop' ? 'shop_qr' : undefined, merchantStore: merchantOrderKind === 'shop' ? merchantStoreId ?? undefined : undefined } : {}) },
       })
       const result = await (token === 'EURC'
         ? sendEURC({ signer: activeSigner, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })

@@ -115,13 +115,15 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
       navigate(`${here.pathname}${here.search}`, { replace: true })
       if (useAuthStore.getState().isAuthenticated && wallet && /^0x[0-9a-fA-F]{40}$/.test(wallet)) {
         const to = `${shop.username}|${wallet}|${shop.businessName}|${shop.avatarUrl ?? ''}`
-        navigate(`/pay?to=${encodeURIComponent(to)}&amount=${encodeURIComponent(String(value))}&merchantPay=${encodeURIComponent(String(data))}&review=1`)
+        // &store: kept on the payment in history, so "Pay again" reopens this store.
+        const storeQ = shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : ''
+        navigate(`/pay?to=${encodeURIComponent(to)}&amount=${encodeURIComponent(String(value))}&merchantPay=${encodeURIComponent(String(data))}&review=1${storeQ}`)
         return
       }
       if (useAuthStore.getState().isAuthenticated) {
         const { getPayment, orderPaySendUrl, isOrderPayable } = await import('@/lib/merchantPay')
         const v = await getPayment(String(data)).catch(() => null)
-        if (v && isOrderPayable(v)) { navigate(`${orderPaySendUrl(v)}&review=1`, { state: { merchantView: v } }); return }
+        if (v && isOrderPayable(v)) { navigate(`${orderPaySendUrl(v)}&review=1${shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : ''}`, { state: { merchantView: v } }); return }
       }
       navigate(`/paylink/r/${data}`)
     } catch (e) {
