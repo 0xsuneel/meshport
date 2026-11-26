@@ -64,17 +64,22 @@ async function clearSwCaches(unregister: boolean): Promise<void> {
 export async function recoverFromStaleBuild(force = false): Promise<boolean> {
   let state = { at: 0, n: 0 }
   try { state = JSON.parse(sessionStorage.getItem(RELOAD_KEY) || '{"at":0,"n":0}') } catch { /* ignore */ }
-  const recent = Date.now() - state.at < RETRY_COOLDOWN_MS
+  // A reload that moved onto a new version starts that version's count afresh.
+  const recent = Date.now() - state.at < RETRY_COOLDOWN_MS && (state as { b?: string }).b === MY_BUILD
   const attempt = recent ? state.n + 1 : 1
   if (!force && attempt > 2) return false
-  try { sessionStorage.setItem(RELOAD_KEY, JSON.stringify({ at: Date.now(), n: attempt })) } catch { /* ignore */ }
+  try { sessionStorage.setItem(RELOAD_KEY, JSON.stringify({ at: Date.now(), n: attempt, b: MY_BUILD })) } catch { /* ignore */ }
   // Only a real update drops the offline copy. When this version is still the
   // live one (or the server can't be asked), the file failed to download on a
   // weak connection: dropping the copy made every reload download the whole
   // app again over that same connection, fail again and land on "MeshPort
   // was updated" - forever. A plain reload keeps the copy, which loads fast.
   // 1st try: drop cached files. 2nd try (or manual): also remove the SW.
-  if (await buildVerdict() === 'stale') await clearSwCaches(force || attempt >= 2)
+  const verdict = await buildVerdict()
+  if (verdict === 'stale') await clearSwCaches(force || attempt >= 2)
+  // Same version, failed again: a stored screen file is bad. Those files are
+  // re-downloaded as screens open; the offline core is kept.
+  else if (force || attempt >= 2) await dropStoredScreens()
   const url = new URL(window.location.href)
   url.searchParams.set('_v', String(Date.now()))
   window.location.replace(url.toString())
@@ -118,6 +123,64 @@ function chunkContext(): string {
 }
 
 /**
+ * "Failed to fetch dynamically imported module: X.js" names the screen's own
+ * file even when one of the files IT imports is the one that failed. Reports
+ * showed X.js itself downloading fine in ~20 ms, the server on the same
+ * version, and the screen still failing on every reload: a file it imports was
+ * stuck bad in the device's copy (the app's file cache keeps a file once it
+ * has it). This walks X.js and the files it imports (through the same cache),
+ * drops any that doesn't come back as a script from every cache, and fetches it
+ * again from the server, so the next load gets a good copy. Returns what it found.
+ */
+async function repairImports(err: unknown): Promise<string> {
+  const top = /(https?:\/\/[^\s'"]+\.js)/.exec(String((err as any)?.message ?? ''))?.[1]
+  if (!top || new URL(top).origin !== window.location.origin) return ''
+  const seen = new Set<string>([top])
+  const queue = [top]
+  const bad: string[] = []
+  const deadline = performance.now() + 6_000
+  while (queue.length && performance.now() < deadline && seen.size < 120) {
+    const batch = queue.splice(0, 8)
+    await Promise.all(batch.map(async url => {
+      let problem = ''
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(8_000) })
+        const type = res.headers.get('content-type') || ''
+        if (!res.ok) problem = String(res.status)
+        else if (!/javascript|ecmascript/i.test(type)) problem = type.split(';')[0] || 'no type'
+        else {
+          const text = await res.text()
+          if (!text.length) problem = 'empty'
+          else for (const m of text.matchAll(/(?:from|import)\s*["'](\.\/[^"']+\.js)["']/g)) {
+            const dep = new URL(m[1], url).href
+            if (!seen.has(dep)) { seen.add(dep); queue.push(dep) }
+          }
+        }
+      } catch (e) { problem = (e as Error)?.name === 'TimeoutError' ? 'timeout' : 'network' }
+      if (problem) bad.push(`${url.split('/').pop()} (${problem})`)
+      if (problem && problem !== 'timeout' && problem !== 'network') await evictEverywhere(url)
+    }))
+  }
+  return bad.length ? `bad: ${bad.slice(0, 5).join(', ')}` : `${seen.size} files ok`
+}
+
+/** Drops a file from every cache, then fetches a fresh copy from the server. */
+async function evictEverywhere(url: string): Promise<void> {
+  try {
+    if ('caches' in window) for (const k of await caches.keys()) {
+      const c = await caches.open(k)
+      for (const r of await c.keys()) if (r.url.split('?')[0] === url) await c.delete(r)
+    }
+  } catch { /* ignore */ }
+  try { await (await fetch(url, { cache: 'reload', signal: AbortSignal.timeout(15_000) })).arrayBuffer() } catch { /* ignore */ }
+}
+
+/** The screen files the app stored as they were opened (not the offline core). */
+async function dropStoredScreens(): Promise<void> {
+  try { if ('caches' in window) await caches.delete('mp-assets') } catch { /* ignore */ }
+}
+
+/**
  * The file a failed import named, fetched again (a few tries) so the reload
  * that follows finds it in the browser's cache - on a weak connection the
  * reload otherwise asks for the same large file over the same link and fails
@@ -158,9 +221,10 @@ export function lazyRetry<T extends ComponentType<any>>(
       if (isChunkLoadError(err)) {
         const started = performance.now()
         const warm = await warmFailedFile(err)
+        const deps = warm.startsWith('refetched') ? await repairImports(err) : ''
         const msg = String((err as any)?.message ?? err).slice(0, 300)
         void import('./errorReport').then(r => r.reportChunkFailure(
-          `${chunkName} failed (${chunkContext()}; ${warm} after ${Math.round(performance.now() - started)} ms): ${msg}`,
+          `${chunkName} failed (${chunkContext()}; ${warm}${deps ? '; ' + deps : ''} after ${Math.round(performance.now() - started)} ms): ${msg}`,
         )).catch(() => {})
       }
       if (isChunkLoadError(err) && await recoverFromStaleBuild()) {
