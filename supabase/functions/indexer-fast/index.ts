@@ -22,6 +22,7 @@ import { enabledChains } from '../blockchain-indexer/chains.ts'
 import { indexChain, cachedKnownWallets } from '../blockchain-indexer/indexChain.ts'
 import { createCursorCache } from '../blockchain-indexer/cursorCache.ts'
 import { cursorDb } from '../blockchain-indexer/cursors.ts'
+import { ALCHEMY_NETWORKS } from '../alchemy-webhook/lib.ts'
 
 // Every external chain (Arc has its own 2s transfer watch in
 // chain-transfer-webhook, and the indexer's Arc pass reads whole blocks).
@@ -58,7 +59,11 @@ Deno.serve(async (req: Request) => {
   )
   let group: 'busy' | 'rest' = 'busy'
   try { if ((await req.json())?.group === 'rest') group = 'rest' } catch { /* no body: busy */ }
-  const chains = enabledChains().filter(c => inGroup(group, c.id))
+  // Chains with an active Alchemy webhook are pushed to alchemy-webhook the
+  // moment a user's transfer is mined: no need to poll them every 4 s.
+  const { data: hooks } = await supabase.from('alchemy_webhooks').select('network').eq('active', true)
+  const pushed = new Set((hooks ?? []).map((h: { network: string }) => ALCHEMY_NETWORKS[h.network]).filter(Boolean))
+  const chains = enabledChains().filter(c => inGroup(group, c.id) && !pushed.has(c.id))
   if (chains.length === 0) return json({ ok: true, note: `no ${group} chains enabled` })
   const lockName = `indexer-fast:${group}`
 
