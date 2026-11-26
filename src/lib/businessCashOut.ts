@@ -1,11 +1,13 @@
-// Business → Cash out to bank (INR).
+// Business → Cash out to the business's bank or payout account, in its own
+// currency (any the P2P market trades - lib/localCurrency picks the default
+// from the phone's region; USD when unknown).
 //
 // Built on MeshPort's P2P marketplace and its escrow contract - nothing new
 // on-chain. The merchant sells USDC to a buyer's "buy" ad: createTrade
-// locks the USDC in escrow (signed on this device), the buyer pays rupees to
-// the merchant's saved UPI / bank account, and the merchant releases the
-// USDC only after the rupees arrive (releaseTrade). Cancel and dispute use
-// the same P2P rules.
+// locks the USDC in escrow (signed on this device), the buyer pays the local
+// money to the merchant's saved account (bank, SEPA, UPI, PayPal, Wise …),
+// and the merchant releases the USDC only after it arrives (releaseTrade).
+// Cancel and dispute use the same P2P rules.
 import {
   fetchOffers, fetchOfferConsumedAmounts, offerRemainingAmount, createTrade, fetchMyTrades, fetchTrade,
   releaseTrade, cancelTrade, canCancelTrade, openDispute, fetchMyPaymentMethods, savePaymentMethod,
@@ -13,13 +15,13 @@ import {
   paymentMethodSummary, fetchCounterpartyProfiles, type P2POffer, type P2PTrade, type P2PPaymentMethod, type P2PMessage,
 } from '@/lib/p2pService'
 
-export const CASH_OUT_CURRENCY = 'INR'
+import { formatFiat } from '@/lib/currencyRegistry'
 
 export type BuyerOffer = { offer: P2POffer; remaining: number; rating: { avg: number; count: number } }
 
-/** Buyers of USDC for rupees, best price first, with what each can still take. */
-export async function listBuyers(myUserId: string): Promise<BuyerOffer[]> {
-  const offers = await fetchOffers({ offerType: 'buy', currency: CASH_OUT_CURRENCY, excludeUserId: myUserId, limit: 50 })
+/** Buyers of USDC for `currency`, best price first, with what each can still take. */
+export async function listBuyers(myUserId: string, currency: string): Promise<BuyerOffer[]> {
+  const offers = await fetchOffers({ offerType: 'buy', currency, excludeUserId: myUserId, limit: 50 })
   if (!offers.length) return []
   const [consumed, ratings, blocked] = await Promise.all([
     fetchOfferConsumedAmounts(offers.map(o => o.id)),
@@ -57,4 +59,5 @@ export {
 }
 export type { P2PTrade, P2PPaymentMethod, P2PMessage }
 
-export const inr = (n: number) => '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+/** Local money, e.g. "£1,240.00", "₹41,700.00", "¥5,000". */
+export const fiat = (n: number, currency: string) => formatFiat(n, currency)

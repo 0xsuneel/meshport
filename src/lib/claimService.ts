@@ -15,7 +15,6 @@
 import { supabase, ensureAnonSession, invokeLinked } from './supabase'
 import { subscribeWithRetry } from './chatService'
 import { describeFunctionsError } from './describeFunctionsError'
-import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 export type ClaimStatus = 'submitted' | 'bridging' | 'verifying' | 'settling' | 'completed' | 'failed'
 
@@ -94,7 +93,6 @@ export async function submitClaim(params: {
   /** MeshPort's fee taken on the source chain before the burn (USDC). */
   meshportFee?:  number
 }): Promise<{ success: boolean; claimId?: string; error?: string }> {
-  assertAccountUnlocked() // business not approved yet: nothing moves
   try {
     await ensureAnonSession()
     const { data, error } = await invokeLinked('claim-submit', params as Record<string, unknown>)

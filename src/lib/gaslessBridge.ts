@@ -27,7 +27,6 @@ import { encodeAbiParameters, keccak256, toHex, pad, getAddress, type Hex } from
 import type { WalletAccount } from '@/wallet'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 import { hasGaslessRouter, NO_SIGNING_DOMAIN } from './gaslessRouters'
-import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 export const ARC_DOMAIN = 26
 /** Circle Forwarding Service hook: "cctp-forward", version 0, no extra data. */
@@ -201,7 +200,6 @@ export async function bringFundsGasless(p: {
   walletAddress: string
   onStatus?: (msg: string) => void
 }): Promise<{ txHash: Hex; fee: number; maxFee: number; mint: 'relayer' | 'circle' }> {
-  assertAccountUnlocked() // business not approved yet: nothing moves
   const chain = GASLESS_CHAINS[p.chainId]
   const router = gaslessRouter(p.chainId)
   if (!chain || !router) throw new Error('Gasless bridging is not available for this chain')

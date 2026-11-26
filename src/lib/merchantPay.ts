@@ -64,6 +64,8 @@ export type PaymentView = {
   via?: string | null
   /** The business's store (branch) the order is for - its own, else the main store. */
   storeName?: string | null
+  /** The business's tax ID (GSTIN, VAT number, EIN, ABN …) for that store - shown on bills. */
+  storeTaxId?: string | null
   items?: InvoiceItem[] | null
   /** Tax rate on a bill (percent); the amount is tax-inclusive. 0 = none. */
   taxPercent?: number

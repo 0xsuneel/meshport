@@ -882,12 +882,14 @@ export function ReportsScreen({ open, onBack, insights, statement, storePick }: 
 
 // ── Receipt ──────────────────────────────────────────────────────────────
 
-export function ReceiptScreen({ open, onBack, storeName, handle, payment, refunded, avatar, outlet }: {
+export function ReceiptScreen({ open, onBack, storeName, handle, payment, refunded, avatar, outlet, taxId }: {
   open: boolean; onBack: () => void; storeName: string; handle: string; payment: MerchantPayment | null; refunded: boolean
   /** The business's profile photo */
   avatar?: string | null
   /** The store's name, when the business has several */
   outlet?: string | null
+  /** That store's tax ID (GSTIN, VAT number, EIN …), printed on the receipt */
+  taxId?: string | null
 }) {
   const printer = usePrint()
   const { share } = useShare()
@@ -899,7 +901,7 @@ export function ReceiptScreen({ open, onBack, storeName, handle, payment, refund
     : payment.orderNumber ? (payment.orderKind ? orderTitle(payment.orderKind, payment.orderNumber, { short: true }) : displayOrderNumber(payment.orderNumber))
     : undefined
   const card = (printable: boolean) => (
-    <ReceiptCard storeName={storeName} handle={handle} avatar={avatar} outlet={outlet} amount={money(payment.amount)} from={from}
+    <ReceiptCard storeName={storeName} handle={handle} avatar={avatar} outlet={outlet} taxId={taxId} amount={money(payment.amount)} from={from}
       chainLabel={chainLabel(payment.chain)} order={forWhat} time={payment.createdAt} txHash={payment.txHash}
       explorerUrl={explorerTxUrl(payment.chain, payment.txHash) ?? undefined} refunded={refunded} printable={printable} />
   )

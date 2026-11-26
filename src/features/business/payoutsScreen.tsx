@@ -34,7 +34,7 @@ const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigi
 const short = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
 // Local date (YYYY-MM-DD), not UTC.
 const today = () => new Date().toLocaleDateString('en-CA')
-const dayLabel = (iso: string) => new Date(iso.length === 10 ? iso + 'T00:00:00' : iso).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
+const dayLabel = (iso: string) => new Date(iso.length === 10 ? iso + 'T00:00:00' : iso).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })
 const people = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`
 const REPEATS: Array<{ id: PayoutRepeat; label: string }> = [
   { id: 'none', label: 'Once' }, { id: 'weekly', label: 'Weekly' }, { id: 'monthly', label: 'Monthly' },
@@ -48,11 +48,11 @@ function daysToDue(p: BusinessPayout): number | null {
 }
 function dueChip(p: BusinessPayout): { text: string; tone: 'warn' | 'ok' | 'mute' } {
   const days = daysToDue(p)
-  if (days === null) return p.lastPaidAt ? { text: `Paid ${new Date(p.lastPaidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`, tone: 'ok' } : { text: 'Not paid yet', tone: 'mute' }
+  if (days === null) return p.lastPaidAt ? { text: `Paid ${new Date(p.lastPaidAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}`, tone: 'ok' } : { text: 'Not paid yet', tone: 'mute' }
   if (days < 0) return { text: `Overdue ${-days}d`, tone: 'warn' }
   if (days === 0) return { text: 'Due today', tone: 'warn' }
-  if (days <= 7) return { text: `Due ${new Date(p.nextDue + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short' })}`, tone: 'warn' }
-  return { text: new Date(p.nextDue + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), tone: 'mute' }
+  if (days <= 7) return { text: `Due ${new Date(p.nextDue + 'T00:00:00').toLocaleDateString([], { weekday: 'short' })}`, tone: 'warn' }
+  return { text: new Date(p.nextDue + 'T00:00:00').toLocaleDateString([], { day: 'numeric', month: 'short' }), tone: 'mute' }
 }
 const CHIP = { warn: 'bg-warning/12 text-warning', ok: 'bg-success/12 text-success', mute: 'bg-bg border border-border text-text-secondary' }
 

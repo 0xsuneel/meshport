@@ -16,6 +16,8 @@ export interface ReceiptCardProps {
   avatar?: string | null
   /** The store (outlet) it was paid at, when there are several */
   outlet?: string | null
+  /** The business's tax ID for that store (GSTIN, VAT number, EIN, ABN …) */
+  taxId?: string | null
   amount: string
   from: string
   chainLabel: string
@@ -32,7 +34,7 @@ export interface ReceiptCardProps {
 const INK = '#0F5C57'
 
 export function ReceiptCard({
-  storeName, handle, avatar, outlet, amount, from, chainLabel, order, time, txHash, explorerUrl,
+  storeName, handle, avatar, outlet, taxId, amount, from, chainLabel, order, time, txHash, explorerUrl,
   refunded = false, printable = false,
 }: ReceiptCardProps) {
   const when = new Date(time)
@@ -43,6 +45,7 @@ export function ReceiptCard({
     { label: 'Paid by', value: from },
     ...(order ? [{ label: 'For', value: order }] : []),
     ...(outlet ? [{ label: 'Store', value: outlet }] : []),
+    ...(taxId ? [{ label: 'Tax ID', value: taxId, mono: true }] : []),
     { label: 'Network', value: chainLabel },
     ...(txHash ? [{ label: 'Transaction hash', value: `${txHash.slice(0, 10)}…${txHash.slice(-6)}`, mono: true }] : []),
   ]

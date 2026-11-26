@@ -1,10 +1,11 @@
-// Shared "locked until your business is approved" screen, route guard and
-// small lock badge for entry points. See lib/accountLock.ts for the rule.
+// "Taking payments turns on once your business is approved": the screen,
+// route guard and small lock badge for the screens that take payments
+// (Receive, Splits). See lib/accountLock.ts for the rule.
 
 import type { ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Lock } from 'lucide-react'
-import { useAccountLock, ACCOUNT_LOCKED_MESSAGE } from '@/lib/accountLock'
+import { useAccountLock, isLockedPath, ACCOUNT_LOCKED_MESSAGE } from '@/lib/accountLock'
 import { useMerchant } from '@/lib/merchant'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { LoadingDots } from '@/components/ui/LoadingDots'
@@ -13,18 +14,19 @@ export const APPLY_PATH = '/business?apply=1'
 
 /** Status-aware copy for the lock. */
 export function lockCopy(status: string, reviewNote: string | null | undefined) {
+  const keep = ' You can still send, swap and withdraw your money.'
   if (status === 'pending') return {
-    text: "Your business application is under review. You'll get a notification as soon as it's approved.",
+    text: "Your business application is under review. You'll get a notification as soon as it's approved." + keep,
     action: 'View application',
   }
   if (status === 'rejected' || status === 'revoked') return {
-    text: reviewNote?.trim() || (status === 'revoked'
+    text: (reviewNote?.trim() || (status === 'revoked'
       ? 'Business access was removed from this account. Check your details and apply again.'
-      : "Your business application wasn't approved. Check your details and apply again."),
+      : "Your business application wasn't approved. Check your details and apply again.")) + keep,
     action: 'Apply again',
   }
   return {
-    text: 'Payments and every other feature turn on once MeshPort approves your business. You can still see your balance and activity.',
+    text: 'Customers can pay you once MeshPort approves your business.' + keep,
     action: 'Apply for approval',
   }
 }
@@ -84,12 +86,15 @@ export function LockedFeature({ title, showBack = true }: { title?: string; show
 }
 
 /**
- * Route guard: a business account that isn't approved sees LockedFeature
- * instead of the page (deep links included). While the status isn't known
- * yet on this device the page waits instead of rendering.
+ * Route guard: on a screen that takes payments (isLockedPath), a business
+ * that isn't approved sees LockedFeature instead (deep links included);
+ * while the status isn't known yet on this device that screen waits. Every
+ * other screen renders as normal.
  */
 export function RequireUnlockedAccount({ children, title }: { children: ReactNode; title?: string }) {
   const lock = useAccountLock()
+  const { pathname } = useLocation()
+  if (!isLockedPath(pathname)) return <>{children}</>
   if (lock.locked) return <LockedFeature title={title} />
   if (lock.unknown) return <LoadingDots />
   return <>{children}</>

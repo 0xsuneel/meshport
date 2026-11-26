@@ -176,6 +176,8 @@ function publicView(i: any, payments: any[]) {
     kind: i.kind ?? 'request', personal: typeof i.personal === 'boolean' ? i.personal : null, items: Array.isArray(i.items) ? i.items : null,
     via: i.via ?? null,
     storeName: i._store_name ?? null,
+    // A business's tax ID - only on an approved business's orders.
+    storeTaxId: i.personal === false ? (i._store_tax_id ?? null) : null,
     taxPercent: Number(i.tax_percent ?? 0),
     createdAt: i.created_at, expiresAt: i.expires_at, paidAt: i.paid_at, dueDate: i.due_date ?? null,
     completedByMerchant: !!i.completed_by_merchant, completedNote: i.completed_note ?? null,
@@ -202,12 +204,15 @@ async function loadIntent(code: string) {
   }
   // The store (branch) it's for, shown with the business name on the pay page
   // and link previews: the order's own store, else the business's main store.
+  // Customers see its reviewed public name (null until approved - just the
+  // business name then), and its tax ID (GSTIN, VAT, EIN, ABN …) on bills.
   if (data?.merchant_auth_uid) {
     const q = data.store_id
-      ? db.from('business_stores').select('name').eq('id', data.store_id)
-      : db.from('business_stores').select('name').eq('owner_auth_uid', data.merchant_auth_uid).eq('is_default', true)
+      ? db.from('business_stores').select('public_name, tax_id').eq('id', data.store_id)
+      : db.from('business_stores').select('public_name, tax_id').eq('owner_auth_uid', data.merchant_auth_uid).eq('is_default', true)
     const { data: st } = await q.limit(1).maybeSingle()
-    ;(data as any)._store_name = st?.name ?? null
+    ;(data as any)._store_name = st?.public_name ?? null
+    ;(data as any)._store_tax_id = st?.tax_id ?? null
   }
   return data
 }

@@ -5,7 +5,6 @@
  */
 import { ensureAnonSession, invokeLinked, markAttemptSubmittedDb } from './supabase'
 import { describeFunctionsError } from './describeFunctionsError'
-import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 export interface CreatePayIntentResult {
   success: boolean
@@ -67,7 +66,6 @@ export async function createPayIntent(params: {
   /** Set for an order payment sent through Arc's Memo contract. */
   callTarget?: string | null
 }): Promise<CreatePayIntentResult> {
-  assertAccountUnlocked() // business not approved yet: nothing moves
   try {
     await ensureAnonSession()
     const { data, error } = await invokeLinked('pay-intent', params as Record<string, unknown>)

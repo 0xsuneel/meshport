@@ -21,7 +21,6 @@
 import { encodeAbiParameters, keccak256, toHex, getAddress, type Hex } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
-import { assertAccountUnlocked } from '@/lib/accountLockRule'
 import { gaslessRouter } from './gaslessBridge'
 import type { CctpxToken } from './tokenBridge'
 
@@ -142,7 +141,6 @@ export async function bringTokenGasless(p: {
   walletAddress: string
   onStatus?: (msg: string) => void
 }): Promise<{ txHash: Hex; fee: number; receive: number }> {
-  assertAccountUnlocked()
   const chainNum = EXTERNAL_CHAINS[p.chainId]?.chainId
   const router = tokenRouter(p.chainId)
   if (typeof chainNum !== 'number' || !router) throw new Error('Gasless bringing is not available for this chain')

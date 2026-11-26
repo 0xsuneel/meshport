@@ -2,7 +2,6 @@ import { backLayerPop } from '@/lib/backLayers'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
-import { isAccountLockedNow, ACCOUNT_LOCKED_MESSAGE } from '@/lib/accountLockRule'
 import { PanelScanner } from '@/features/scanner/PanelScanner'
 import { ubFeeBreakdown, ubSpendAmount, ubQuoteFees } from '@/lib/transferFees'
 import { EASE_OUT, PUSH_OPEN_MS, PUSH_EASE_CSS, DESKTOP_FADE_KEYFRAMES, DESKTOP_FADE_MS } from '@/lib/motion'
@@ -1789,7 +1788,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     // in the outer finally below, closing that window entirely.
     // Business not approved yet: no transfers (the guard on this route
     // already shows why - this is the backstop).
-    if (isAccountLockedNow()) { showToastMessage(ACCOUNT_LOCKED_MESSAGE, 'error'); return }
     if (isConfirmingRef.current) return
     isConfirmingRef.current = true
     moveTimerRef.current = startMoveTimer('transfer', { route: isTokenRoute ? 'cctpx' : chain.ub ? 'ub' : 'cctp', chain: chain.sdk || chain.name, token: tokenSym })

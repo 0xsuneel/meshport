@@ -22,7 +22,6 @@ import {
   classifyStuckRelease, STUCK_RELEASE_GRACE_MS, parseActivationCutoff, isEligibleForReconcile,
   type StuckReleaseVerdict, type StuckReleaseProbe, type StuckReleaseDecision,
 } from './stuckReleasePolicy'
-import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
 
@@ -288,7 +287,6 @@ export async function createOffer(p: {
   priceType?: 'fixed' | 'floating'; floatMarginPct?: number
   autoReply?: string; paymentMethodIds?: string[]
 }): Promise<{ offer: P2POffer | null; error?: string }> {
-  assertAccountUnlocked() // business not approved yet: nothing moves
   // Both checks at once (createTrade already does this).
   const [banned, enabled] = await Promise.all([isUserBanned(p.userId), isP2PEnabled()])
   if (banned) return { offer: null, error: 'Your account is restricted from the P2P marketplace.' }
@@ -522,7 +520,6 @@ export async function topUpOfferEscrow(
   userId: string,
   additionalUsdc: number,
 ): Promise<{ success: boolean; message: string }> {
-  assertAccountUnlocked() // business not approved yet: nothing moves
   if (offer.userId !== userId) return { success: false, message: 'You can only top up your own offers.' }
   if (offer.offerType !== 'sell') return { success: false, message: 'Only sell offers hold escrow that can be topped up.' }
   // Fully-sold offers (status 'completed', zero remaining capacity) can
@@ -1032,7 +1029,6 @@ export async function createTrade(p: {
   /** The seller's account the buyer will pay (sell ads: one the ad lists; buy ads: the accepting seller's own). */
   paymentMethodId?: string; paymentMethodName?: string
 }): Promise<{ trade: P2PTrade | null; error?: string }> {
-  assertAccountUnlocked() // business not approved yet: nothing moves
   if (p.offer.userId === p.acceptingUserId) {
     return { trade: null, error: "You can't accept your own offer." }
   }
@@ -2163,7 +2159,6 @@ async function p2pReadySigner() {
 }
 
 export async function markPaymentSent(trade: P2PTrade): Promise<{ success: boolean; message: string }> {
-  assertAccountUnlocked() // business not approved yet: nothing moves
   if (trade.disputeStatus === 'open') return { success: false, message: DISPUTE_LOCKED_MESSAGE }
   if (trade.adminFrozen) return { success: false, message: 'This trade has been frozen by an admin.' }
   if (trade.status !== 'waiting_for_buyer') {
@@ -2233,7 +2228,6 @@ async function withRetry(fn: () => Promise<boolean>, attempts = 3): Promise<bool
 }
 
 export async function releaseTrade(trade: P2PTrade): Promise<{ success: boolean; message: string }> {
-  assertAccountUnlocked() // business not approved yet: nothing moves
   if (trade.disputeStatus === 'open') return { success: false, message: DISPUTE_LOCKED_MESSAGE }
   if (trade.adminFrozen) return { success: false, message: 'This trade has been frozen by an admin.' }
 

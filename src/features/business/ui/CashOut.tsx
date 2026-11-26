@@ -1,11 +1,12 @@
 /**
- * Cash-out to bank (INR) components:
+ * Cash-out to the business's bank / payout account (any currency) components:
  * CashOutAmountCard, CashOutPickRow, BuyerList, PayoutAccountList,
- * PayoutAccountForm, CashOutTracker, CashOutChat, CashOutHistoryList.
+ * CashOutTracker, CashOutChat, CashOutHistoryList. (Payout accounts are added
+ * with the P2P market's PaymentMethodSheet - any country's methods.)
  * Presentational only: CashOutScreen (../cashOutScreen.tsx) feeds them data.
  */
 import React from 'react'
-import { ShieldCheck, Loader2, Send, AlertTriangle, Plus, Landmark, UserRound, Check, ChevronRight, X, Clock } from 'lucide-react'
+import { ShieldCheck, Send, AlertTriangle, Plus, Landmark, UserRound, Check, ChevronRight, X, Clock } from 'lucide-react'
 import { Skeleton } from './primitives'
 import { AmountField, type QuickAmount } from '@/components/ui/AmountField'
 
@@ -18,8 +19,8 @@ export interface CashOutAmountCardProps {
   /** Quick amounts under the field ($100 / $500 / $1,000), greyed out above what can go. */
   quick: QuickAmount[]
   onMax?: () => void
-  fiat: string                // "₹41,700" or ''
-  rate?: string               // "₹83.40 / $"
+  fiat: string                // local money, e.g. "£1,240.00" or ''
+  rate?: string               // e.g. "£0.79 / $"
   error?: string
   /** Phone: tapping the field opens the AmountKeypad sheet (`editing` while it's up). */
   onTap?: () => void
@@ -27,7 +28,7 @@ export interface CashOutAmountCardProps {
 }
 
 /** The amount box is the app's one AmountField (Pay, Swap, Bulk Pay…); the
- *  bank side (what arrives in rupees, at what rate) sits under it. */
+ *  bank side (what arrives in the local currency, at what rate) sits under it. */
 export function CashOutAmountCard({ value, onChange, available, quick, onMax, fiat, rate, error, onTap, editing }: CashOutAmountCardProps) {
   return (
     <div className="rounded-3xl bg-card border border-border p-5 flex flex-col gap-4">
@@ -43,7 +44,7 @@ export function CashOutAmountCard({ value, onChange, available, quick, onMax, fi
         ) : (
           <div className="min-w-0">
             <p className="text-xs text-text-muted">You get in your bank</p>
-            <p className={`text-[22px] font-bold tabular-nums ${fiat ? 'text-success' : 'text-text-muted'}`}>{fiat || '₹0'}</p>
+            <p className={`text-[22px] font-bold tabular-nums ${fiat ? 'text-success' : 'text-text-muted'}`}>{fiat || '-'}</p>
           </div>
         )}
         {rate && <span className="shrink-0 px-2.5 py-1 rounded-full bg-success/12 text-success text-[11px] font-semibold tabular-nums">{rate}</span>}
@@ -87,9 +88,9 @@ export interface BuyerOption {
   id: string
   name: string
   verified: boolean
-  detail: string              // "★ 4.9 · UPI, IMPS"
-  youGet: string              // "₹41,700" ('' when this buyer can't take the amount)
-  rate: string                // "₹83.40 / $"
+  detail: string              // "★ 4.9 · SEPA, Wise"
+  youGet: string              // local money ('' when this buyer can't take the amount)
+  rate: string                // e.g. "£0.79 / $"
   note?: string               // "Takes $10 – $300"
   best?: boolean
   disabled?: boolean
@@ -142,61 +143,8 @@ export function PayoutAccountList({ accounts, selected, onSelect, onAdd }: {
       ))}
       <button type="button" onClick={onAdd} className="flex items-center gap-3 px-5 py-3 text-left text-brand-text active:bg-border/20">
         <span className="shrink-0 size-9 rounded-xl border border-dashed border-border inline-flex items-center justify-center"><Plus className="size-4" /></span>
-        <span className="text-[14px] font-semibold">Add UPI or bank account</span>
+        <span className="text-[14px] font-semibold">Add a payout account</span>
       </button>
-    </div>
-  )
-}
-
-// ─── PayoutAccountForm ────────────────────────────────────────────────────────
-
-export type PayoutMethod = 'UPI' | 'Bank transfer'
-
-export interface PayoutAccountField { key: string; label: string; value: string; placeholder: string }
-
-export interface PayoutAccountFormProps {
-  method: PayoutMethod
-  onMethod: (m: PayoutMethod) => void
-  holder: string
-  onHolder: (v: string) => void
-  fields: PayoutAccountField[]
-  onField: (key: string, v: string) => void
-  busy?: boolean
-  onSave: () => void
-  onCancel: () => void
-}
-
-const inputCls = 'h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm placeholder:text-text-muted focus:outline-none focus:border-brand-text'
-
-export function PayoutAccountForm({ method, onMethod, holder, onHolder, fields, onField, busy, onSave, onCancel }: PayoutAccountFormProps) {
-  return (
-    <div className="flex flex-col gap-4 px-5">
-      <div className="grid grid-cols-2 gap-1 bg-bg border border-border rounded-2xl p-1">
-        {(['UPI', 'Bank transfer'] as PayoutMethod[]).map(m => (
-          <button key={m} type="button" onClick={() => onMethod(m)}
-            className={`h-9 rounded-xl text-sm font-semibold transition-colors ${method === m ? 'bg-brand text-white' : 'text-text-secondary'}`}>
-            {m}
-          </button>
-        ))}
-      </div>
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-semibold text-text-secondary">Name on the account</span>
-        <input type="text" value={holder} onChange={e => onHolder(e.target.value)} placeholder="Full name as in your bank" className={inputCls} />
-      </label>
-      {fields.map(f => (
-        <label key={f.key} className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-text-secondary">{f.label}</span>
-          <input type="text" value={f.value} onChange={e => onField(f.key, e.target.value)} placeholder={f.placeholder}
-            autoCapitalize="none" autoCorrect="off" spellCheck={false} className={inputCls} />
-        </label>
-      ))}
-      <div className="flex gap-3 pt-1">
-        <button type="button" onClick={onCancel} className="flex-1 h-12 rounded-2xl border border-border text-text-secondary text-sm font-semibold">Back</button>
-        <button type="button" onClick={onSave} disabled={busy}
-          className="flex-1 h-12 rounded-2xl bg-brand text-white font-semibold text-sm disabled:opacity-60 inline-flex items-center justify-center gap-2">
-          {busy && <Loader2 className="size-4 animate-spin" />} Save account
-        </button>
-      </div>
     </div>
   )
 }
@@ -207,9 +155,9 @@ export type TradeStage = 'escrow' | 'waiting_payment' | 'payment_sent' | 'releas
 
 export interface CashOutTrackerProps {
   amountUsdc: string          // "$500.00"
-  amountFiat: string          // "₹41,700"
+  amountFiat: string          // local money
   buyer: string
-  account: string             // "UPI · sunil@okaxis"
+  account: string             // "SEPA · DE89 3704…"
   stage: TradeStage
   lockedAt: string            // "4:02 pm"
   paidAt?: string             // "4:09 pm"

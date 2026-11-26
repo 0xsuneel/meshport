@@ -32,7 +32,6 @@
  */
 import { ensureAnonSession, invokeLinked, markAttemptSubmittedDb } from './supabase'
 import { describeFunctionsError } from './describeFunctionsError'
-import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 /** Wakes the swap-intent function on Swap screen open, so the swap itself
  *  doesn't wait for a cold start. Throttled; never throws. */
@@ -72,7 +71,6 @@ export async function createSwapIntent(params: {
   slippageBps: number | null
   routerAddress: string | null
 }): Promise<CreateSwapIntentResult> {
-  assertAccountUnlocked() // business not approved yet: nothing moves
   try {
     await ensureAnonSession()
     const { data, error } = await invokeLinked('swap-intent', params as Record<string, unknown>)

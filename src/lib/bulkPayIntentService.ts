@@ -21,7 +21,6 @@
  */
 import { ensureAnonSession, invokeLinked, markAttemptSubmittedDb } from './supabase'
 import { describeFunctionsError } from './describeFunctionsError'
-import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 export interface CreateBulkPayIntentResult {
   success: boolean
@@ -43,7 +42,6 @@ export async function createBulkPayIntent(params: {
   recipientCount: number
   purpose?: string | null
 }): Promise<CreateBulkPayIntentResult> {
-  assertAccountUnlocked() // business not approved yet: nothing moves
   try {
     await ensureAnonSession()
     const { data, error } = await invokeLinked('bulkpay-intent', params as Record<string, unknown>)

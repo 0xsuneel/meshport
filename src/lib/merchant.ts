@@ -15,6 +15,7 @@
 
 import { useSyncExternalStore } from 'react'
 import { setRegisteredBusinessName } from './orderLabels'
+import { deviceTimeZone } from './localCurrency'
 import { supabase } from './supabase'
 import { subscribeWithRetry } from './chatService'
 import { useAuthStore } from '@/store'
@@ -63,7 +64,7 @@ type State = {
 let state: State = { loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null, pendingName: null }
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach(l => l())
-const set = (s: State) => { state = s; if (s.loaded) setRegisteredBusinessName(s.storeName || s.application?.businessName); emit(); if (s.loaded) rememberHint(s.status === 'approved', s.accountType === 'business', s.status === 'revoked') }
+const set = (s: State) => { state = s; if (s.loaded) setRegisteredBusinessName(s.storeName || s.application?.businessName); emit(); if (s.loaded) rememberHint(s.status === 'approved', s.accountType === 'business') }
 
 // Display hint only: the last known "is a merchant" for this wallet, so the
 // screen opens with the right labels (Cross-chain Transfer / Manage money) instead of
@@ -74,20 +75,20 @@ const HINT_KEY = 'meshport_merchant_hint'
 function currentWallet(): string {
   try { return (useAuthStore.getState().walletAddress || '').toLowerCase() } catch { return '' }
 }
-function rememberHint(approved: boolean, business: boolean, revoked: boolean) {
+function rememberHint(approved: boolean, business: boolean) {
   try {
     const w = currentWallet()
-    if (w) localStorage.setItem(HINT_KEY, JSON.stringify({ w, approved, business, revoked }))
+    if (w) localStorage.setItem(HINT_KEY, JSON.stringify({ w, approved, business }))
   } catch { /* storage unavailable */ }
 }
 /** Last known merchant status for this wallet, or null when there is none
  *  (first load on this device). `business` is null in hints written before
  *  the account type was remembered. */
-export function readMerchantHint(): { approved: boolean; business: boolean | null; revoked?: boolean } | null {
+export function readMerchantHint(): { approved: boolean; business: boolean | null } | null {
   try {
     const h = JSON.parse(localStorage.getItem(HINT_KEY) || 'null')
     if (!h || h.w !== currentWallet() || !h.w) return null
-    return { approved: h.approved === true, business: typeof h.business === 'boolean' ? h.business : null, revoked: h.revoked === true }
+    return { approved: h.approved === true, business: typeof h.business === 'boolean' ? h.business : null }
   } catch { return null }
 }
 function readHint(): boolean {
@@ -159,6 +160,7 @@ export function refreshMerchant(): Promise<void> {
         pendingName = row?.pending_name ?? null
       }
       set({ loaded: true, status: app?.status ?? 'none', application: app, accountType, storeName: me?.store_name ?? null, pendingName })
+      if (accountType === 'business' || app) syncTimeZone()
       if (!app && recheckedUid !== uid) {
         recheckedUid = uid
         setTimeout(() => { loading = null; void refreshMerchant() }, 3000)
@@ -180,6 +182,19 @@ export function refreshMerchant(): Promise<void> {
     }
   })()
   return loading
+}
+
+// A business's days (bill due dates, reminders, the cashier's "today")
+// follow its own time zone - MeshPort is used in every country. The phone's
+// zone is sent once, and again only when it changes (travel, a new phone).
+const TZ_KEY = 'meshport_tz_synced'
+function syncTimeZone() {
+  const tz = deviceTimeZone()
+  const key = `${currentWallet()}|${tz}`
+  try { if (localStorage.getItem(TZ_KEY) === key) return } catch { /* storage unavailable */ }
+  void supabase.rpc('set_my_time_zone', { p_tz: tz }).then(({ error }) => {
+    if (!error) { try { localStorage.setItem(TZ_KEY, key) } catch { /* storage unavailable */ } }
+  })
 }
 
 /** Clears cached merchant state (sign-out). */

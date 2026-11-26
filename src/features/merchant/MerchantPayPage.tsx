@@ -145,6 +145,8 @@ export function MerchantPayPage() {
                       </>
                     )}
                     <div className="flex justify-between text-sm font-bold text-text-primary py-0.5"><span>Total</span><span>${formatAmount(view.amount)} USDC</span></div>
+                    {/* The seller's tax ID - a tax invoice needs it (GST, VAT …). */}
+                    {view.storeTaxId && <div className="flex justify-between text-xs text-text-secondary pt-1"><span>Tax ID</span><span className="font-mono">{view.storeTaxId}</span></div>}
                   </div>
                 )
               })()}

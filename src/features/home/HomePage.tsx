@@ -2889,8 +2889,6 @@ export function HomePage() {
   const openChatWithUser = async (otherUser: { id: string; display_name?: string; username?: string; avatar_url?: string; wallet_address?: string }) => {
     const otherUserId = otherUser.id
     if (!user?.id || navigatingId) return
-    // Business not approved yet: Chats is locked (the route shows why).
-    if (accountLock.locked) { navigate('/chat'); return }
     setNavigatingId(otherUserId)
     try {
       const { id: convId, error } = await getOrCreateConversation(user.id, otherUserId)
@@ -4381,10 +4379,10 @@ export function HomePage() {
                 background: a.accent ? 'var(--mustard)' : 'rgba(255,255,255,0.12)',
                 color: a.accent ? 'var(--mustard-ink)' : '#fff',
                 boxShadow: a.accent ? 'none' : 'inset 0 0 0 1px rgba(255,255,255,0.16)',
-                opacity: accountLock.locked ? 0.45 : 1,
+                opacity: accountLock.locked && isLockedPath(a.path) ? 0.45 : 1,
               }}>
               <ActionIcon name={a.icon} size={15} color="currentColor" />{a.label}
-              {accountLock.locked && <LockBadge />}
+              {accountLock.locked && isLockedPath(a.path) && <LockBadge />}
             </button>
           ))}
         </div>
@@ -4400,7 +4398,7 @@ export function HomePage() {
               {homeTileIds.map((id, i) => {
                 const def = tileView(id)
                 return <QuickIcon key={id} icon={def.icon} label={def.label.replace(/ Hub$/, '')} ariaLabel={def.label}
-                  color={`var(--tile-${HOME_TILE_TONES[i]}-ink)`} dim={accountLock.locked} locked={accountLock.locked}
+                  color={`var(--tile-${HOME_TILE_TONES[i]}-ink)`} dim={accountLock.locked && isLockedPath(def.path)} locked={accountLock.locked && isLockedPath(def.path)}
                   dot={id === 'p2p' && ongoingTradesCount > 0}
                   onClick={() => { if (def.path === '/scanner') prewarmCamera(); navigate(def.path) }} />
               })}
@@ -4418,15 +4416,15 @@ export function HomePage() {
         <StuckPaymentsBanner />
 
         {/* Bills, payment requests and Split Expense shares waiting for you (lib/dueReminders). */}
-        <DueRemindersPopup enabled={!accountLock.locked} />
+        <DueRemindersPopup enabled />
 
         {/* ── FEATURE BANNERS - promo carousel for what MeshPort can do ─────── */}
         {/* Same width/radius as the old Multichain Hub row, 10% taller. */}
-        {/* Business not approved yet: no promos, recents, news or QR - the
-            balance, assets and activity stay. */}
+        {/* Business not approved yet: no "receive" QR (taking payments waits
+            for approval); everything else stays. */}
         {/* ── RECENT + UPDATES - side by side. On the phone they share one card
              with the promo banner, which sits at its foot. ─────────────────── */}
-        {!accountLock.locked && (isDesktop ? (
+        {(isDesktop ? (
           <>
             <FeatureBanner height={64} onOpen={path => navigate(path)} />
             <RecentNewsRow navigate={navigate} />
@@ -4440,7 +4438,7 @@ export function HomePage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isDesktop ? 6 : 12 }}>
             {/* Same heading size as Quick Actions on the phone. */}
             <span style={{ fontSize: isDesktop ? 16 : 19, fontWeight: 700, letterSpacing: isDesktop ? undefined : '-0.3px' }}>Assets</span>
-            {!accountLock.locked && <button onClick={handleFaucet}
+            {<button onClick={handleFaucet}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 background: 'none', border: 'none', cursor: 'pointer', padding: 0,

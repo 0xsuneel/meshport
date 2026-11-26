@@ -26,7 +26,6 @@ import type { WalletAccount } from '@/wallet'
 import { USDC_CONTRACT, EURC_CONTRACT, CIRBTC_CONTRACT } from './arcService'
 import { ARC_EXPLORER } from './chainExplorers'
 import { relayRawSend } from './arcRelaySend'
-import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 // Derive the Arc chain key from env so a mainnet build targets Arc mainnet.
 // Hardcoding 'Arc_Testnet' here broke every swap on a mainnet deployment,
@@ -591,7 +590,6 @@ export function executeSwapLocal(params: ExecuteSwapParams): Promise<SwapOutcome
 }
 
 async function executeSwapOnce(params: ExecuteSwapParams): Promise<SwapOutcome> {
-  assertAccountUnlocked() // business not approved yet: nothing moves
   const run: SwapRun = { dead: false }
   _run = run
   _onSwapProgress = params.onProgress ?? null

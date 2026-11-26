@@ -192,6 +192,12 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
                 </div>
               ) : null
             })()}
+            {v.storeTaxId && (
+              <div style={{ display: 'contents' }}>
+                <span style={{ color: muted }}>Tax ID</span>
+                <span style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace' }}>{v.storeTaxId}</span>
+              </div>
+            )}
           </div>
         )}
         {v.note && <div style={{ fontSize: 12, color: muted, marginTop: isBill ? 5 : 0 }}>{v.note}</div>}

@@ -774,7 +774,7 @@ function OwnerBusinessPage() {
             ] },
             { title: 'Money', rows: [
               { id: 'payouts', label: 'Pay staff', hint: 'Salary and suppliers · everyone in one payment' },
-              { id: 'cashout', label: 'Cash out', hint: 'Dollars to your UPI or bank in rupees' },
+              { id: 'cashout', label: 'Cash out', hint: 'Dollars to your bank or payout account, in your currency' },
             ] },
             { title: 'Settings', rows: [
               { id: 'profile', label: 'Business profile', hint: `${headerStatus === 'verified' ? 'Verified' : 'Complete your application'} · name, logo, payment limits` },
@@ -834,7 +834,8 @@ function OwnerBusinessPage() {
       ))}
       {level('receipt', (
         <ReceiptScreen open={stack.includes('receipt')} onBack={back} storeName={storeName} handle={handle} payment={receiptFor} refunded={!!(receiptFor && refundedIds.has(receiptFor.id))}
-          avatar={userAvatar} outlet={stores.length > 1 && receiptFor ? stores.find(st => st.id === storeOf(receiptFor))?.publicName ?? null : null} />
+          avatar={userAvatar} outlet={stores.length > 1 && receiptFor ? stores.find(st => st.id === storeOf(receiptFor))?.publicName ?? null : null}
+          taxId={receiptFor ? (stores.find(st => st.id === storeOf(receiptFor)) ?? stores.find(st => st.isDefault))?.taxId ?? null : null} />
       ))}
       {level('help', (
         <HelpScreen open={stack.includes('help')} onBack={back} />
