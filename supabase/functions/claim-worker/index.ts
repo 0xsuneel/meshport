@@ -128,7 +128,7 @@ async function rpcCallSingle(url: string, method: string, params: unknown[]): Pr
   if (respJson.error) throw respJson.error
   return respJson.result
 }
-function decodeCctpMessageNonce(messageHex: string): { nonce: bigint; sourceDomain: number } | null {
+function decodeCctpMessageNonce(messageHex: string): { nonce: bigint; sourceDomain: number; version: number } | null {
   try {
     const hex = messageHex.startsWith('0x') ? messageHex.slice(2) : messageHex
     if (hex.length < 116 * 2) return null
@@ -137,7 +137,7 @@ function decodeCctpMessageNonce(messageHex: string): { nonce: bigint; sourceDoma
     const nonceBytes = version === 1 ? 32 : 8
     if (hex.length < (12 + nonceBytes) * 2) return null
     const nonce = BigInt('0x' + hex.slice(12 * 2, (12 + nonceBytes) * 2))
-    return { nonce, sourceDomain }
+    return { nonce, sourceDomain, version }
   } catch {
     return null
   }
@@ -205,6 +205,34 @@ async function fetchLogsBounded(filterBase: Record<string, unknown>): Promise<an
   return allLogs
 }
 const NATIVE_USDC_EMITTER = '0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE'
+// Newest-first scan, one small range at a time, stopping at the first hit.
+// A just-arrived mint is in the first range, so this is usually ONE request -
+// unlike fetchLogsBounded's 10 parallel 5k-block ranges per endpoint, which
+// Arc's RPCs reject (26 Nov 2026: every range failed, the claim sat
+// 'settling' with its funds already on Arc).
+const BACKWARD_CHUNK_BLOCKS = 2_000
+async function fetchLogsBackward(filterBase: Record<string, unknown>): Promise<any[]> {
+  const head = await getCurrentArcBlockNumber()
+  const floor = Math.max(0, head - LOG_SCAN_WINDOW_BLOCKS)
+  for (let to = head; to >= floor; to -= BACKWARD_CHUNK_BLOCKS) {
+    const from = Math.max(floor, to - BACKWARD_CHUNK_BLOCKS + 1)
+    const logs = await rpcCall(ARC_RPCS, 'eth_getLogs', [{ ...filterBase, fromBlock: '0x' + from.toString(16), toBlock: '0x' + to.toString(16) }])
+    if (Array.isArray(logs) && logs.length) return logs
+  }
+  return []
+}
+// CCTP v2: MessageTransmitterV2.usedNonces(nonce) is 1 once the message was
+// received on Arc. One eth_call says whether there is anything to look for.
+const USED_NONCES_SELECTOR = '0xfeb61724'
+async function isNonceUsedOnArc(nonce: bigint): Promise<boolean | null> {
+  try {
+    const r = await rpcCall(ARC_RPCS, 'eth_call', [{ to: ARC_MESSAGE_TRANSMITTER, data: USED_NONCES_SELECTOR + nonce.toString(16).padStart(64, '0') }, 'latest'])
+    return BigInt(r ?? '0x0') !== 0n
+  } catch (e) {
+    console.error('[claim-worker] usedNonces check failed (non-fatal):', e instanceof Error ? e.message : e)
+    return null
+  }
+}
 async function fetchMintAmountForTx(transactionHash: string): Promise<number | null> {
   try {
     const receipt = await rpcCall(ARC_RPCS, 'eth_getTransactionReceipt', [transactionHash])
@@ -233,7 +261,7 @@ async function findCctpReceiveLog(nonce: bigint): Promise<CctpReceiveLog | null>
     address: ARC_MESSAGE_TRANSMITTER,
     topics: [[MESSAGE_RECEIVED_TOPIC0_V1, MESSAGE_RECEIVED_TOPIC0_V2], null, nonceTopic],
   }
-  const logs = await fetchLogsBounded(filter)
+  const logs = await fetchLogsBackward(filter)
   if (logs.length === 0) return null
   const log = logs[0]
   const transactionHash = log.transactionHash as string
@@ -589,6 +617,12 @@ async function confirmArrival(supabase: SupabaseClient, claim: Claim) {
     if (claim.message_hash) {
       const decoded = decodeCctpMessageNonce(claim.message_hash)
       if (decoded && ARC_MESSAGE_TRANSMITTER) {
+        // v2 message not received on Arc yet: nothing to find - skip every
+        // scan below until it is (keeps this sweep to one RPC call).
+        if (decoded.version === 1 && await isNonceUsedOnArc(decoded.nonce) === false) {
+          await persistErrorBestEffort(supabase, claim.id, 'waiting: CCTP message not yet received on Arc')
+          return
+        }
         const log = await findCctpReceiveLog(decoded.nonce)
         if (log) {
           try {
