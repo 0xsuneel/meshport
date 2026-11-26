@@ -417,9 +417,10 @@ Deno.serve(async (req: Request) => {
   if (knownWallets.size === 0) {
     return json({ ok: true, mode, note: 'no wallets to watch', walletCount: 0 })
   }
-  // Cursors read in one request and saved in one at the end (each pass's
-  // cursor save is a 'lazy' one: kept until flushAll).
-  const cursors = createCursorCache(cursorDb(supabase), { flushMs: Number.POSITIVE_INFINITY })
+  // Cursors read in one request; saves batched into one call every 10 s and
+  // at the end. Not only at the end: when the runtime stops a long pass
+  // (worker limit), the chains already done keep their progress.
+  const cursors = createCursorCache(cursorDb(supabase), { flushMs: 10_000 })
   await cursors.preload(chains.map(c => c.id))
 
   const started = Date.now()
