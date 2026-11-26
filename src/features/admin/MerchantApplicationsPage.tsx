@@ -7,7 +7,7 @@ import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { FileText, Store, X } from 'lucide-react'
 import { AdminCard } from '@/components/admin/AdminCard'
 import { useAdminStore } from '@/store/adminStore'
-import { adminListMerchantApplications, adminReviewMerchant, adminListBusinessNameChanges, adminReviewBusinessName, businessDocUrl, BUSINESS_DOC_KINDS, type BusinessNameChange, type MerchantApplication } from '@/lib/merchant'
+import { adminListMerchantApplications, adminReviewMerchant, adminListBusinessNameChanges, adminReviewBusinessName, adminListStoreNameChanges, adminReviewStoreName, businessDocUrl, BUSINESS_DOC_KINDS, type BusinessNameChange, type StoreNameChange, type MerchantApplication } from '@/lib/merchant'
 
 const TABS: Array<{ key: 'pending' | 'approved' | 'rejected' | 'all'; label: string }> = [
   { key: 'pending',  label: 'Pending' },
@@ -33,7 +33,19 @@ export function MerchantApplicationsPage() {
   // Approved businesses' new names: customers see them only once approved.
   const [names, setNames] = useState<BusinessNameChange[]>([])
   const [nameBusy, setNameBusy] = useState<string | null>(null)
-  const loadNames = () => { adminListBusinessNameChanges().then(setNames).catch(e => setError(e instanceof Error ? e.message : String(e))) }
+  const [storeNames, setStoreNames] = useState<StoreNameChange[]>([])
+  const loadNames = () => {
+    adminListBusinessNameChanges().then(setNames).catch(e => setError(e instanceof Error ? e.message : String(e)))
+    adminListStoreNameChanges().then(setStoreNames).catch(e => setError(e instanceof Error ? e.message : String(e)))
+  }
+  const decideStore = async (c: StoreNameChange, approve: boolean) => {
+    const reason = approve ? null : window.prompt(`Why is the store name "${c.pendingName}" not approved? The business sees this.`)
+    if (!approve && !reason?.trim()) return
+    setNameBusy(c.storeId)
+    try { await adminReviewStoreName(c.storeId, approve, reason); loadNames() }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    setNameBusy(null)
+  }
   useEffect(() => { loadNames() }, [])
   const decideName = async (c: BusinessNameChange, approve: boolean) => {
     const reason = approve ? null : window.prompt(`Why is "${c.pendingName}" not approved? The business sees this.`)
@@ -114,6 +126,29 @@ export function MerchantApplicationsPage() {
                 <button onClick={() => { void decideName(c, true) }} disabled={nameBusy === c.userId}
                   style={{ padding: '8px 12px', borderRadius: 12, background: 'var(--success)', color: '#fff', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Approve</button>
                 <button onClick={() => { void decideName(c, false) }} disabled={nameBusy === c.userId}
+                  style={{ padding: '8px 12px', borderRadius: 12, background: 'transparent', color: 'var(--danger-text)', fontSize: 12, fontWeight: 600, border: '1px solid var(--danger)', cursor: 'pointer' }}>Reject</button>
+              </div>
+            ))}
+          </div>
+        </AdminCard>
+      )}
+      {storeNames.length > 0 && (
+        <AdminCard padding={14}>
+          <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Store name changes ({storeNames.length})</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {storeNames.map(c => (
+              <div key={c.storeId} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, wordBreak: 'break-word' }}>
+                    {c.businessName ?? c.username} · {c.pendingName}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-secondary)' }}>
+                    {c.username ? `${c.username}.arc · ` : ''}customers see now: {c.currentPublic ?? 'business name only'} · {new Date(c.pendingSince).toLocaleString()}
+                  </p>
+                </div>
+                <button onClick={() => { void decideStore(c, true) }} disabled={nameBusy === c.storeId}
+                  style={{ padding: '8px 12px', borderRadius: 12, background: 'var(--success)', color: '#fff', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Approve</button>
+                <button onClick={() => { void decideStore(c, false) }} disabled={nameBusy === c.storeId}
                   style={{ padding: '8px 12px', borderRadius: 12, background: 'transparent', color: 'var(--danger-text)', fontSize: 12, fontWeight: 600, border: '1px solid var(--danger)', cursor: 'pointer' }}>Reject</button>
               </div>
             ))}

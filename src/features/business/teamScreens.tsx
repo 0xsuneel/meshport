@@ -39,7 +39,12 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
   const save = async () => {
     if (!edit) return
     setBusy(true)
-    try { await saveStore({ ...edit, isDefault: !edit.id && !(stores ?? []).length ? true : undefined }); changeEdit(null); await load() }
+    try {
+      const saved = await saveStore({ ...edit, isDefault: !edit.id && !(stores ?? []).length ? true : undefined })
+      // A new store name is checked before customers see it (like the business name).
+      if (saved.nameInReview) toast('Saved - customers see your business name until MeshPort approves this store name', 'info')
+      changeEdit(null); await load()
+    }
     catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
     setBusy(false)
   }
@@ -59,7 +64,7 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
         ) : stores === null ? <Skeleton className="h-40 w-full" /> : (
           <StoresView stores={stores.map(s => {
             const p = paymentsByStore.get(s.id)
-            return { id: s.id, name: s.name, type: s.type ?? 'Store', address: s.address ?? undefined, taxId: s.taxId ?? undefined, isDefault: s.isDefault,
+            return { id: s.id, name: s.name, type: s.type ?? 'Store', address: s.address ?? undefined, taxId: s.taxId ?? undefined, isDefault: s.isDefault, nameInReview: s.nameInReview, publicName: s.publicName,
               payments: p ? `${money(p.total)} · ${p.count} payment${p.count === 1 ? '' : 's'}` : 'No payments yet' }
           })}
             onAdd={() => changeEdit({ name: '', type: defaultType, address: '', taxId: '' })}

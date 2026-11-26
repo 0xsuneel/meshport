@@ -335,6 +335,24 @@ export async function adminReviewBusinessName(userId: string, approve: boolean, 
   if (error) throw new Error(error.message)
 }
 
+export type StoreNameChange = {
+  storeId: string; username: string | null; businessName: string | null; currentPublic: string | null
+  pendingName: string; pendingSince: string
+}
+/** Store (branch) names waiting for review before customers see them. */
+export async function adminListStoreNameChanges(): Promise<StoreNameChange[]> {
+  const { adminDb } = await import('./adminDb')
+  const { data, error } = await adminDb.rpc('admin_store_name_changes')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as any[]).map(r => ({ storeId: r.store_id, username: r.username ?? null, businessName: r.business_name ?? null,
+    currentPublic: r.current_public ?? null, pendingName: r.pending_name, pendingSince: r.pending_since }))
+}
+export async function adminReviewStoreName(storeId: string, approve: boolean, note: string | null): Promise<void> {
+  const { adminDb } = await import('./adminDb')
+  const { error } = await adminDb.rpc('admin_review_store_name', { p_store: storeId, p_approve: approve, p_note: note })
+  if (error) throw new Error(error.message)
+}
+
 export async function adminReviewMerchant(id: string, status: 'approved' | 'rejected' | 'revoked', note: string | null, reviewer: string): Promise<void> {
   const { adminDb } = await import('./adminDb')
   const { error } = await adminDb.from('merchant_applications')

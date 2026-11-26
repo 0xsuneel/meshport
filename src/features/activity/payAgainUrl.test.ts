@@ -19,6 +19,8 @@ describe('"Pay again" from history', () => {
     expect(shopNameOf({ merchantName: 'Royal Salons', merchantStore: 'Cutting Edge' })).toBe('Royal Salons · Cutting Edge')
     expect(shopNameOf({ merchantName: 'Shop', merchantStore: 'Shop' })).toBe('Shop')
     expect(shopNameOf({ merchantName: 'Shop', merchantStore: '895bbfd4-00b3-4af2-8319-9dc636ff0161' })).toBe('Shop')
+    // The business's own label for the store, even before customers see it.
+    expect(shopNameOf({ merchantName: 'Shop', merchantStore: null, merchantStoreLabel: 'Andheri Branch' })).toBe('Shop · Andheri Branch')
   })
   it('anything else opens Pay as before', async () => {
     const { payAgainUrl } = await import('./ActivityPage')

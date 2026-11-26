@@ -135,7 +135,7 @@ export function StaffModePage() {
         // Staff actions go into the owner's activity log.
         log: (action, x) => { void logBusiness(action, { ...x, owner: active.ownerAuthUid }) },
       }}>
-        <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={active.ownerName} outlet={active.storeName} handle={`${active.ownerUsername}.arc`} payTo={active.ownerUsername} />
+        <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={active.ownerName} outlet={active.storePublicName} handle={`${active.ownerUsername}.arc`} payTo={active.ownerUsername} />
         <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={active.ownerName} />
       </RequestMaker.Provider>
       {/* Same page push and header as every other Business screen. */}

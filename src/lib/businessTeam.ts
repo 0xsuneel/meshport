@@ -10,12 +10,15 @@ import { supabase } from '@/lib/supabase'
 import { mapIntent, type MerchantIntent, type MerchantPayment, type InvoiceItem } from '@/lib/merchantPay'
 import type { MerchantRefund } from '@/lib/merchantRefunds'
 
-export type Store = { id: string; name: string; type: string | null; address: string | null; taxId: string | null; isDefault: boolean; createdAt: string }
+/** `name` is the owner's own label; customers see `publicName` (null until
+ *  MeshPort has reviewed it - they see just the business name then).
+ *  `nameInReview`: a new name is waiting for that review. */
+export type Store = { id: string; name: string; publicName: string | null; nameInReview: boolean; type: string | null; address: string | null; taxId: string | null; isDefault: boolean; createdAt: string }
 export type StaffRole = 'cashier' | 'manager'
 export type StaffMember = { id: string; username: string; role: StaffRole; status: 'invited' | 'active'; storeId: string | null; createdAt: string }
-export type Membership = { id: string; ownerAuthUid: string; ownerName: string; ownerUsername: string; role: StaffRole; status: 'invited' | 'active'; storeId: string | null; storeName: string | null }
+export type Membership = { id: string; ownerAuthUid: string; ownerName: string; ownerUsername: string; role: StaffRole; status: 'invited' | 'active'; storeId: string | null; storeName: string | null; storePublicName: string | null }
 
-const mapStore = (r: any): Store => ({ id: r.id, name: r.name, type: r.type ?? null, address: r.address ?? null, taxId: r.tax_id ?? null, isDefault: !!r.is_default, createdAt: r.created_at })
+const mapStore = (r: any): Store => ({ id: r.id, name: r.name, publicName: r.public_name ?? null, nameInReview: !!r.name_review_since, type: r.type ?? null, address: r.address ?? null, taxId: r.tax_id ?? null, isDefault: !!r.is_default, createdAt: r.created_at })
 const fail = (e: { message: string } | null) => { if (e) throw new Error(e.message.replace(/^.*?ERROR:\s*/, '')) }
 
 async function myUid(): Promise<string | null> {
@@ -89,7 +92,7 @@ export async function myMemberships(): Promise<Membership[]> {
   const { data, error } = await supabase.rpc('business_staff_memberships')
   if (error) return []
   return (data ?? []).map((r: any) => ({ id: r.id, ownerAuthUid: r.owner_auth_uid, ownerName: r.owner_name, ownerUsername: r.owner_username,
-    role: r.role, status: r.status, storeId: r.store_id ?? null, storeName: r.store_name ?? null }))
+    role: r.role, status: r.status, storeId: r.store_id ?? null, storeName: r.store_name ?? null, storePublicName: r.store_public_name ?? null }))
 }
 
 export async function acceptInvite(id: string): Promise<void> {

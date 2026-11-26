@@ -408,9 +408,11 @@ export function activityOrderKind(md: any): OrderKind | null {
  * again - not a plain payment to the shop's wallet. Anything else: Pay.
  */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-/** The store's name kept on a payment (never an id). */
+/** The store's name kept on a payment (never an id). These rows are the
+ *  business's own: its label for the store (merchantStoreLabel) first, then
+ *  the name customers saw. */
 function storeNameOf(md: Record<string, any> | null | undefined): string {
-  const v = md?.merchantStore
+  const v = typeof md?.merchantStoreLabel === 'string' && md.merchantStoreLabel ? md.merchantStoreLabel : md?.merchantStore
   return typeof v === 'string' && !UUID_RE.test(v) ? v : ''
 }
 /** The shop a payment was made to, as it was named when paid:

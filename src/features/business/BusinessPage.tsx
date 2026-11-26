@@ -812,11 +812,11 @@ function OwnerBusinessPage() {
 
       <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: qrStore?.id ?? null, canBill: true, chat: true }}>
       {level('qr', (
-        <ShopQrScreen open={stack.includes('qr')} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} storePick={screenStorePick} avatar={userAvatar} />
+        <ShopQrScreen open={stack.includes('qr')} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.publicName : null} handle={handle} storePick={screenStorePick} avatar={userAvatar} />
       ))}
       {level('receive', (
         <ReceiveScreen open={stack.includes('receive')} onBack={() => { back(); reloadIntents() }} onChanged={reloadIntents} storeName={storeName}
-          shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} storePick={screenStorePick} avatar={userAvatar} />
+          shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.publicName : null }} storePick={screenStorePick} avatar={userAvatar} />
       ))}
       {level('customers', (
         <CustomersScreen open={stack.includes('customers')} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundedOf(p.id) > 0 && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
@@ -834,7 +834,7 @@ function OwnerBusinessPage() {
       ))}
       {level('receipt', (
         <ReceiptScreen open={stack.includes('receipt')} onBack={back} storeName={storeName} handle={handle} payment={receiptFor} refunded={!!(receiptFor && refundedIds.has(receiptFor.id))}
-          avatar={userAvatar} outlet={stores.length > 1 && receiptFor ? stores.find(st => st.id === storeOf(receiptFor))?.name ?? null : null} />
+          avatar={userAvatar} outlet={stores.length > 1 && receiptFor ? stores.find(st => st.id === storeOf(receiptFor))?.publicName ?? null : null} />
       ))}
       {level('help', (
         <HelpScreen open={stack.includes('help')} onBack={back} />

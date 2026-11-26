@@ -77,6 +77,9 @@ export interface StoreEntry {
   taxId?: string
   isDefault: boolean
   payments: string   // "$1,240 · 32 payments"
+  /** A new name waiting for MeshPort's review; customers see publicName (or the business name). */
+  nameInReview?: boolean
+  publicName?: string | null
 }
 
 export interface StoresViewProps {
@@ -122,6 +125,11 @@ export function StoresView({ stores, onAdd, onEdit, onQr, onSetPrimary, addLocke
                     )}
                   </div>
                   <p className="text-xs text-text-muted mt-0.5">{store.type}</p>
+                  {store.nameInReview && (
+                    <p className="text-xs text-warning-text mt-0.5">
+                      Name in review - customers see {store.publicName ? `“${store.publicName}”` : 'your business name'} until it’s approved
+                    </p>
+                  )}
                   {store.address && (
                     <p className="text-xs text-text-muted truncate mt-0.5">{store.address}</p>
                   )}
