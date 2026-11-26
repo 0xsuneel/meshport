@@ -48,6 +48,7 @@ import {
   ARC, ARC_RPCS, ARC_CHAIN_INLINE, EXTERNAL_CHAINS,
   resolveRpcList, isArc,
 } from './chains'
+import { arcTransport } from '@/lib/arc'
 import { orderEndpoints, recordSuccess, recordFailure, STAGGER_MS } from './endpointHealth'
 import { countRequest, countError } from './rpcMetrics'
 import type { ChainId } from './types'
@@ -165,7 +166,10 @@ export function getClient(chain: ChainId): ArcPublicClient {
   const rpcs = orderEndpoints(allEndpointsFor(chain))
   const client = createPublicClient({
     chain: viemChainFor(chain, rpcs),
-    transport: fallback(rpcs.map(u => instrumentedHttp(u, chain)), { rank: false }),
+    // Arc: reads straight to Circle's node, sends via the proxy (arcTransport).
+    // Through the proxy only, a receipt wait's 250 ms polling was one Vercel
+    // function call per poll.
+    transport: isArc(chain) ? arcTransport({ retryCount: 2 }) : fallback(rpcs.map(u => instrumentedHttp(u, chain)), { rank: false }),
     // Receipt waits (Bring, gasless bridge) re-check this often. viem's 4s
     // default added up to 4s after a transaction had already landed; Arc
     // confirms in under a second, other chains in 1-12s.

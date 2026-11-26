@@ -105,3 +105,17 @@ not an unlimited place to move load either. Functions per deployment are
    pruned before: chain_events + shadow reports, cron history (hourly),
    push subscriptions, pg_net responses. Kept: fx_rate_history (rate
    charts), and everything a user owns.
+
+## Vercel side: Arc reads from the device (26 Nov)
+
+The app sent ~2,000 Arc requests a day through /api/arc-rpc for 17 people
+(eth_getLogs 893, eth_blockNumber 850, eth_chainId 181, …) - one Vercel
+function call each, ~36M a month at 10k people against Vercel Hobby's 1M.
+Now, as a wallet like MetaMask does, reads go from the device to Circle's
+Arc node: arcTransport (30+ viem clients: P2P escrow, batch pay, rewards,
+refunds) and ProviderManager's Arc client (receipt waits polling every
+250 ms) are built on arcRpcJson; eth_getLogs, eth_getTransactionByHash,
+eth_getCode, eth_feeHistory, eth_getBlockByHash joined the direct reads;
+eth_chainId is answered locally. Sends and nonce reads stay on the proxy;
+a refused/failed direct read falls back to it. Still on the proxy: the
+ethers providers of the bridge pages (Circle kit) and getEthersProvider.

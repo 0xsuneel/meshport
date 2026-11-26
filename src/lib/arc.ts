@@ -20,11 +20,18 @@ export const USDC_CONTRACT = ARC_TOKENS.USDC.contract
 export const ARC_RPCS = REGISTRY_ARC_RPCS
 export const ARC_NETWORK = REGISTRY_ARC_NETWORK
 
-// ─── viem transport that fails over across ARC_RPCS ────────────────────────
-// Drop-in replacement for `http(ARC_TESTNET.rpcUrl, opts)` - same options,
-// but retries against the next endpoint instead of failing outright when
-// one Arc RPC node is down or lagging.
+// ─── viem transport for Arc ─────────────────────────────────────────────────
+// Drop-in replacement for `http(ARC_TESTNET.rpcUrl, opts)` (timeout,
+// retryCount). Built on arcRpcJson, so plain reads go straight to Circle's Arc
+// node and sends / nonce reads go through the proxy, which knows about sends.
+// It used to send everything through /api/arc-rpc - one Vercel function call
+// per request (~120 per person per day; Vercel Hobby allows 1M a month), the
+// way a phone wallet would not: MetaMask reads the chain from the device.
 export function arcTransport(opts?: Parameters<typeof http>[1]) {
+  return arcJsonTransport({ timeout: opts?.timeout, retryCount: opts?.retryCount ?? 3 })
+}
+/** The proxy-only transport (all calls through /api/arc-rpc). */
+export function arcProxyTransport(opts?: Parameters<typeof http>[1]) {
   return fallback(ARC_RPCS.map(url => http(url, opts)))
 }
 
@@ -100,9 +107,16 @@ const DIRECT_READ_METHODS: ReadonlySet<string> = new Set([
   // The latest block (fee data before a send - Circle's kit reads it on every
   // deposit/approve): a plain read, it went through the proxy (+~350 ms).
   'eth_getBlockByNumber',
+  // Transfer logs (deposit watcher, escrow events), transaction lookups,
+  // contract code, fee history: plain reads too. An error answer (a range the
+  // node refuses, a rate limit) still falls back to the proxy.
+  'eth_getLogs', 'eth_getTransactionByHash', 'eth_getCode', 'eth_feeHistory', 'eth_getBlockByHash',
   // Not eth_getTransactionCount: a nonce is read right after a send, and the
   // proxy is the path that knows about that send.
 ])
+// Arc Testnet's chain id is fixed: answered here, no request at all (it was
+// ~180 proxy calls a day from libraries checking the network).
+const ARC_CHAIN_ID_HEX = '0x' + ARC.chainId.toString(16)
 const DIRECT_PARK_MS = 60_000
 const DIRECT_BLOCKED_PARK_MS = 10 * 60_000 // network / CORS: this origin can't use it
 let directParkedUntil = 0
@@ -167,6 +181,9 @@ const isLostRequest = (e: unknown) => e instanceof Error
   && (e.name === 'TimeoutError' || e.name === 'AbortError' || e instanceof TypeError || /^Arc RPC (5\d\d|429) /.test(e.message))
 
 export async function arcRpcJson(body: unknown, timeoutMs = 10000): Promise<any> {
+  if (body && typeof body === 'object' && !Array.isArray(body) && (body as { method?: unknown }).method === 'eth_chainId') {
+    return { jsonrpc: '2.0', id: (body as { id?: unknown }).id ?? 1, result: ARC_CHAIN_ID_HEX }
+  }
   noteRpcSent()
   if (isDirectReadable(body)) {
     const fast = await directRead(body, timeoutMs)
