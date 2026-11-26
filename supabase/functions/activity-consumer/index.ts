@@ -60,6 +60,15 @@ function json(body: unknown, status = 200): Response {
 const ARC_EXPLORER = 'https://explorer.testnet.arc.io' // Arc's official explorer (docs.arc.io)
 
 /**
+ * Activity shows receives on Arc only. Money arriving on another chain
+ * belongs to Multichain (claimed over to Arc there), not the personal
+ * Activity list - and every row here links to Arc's explorer. This used to
+ * hold only because other chains' events stayed 'pending'; the Alchemy
+ * webhook records them confirmed, so it is stated outright now.
+ */
+const ACTIVITY_CHAIN = 'arc'
+
+/**
  * How far back to look for uncredited events.
  *
  * Bounded so a pass is O(recent) rather than O(history) - chain_events retention
@@ -161,6 +170,7 @@ async function runPass(supabase: SupabaseClient) {
   const { data: events, error } = await supabase
     .from('chain_events')
     .select('id, chain_id, event_type, tx_hash, wallet_address, assets, metadata, status, created_at')
+    .eq('chain_id', ACTIVITY_CHAIN)
     .in('event_type', [...CREDIT_EVENT_TYPES])
     .eq('status', CREDITABLE_STATUS)
     .not('tx_hash', 'is', null)
@@ -252,7 +262,8 @@ Deno.serve(async (req: Request) => {
       const { data: events, error } = await supabase
         .from('chain_events')
         .select('id, chain_id, event_type, tx_hash, wallet_address, assets, metadata, status, created_at')
-        .in('event_type', [...CREDIT_EVENT_TYPES])
+        .eq('chain_id', ACTIVITY_CHAIN)
+    .in('event_type', [...CREDIT_EVENT_TYPES])
         .eq('status', CREDITABLE_STATUS)
         .not('tx_hash', 'is', null)
         .not('wallet_address', 'is', null)
