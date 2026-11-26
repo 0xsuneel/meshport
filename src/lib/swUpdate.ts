@@ -424,9 +424,9 @@ export function showUpdating(): void {
  */
 function renderProgress(fraction: number): void {
   try {
-    // In use (no opening screen, no update screen): only the thin bar.
-    const splashUp = (() => { const sp = document.getElementById('splash'); return !!sp && !sp.classList.contains('splash-hide') })()
-    if (!splashUp && !document.documentElement.classList.contains('mp-updating')) { renderUpdateBar(fraction); return }
+    // In use (no opening screen, no update screen): nothing at all - a new
+    // version downloads quietly. Update bars belong to the update screen only.
+    if (!onUpdateScreen()) { clearUpdateLeftovers(); return }
     const pct = Math.max(0, Math.min(100, Math.round(fraction * 100)))
     const splash = document.getElementById('splash')
     if (splash && !splash.classList.contains('splash-hide')) splash.setAttribute('data-update-pct', ` ${pct}%`)
@@ -456,38 +456,44 @@ function renderProgress(fraction: number): void {
   } catch { /* cosmetic only */ }
 }
 
-// ── The thin bar: a new version downloading while the app is in use ────────
-// 3 px across the very top, over everything but taking no space and no taps;
-// gone when the download is done. The switch itself happens later, never
-// over the app being used (switchQuietly / the next open).
-let barDone: ReturnType<typeof setTimeout> | undefined
-function renderUpdateBar(fraction: number): void {
+/** The opening screen, or the "Updating MeshPort…" screen, is on screen. */
+function onUpdateScreen(): boolean {
+  const sp = document.getElementById('splash')
+  return (!!sp && !sp.classList.contains('splash-hide')) || !!document.getElementById('mp-updating')
+}
+
+/**
+ * Anything an update screen left behind once the app is in use: the progress
+ * bar, the thin bar, the mp-updating flag. The opening screen can close
+ * while a download is still reporting (after an update reload it carries the
+ * "Updating" line), and the bar it drew used to stay over the app.
+ */
+function clearUpdateLeftovers(): void {
   try {
-    let bar = document.getElementById('mp-update-bar')
-    if (!bar) {
-      bar = document.createElement('div')
-      bar.id = 'mp-update-bar'
-      bar.setAttribute('role', 'progressbar')
-      bar.setAttribute('aria-label', 'Downloading the new version of MeshPort')
-      bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', '100')
-      Object.assign(bar.style, {
-        position: 'fixed', top: '0', left: '0', right: '0', height: '3px', zIndex: '10000', pointerEvents: 'none',
-        background: 'color-mix(in srgb, var(--brand, #12665F) 18%, transparent)',
-      })
-      const fill = document.createElement('div')
-      Object.assign(fill.style, { height: '100%', width: '0%', background: 'var(--brand, #12665F)', transition: 'width .3s ease' })
-      bar.appendChild(fill)
-      document.body.appendChild(bar)
-    }
-    const pct = Math.max(0, Math.min(100, Math.round(fraction * 100)))
-    bar.setAttribute('aria-valuenow', String(pct))
-    ;(bar.firstElementChild as HTMLElement).style.width = `${pct}%`
-    clearTimeout(barDone)
-    // Done - or no word for a while (the download stopped): it goes.
-    barDone = setTimeout(removeUpdateBar, pct >= 100 ? 600 : 15_000)
+    document.getElementById('mp-update-progress')?.remove()
+    removeUpdateBar()
+    if (!document.getElementById('mp-updating')) document.documentElement.classList.remove('mp-updating')
   } catch { /* cosmetic only */ }
 }
 
+// The moment the opening screen closes, clear what it left.
+try {
+  const sp = typeof document !== 'undefined' ? document.getElementById('splash') : null
+  if (sp && typeof MutationObserver !== 'undefined') {
+    const mo = new MutationObserver(() => {
+      if (sp.classList.contains('splash-hide') && !document.getElementById('mp-updating')) { clearUpdateLeftovers(); mo.disconnect() }
+    })
+    mo.observe(sp, { attributes: true, attributeFilter: ['class'] })
+    if (sp.classList.contains('splash-hide')) clearUpdateLeftovers()
+  } else if (typeof document !== 'undefined' && !sp) clearUpdateLeftovers()
+} catch { /* cosmetic only */ }
+
+// ── The thin bar: kept only so an old one can be removed ─────────────────────
+// It used to show a new version downloading while the app was in use; update
+// bars now show on the update screen only (renderProgress).
+// 3 px across the very top, over everything but taking no space and no taps;
+// gone when the download is done. The switch itself happens later, never
+// over the app being used (switchQuietly / the next open).
 function removeUpdateBar(): void {
   try { document.getElementById('mp-update-bar')?.remove() } catch { /* cosmetic only */ }
 }
