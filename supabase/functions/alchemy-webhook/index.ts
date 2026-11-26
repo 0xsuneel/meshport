@@ -9,13 +9,30 @@ import { getServiceRoleKey } from '../_shared/serviceKey.ts'
 import { ALCHEMY_NETWORKS, type AlchemyActivity, toChainEvent, validSignature } from './lib.ts'
 
 const lc = (a?: string | null) => (a ?? '').toLowerCase()
+
+// Signing keys: the ALCHEMY_WEBHOOK_SIGNING_KEYS secret, else the vault
+// secret 'alchemy_webhook_signing_keys' (public.alchemy_signing_keys(),
+// service role only). Kept in this worker's memory for 10 minutes.
+let keyCache: { keys: string[]; at: number } | null = null
+const split = (s: string | null | undefined) => (s ?? '').split(',').map(k => k.trim()).filter(Boolean)
+// deno-lint-ignore no-explicit-any
+async function signingKeys(db: any): Promise<string[]> {
+  const env = split(Deno.env.get('ALCHEMY_WEBHOOK_SIGNING_KEYS'))
+  if (env.length) return env
+  if (keyCache && Date.now() - keyCache.at < 10 * 60_000) return keyCache.keys
+  const { data, error } = await db.rpc('alchemy_signing_keys')
+  if (error) { console.error('[alchemy-webhook] signing keys read failed:', error.message); return keyCache?.keys ?? [] }
+  keyCache = { keys: split(data as string | null), at: Date.now() }
+  return keyCache.keys
+}
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } })
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
   const body = await req.text()
-  const keys = (Deno.env.get('ALCHEMY_WEBHOOK_SIGNING_KEYS') ?? '').split(',').map(s => s.trim()).filter(Boolean)
-  if (!keys.length) { console.error('[alchemy-webhook] ALCHEMY_WEBHOOK_SIGNING_KEYS not set'); return json({ error: 'not configured' }, 503) }
+  const db = createClient(Deno.env.get('SUPABASE_URL') ?? '', getServiceRoleKey(), { auth: { persistSession: false } })
+  const keys = await signingKeys(db)
+  if (!keys.length) { console.error('[alchemy-webhook] no signing keys (env or vault)'); return json({ error: 'not configured' }, 503) }
   if (!(await validSignature(body, req.headers.get('x-alchemy-signature') ?? '', keys))) return json({ error: 'Forbidden' }, 403)
 
   let payload: { type?: string; event?: { network?: string; activity?: AlchemyActivity[] } }
@@ -26,7 +43,6 @@ Deno.serve(async (req) => {
   if (!chain) return json({ ok: true, ignored: payload.event?.network ?? null })
 
   const activity = payload.event?.activity ?? []
-  const db = createClient(Deno.env.get('SUPABASE_URL') ?? '', getServiceRoleKey(), { auth: { persistSession: false } })
 
   // Reorged-out activity: mark what it produced, never delete.
   const removed = activity.filter(a => a.log?.removed && a.hash).map(a => lc(a.hash))

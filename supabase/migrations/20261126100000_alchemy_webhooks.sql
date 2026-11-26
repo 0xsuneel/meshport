@@ -60,3 +60,18 @@ select cron.schedule('alchemy-addresses-full', '37 4 * * *', $cron$
     timeout_milliseconds := 60000)
   where exists (select 1 from public.alchemy_webhooks where active);
 $cron$);
+
+-- Signing keys can also live in vault (secret 'alchemy_webhook_signing_keys',
+-- comma-separated) when the Edge Function secret cannot be set; read by
+-- alchemy-webhook through this service-role-only function.
+create or replace function public.alchemy_signing_keys()
+returns text
+language sql
+stable
+security definer
+set search_path = public, vault
+as $$
+  select decrypted_secret from vault.decrypted_secrets where name = 'alchemy_webhook_signing_keys' limit 1
+$$;
+revoke all on function public.alchemy_signing_keys() from public, anon, authenticated;
+grant execute on function public.alchemy_signing_keys() to service_role;
