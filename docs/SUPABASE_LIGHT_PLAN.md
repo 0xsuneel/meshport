@@ -105,32 +105,3 @@ not an unlimited place to move load either. Functions per deployment are
    pruned before: chain_events + shadow reports, cron history (hourly),
    push subscriptions, pg_net responses. Kept: fx_rate_history (rate
    charts), and everything a user owns.
-
-## Reference: how Acme (app.acme.money) does it
-
-REA `analyze-javascript-application` over the 125 public JS chunks of
-app.acme.money (26 Nov 2026; evidence
-`ev_b7ffae005d9cc3bb678b93e9d8bb372828e588555143b92b5a1d7d7b96c0dbc1`,
-graph coverage partial - 100k-node cap), plus a string inventory of the same
-files for hosts and paths.
-
-- Next.js front end on Vercel (`dpl_` deployment ids); no BaaS: zero
-  references to Supabase, Firebase, Convex, Appwrite, Hasura, GraphQL.
-- Own always-on API servers: `evm-api.acme.money` and
-  `mobile-api.acme.money/api/v1` (axios clients) - users, KYC, Stripe
-  checkout, challenges/leaderboards, social-pay, `/token/balances`,
-  `/moralis/...` (balances and token data from Moralis, server-side).
-- Login, sessions and embedded wallets: Privy (`auth.privy.io`, its
-  `/api/v1/siwe|passkeys|oauth|passwordless...` routes) - not their DB.
-- Wallet history: Reown/WalletConnect account API
-  (`/v1/account/{address}/history`) - a third-party indexer, not their DB.
-- Bridging: Relay API called straight from the browser (`api.relay.link`).
-- Caching: React Query `staleTime` 30 s / 2 min / 5 min; no WebSocket to
-  their own backend found in the bundle (only WalletConnect relay).
-- Images on Bunny CDN (`acmemoney.b-cdn.net`); self-hosted analytics.
-
-What MeshPort takes from it: the database holds only what is MeshPort's own
-(profiles, contacts, chat, merchant orders); balances, history, bridging and
-login state come from specialist providers or the chain, fetched on demand
-and cached on the device; no always-open socket per user. Unknown from a
-bundle: what runs behind their API servers.
