@@ -60,7 +60,7 @@ type State = {
 let state: State = { loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null }
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach(l => l())
-const set = (s: State) => { state = s; if (s.loaded) setRegisteredBusinessName(s.application?.businessName || s.storeName); emit(); if (s.loaded) rememberHint(s.status === 'approved', s.accountType === 'business') }
+const set = (s: State) => { state = s; if (s.loaded) setRegisteredBusinessName(s.storeName || s.application?.businessName); emit(); if (s.loaded) rememberHint(s.status === 'approved', s.accountType === 'business') }
 
 // Display hint only: the last known "is a merchant" for this wallet, so the
 // screen opens with the right labels (Cross-chain Transfer / Manage money) instead of

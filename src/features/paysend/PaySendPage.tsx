@@ -965,7 +965,7 @@ export function PaySendPage() {
       const noteFailed = (err: unknown, txHash?: string) => void recordFailure({
         feature: 'pay', walletAddress: useAuthStore.getState().walletAddress, amount: numAmount, token,
         counterparty: toAddr, txHash, failure: classifyFailure(err, { reverted: !!txHash }),
-        metadata: { toUsername: recipient?.isUsername ? recipient.display : undefined, ...(merchantPayCode ? { merchantOrder: merchantOrderNumber ?? undefined, merchantOrderKind: merchantOrderKind === 'bill' ? 'invoice' : 'request', merchantPersonal: merchantOrderKind === 'bill' ? undefined : merchantOrderKind === 'request', merchantVia: merchantOrderKind === 'shop' ? 'shop_qr' : undefined, merchantStore: merchantOrderKind === 'shop' ? merchantStoreId ?? undefined : undefined } : {}) },
+        metadata: { toUsername: recipient?.isUsername ? recipient.display : undefined, ...(merchantPayCode ? { merchantOrder: merchantOrderNumber ?? undefined, merchantOrderKind: merchantOrderKind === 'bill' ? 'invoice' : 'request', merchantPersonal: merchantOrderKind === 'bill' ? undefined : merchantOrderKind === 'request', merchantVia: merchantOrderKind === 'shop' ? 'shop_qr' : undefined, merchantStoreId: merchantOrderKind === 'shop' ? merchantStoreId ?? undefined : undefined } : {}) },
       })
       const result = await (token === 'EURC'
         ? sendEURC({ signer: activeSigner, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })

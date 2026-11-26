@@ -21,7 +21,7 @@ import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { TxDetailPage, type TxDetail, type TxParty } from '@/components/ui/TxDetailPage'
 import { SearchField } from '@/components/ui/SearchField'
 import { useMerchant, isMerchantClaim } from '@/lib/merchant'
-import { orderTitle, shopReceivedTitle, displayOrderNumber, shortOrderNumber, type OrderKind } from '@/lib/merchantPay'
+import { orderTitle, shopReceivedTitle, shopFrom, displayOrderNumber, shortOrderNumber, type OrderKind } from '@/lib/merchantPay'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { TokenMenu } from '@/components/ui/TokenMenu'
@@ -308,7 +308,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   const shopPay = (isReceive || isSend) && activityOrderKind(metadata) === 'shop'
   const merchantOrder = (isReceive || isSend) && metadata.merchantOrder && !shopPay ? String(metadata.merchantOrder) : null
   // Which of the business's stores took it (merchant side).
-  const orderStore = isReceive && metadata.merchantStore ? String(metadata.merchantStore) : ''
+  const orderStore = isReceive ? storeNameOf(metadata) : ''
   const subtitle = merchantOrder || shopPay ? (isSend && metadata.merchantName ? String(metadata.merchantName) : `${counterpartyLabel}${orderStore ? ` · ${orderStore}` : ''}`)
                  : isSelfTransfer && (isSend || isReceive) ? 'Self'
                  : isSend     ? counterpartyLabel
@@ -326,7 +326,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   const title = isClaim && metadata.auto_convert ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
               : isClaim && isMerchantClaim(record as any) ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
               : merchantOrder ? paidOrderTitle(metadata, merchantOrder, isReceive, true)
-              : shopPay && isReceive ? shopReceivedTitle()
+              : shopPay && isReceive ? shopReceivedTitle(typeof metadata.merchantName === 'string' ? metadata.merchantName : '')
               : recoveredTitle ? recoveredTitle
               : refund ? 'Refund from'
               // A rewards claim that didn't go through (lib/rewards.ts).
@@ -407,9 +407,23 @@ export function activityOrderKind(md: any): OrderKind | null {
  * (/paylink/<shop>[?store=], as scanning its QR does), so it is a shop payment
  * again - not a plain payment to the shop's wallet. Anything else: Pay.
  */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** The store's name kept on a payment (never an id). */
+function storeNameOf(md: Record<string, any> | null | undefined): string {
+  const v = md?.merchantStore
+  return typeof v === 'string' && !UUID_RE.test(v) ? v : ''
+}
+/** The shop a payment was made to, as it was named when paid:
+ *  "Royal Salons", or "Royal Salons · Cutting Edge" for a branch. */
+export function shopNameOf(md: Record<string, any> | null | undefined): string {
+  return shopFrom(typeof md?.merchantName === 'string' ? md.merchantName : '', storeNameOf(md))
+}
 export function payAgainUrl(cpName: string | null | undefined, counterparty: string | null | undefined, md: Record<string, any> | null | undefined): string {
   if (cpName && md?.merchantVia === 'shop_qr') {
-    const store = typeof md.merchantStore === 'string' && md.merchantStore ? `?store=${encodeURIComponent(md.merchantStore)}` : ''
+    // The store's id: merchantStoreId (older rows kept the id in merchantStore,
+    // which the server now fills with the store's name - only an id is usable).
+    const id = [md.merchantStoreId, md.merchantStore].find(v => typeof v === 'string' && UUID_RE.test(v))
+    const store = id ? `?store=${encodeURIComponent(id)}` : ''
     return `/paylink/${encodeURIComponent(cpName)}${store}`
   }
   return `/pay?to=${encodeURIComponent(cpName && counterparty ? `${cpName}|${counterparty}` : cpName || counterparty || '')}`
@@ -665,7 +679,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const orderWord = merchantOrderDetail ? paidOrderTitle(metadata, merchantOrderDetail, type === 'receive') : ''
   const title = isClaim && (metadata as any)?.merchant ? `Payment received · ${chainLabel(sourceChain) || 'External'}`
               : merchantOrderDetail ? orderWord
-              : type === 'receive' && activityOrderKind(metadata) === 'shop' ? shopReceivedTitle()
+              : type === 'receive' && activityOrderKind(metadata) === 'shop' ? shopReceivedTitle(shopNameOf(metadata))
               : recoveredDetail && isClaim ? `${recoveredDetail} · ${chainLabel(sourceChain) || 'External'}`
               : recoveredDetail ? recoveredDetail
               : refundDetail ? `Refund from ${refundDetail.from}`
@@ -764,7 +778,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     ...(merchantOrderDetail ? [{ label: activityOrderKind(metadata) === 'bill' ? 'Bill' : activityOrderKind(metadata) === 'merchant_request' ? 'Requested Payment' : 'Request', value: displayOrderNumber(merchantOrderDetail) }] : []),
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Business', value: String((metadata as any).merchantName) }] : []),
     // The business's store that took the payment (merchant side).
-    ...(type === 'receive' && (metadata as any)?.merchantStore ? [{ label: 'Store', value: String((metadata as any).merchantStore) }] : []),
+    ...(type === 'receive' && storeNameOf(metadata) ? [{ label: 'Store', value: storeNameOf(metadata) }] : []),
     ...(isClaim && (metadata as any)?.merchant && (record as any).walletAddress
       ? [{ label: 'Paid to', value: `${String((record as any).walletAddress).slice(0, 6)}…${String((record as any).walletAddress).slice(-6)}`, copy: String((record as any).walletAddress) }]
       : []),
@@ -962,7 +976,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const typeRow = (rows as { label: string; value: string }[]).find(r => r.label === 'Type')
   const feeRow = (rows as { label: string; value: string }[]).find(r => /fee/i.test(r.label) && r.value)
   const pageRows = personal ? [
-    { label: 'Type', value: activityOrderKind(metadata) === 'shop' ? (type === 'receive' ? shopReceivedTitle() : 'Shop payment') : typeRow?.value && typeRow.value !== type ? typeRow.value : type === 'send' ? 'Payment' : 'Received' },
+    { label: 'Type', value: activityOrderKind(metadata) === 'shop' ? (type === 'receive' ? shopReceivedTitle(shopNameOf(metadata)) : 'Shop payment') : typeRow?.value && typeRow.value !== type ? typeRow.value : type === 'send' ? 'Payment' : 'Received' },
     { label: 'Network', value: chain === 'Arc' || !chain ? 'Arc Testnet' : chain },
     ...(feeRow ? [{ label: 'Fee', value: feeRow.value }] : []),
     ...(txHash ? [toReceiptRow({ label: 'Transaction hash', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, copy: txHash })] : []),
@@ -1026,7 +1040,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     }
     txDetail = {
       title: 'Payment details', status: receiptStatus, amountLabel: 'Amount', amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC',
-      note: noteText || undefined, pill: shop ? { icon: 'qr', text: type === 'receive' ? shopReceivedTitle() : 'Shop payment' } : merchantOrderDetail ? { icon: 'list', text: orderWord }
+      note: noteText || undefined, pill: shop ? { icon: 'qr', text: type === 'receive' ? shopReceivedTitle(shopNameOf(metadata)) : 'Shop payment' } : merchantOrderDetail ? { icon: 'list', text: orderWord }
         : viaChat ? { icon: 'chat', text: type === 'send' ? 'Paid' : 'Received' }
         : type === 'send' ? { icon: 'pay', text: 'Paid' } : { icon: 'receive', text: 'Received' },
       reason: reasonNote ?? undefined,
