@@ -79,6 +79,9 @@ export interface StoreEntry {
   payments: string   // "$1,240 · 32 payments"
   /** A new name waiting for MeshPort's review; customers see publicName (or the business name). */
   nameInReview?: boolean
+  /** The store's logo (the owner's), and whether a new one waits for review. */
+  logoUrl?: string | null
+  logoInReview?: boolean
   publicName?: string | null
 }
 
@@ -112,9 +115,13 @@ export function StoresView({ stores, onAdd, onEdit, onQr, onSetPrimary, addLocke
               className="bg-card border border-border rounded-2xl p-4 flex flex-col gap-3"
             >
               <div className="flex items-start gap-3">
-                <span className="size-10 rounded-xl bg-brand/10 text-brand-text flex items-center justify-center shrink-0">
-                  <Store className="size-5" />
-                </span>
+                {store.logoUrl
+                  ? <img src={store.logoUrl} alt="" className="size-10 rounded-xl object-cover shrink-0 border border-border" />
+                  : (
+                    <span className="size-10 rounded-xl bg-brand/10 text-brand-text flex items-center justify-center shrink-0">
+                      <Store className="size-5" />
+                    </span>
+                  )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-text-primary truncate">{store.name}</p>
@@ -125,6 +132,9 @@ export function StoresView({ stores, onAdd, onEdit, onQr, onSetPrimary, addLocke
                     )}
                   </div>
                   <p className="text-xs text-text-muted mt-0.5">{store.type}</p>
+                  {store.logoInReview && (
+                    <p className="text-xs text-warning-text mt-0.5">New logo in review - customers see it once it's approved</p>
+                  )}
                   {store.nameInReview && (
                     <p className="text-xs text-warning-text mt-0.5">
                       Name in review - customers see {store.publicName ? `“${store.publicName}”` : 'your business name'} until it’s approved
@@ -204,6 +214,11 @@ export interface StoreFormProps {
   onAddress: (v: string) => void
   taxId: string
   onTaxId: (v: string) => void
+  /** The store's logo: its URL, and a picked file to upload. */
+  logoUrl?: string | null
+  onLogo?: (file: File) => void
+  onRemoveLogo?: () => void
+  logoBusy?: boolean
   busy?: boolean
   onSave: () => void
   onDelete?: () => void
@@ -212,10 +227,33 @@ export interface StoreFormProps {
 
 export function StoreForm({
   name, onName, type, types, onType, address, onAddress, taxId, onTaxId,
-  busy, onSave, onDelete, onCancel,
+  logoUrl, onLogo, onRemoveLogo, logoBusy, busy, onSave, onDelete, onCancel,
 }: StoreFormProps) {
+  const pick = React.useRef<HTMLInputElement>(null)
   return (
     <div className="flex flex-col gap-4">
+      {onLogo && (
+        <div className="flex items-center gap-3">
+          {logoUrl
+            ? <img src={logoUrl} alt="" className="size-14 rounded-2xl object-cover border border-border" />
+            : <span className="size-14 rounded-2xl bg-brand/10 text-brand-text flex items-center justify-center"><Store className="size-6" /></span>}
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold text-text-primary">Store logo</span>
+            <span className="block text-[11px] text-text-muted">On this store's QR page and receipts, once MeshPort checks it. Without one, your business photo shows.</span>
+          </span>
+          <input ref={pick} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) onLogo(f); e.target.value = '' }} />
+          <div className="flex flex-col gap-1 shrink-0">
+            <button type="button" onClick={() => pick.current?.click()} disabled={logoBusy}
+              className="min-h-[36px] px-3 rounded-full border border-border text-[13px] font-semibold text-text-primary disabled:opacity-50">
+              {logoBusy ? <Loader2 className="size-4 animate-spin" /> : logoUrl ? 'Change' : 'Add'}
+            </button>
+            {logoUrl && onRemoveLogo && (
+              <button type="button" onClick={onRemoveLogo} disabled={logoBusy} className="text-[12px] text-danger-text font-semibold">Remove</button>
+            )}
+          </div>
+        </div>
+      )}
       <label className="flex flex-col gap-1.5">
         <span className="text-xs text-text-muted font-medium">Store name</span>
         <input

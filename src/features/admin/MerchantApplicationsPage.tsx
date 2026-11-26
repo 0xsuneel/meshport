@@ -7,7 +7,7 @@ import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { FileText, Store, X } from 'lucide-react'
 import { AdminCard } from '@/components/admin/AdminCard'
 import { useAdminStore } from '@/store/adminStore'
-import { adminListMerchantApplications, adminReviewMerchant, adminListBusinessNameChanges, adminReviewBusinessName, adminListStoreNameChanges, adminReviewStoreName, businessDocUrl, BUSINESS_DOC_KINDS, type BusinessNameChange, type StoreNameChange, type MerchantApplication } from '@/lib/merchant'
+import { adminListMerchantApplications, adminReviewMerchant, adminListBusinessNameChanges, adminReviewBusinessName, adminListStoreNameChanges, adminReviewStoreName, adminListStoreLogoChanges, adminReviewStoreLogo, type StoreLogoChange, businessDocUrl, BUSINESS_DOC_KINDS, type BusinessNameChange, type StoreNameChange, type MerchantApplication } from '@/lib/merchant'
 
 const TABS: Array<{ key: 'pending' | 'approved' | 'rejected' | 'all'; label: string }> = [
   { key: 'pending',  label: 'Pending' },
@@ -34,9 +34,19 @@ export function MerchantApplicationsPage() {
   const [names, setNames] = useState<BusinessNameChange[]>([])
   const [nameBusy, setNameBusy] = useState<string | null>(null)
   const [storeNames, setStoreNames] = useState<StoreNameChange[]>([])
+  const [storeLogos, setStoreLogos] = useState<StoreLogoChange[]>([])
+  const decideLogo = async (c: StoreLogoChange, approve: boolean) => {
+    const reason = approve ? null : window.prompt(`Why is this logo for "${c.storeName ?? c.businessName}" not approved? The business sees this.`)
+    if (!approve && !reason?.trim()) return
+    setNameBusy(c.storeId + ':logo')
+    try { await adminReviewStoreLogo(c.storeId, approve, reason); loadNames() }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    setNameBusy(null)
+  }
   const loadNames = () => {
     adminListBusinessNameChanges().then(setNames).catch(e => setError(e instanceof Error ? e.message : String(e)))
     adminListStoreNameChanges().then(setStoreNames).catch(e => setError(e instanceof Error ? e.message : String(e)))
+    adminListStoreLogoChanges().then(setStoreLogos).catch(e => setError(e instanceof Error ? e.message : String(e)))
   }
   const decideStore = async (c: StoreNameChange, approve: boolean) => {
     const reason = approve ? null : window.prompt(`Why is the store name "${c.pendingName}" not approved? The business sees this.`)
@@ -126,6 +136,32 @@ export function MerchantApplicationsPage() {
                 <button onClick={() => { void decideName(c, true) }} disabled={nameBusy === c.userId}
                   style={{ padding: '8px 12px', borderRadius: 12, background: 'var(--success)', color: '#fff', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Approve</button>
                 <button onClick={() => { void decideName(c, false) }} disabled={nameBusy === c.userId}
+                  style={{ padding: '8px 12px', borderRadius: 12, background: 'transparent', color: 'var(--danger-text)', fontSize: 12, fontWeight: 600, border: '1px solid var(--danger)', cursor: 'pointer' }}>Reject</button>
+              </div>
+            ))}
+          </div>
+        </AdminCard>
+      )}
+      {storeLogos.length > 0 && (
+        <AdminCard padding={14}>
+          <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Store logo changes ({storeLogos.length})</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {storeLogos.map(c => (
+              <div key={c.storeId} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                {c.currentLogo
+                  ? <img src={c.currentLogo} alt="Current logo" style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover', opacity: 0.6 }} />
+                  : <span style={{ width: 40, height: 40, borderRadius: 10, border: '1px dashed var(--border)', display: 'inline-block' }} />}
+                <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>→</span>
+                <a href={c.pendingLogo} target="_blank" rel="noreferrer">
+                  <img src={c.pendingLogo} alt="New logo" style={{ width: 56, height: 56, borderRadius: 12, objectFit: 'cover', border: '1px solid var(--border)' }} />
+                </a>
+                <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, wordBreak: 'break-word' }}>{c.businessName ?? c.username} · {c.storeName}</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-secondary)' }}>{c.username ? `${c.username}.arc · ` : ''}{new Date(c.pendingSince).toLocaleString()}</p>
+                </div>
+                <button onClick={() => { void decideLogo(c, true) }} disabled={nameBusy === c.storeId + ':logo'}
+                  style={{ padding: '8px 12px', borderRadius: 12, background: 'var(--success)', color: '#fff', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Approve</button>
+                <button onClick={() => { void decideLogo(c, false) }} disabled={nameBusy === c.storeId + ':logo'}
                   style={{ padding: '8px 12px', borderRadius: 12, background: 'transparent', color: 'var(--danger-text)', fontSize: 12, fontWeight: 600, border: '1px solid var(--danger)', cursor: 'pointer' }}>Reject</button>
               </div>
             ))}

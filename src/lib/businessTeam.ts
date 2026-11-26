@@ -13,12 +13,14 @@ import type { MerchantRefund } from '@/lib/merchantRefunds'
 /** `name` is the owner's own label; customers see `publicName` (null until
  *  MeshPort has reviewed it - they see just the business name then).
  *  `nameInReview`: a new name is waiting for that review. */
-export type Store = { id: string; name: string; publicName: string | null; nameInReview: boolean; type: string | null; address: string | null; taxId: string | null; isDefault: boolean; createdAt: string }
+export type Store = { id: string; name: string; publicName: string | null; nameInReview: boolean
+  /** The owner's logo for this store, what customers see (after review), and whether a new one is waiting. */
+  logoUrl: string | null; publicLogoUrl: string | null; logoInReview: boolean; type: string | null; address: string | null; taxId: string | null; isDefault: boolean; createdAt: string }
 export type StaffRole = 'cashier' | 'manager'
 export type StaffMember = { id: string; username: string; role: StaffRole; status: 'invited' | 'active'; storeId: string | null; createdAt: string }
 export type Membership = { id: string; ownerAuthUid: string; ownerName: string; ownerUsername: string; role: StaffRole; status: 'invited' | 'active'; storeId: string | null; storeName: string | null; storePublicName: string | null }
 
-const mapStore = (r: any): Store => ({ id: r.id, name: r.name, publicName: r.public_name ?? null, nameInReview: !!r.name_review_since, type: r.type ?? null, address: r.address ?? null, taxId: r.tax_id ?? null, isDefault: !!r.is_default, createdAt: r.created_at })
+const mapStore = (r: any): Store => ({ id: r.id, name: r.name, publicName: r.public_name ?? null, nameInReview: !!r.name_review_since, logoUrl: r.logo_url ?? null, publicLogoUrl: r.public_logo_url ?? null, logoInReview: !!r.logo_review_since, type: r.type ?? null, address: r.address ?? null, taxId: r.tax_id ?? null, isDefault: !!r.is_default, createdAt: r.created_at })
 const fail = (e: { message: string } | null) => { if (e) throw new Error(e.message.replace(/^.*?ERROR:\s*/, '')) }
 
 async function myUid(): Promise<string | null> {
@@ -35,16 +37,29 @@ export async function listStores(): Promise<Store[]> {
   return (data ?? []).map(mapStore)
 }
 
-export async function saveStore(s: { id?: string; name: string; type?: string; address?: string; taxId?: string; isDefault?: boolean }): Promise<Store> {
+export async function saveStore(s: { id?: string; name: string; type?: string; address?: string; taxId?: string; isDefault?: boolean; logoUrl?: string | null }): Promise<Store> {
   const name = s.name.trim()
   if (name.length < 2) throw new Error('Enter the store name')
   const row = { name: name.slice(0, 60), type: s.type || null, address: s.address?.trim().slice(0, 160) || null,
     ...(s.taxId !== undefined ? { tax_id: s.taxId.trim().toUpperCase().slice(0, 40) || null } : {}),
-    ...(s.isDefault !== undefined ? { is_default: s.isDefault } : {}) }
+    ...(s.isDefault !== undefined ? { is_default: s.isDefault } : {}),
+    ...(s.logoUrl !== undefined ? { logo_url: s.logoUrl } : {}) }
   const q = s.id ? supabase.from('business_stores').update(row).eq('id', s.id) : supabase.from('business_stores').insert(row)
   const { data, error } = await q.select('*').single()
   fail(error)
   return mapStore(data)
+}
+
+/** Uploads a store's logo (squared to 512 px) and returns its public URL. */
+export async function uploadStoreLogo(file: File, storeKey: string): Promise<string> {
+  if (!/^image\//.test(file.type)) throw new Error('Pick an image (JPG, PNG or WebP)')
+  if (file.size > 15 * 1024 * 1024) throw new Error('Image too large - up to 15 MB')
+  const { compressImage } = await import('@/lib/imageCompress')
+  const small = await compressImage(file)
+  const name = `store-logos/${storeKey.replace(/[^A-Za-z0-9-]/g, '')}_${Date.now()}.jpg`
+  const { error } = await supabase.storage.from('attachments').upload(name, small, { cacheControl: '31536000', upsert: false, contentType: 'image/jpeg' })
+  fail(error)
+  return `${supabase.storage.from('attachments').getPublicUrl(name).data.publicUrl}?t=${Date.now()}`
 }
 
 export async function deleteStore(id: string): Promise<void> {

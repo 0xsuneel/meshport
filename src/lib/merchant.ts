@@ -373,6 +373,24 @@ export async function adminListStoreNameChanges(): Promise<StoreNameChange[]> {
   return ((data ?? []) as any[]).map(r => ({ storeId: r.store_id, username: r.username ?? null, businessName: r.business_name ?? null,
     currentPublic: r.current_public ?? null, pendingName: r.pending_name, pendingSince: r.pending_since }))
 }
+export type StoreLogoChange = {
+  storeId: string; username: string | null; businessName: string | null; storeName: string | null
+  currentLogo: string | null; pendingLogo: string; pendingSince: string
+}
+/** Store logos waiting for review before customers see them. */
+export async function adminListStoreLogoChanges(): Promise<StoreLogoChange[]> {
+  const { adminDb } = await import('./adminDb')
+  const { data, error } = await adminDb.rpc('admin_store_logo_changes')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as any[]).map(r => ({ storeId: r.store_id, username: r.username ?? null, businessName: r.business_name ?? null,
+    storeName: r.store_name ?? null, currentLogo: r.current_logo ?? null, pendingLogo: r.pending_logo, pendingSince: r.pending_since }))
+}
+export async function adminReviewStoreLogo(storeId: string, approve: boolean, note: string | null): Promise<void> {
+  const { adminDb } = await import('./adminDb')
+  const { error } = await adminDb.rpc('admin_review_store_logo', { p_store: storeId, p_approve: approve, p_note: note })
+  if (error) throw new Error(error.message)
+}
+
 export async function adminReviewStoreName(storeId: string, approve: boolean, note: string | null): Promise<void> {
   const { adminDb } = await import('./adminDb')
   const { error } = await adminDb.rpc('admin_review_store_name', { p_store: storeId, p_approve: approve, p_note: note })

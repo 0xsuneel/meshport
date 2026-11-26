@@ -32,7 +32,7 @@ export function urlFor(n: Pick<AppNotification, 'id' | 'tradeId' | 'type'> & { b
   if (type === 'merchant_refund' || type === 'merchant_order_completed' || type === 'payment_received') return '/activity'
   if (type === 'merchant_bill_reminder') return '/chat'
   if (type === 'reward_earned') return '/rewards'
-  if (type.startsWith('merchant_') || type.startsWith('business_') || type.startsWith('store_name_')) return '/business'
+  if (type.startsWith('merchant_') || type.startsWith('business_') || type.startsWith('store_name_') || type.startsWith('store_logo_')) return '/business'
   return '/notifications'
 }
 

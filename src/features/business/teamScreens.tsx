@@ -2,7 +2,7 @@
 // Visuals from the Arc Studio kit in ./ui; data from lib/businessTeam.
 import { useEffect, useMemo, useState } from 'react'
 import { useUIStore } from '@/store'
-import { listStores, saveStore, deleteStore, setDefaultStore, listStaff, inviteStaff, updateStaff, removeStaff, type Store, type StaffMember, type StaffRole } from '@/lib/businessTeam'
+import { listStores, saveStore, uploadStoreLogo, deleteStore, setDefaultStore, listStaff, inviteStaff, updateStaff, removeStaff, type Store, type StaffMember, type StaffRole } from '@/lib/businessTeam'
 import { BUSINESS_CATEGORIES, toCategory, useBizTerms } from '@/lib/businessCategories'
 import { useMerchant } from '@/lib/merchant'
 import {
@@ -26,7 +26,15 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
   // A new store starts with the category the business applied with.
   const defaultType = toCategory(useMerchant().application?.businessType)
   const [stores, setStores] = useState<Store[] | null>(null)
-  const [edit, setEdit] = useState<{ id?: string; name: string; type: string; address: string; taxId: string } | null>(null)
+  const [edit, setEdit] = useState<{ id?: string; name: string; type: string; address: string; taxId: string; logoUrl?: string | null } | null>(null)
+  const [logoBusy, setLogoBusy] = useState(false)
+  const pickLogo = async (file: File) => {
+    if (!edit) return
+    setLogoBusy(true)
+    try { const url = await uploadStoreLogo(file, edit.id ?? 'new'); setEdit(e => e ? { ...e, logoUrl: url } : e) }
+    catch (e) { toast(e instanceof Error ? e.message : 'Could not upload the logo', 'error') }
+    setLogoBusy(false)
+  }
   const [busy, setBusy] = useState(false)
   const load = () => listStores().then(s => { setStores(s); onChanged(s) }).catch(() => setStores([]))
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
@@ -42,7 +50,7 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
     try {
       const saved = await saveStore({ ...edit, isDefault: !edit.id && !(stores ?? []).length ? true : undefined })
       // A new store name is checked before customers see it (like the business name).
-      if (saved.nameInReview) toast('Saved - customers see your business name until MeshPort approves this store name', 'info')
+      if (saved.nameInReview || saved.logoInReview) toast(`Saved - customers see the new ${saved.nameInReview && saved.logoInReview ? 'name and logo' : saved.nameInReview ? 'store name' : 'logo'} once MeshPort approves it`, 'info')
       changeEdit(null); await load()
     }
     catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
@@ -59,16 +67,18 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
       <div className="px-5 pt-4 pb-6">
         {edit ? (
           <StoreForm name={edit.name} onName={v => setEdit({ ...edit, name: v })} type={edit.type} types={STORE_TYPES} onType={v => setEdit({ ...edit, type: v })}
-            address={edit.address} onAddress={v => setEdit({ ...edit, address: v })} taxId={edit.taxId} onTaxId={v => setEdit({ ...edit, taxId: v })} busy={busy} onSave={save}
+            address={edit.address} onAddress={v => setEdit({ ...edit, address: v })} taxId={edit.taxId} onTaxId={v => setEdit({ ...edit, taxId: v })}
+            logoUrl={edit.logoUrl ?? null} onLogo={pickLogo} onRemoveLogo={() => setEdit({ ...edit, logoUrl: null })} logoBusy={logoBusy}
+            busy={busy || logoBusy} onSave={save}
             onDelete={edit.id ? remove : undefined} onCancel={() => changeEdit(null)} />
         ) : stores === null ? <Skeleton className="h-40 w-full" /> : (
           <StoresView stores={stores.map(s => {
             const p = paymentsByStore.get(s.id)
-            return { id: s.id, name: s.name, type: s.type ?? 'Store', address: s.address ?? undefined, taxId: s.taxId ?? undefined, isDefault: s.isDefault, nameInReview: s.nameInReview, publicName: s.publicName,
+            return { id: s.id, name: s.name, type: s.type ?? 'Store', address: s.address ?? undefined, taxId: s.taxId ?? undefined, isDefault: s.isDefault, nameInReview: s.nameInReview, publicName: s.publicName, logoUrl: s.logoUrl, logoInReview: s.logoInReview,
               payments: p ? `${money(p.total)} · ${p.count} payment${p.count === 1 ? '' : 's'}` : 'No payments yet' }
           })}
             onAdd={() => changeEdit({ name: '', type: defaultType, address: '', taxId: '' })}
-            onEdit={id => { const s = stores.find(x => x.id === id); if (s) changeEdit({ id, name: s.name, type: s.type ?? STORE_TYPES[0], address: s.address ?? '', taxId: s.taxId ?? '' }) }}
+            onEdit={id => { const s = stores.find(x => x.id === id); if (s) changeEdit({ id, name: s.name, type: s.type ?? STORE_TYPES[0], address: s.address ?? '', taxId: s.taxId ?? '', logoUrl: s.logoUrl }) }}
             onSetPrimary={async id => { try { await setDefaultStore(id); await load(); toast('Main store updated', 'success') } catch (e) { toast(e instanceof Error ? e.message : 'Could not update', 'error') } }}
             onQr={onQr} addLockedNote={addLockedNote} />
         )}
