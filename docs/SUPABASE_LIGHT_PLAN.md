@@ -96,7 +96,15 @@ not an unlimited place to move load either. Functions per deployment are
    filtered to `type=eq.payment_sent`, its P2P listener to this person's
    trades (buyer_id / seller_id). messages and p2p_trades are RLS-limited to
    participants, so their other listeners only reach the people involved.
-5. **Retention**: rpc_usage, client_errors, cron history, net._http_response.
+5. **Retention** (done 26 Nov, migration 20261126170000): prune_logs() daily
+   at 03:29 - rpc_usage 14 days (admin reads 7), client_errors 30,
+   wallet_events 30, move_timings 90. First run removed 14,829 rpc_usage
+   rows and 70 error rows; a one-time VACUUM FULL of cron.job_run_details
+   (13 MB → 0.7 MB for 700 rows), rpc_usage and the empty wallet_audit_log
+   took the database from 71 MB to 52 MB (Free plan: 500 MB). Already
+   pruned before: chain_events + shadow reports, cron history (hourly),
+   push subscriptions, pg_net responses. Kept: fx_rate_history (rate
+   charts), and everything a user owns.
 
 ## Reference: how Acme (app.acme.money) does it
 
