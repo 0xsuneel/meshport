@@ -1107,9 +1107,16 @@ export function PaySendPage() {
           const { ensureConversation, persistPaymentCard, touchConversation } = await import('@/lib/chatService')
           // Paying an order by link / QR: the chat gets the same payment card
           // as paying the request in chat - with "Bill ORD-… · Paid in full".
-          // A Shop QR payment has no number but is still tagged (" · Payment").
           const orderTag = merchantPayCode && (merchantOrderNumber || merchantOrderKind === 'shop') ? paymentOrderTag(merchantOrderKind, merchantOrderNumber) : ''
-          const chatName = recipient.isUsername ? recipient.display.replace('.arc', '') : merchantPayCode ? merchantUsername : null
+          // A Shop QR payment is a counter payment, not a conversation (as in
+          // Google Pay, PhonePe, Venmo): no chat card. Both sides already get
+          // it in Activity and a notification (merchant-pay: "Payment
+          // Received" / "Payment Paid"); the details screen's History lists
+          // past payments to the shop and Chat starts a conversation only
+          // when the customer wants one. Bills and requests paid by link
+          // still get their card - those belong to a conversation.
+          const shopCounterPayment = !!merchantPayCode && merchantOrderKind === 'shop'
+          const chatName = shopCounterPayment ? null : recipient.isUsername ? recipient.display.replace('.arc', '') : merchantPayCode ? merchantUsername : null
           if (chatName && user) {
             await ensureAnonSession()
             const name = chatName
