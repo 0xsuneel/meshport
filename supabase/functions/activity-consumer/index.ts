@@ -82,7 +82,13 @@ const LOOKBACK_HOURS = 2
 /** Per-pass cap, so one invocation cannot run unboundedly. */
 const MAX_EVENTS_PER_PASS = 200
 
+// Routine progress (a pass started/ended, a range scanned, a cursor read or
+// moved) is not written: every log line counts toward the Free plan's 1 GB of
+// log ingestion a month, and these ran on every pass. Deposits found, credit
+// decisions, skips, stalls and failures are still logged.
+const ROUTINE_EVENT = /^(pass_start|pass_end|pass_done)$|_scanned$|_cursor_read$|_cursor_advanced$/
 function logEvent(event: string, fields: Record<string, unknown> = {}): void {
+  if (ROUTINE_EVENT.test(event)) return
   console.log(JSON.stringify({ fn: 'activity-consumer', event, ts: new Date().toISOString(), ...fields }))
 }
 

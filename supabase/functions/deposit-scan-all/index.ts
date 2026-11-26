@@ -350,7 +350,13 @@ async function getCurrentArcBlockNumber(): Promise<number> {
 // produced a delayed row. One JSON line per event, so a log query can
 // answer "what was the cursor / latest block / candidates / inserts for
 // this pass" without guessing from prose.
+// Routine progress (a pass started/ended, a range scanned, a cursor read or
+// moved) is not written: every log line counts toward the Free plan's 1 GB of
+// log ingestion a month, and these ran on every pass. Deposits found, credit
+// decisions, skips, stalls and failures are still logged.
+const ROUTINE_EVENT = /^(pass_start|pass_end|pass_done)$|_scanned$|_cursor_read$|_cursor_advanced$|_candidates_matched$/
 function logEvent(event: string, fields: Record<string, unknown> = {}): void {
+  if (ROUTINE_EVENT.test(event)) return
   console.log(JSON.stringify({ fn: 'deposit-scan-all', event, ts: new Date().toISOString(), ...fields }))
 }
 

@@ -845,7 +845,6 @@ async function markFailed(supabase: SupabaseClient, claim: Claim, errorMsg: stri
 }
 async function advanceClaim(supabase: SupabaseClient, claim: Claim) {
   for (let i = 0; i < 4; i++) {
-    console.log('processing', claim.id)
     const { data: latest, error: fetchErr } = await supabase
       .from('claims').select('*').eq('id', claim.id).single()
     if (fetchErr) {
@@ -853,7 +852,6 @@ async function advanceClaim(supabase: SupabaseClient, claim: Claim) {
       return
     }
     if (latest.status === 'completed' || latest.status === 'failed') return
-    console.log('incrementing', claim.id)
     const { data: incrementedRaw, error: incErr } = await supabase.rpc('increment_claim_attempts', {
       p_claim_id: claim.id,
     })
@@ -863,7 +861,6 @@ async function advanceClaim(supabase: SupabaseClient, claim: Claim) {
       return
     }
     const incremented = Array.isArray(incrementedRaw) ? incrementedRaw[0] : incrementedRaw
-    console.log('increment success', claim.id, incremented?.attempts)
     if (latest.status === 'settling') {
       const settlingStartMs = latest.settling_at ? new Date(latest.settling_at).getTime() : Date.now()
       if (Date.now() - settlingStartMs >= SETTLING_TIMEOUT_MS) {
@@ -946,8 +943,6 @@ async function checkStuckClaims(supabase: SupabaseClient) {
 }
 async function processPass(supabase: SupabaseClient, claimId?: string) {
   const claims = await fetchDueClaims(supabase, claimId)
-  console.log('fetchDueClaims', claims.length)
-  console.log(claims.map(c => ({ id: c.id, status: c.status, attempts: c.attempts, updated_at: (c as any).updated_at })))
   await Promise.all(claims.map(c => advanceClaim(supabase, c).catch(e => {
     console.error(`[claim-worker] advance ${c.id} failed:`, serializeError(e))
     return persistErrorBestEffort(supabase, c.id, `advanceClaim threw: ${serializeError(e)}`)
