@@ -20,6 +20,7 @@
  * question.
  */
 import { supabase } from '@/lib/supabase'
+import { subscribeWithRetry } from '@/lib/chatService'
 import { mapChainEventRow, latencyStats, type ShadowEvent } from './shadowEventMap'
 import { createSyncCoordinator } from './SyncCoordinator'
 import { refreshScope, notifyExternalBalanceChanged } from './BlockchainManager'
@@ -73,7 +74,7 @@ type Listener = (e: ShadowEvent) => void
 const MAX_RETAINED = 200
 
 class ShadowEventBus {
-  private channel: ReturnType<typeof supabase.channel> | null = null
+  private channel: (() => void) | null = null
   private listeners = new Set<Listener>()
   private observed: ShadowEvent[] = []
   private walletFilter: string | null = null
@@ -93,8 +94,7 @@ class ShadowEventBus {
     // every other user's events into this tab. Unfiltered otherwise.
     const filter = next ? `wallet_address=eq.${next}` : undefined
 
-    this.channel = supabase
-      .channel(`shadow-chain-events${next ? `-${next.slice(0, 10)}` : ''}`)
+    this.channel = subscribeWithRetry(supabase, `shadow-chain-events${next ? `-${next.slice(0, 10)}` : ''}`, c => c
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chain_events', ...(filter ? { filter } : {}) },
@@ -117,15 +117,14 @@ class ShadowEventBus {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'activity', ...(filter ? { filter } : {}) },
         (payload: { new: Record<string, unknown> }) => this.ingestActivity(payload.new),
-      )
-      .subscribe()
+      ))
 
     console.info('[shadow-bus] observing chain_events + activity', next ? `for ${next}` : '(all wallets)')
   }
 
   stop(): void {
     if (this.channel) {
-      supabase.removeChannel(this.channel)
+      this.channel()
       this.channel = null
     }
   }

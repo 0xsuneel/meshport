@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { subscribeWithRetry } from './chatService'
 import { adminDb } from './adminDb'
 import { bootPart } from './homeBootstrap'
 
@@ -61,11 +62,10 @@ export async function updateSettingValue(feature: string, value: string): Promis
 
 // ─── Realtime subscription - pushes live toggle changes to every client ─────
 export function subscribeToSettings(onChange: () => void) {
-  const channel = supabase
-    .channel('app_settings_changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, onChange)
-    .subscribe()
-  return () => { supabase.removeChannel(channel) }
+  // A change while paused (app hidden/idle) is re-read on resume.
+  return subscribeWithRetry(supabase, 'app_settings_changes', c => c
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, onChange),
+    { onReconnect: onChange })
 }
 
 // ─── Admin auth ───────────────────────────────────────────────────────────────

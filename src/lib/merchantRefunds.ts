@@ -24,6 +24,7 @@
 import { createPublicClient, createWalletClient, encodeFunctionData, keccak256, toBytes, parseGwei, pad, type Hash, type Hex } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { supabase } from '@/lib/supabase'
+import { subscribeWithRetry } from '@/lib/chatService'
 import { arcTransport } from '@/lib/arc'
 import { ARC_CHAIN_INLINE, circleForwarderMintsTo } from '@/blockchain/chains'
 import { describeFunctionsError } from '@/lib/describeFunctionsError'
@@ -74,9 +75,9 @@ export async function listMyRefunds(): Promise<MerchantRefund[]> {
 }
 
 export function subscribeMyRefunds(onChange: () => void): () => void {
-  const ch = supabase.channel(`merchant-refunds-${Math.random().toString(36).slice(2)}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_refunds' }, onChange).subscribe()
-  return () => { supabase.removeChannel(ch) }
+  return subscribeWithRetry(supabase, 'merchant-refunds', c => c
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_refunds' }, onChange),
+    { onReconnect: onChange })
 }
 
 async function record(target: { paymentId?: string; receiptId?: string }, txHash: string, route: 'contract' | 'cctp' | 'chain', reason: string, amount?: number): Promise<MerchantRefund> {

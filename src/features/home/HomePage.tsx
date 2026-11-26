@@ -2547,21 +2547,17 @@ export function HomePage() {
   useEffect(() => {
     if (!user?.id) return
     let stopped = false
-    let channel: any = null
-    let client: any = null
-    import('@/lib/supabase').then(({ supabase }) => {
+    let unsub: (() => void) | null = null
+    Promise.all([import('@/lib/supabase'), import('@/lib/chatService')]).then(([{ supabase }, { subscribeWithRetry }]) => {
       if (stopped) return
-      client = supabase
-      channel = supabase
-        .channel(`p2p-trade-status-${user.id.slice(0, 8)}-${Math.random().toString(36).slice(2, 8)}`)
+      unsub = subscribeWithRetry(supabase, `p2p-trade-status-${user.id.slice(0, 8)}`, c => c
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'p2p_trades' }, (payload: any) => {
           const row = payload.new
           if (row?.buyer_id !== user.id && row?.seller_id !== user.id) return
           setTradeLiveById(prev => ({ ...prev, [row.id]: toLive(row) }))
-        })
-        .subscribe()
+        }))
     })
-    return () => { stopped = true; if (channel) client?.removeChannel(channel) }
+    return () => { stopped = true; unsub?.() }
   }, [user?.id])
   // Backup for the live feed: while a card is up for a trade still moving,
   // re-read those trades every few seconds (screen on).
@@ -3035,15 +3031,13 @@ export function HomePage() {
   // ── Realtime: incoming payment notifications ──────────────────────────────
   useEffect(() => {
     if (!walletAddress || !user?.id) return
-    let channel: any
+    let unsubRecv: (() => void) | null = null
     let stoppedRecv = false
-    let recvClient: any = null
-    import('@/lib/supabase').then(({ supabase }) => {
+    Promise.all([import('@/lib/supabase'), import('@/lib/chatService')]).then(([{ supabase }, { subscribeWithRetry }]) => {
       if (stoppedRecv) return
-      recvClient = supabase
-      // Unique per mount (see the trade-status channel above).
-      channel = supabase
-        .channel('recv-' + user.id.slice(0, 8) + '-' + walletAddress.slice(2, 10).toLowerCase() + '-' + Math.random().toString(36).slice(2, 8))
+      // A gap while paused/dropped is covered by the missed-payment catch-up
+      // below (it runs on 'meshport:live-resumed').
+      unsubRecv = subscribeWithRetry(supabase, 'recv-' + user.id.slice(0, 8) + '-' + walletAddress.slice(2, 10).toLowerCase(), c => c
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload: any) => {
           const msg = payload.new
           if (msg.type !== 'payment_sent') return
@@ -3116,9 +3110,9 @@ export function HomePage() {
             refreshBalanceForToken(msg.token_symbol)
             import('@/lib/recentContacts').then(({ invalidateRecentContactsCache }) => invalidateRecentContactsCache())
           } catch {}
-        }).subscribe()
+        }))
     })
-    return () => { stoppedRecv = true; if (channel) recvClient?.removeChannel(channel) }
+    return () => { stoppedRecv = true; unsubRecv?.() }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [walletAddress, user?.id])
 
@@ -3240,7 +3234,10 @@ export function HomePage() {
       } catch {}
     }
     const cancelWait = whenNetworkOk(() => { if (!stopped) void run() })
-    return () => { stopped = true; cancelWait() }
+    // Live updates were paused (app hidden/idle): look for what came meanwhile.
+    const onLiveResumed = () => { if (!stopped) void run() }
+    window.addEventListener('meshport:live-resumed', onLiveResumed)
+    return () => { stopped = true; cancelWait(); window.removeEventListener('meshport:live-resumed', onLiveResumed) }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [walletAddress, user?.id])
 
@@ -3844,11 +3841,10 @@ export function HomePage() {
     fullScan()
     const iv = setInterval(fullScan, 5 * 60_000)
 
-    let channel: any
-    import('@/lib/supabase').then(({ supabase }) => {
+    let unsubHub: (() => void) | null = null
+    Promise.all([import('@/lib/supabase'), import('@/lib/chatService')]).then(([{ supabase }, { subscribeWithRetry }]) => {
       if (cancelled) return
-      channel = supabase
-        .channel('multichain-hub-balance-' + walletAddress.slice(2, 10).toLowerCase())
+      unsubHub = subscribeWithRetry(supabase, 'multichain-hub-balance-' + walletAddress.slice(2, 10).toLowerCase(), c => c
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'claims', filter: `wallet_address=eq.${walletAddress.toLowerCase()}` },
           (payload: any) => {
             if (payload.new?.status === 'completed' && payload.old?.status !== 'completed' && payload.new?.source_chain) {
@@ -3860,11 +3856,10 @@ export function HomePage() {
             if (payload.new?.activity_type === 'bridge' && payload.new?.status === 'completed' && payload.old?.status !== 'completed' && payload.new?.destination_chain) {
               refreshOneChain(payload.new.destination_chain)
             }
-          })
-        .subscribe()
+          }), { onReconnect: () => { fullScan() } })
     })
 
-    return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal); window.removeEventListener(EXTERNAL_SCAN_PROGRESS_EVENT, onScanProgress) }
+    return () => { cancelled = true; clearInterval(iv); unsubHub?.(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal); window.removeEventListener(EXTERNAL_SCAN_PROGRESS_EVENT, onScanProgress) }
   }, [walletAddress, settingsMap, settingsLoaded])
 
   // ── Desktop-only: Insights column + Recent Activity + Balance trend ────────

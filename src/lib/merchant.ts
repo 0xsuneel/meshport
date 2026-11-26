@@ -15,6 +15,7 @@
 
 import { useSyncExternalStore } from 'react'
 import { supabase } from './supabase'
+import { subscribeWithRetry } from './chatService'
 import { useAuthStore } from '@/store'
 
 export type MerchantStatus = 'none' | 'pending' | 'approved' | 'rejected' | 'revoked'
@@ -106,7 +107,7 @@ async function authUid(): Promise<string | null> {
 }
 
 let loading: Promise<void> | null = null
-let channel: ReturnType<typeof supabase.channel> | null = null
+let channel: (() => void) | null = null
 let channelUid: string | null = null
 // Right after a sign-in the account's new login id may not be linked to its
 // merchant rows for a moment (the database does it when the users row gets
@@ -153,12 +154,12 @@ export function refreshMerchant(): Promise<void> {
       }
       // Live: an admin's decision shows up without a refresh.
       if (channelUid !== uid) {
-        channel?.unsubscribe()
+        channel?.()
         channelUid = uid
-        channel = supabase.channel(`merchant-app-${uid}`)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_applications', filter: `auth_uid=eq.${uid}` },
-            () => { loading = null; void refreshMerchant() })
-          .subscribe()
+        const reload = () => { loading = null; void refreshMerchant() }
+        channel = subscribeWithRetry(supabase, `merchant-app-${uid}`, c => c
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_applications', filter: `auth_uid=eq.${uid}` }, reload),
+          { onReconnect: reload })
       }
     } catch {
       const wait = failures < 4 ? 1000 * 2 ** failures++ : 30_000
@@ -172,7 +173,7 @@ export function refreshMerchant(): Promise<void> {
 
 /** Clears cached merchant state (sign-out). */
 export function resetMerchant() {
-  channel?.unsubscribe(); channel = null; channelUid = null
+  channel?.(); channel = null; channelUid = null
   set({ loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null })
 }
 

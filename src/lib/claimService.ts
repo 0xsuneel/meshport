@@ -13,6 +13,7 @@
  * for UI, never for driving the claim forward.
  */
 import { supabase, ensureAnonSession, invokeLinked } from './supabase'
+import { subscribeWithRetry } from './chatService'
 import { describeFunctionsError } from './describeFunctionsError'
 import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
@@ -201,7 +202,7 @@ export function fetchProcessingClaims(walletAddress: string): Promise<Claim[]> {
 // time the same claimId is subscribed to. To avoid that, we multiplex: only
 // ONE underlying channel is ever opened per claimId, shared by every caller.
 const claimChannels = new Map<string, {
-  channel: ReturnType<typeof supabase.channel>
+  channel: () => void
   listeners: Set<(claim: Claim) => void>
   latest: Claim | null
   pollTimer: ReturnType<typeof setInterval> | null
@@ -235,15 +236,16 @@ export function subscribeToClaim(claimId: string, onChange: (claim: Claim) => vo
   }
 
   if (!entry) {
-    entry = { channel: null as any, listeners: new Set(), latest: null, pollTimer: null }
+    entry = { channel: () => {}, listeners: new Set(), latest: null, pollTimer: null }
     claimChannels.set(claimId, entry)
 
     // Fire once immediately with current state so the UI isn't blank until the
     // first change event arrives.
     reconcile()
 
-    entry.channel = supabase
-      .channel(`claim-${claimId}`)
+    // Reconnecting after a drop or a live-gate pause means events may have
+    // been missed in between - catch up.
+    entry.channel = subscribeWithRetry(supabase, `claim-${claimId}`, c => c
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'claims', filter: `id=eq.${claimId}` },
@@ -253,12 +255,7 @@ export function subscribeToClaim(claimId: string, onChange: (claim: Claim) => vo
           entry!.latest = c
           entry!.listeners.forEach(fn => fn(c))
         }
-      )
-      .subscribe((status) => {
-        // Reconnecting after a drop ('SUBSCRIBED' firing again post-error/
-        // closed) means we may have missed events in between - catch up.
-        if (status === 'SUBSCRIBED') reconcile()
-      })
+      ), { onReconnect: () => reconcile() })
 
     // Belt-and-suspenders poll - fires independently of whatever state the
     // WebSocket thinks it's in, so a silently-dead connection can't leave
@@ -298,7 +295,7 @@ export function subscribeToClaim(claimId: string, onChange: (claim: Claim) => vo
     // Only tear down the real subscription once nobody is listening anymore.
     if (e.listeners.size === 0) {
       if (e.pollTimer) clearInterval(e.pollTimer)
-      supabase.removeChannel(e.channel)
+      e.channel()
       claimChannels.delete(claimId)
     }
   }
@@ -308,7 +305,7 @@ export function subscribeToClaim(claimId: string, onChange: (claim: Claim) => vo
 // Same multiplexing approach as subscribeToClaim, in case more than one
 // component subscribes to the same wallet's claim list at once.
 const walletChannels = new Map<string, {
-  channel: ReturnType<typeof supabase.channel>
+  channel: () => void
   listeners: Set<(claims: Claim[]) => void>
   pollTimer: ReturnType<typeof setInterval> | null
 }>()
@@ -327,21 +324,16 @@ export function subscribeToWalletClaims(
   }
 
   if (!entry) {
-    entry = { channel: null as any, listeners: new Set(), pollTimer: null }
+    entry = { channel: () => {}, listeners: new Set(), pollTimer: null }
     walletChannels.set(addr, entry)
 
-    entry.channel = supabase
-      .channel(`claims-wallet-${addr}`)
+    // Same reasoning as subscribeToClaim: after a drop or pause, catch up.
+    entry.channel = subscribeWithRetry(supabase, `claims-wallet-${addr}`, c => c
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'claims', filter: `wallet_address=eq.${addr}` },
         () => refresh()
-      )
-      .subscribe((status) => {
-        // Same reasoning as subscribeToClaim: a reconnect after a drop means
-        // events may have been missed in between - catch up explicitly.
-        if (status === 'SUBSCRIBED') refresh()
-      })
+      ), { onReconnect: () => refresh() })
 
     // Same belt-and-suspenders poll as subscribeToClaim - this list has no
     // terminal state to stop early on (it's an ongoing view of a wallet's
@@ -366,7 +358,7 @@ export function subscribeToWalletClaims(
     e.listeners.delete(onChange)
     if (e.listeners.size === 0) {
       if (e.pollTimer) clearInterval(e.pollTimer)
-      supabase.removeChannel(e.channel)
+      e.channel()
       walletChannels.delete(addr)
     }
   }

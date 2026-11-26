@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send, X } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import { submitSupportTicket, fetchMySupportTickets, supabase, type SupportTicket } from '@/lib/supabase'
+import { subscribeWithRetry } from '@/lib/chatService'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 
@@ -48,14 +49,11 @@ export function HelpSupportPage({ embedded, onClose }: { embedded?: boolean; onC
   // Live-update the ticket list the moment an admin replies, without polling.
   useEffect(() => {
     if (!user?.id) return
-    const channel = supabase
-      .channel(`support_tickets_${user.id}`)
+    return subscribeWithRetry(supabase, `support_tickets_${user.id}`, c => c
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'support_tickets', filter: `user_id=eq.${user.id}` },
         () => loadTickets(),
-      )
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
+      ), { onReconnect: () => loadTickets() })
   }, [user?.id, loadTickets])
 
   const handleSubmit = async () => {

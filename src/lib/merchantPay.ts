@@ -16,6 +16,7 @@ import { ARC_MEMO_CONTRACT, memoTransferData as encodeMemoTransfer, checkoutAddr
 export { ARC_MEMO_CONTRACT, orderMemoId } from './arcMemo'
 import { encodeFunctionData, parseUnits, createPublicClient, http, erc20Abi, type Hex } from 'viem'
 import { supabase } from './supabase'
+import { subscribeWithRetry } from './chatService'
 import { describeFunctionsError } from './describeFunctionsError'
 import { ARC_EXPLORER, ARC_CHAIN_KEY } from './chainExplorers'
 
@@ -515,7 +516,7 @@ export function subscribeMerchantPayments(merchantWallet: string, onChange: () =
   // and a shared name returns the already-joined channel, where adding
   // listeners throws ("cannot add postgres_changes callbacks after subscribe")
   // and crashed Manage money. Removing one must not remove the other either.
-  const ch = supabase.channel(`merchant-pay-${w}-${Math.random().toString(36).slice(2, 10)}`)
+  return subscribeWithRetry(supabase, `merchant-pay-${w}`, c => c
     .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_payment_intents', filter: `merchant_wallet=eq.${w}` }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_payments', filter: `merchant_wallet=eq.${w}` }, (e: any) => {
       const r = e?.new
@@ -523,9 +524,7 @@ export function subscribeMerchantPayments(merchantWallet: string, onChange: () =
         try { onNewPayment({ chain: r.source_chain, txHash: r.tx_hash, amount: Number(r.amount), createdAt: r.created_at }) } catch { /* the reload still shows it */ }
       }
       onChange()
-    })
-    .subscribe()
-  return () => { supabase.removeChannel(ch) }
+    }), { onReconnect: onChange })
 }
 
 /**
@@ -536,10 +535,9 @@ export function subscribeMerchantPayments(merchantWallet: string, onChange: () =
  */
 export function subscribeChainReceipts(merchantWallet: string, onChange: () => void): () => void {
   const w = merchantWallet.toLowerCase()
-  const ch = supabase.channel(`merchant-rcpt-${w}-${Math.random().toString(36).slice(2, 10)}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_chain_receipts', filter: `merchant_wallet=eq.${w}` }, onChange)
-    .subscribe()
-  return () => { supabase.removeChannel(ch) }
+  return subscribeWithRetry(supabase, `merchant-rcpt-${w}`, c => c
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_chain_receipts', filter: `merchant_wallet=eq.${w}` }, onChange),
+    { onReconnect: onChange })
 }
 
 /** Live updates for one request (pay page / chat card). Polls - customers may not be signed in. */

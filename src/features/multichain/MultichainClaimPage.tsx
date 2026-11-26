@@ -1164,11 +1164,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       })
     }
 
-    let channel: any
-    import('@/lib/supabase').then(({ supabase }) => {
+    let unsubBalance: (() => void) | null = null
+    Promise.all([import('@/lib/supabase'), import('@/lib/chatService')]).then(([{ supabase }, { subscribeWithRetry }]) => {
       if (cancelled) return
-      channel = supabase
-        .channel('multichain-claim-page-balance-' + walletAddress.slice(2, 10).toLowerCase())
+      unsubBalance = subscribeWithRetry(supabase, 'multichain-claim-page-balance-' + walletAddress.slice(2, 10).toLowerCase(), c => c
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'claims', filter: `wallet_address=eq.${walletAddress.toLowerCase()}` },
           (payload: any) => {
             if (payload.new?.status === 'completed' && payload.old?.status !== 'completed' && payload.new?.source_chain) {
@@ -1180,10 +1179,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             if (payload.new?.activity_type === 'bridge' && payload.new?.status === 'completed' && payload.old?.status !== 'completed' && payload.new?.destination_chain) {
               refreshOneChain(payload.new.destination_chain)
             }
-          })
-        .subscribe()
+          }))
     })
-    return () => { cancelled = true; channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal) }
+    return () => { cancelled = true; unsubBalance?.(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal) }
   }, [walletAddress, token])
 
   useEffect(() => {

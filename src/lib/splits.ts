@@ -13,6 +13,7 @@
 //   'complete' action (merchant-pay), as for any request.
 
 import { supabase } from './supabase'
+import { subscribeWithRetry } from './chatService'
 
 export const SPLITS_CHANGED_EVENT = 'meshport:splits-changed'
 export const MAX_SPLIT_PEOPLE = 20
@@ -249,12 +250,11 @@ export async function sendSplitMessage(splitId: string, body: string): Promise<S
 }
 
 /** New messages in a group as they arrive; returns the unsubscribe. */
-export function watchSplitMessages(splitId: string, onMessage: (m: SplitMessage) => void): () => void {
-  const ch = supabase.channel(`split-msgs-${splitId}`)
+export function watchSplitMessages(splitId: string, onMessage: (m: SplitMessage) => void, onResync?: () => void): () => void {
+  // onResync: after a drop or a live-gate pause, re-read what was missed.
+  return subscribeWithRetry(supabase, `split-msgs-${splitId}`, c => c
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'split_messages', filter: `split_id=eq.${splitId}` },
-      (p: { new: SplitMessage }) => onMessage(p.new))
-    .subscribe()
-  return () => { void supabase.removeChannel(ch) }
+      (p: { new: SplitMessage }) => onMessage(p.new)), { onReconnect: onResync })
 }
 
 // When you last looked at each group (this device): a group with newer

@@ -44,7 +44,8 @@ export function SplitDetailPage() {
     setMsgs([])
     splitMessages(groupId).then(setMsgs).catch(() => {})
     markSplitGroupSeen(groupId)
-    const stop = watchSplitMessages(groupId, m => setMsgs(cur => cur.some(x => x.id === m.id) ? cur : [...cur, m]))
+    const stop = watchSplitMessages(groupId, m => setMsgs(cur => cur.some(x => x.id === m.id) ? cur : [...cur, m]),
+      () => { splitMessages(groupId).then(setMsgs).catch(() => {}) })
     return () => { stop(); markSplitGroupSeen(groupId) }
   }, [groupId])
 

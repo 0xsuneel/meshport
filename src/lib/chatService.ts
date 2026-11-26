@@ -70,11 +70,71 @@ export async function authHeaders(): Promise<Record<string, string>> {
 // ("cannot add postgres_changes callbacks … after subscribe()") and crashed
 // the page.
 let _subscriptionSeq = 0
+
+// ── Live gate (docs/SUPABASE_LIGHT_PLAN.md, Phase 4) ─────────────────────────
+// The Free plan allows 200 devices connected to Realtime at once. Every open
+// app held its socket all day - a backgrounded phone, a desktop tab left
+// open - so the connection count followed installs, not use. Now every
+// subscription made here pauses when nobody is looking:
+//   - app hidden for LIVE_HIDDEN_GRACE_MS (a quick app switch doesn't churn);
+//   - no touch/key/scroll for LIVE_IDLE_MS - except on a chat screen, where
+//     reading without touching is normal.
+// With every channel removed, supabase-js closes the socket. The next touch or
+// return resumes them, and each runs its onReconnect catch-up for the gap.
+// Alerts while paused arrive by Web Push.
+const LIVE_IDLE_MS = 3 * 60_000
+const LIVE_HIDDEN_GRACE_MS = 30_000
+type LiveSub = { pause: () => void; resume: () => void }
+const liveSubs = new Set<LiveSub>()
+let livePaused = false
+let lastInputAt = Date.now()
+let liveGateInstalled = false
+function onChatScreen(): boolean {
+  try { const p = window.location.pathname; return p.startsWith('/chat') || p.startsWith('/split') } catch { return false }
+}
+function wantLive(): boolean {
+  if (typeof document === 'undefined') return true
+  if (document.visibilityState !== 'visible') return false
+  return onChatScreen() || Date.now() - lastInputAt < LIVE_IDLE_MS
+}
+function evaluateLive() {
+  const want = wantLive()
+  if (want && livePaused) {
+    livePaused = false
+    liveSubs.forEach(s => s.resume())
+    try { window.dispatchEvent(new Event('meshport:live-resumed')) } catch { /* no window */ }
+  }
+  else if (!want && !livePaused) { livePaused = true; liveSubs.forEach(s => s.pause()) }
+}
+function installLiveGate() {
+  if (liveGateInstalled || typeof window === 'undefined' || typeof document === 'undefined') return
+  liveGateInstalled = true
+  const onInput = () => { lastInputAt = Date.now(); if (livePaused) evaluateLive() }
+  for (const ev of ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll']) {
+    window.addEventListener(ev, onInput, { passive: true, capture: true })
+  }
+  let hiddenTimer: ReturnType<typeof setTimeout> | null = null
+  document.addEventListener('visibilitychange', () => {
+    if (hiddenTimer) { clearTimeout(hiddenTimer); hiddenTimer = null }
+    if (document.visibilityState === 'visible') { lastInputAt = Date.now(); evaluateLive() }
+    else hiddenTimer = setTimeout(evaluateLive, LIVE_HIDDEN_GRACE_MS)
+  })
+  setInterval(evaluateLive, 30_000)
+}
+/** True while live updates are paused (app hidden or idle). */
+export function isLivePaused(): boolean { return livePaused }
+
 export function subscribeWithRetry(
   client: SupabaseClient,
   channelNameBase: string,
   configure: (channel: RealtimeChannel) => RealtimeChannel,
-  opts?: { retryDelayMs?: number; onReconnect?: () => void },
+  opts?: {
+    retryDelayMs?: number
+    onReconnect?: () => void
+    /** Use channelNameBase as the topic itself - for broadcast, where both
+     *  people must join the same topic (e.g. typing in one chat). */
+    exactName?: boolean
+  },
 ): () => void {
   const baseRetryDelayMs = opts?.retryDelayMs ?? 2000
   // Bug fix: this used to retry at a flat 2s forever, no backoff, no cap.
@@ -102,6 +162,7 @@ export function subscribeWithRetry(
 
   const connect = () => {
     if (cancelled) return
+    if (livePaused) return // resume() connects again
     // A resync (below) or a fresh manual connect supersedes any pending
     // auto-retry - without this, a retry scheduled right as the tab was
     // backgrounded (backgrounding very commonly drops the socket, which
@@ -133,7 +194,7 @@ export function subscribeWithRetry(
     // page) or a real socket drop both reach the branch with cancelled=false
     // and myAttempt===attempt, so neither existing guard applied.
     let settled = false
-    channel = configure(client.channel(`${channelNameBase}-${instance}-${attempt}`))
+    channel = configure(client.channel(opts?.exactName ? channelNameBase : `${channelNameBase}-${instance}-${attempt}`))
     channel.subscribe((status) => {
       if (cancelled) return
       // A newer connect() has already superseded this one (e.g. a second
@@ -191,6 +252,23 @@ export function subscribeWithRetry(
       }
     })
   }
+  installLiveGate()
+  const live: LiveSub = {
+    pause: () => {
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
+      // Supersede the current attempt: the 'CLOSED' our own removal fires is
+      // then ignored instead of scheduling a retry (and growing the backoff).
+      attempt += 1
+      const dying = channel
+      channel = null
+      if (dying) {
+        try { client.removeChannel(dying) } catch { /* already gone */ }
+      }
+    },
+    // A fresh attempt: attempt > 1, so SUBSCRIBED runs onReconnect (catch-up).
+    resume: () => { if (!channel) { if (attempt === 0) attempt = 1; currentRetryDelayMs = baseRetryDelayMs; connect() } },
+  }
+  liveSubs.add(live)
   connect()
 
   // Resync on tab focus / network regain - catches gaps the socket-level
@@ -206,6 +284,7 @@ export function subscribeWithRetry(
   let resyncScheduled = false
   const onResync = () => {
     if (cancelled) return
+    if (livePaused) return // the live gate resumes it
     if (document.visibilityState !== 'visible') return
     if (resyncScheduled) return
     resyncScheduled = true
@@ -229,6 +308,7 @@ export function subscribeWithRetry(
 
   return () => {
     cancelled = true
+    liveSubs.delete(live)
     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
     // Same detach-then-remove discipline. `cancelled` already makes the status
     // callback a no-op, so the 'CLOSED' this triggers is inert - but nulling

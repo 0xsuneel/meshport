@@ -4101,26 +4101,29 @@ export function ChatConversationPage() {
   useEffect(() => {
     if (!conversationId || !user?.id) return
     let hideTimer: ReturnType<typeof setTimeout> | undefined
-    let ch: any = null
+    let unsubTyping: (() => void) | null = null
     let cancelled = false
+    // Through the live gate like every other channel: closed while the app is
+    // hidden. Same topic for both people (exactName). Broadcast `self` is off
+    // by default.
     import('@/lib/supabase').then(({ supabase }) => {
       if (cancelled) return
-      ch = supabase.channel(`typing-${conversationId}`, { config: { broadcast: { self: false } } })
-        .on('broadcast', { event: 'typing' }, (p: any) => {
+      unsubTyping = subscribeWithRetry(supabase, `typing-${conversationId}`, c => {
+        typingChannelRef.current = c
+        return c.on('broadcast', { event: 'typing' }, (p: any) => {
           if (p?.payload?.from === user.id) return
           setOtherTyping(true)
           if (hideTimer) clearTimeout(hideTimer)
           hideTimer = setTimeout(() => setOtherTyping(false), 4000)
         })
-        .subscribe()
-      typingChannelRef.current = ch
+      }, { exactName: true })
     })
     return () => {
       cancelled = true
       if (hideTimer) clearTimeout(hideTimer)
       setOtherTyping(false)
       typingChannelRef.current = null
-      ch?.unsubscribe?.()
+      unsubTyping?.()
     }
   }, [conversationId, user?.id])
   const notifyTyping = () => {

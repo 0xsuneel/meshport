@@ -623,11 +623,10 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
     // app-wide catch-up in blockchain/externalLiveWatch.ts); this is a backstop.
     const iv = setInterval(fullScan, 5 * 60_000)
 
-    let channel: any
-    import('@/lib/supabase').then(({ supabase }) => {
+    let unsubBalance: (() => void) | null = null
+    Promise.all([import('@/lib/supabase'), import('@/lib/chatService')]).then(([{ supabase }, { subscribeWithRetry }]) => {
       if (cancelled) return
-      channel = supabase
-        .channel('multichain-hub-page-balance-' + walletAddress.slice(2, 10).toLowerCase())
+      unsubBalance = subscribeWithRetry(supabase, 'multichain-hub-page-balance-' + walletAddress.slice(2, 10).toLowerCase(), c => c
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'claims', filter: `wallet_address=eq.${walletAddress.toLowerCase()}` },
           (payload: any) => {
             if (payload.new?.status === 'completed' && payload.old?.status !== 'completed' && payload.new?.source_chain) {
@@ -646,11 +645,10 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
               refreshOneChain(payload.new.destination_chain)
               refreshScope({ kind: 'external', wallet: walletAddress, chains: [payload.new.destination_chain] })
             }
-          })
-        .subscribe()
+          }), { onReconnect: () => { fullScan() } })
     })
 
-    return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal) }
+    return () => { cancelled = true; clearInterval(iv); unsubBalance?.(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal) }
   }, [walletAddress, processingClaimsKey, settingsMap, settingsLoaded, scanNonce])
 
   const reloadActivityRef = useRef<(() => void) | null>(null)
@@ -916,16 +914,15 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
     let soon: ReturnType<typeof setTimeout> | undefined
     const reloadSoon = () => { clearTimeout(soon); soon = setTimeout(loadActivity, 400) }
     reloadActivityRef.current = reloadSoon
-    let channel: any
-    import('@/lib/supabase').then(({ supabase }) => {
+    let unsubActivity: (() => void) | null = null
+    Promise.all([import('@/lib/supabase'), import('@/lib/chatService')]).then(([{ supabase }, { subscribeWithRetry }]) => {
       if (disposed) return
-      channel = supabase
-        .channel('multichain-hub-activity-' + walletAddress.slice(2, 10).toLowerCase())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'activity', filter: `wallet_address=eq.${walletAddress.toLowerCase()}` }, reloadSoon)
-        .subscribe()
+      unsubActivity = subscribeWithRetry(supabase, 'multichain-hub-activity-' + walletAddress.slice(2, 10).toLowerCase(), c => c
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'activity', filter: `wallet_address=eq.${walletAddress.toLowerCase()}` }, reloadSoon),
+        { onReconnect: reloadSoon })
     })
 
-    return () => { disposed = true; clearInterval(interval); clearTimeout(soon); channel?.unsubscribe(); reloadActivityRef.current = null }
+    return () => { disposed = true; clearInterval(interval); clearTimeout(soon); unsubActivity?.(); reloadActivityRef.current = null }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [walletAddress, serverClaimsKey])
 

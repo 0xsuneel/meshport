@@ -63,8 +63,19 @@ not an unlimited place to move load either. Functions per deployment are
    claim-submit, merchant API, name-register, rewards, login → one merged
    Vercel route (`/api/tx?action=`) - or Cloudflare Workers if Vercel
    Hobby's non-commercial rule applies (verify).
-4. **Realtime only on the chat screen**: payment alerts via Web Push
-   (`/api/push`) + refresh on resume.
+4. **Realtime only while someone is looking** (done 26 Nov): every channel
+   goes through subscribeWithRetry's live gate - closed 30 s after the app
+   is hidden and after 3 idle minutes (not on /chat or /splits, where
+   reading without touching is normal); with no channels supabase-js closes
+   the socket, so the 200-connection limit counts people actively using the
+   app, not installs or tabs left open. The next touch / return reopens
+   them and each runs its catch-up (Home's missed-payment check listens for
+   `meshport:live-resumed`). Alerts while paused: Web Push, already sent for
+   chat payments (api/chat), external deposits (chain-transfer-webhook)
+   and claims (claim-worker / ub-claim-worker).
+   Still open: Home's messages listener and the P2P trade listener have no
+   row filter, so every change is checked for every connected client -
+   narrow them (Realtime message quota, 2M/month).
 5. **Retention**: rpc_usage, client_errors, cron history, net._http_response.
 
 ## Reference: how Acme (app.acme.money) does it
