@@ -36,6 +36,7 @@ export { UB_CLAIM_CHAINS }
 import { isMerchantNow } from './merchant'
 import { ubQuoteFees, ubSpendCost, ubSpendMargin, ubForwarderPart } from './transferFees'
 import { assertAccountUnlocked, isAccountLockedNow } from '@/lib/accountLockRule'
+import { depositOutcomeUnknownTx } from './ubDepositOutcome'
 
 const FAST_FINALITY = new Set(['Avalanche_Fuji', 'Polygon_Amoy_Testnet', 'Sonic_Testnet', 'Sei_Testnet', 'HyperEVM_Testnet'])
 
@@ -430,9 +431,20 @@ async function runUbClaimInner(params: {
   }
 
   onStep('approving', `Moving ${amount} USDC into Unified Balance on ${chainLabel}…`, 25)
-  const dep: any = await kit.unifiedBalance.deposit({
-    from: { adapter, chain: sdkChainId }, amount: amount.toFixed(6), token: 'USDC', allowanceStrategy: 'permit',
-  })
+  let dep: any
+  try {
+    dep = await kit.unifiedBalance.deposit({
+      from: { adapter, chain: sdkChainId }, amount: amount.toFixed(6), token: 'USDC', allowanceStrategy: 'permit',
+    })
+  } catch (e) {
+    // Sent, but its confirmation wasn't seen (App Kit 1.23): it may still
+    // execute. Never deposit again - follow this deposit instead; the check
+    // below waits for it and stops if it reverted.
+    const pendingTx = depositOutcomeUnknownTx(e)
+    if (!pendingTx) throw e
+    console.warn('[ubClaim] deposit outcome unknown - following it', pendingTx)
+    dep = { txHash: pendingTx }
+  }
   const depositTx = hashOf(dep)
   // A reverted deposit moved nothing - don't record it as a claim.
   await assertDepositSucceeded(sdkChainId, depositTx)

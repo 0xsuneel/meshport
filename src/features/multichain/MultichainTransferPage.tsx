@@ -2177,16 +2177,29 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // In move_timings: how much of the deposit step was Circle's quote.
           moveTimerRef.current?.mark('ub_quote')
           setStage('deposit')
-          const depositResult: any = await kit.unifiedBalance.deposit({
-            from: { adapter, chain: ARC_CHAIN_KEY as any },
-            amount: targetDepositAmount.toFixed(6),
-            token: 'USDC',
-            // Gasless EIP-2612 signature - same rationale as arc.ts's default
-            // allowanceStrategy: avoids a separate on-chain approve tx before
-            // the deposit can happen, which would add a full extra round trip
-            // on top of what's supposed to be a sub-second step.
-            allowanceStrategy: 'permit',
-          })
+          let depositResult: any
+          try {
+            depositResult = await kit.unifiedBalance.deposit({
+              from: { adapter, chain: ARC_CHAIN_KEY as any },
+              amount: targetDepositAmount.toFixed(6),
+              token: 'USDC',
+              // Gasless EIP-2612 signature - same rationale as arc.ts's default
+              // allowanceStrategy: avoids a separate on-chain approve tx before
+              // the deposit can happen, which would add a full extra round trip
+              // on top of what's supposed to be a sub-second step.
+              allowanceStrategy: 'permit',
+            })
+          } catch (e) {
+            // Sent, but its confirmation wasn't seen (App Kit 1.23): it may
+            // still execute, so never deposit again - wait for this one.
+            const { depositOutcomeUnknownTx, waitForDepositOutcome } = await import('@/lib/ubDepositOutcome')
+            const pendingTx = depositOutcomeUnknownTx(e)
+            if (!pendingTx) throw e
+            const outcome = await waitForDepositOutcome(ARC_CHAIN_KEY, pendingTx)
+            if (outcome === 'reverted') throw new Error('The deposit failed on-chain - nothing was moved. Try again.')
+            if (outcome === 'unknown') throw new Error(`Your deposit was sent but isn't confirmed yet (${pendingTx.slice(0, 10)}…). Don't send it again - check your balance in a minute.`)
+            depositResult = { txHash: pendingTx }
+          }
           logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'unifiedBalance.deposit result', data: depositResult })
           depositHash = getUBHash(depositResult)
           ubDepositTxRef.current = depositHash || null
