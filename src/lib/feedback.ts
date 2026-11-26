@@ -31,8 +31,7 @@ function audio(): AudioContext | null {
  * rising quickly (G5 → B5 → E6) and landing on a warm ring. Made on the fly
  * (no audio file to download), dry - no echo - through a gentle compressor.
  */
-function pluck(ac: AudioContext, dst: AudioNode, freq: number, at: number, ring: number, bright: number) {
-  const t = ac.currentTime + at
+function pluck(ac: AudioContext, dst: AudioNode, freq: number, t: number, ring: number, bright: number) {
   const partials: Array<[number, number, number]> = [
     [1, 1, ring],
     [2, 0.6 * bright, ring * 0.45],
@@ -55,23 +54,32 @@ function pluck(ac: AudioContext, dst: AudioNode, freq: number, at: number, ring:
   }
 }
 
+/**
+ * Schedules the MeshPort chime on `ac` at AudioContext time `at` and returns
+ * when its notes have landed (the last one keeps ringing softly after). The
+ * success screen plays it now; business payment alerts play it before the
+ * spoken amount (voiceAlerts), so both sound the same.
+ */
+export function playSuccessChime(ac: AudioContext, at: number): number {
+  const comp = ac.createDynamicsCompressor()
+  comp.threshold.value = -16
+  comp.ratio.value = 3
+  comp.attack.value = 0.002
+  comp.release.value = 0.15
+  comp.connect(ac.destination)
+  const out = ac.createGain()
+  out.gain.value = 0.3
+  out.connect(comp)
+  pluck(ac, out, 784, at, 0.35, 0.35)
+  pluck(ac, out, 988, at + 0.085, 0.35, 0.35)
+  pluck(ac, out, 1318.5, at + 0.17, 1.1, 0.45)
+  return at + 0.6
+}
+
 function ding() {
   const ac = audio()
   if (!ac) return
-  try {
-    const comp = ac.createDynamicsCompressor()
-    comp.threshold.value = -16
-    comp.ratio.value = 3
-    comp.attack.value = 0.002
-    comp.release.value = 0.15
-    comp.connect(ac.destination)
-    const out = ac.createGain()
-    out.gain.value = 0.3
-    out.connect(comp)
-    pluck(ac, out, 784, 0, 0.35, 0.35)
-    pluck(ac, out, 988, 0.085, 0.35, 0.35)
-    pluck(ac, out, 1318.5, 0.17, 1.1, 0.45)
-  } catch { /* audio blocked - stay silent */ }
+  try { playSuccessChime(ac, ac.currentTime) } catch { /* audio blocked - stay silent */ }
 }
 
 let lastSuccess = 0

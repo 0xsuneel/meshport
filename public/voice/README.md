@@ -12,7 +12,8 @@ Short recorded words the business app joins to announce a payment
   - `n1` … `n99` - "one" … "ninety nine"
   - `dollar_and` / `dollars_and`, `dollar_on` / `dollars_on` ("dollars, on Mesport.")
   - `cent_on` / `cents_on` ("cents, on Mesport.")
-- `emma/chime.mp3` - the MeshPort chime (three rising bell notes), our own.
+- The chime before the words is the success-screen sound, made in code
+  (`playSuccessChime` in `src/lib/feedback.ts`) - no audio file.
 
 Each clip is trimmed and peak-normalised, 24 kHz mono MP3. 108 words cover
 every amount up to $99,999.99 (larger ones use the device's own speech).

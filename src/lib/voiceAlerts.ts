@@ -23,6 +23,7 @@
 //    are both said in full.
 
 import { useSyncExternalStore } from 'react'
+import { playSuccessChime } from './feedback'
 
 type Settings = {
   enabled: boolean
@@ -103,9 +104,10 @@ export function phrasesFor(amount: number): string[] | null {
   return out
 }
 
-/** Every clip in the voice folder (scripts/gen_voice_clips.py), chime included. */
+/** Every clip in the voice folder (scripts/gen_voice_clips.py). The chime
+ *  before the words is the success-screen sound, made on the fly (feedback.ts). */
 export const VOICE_CLIPS: readonly string[] = (() => {
-  const out = ['chime', 'received', 'dollars_and', 'dollars_on', 'one_dollar_and', 'one_dollar_on']
+  const out = ['received', 'dollars_and', 'dollars_on', 'one_dollar_and', 'one_dollar_on']
   for (let n = 1; n < 100; n++) out.push(`t${n}`, `da${n}`, `do${n}`, `c${n}`)
   for (let n = 1; n < 10; n++) out.push(`h${n}`)
   return out
@@ -200,7 +202,7 @@ function unlock() {
   if (unlocked) return
   unlocked = true
   // Ready the chime and the most common ending before the first payment.
-  if (settings.enabled) { void clip('chime'); void clip('received') }
+  if (settings.enabled) void clip('received')
   if (voiceSupported()) {
     try {
       // A silent utterance started by this tap lets later ones play.
@@ -261,10 +263,10 @@ async function playClips(names: string[]): Promise<boolean> {
   if (!ctx) return false
   if (ctx.state === 'suspended') void ctx.resume().catch(() => {})
   const timeout = new Promise<null>(r => setTimeout(() => r(null), CLIP_WAIT_MS))
-  const chime = await Promise.race([clip('chime'), timeout])
   const speech = Promise.race([Promise.all(names.map(clip)), timeout])
   let t = Math.max(ctx.currentTime + 0.02, queueEnd)
-  if (chime) t = play(ctx, chime, t) + 0.08
+  // The success-screen chime (was a separate beep clip, chime.mp3).
+  try { t = playSuccessChime(ctx, t) + 0.08 } catch { /* audio blocked */ }
   const bufs = await speech
   if (!bufs || bufs.some(b => !b)) { queueEnd = t; return false }
   // A slow fetch: start after the chime has finished, never over it.

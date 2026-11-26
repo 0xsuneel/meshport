@@ -1,4 +1,4 @@
-# Generates public/voice/emma2/*.mp3 (except chime.mp3) - the phrases src/lib/voiceAlerts.ts joins.
+# Generates public/voice/emma2/*.mp3 - the phrases src/lib/voiceAlerts.ts joins (the chime before them is made in code, src/lib/feedback.ts).
 #
 # Kokoro-82M v1.0 (kokoro-multi-lang-v1_0, voice bf_emma = speaker 21) via sherpa-onnx 2.x:
 #   pip install sherpa-onnx numpy

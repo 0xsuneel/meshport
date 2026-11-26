@@ -59,7 +59,8 @@ describe('phrasesFor', () => {
     const { phrasesFor } = await load()
     const { readdirSync } = await import('node:fs')
     const have = new Set(readdirSync('public/voice/emma2').map(f => f.replace(/\.mp3$/, '')))
-    expect(have.has('chime')).toBe(true)
+    // The chime is the success-screen sound, made in code (feedback.ts) - no file.
+    expect(have.has('chime')).toBe(false)
     for (let cents = 1; cents < 10_000_000; cents += 997) {
       for (const name of phrasesFor(cents / 100)!) expect(have.has(name), name).toBe(true)
     }
