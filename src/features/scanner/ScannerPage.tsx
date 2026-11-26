@@ -307,9 +307,13 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
       // Try to extract wallet address from MeshPort QR URL format
       // e.g. meshport.xyz/paylink/sunil (older: /pay/sunil) OR /pay?to=username OR /pay?to=0x...
       let shopLink: { username: string; store: string | null; amount: string | null } | null = null
+      // A business's Personal QR (?personal=1): the owner chose a normal payment.
+      let personalQr = false
+      let linkAmount: string | null = null
       if (value.includes('meshportweb') || value.includes('meshport') || value.includes('?to=')) {
         try {
           const urlObj = new URL(value.startsWith('http') ? value : 'https://' + value)
+          personalQr = urlObj.searchParams.get('personal') === '1'
           // A business's Shop QR (/paylink/<username>[?store=]) - checked below.
           const seg = urlObj.pathname.split('/').filter(Boolean)
           // A business's Personal QR (?personal=1) is a normal payment, not the shop.
@@ -324,7 +328,7 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
           // Read alongside the recipient below, not instead of it, so a
           // scan still resolves the recipient normally either way.
           const amountParam = urlObj.searchParams.get('amount')
-          if (amountParam && Number(amountParam) > 0) setScannedAmount(amountParam)
+          if (amountParam && Number(amountParam) > 0) { setScannedAmount(amountParam); linkAmount = amountParam }
           const tokenParam = urlObj.searchParams.get('token')
           if (tokenParam === 'EURC' || tokenParam === 'cirBTC') setScannedToken(tokenParam)
           if (addrParam && isValidAddress(addrParam)) value = addrParam
@@ -407,6 +411,19 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
         const withArc = normalized.endsWith('.arc') ? normalized : normalized + '.arc'
         const results = await searchUsersDb(withArc)
         user = results[0] || null
+      }
+
+      // Paying a business is a business payment whatever the QR looked like -
+      // its wallet address, a /pay?to= link, its username (as UPI apps treat
+      // any payment to a merchant's ID). Only an approved business; its
+      // Personal QR stays a normal payment, as the owner chose.
+      if (user?.username && !personalQr) {
+        const shop = await getShopInfo(user.username, null).catch(() => null)
+        if (shop?.verified) {
+          setResolving(false)
+          navigate(`/paylink/${shop.username}${linkAmount ? `?amount=${encodeURIComponent(linkAmount)}` : ''}`)
+          return
+        }
       }
 
       if (user) setResolvedUser(user)

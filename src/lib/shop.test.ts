@@ -11,3 +11,13 @@ describe('shopSubline - under a shop\'s name, never its username', () => {
     expect(shopSubline({ businessName: 'Royal Salons', storeName: null, category: null })).toBe('')
   })
 })
+
+describe('merchant category codes', () => {
+  it('every category has a 4-digit code', async () => {
+    const { BUSINESS_CATEGORIES, businessMcc } = await import('./businessCategories')
+    for (const c of BUSINESS_CATEGORIES) expect(businessMcc(c)).toMatch(/^\d{4}$/)
+    expect(businessMcc('Restaurant / Café')).toBe('5812')
+    expect(businessMcc('Grocery / Supermarket')).toBe('5411')
+    expect(businessMcc(null)).toBe('5999')
+  })
+})

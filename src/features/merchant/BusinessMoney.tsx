@@ -184,8 +184,12 @@ function MoneyHome({ loaded, intents, payments, receipts, chains, claimChains, o
   const allCustomers = useMemo(() => customersOf(payments), [payments])
   const needle = q.trim().toLowerCase().replace(/^@/, '')
   const customers = allCustomers.filter(c => !needle || c.search.includes(needle))
-  const openRequests = intents.filter(i => ['pending', 'partially_paid', 'processing'].includes(i.status))
-  const history = intents.filter(i => !['pending', 'partially_paid', 'processing'].includes(i.status))
+  // What the business asked to be paid. A Shop QR scan isn't an order (as on
+  // PhonePe / Paytm Business, only money that arrived shows): its payment is
+  // in Payments; an abandoned scan shows nowhere.
+  const asked = intents.filter(i => i.via !== 'shop_qr')
+  const openRequests = asked.filter(i => ['pending', 'partially_paid', 'processing'].includes(i.status))
+  const history = asked.filter(i => !['pending', 'partially_paid', 'processing'].includes(i.status))
   const received = payments.reduce((s, p) => s + p.amount, 0)
   const paymentCount = payments.length
   const intentByPay = new Map(intents.map(i => [i.id, i]))
@@ -203,7 +207,7 @@ function MoneyHome({ loaded, intents, payments, receipts, chains, claimChains, o
     <Row key={i.id}
       icon={<HistoryIcon tone={i.status === 'paid' ? 'in' : i.status === 'failed' ? 'failed' : ['expired', 'cancelled'].includes(i.status) ? 'muted' : 'pending'} icon="receive" />}
       title={`${i.kind === 'invoice' ? 'Bill · ' : ''}$${formatAmount(i.amount)} USDC${i.note ? ' · ' + i.note : ''}`}
-      sub={`${i.via === 'shop_qr' ? '' : orderDisplay(i) + ' · '}${i.customerUsername ? i.customerUsername + '.arc · ' : ''}${i.status === 'paid' && i.completedByMerchant ? 'Completed by you' : STATUS_LABEL[i.status]}${i.sourceChain ? ' · ' + routeLabel(i.sourceChain) : ''} · ${timeAgo(i.createdAt)}`}
+      sub={`${orderDisplay(i)} · ${i.customerUsername ? i.customerUsername + '.arc · ' : ''}${i.status === 'paid' && i.completedByMerchant ? 'Completed by you' : STATUS_LABEL[i.status]}${i.sourceChain ? ' · ' + routeLabel(i.sourceChain) : ''} · ${timeAgo(i.createdAt)}`}
       flash={i.id === listFlash.flashId}
       onClick={() => { listFlash.leaving(i.id); onOpenRequest(i.code) }} amountColor={i.status === 'paid' ? 'var(--success)' : undefined} />
   )

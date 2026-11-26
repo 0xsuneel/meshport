@@ -239,6 +239,7 @@ export function StoreForm({
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-text-muted pointer-events-none" />
         </div>
+        <span className="text-[11px] text-text-muted">For your own screens. Customers see your business category from your approved application.</span>
       </div>
 
       <label className="flex flex-col gap-1.5">
@@ -247,7 +248,7 @@ export function StoreForm({
           type="text"
           value={address}
           onChange={e => onAddress(e.target.value)}
-          placeholder="e.g. 12 MG Road, Bangalore"
+          placeholder="Street, area, city - customers see it on your Shop QR page"
           className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] focus:outline-none focus:ring-2 focus:ring-brand/40"
         />
       </label>

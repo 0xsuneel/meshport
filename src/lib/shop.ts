@@ -9,6 +9,8 @@ export type ShopInfo = {
   category: string | null
   /** The store's address, when the business added one. */
   address: string | null
+  /** Merchant category code (ISO 18245) for that category, e.g. "5812". */
+  mcc: string | null
 }
 
 /** The line under a shop's name on its pay page: "Restaurant / Café · Andheri branch". Never the username. */
@@ -27,7 +29,7 @@ export async function getShopInfo(username: string, storeId: string | null): Pro
   if (error) throw new Error(error.message)
   const r = Array.isArray(data) ? data[0] : data
   const info = r ? { businessName: r.business_name, username: r.username, storeId: r.store_id ?? null, storeName: r.store_name ?? null,
-    avatarUrl: r.avatar_url ?? null, verified: !!r.verified, category: r.category ?? null, address: r.address ?? null } : null
+    avatarUrl: r.avatar_url ?? null, verified: !!r.verified, category: r.category ?? null, address: r.address ?? null, mcc: r.mcc ?? null } : null
   shopCache.set(key, info)
   return info
 }

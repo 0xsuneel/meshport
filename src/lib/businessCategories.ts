@@ -12,6 +12,17 @@ export const BUSINESS_CATEGORIES = [
 ] as const
 export type BusinessCategory = typeof BUSINESS_CATEGORIES[number]
 
+/** Merchant category code (ISO 18245) per category - the code UPI and card
+ *  networks use. The same table as the database's business_mcc(). */
+export const BUSINESS_MCC: Record<BusinessCategory, string> = {
+  'Retail store': '5399', 'Grocery / Supermarket': '5411', 'Restaurant / Café': '5812', 'Online shop': '5999',
+  'Pharmacy': '5912', 'Salon / Beauty': '7230', 'Clinic / Healthcare': '8099', 'Education / Tutoring': '8299',
+  'Hotel / Stay': '7011', 'Events / Tickets': '7922', 'Repair / Workshop': '7699', 'Transport / Delivery': '4215',
+  'Services': '7299', 'Freelancer': '8999', 'Kiosk / Counter': '5499', 'Non-profit / Donations': '8398', 'Other': '5999',
+}
+export const businessMcc = (category: string | null | undefined): string =>
+  (category && (BUSINESS_MCC as Record<string, string>)[category]) || '5999'
+
 export interface BizTerms {
   /** "Orders" / "Invoices" */ orders: string
   /** "order" / "invoice" */ order: string
