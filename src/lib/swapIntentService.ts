@@ -36,9 +36,10 @@ import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 /** Wakes the swap-intent function on Swap screen open, so the swap itself
  *  doesn't wait for a cold start. Throttled; never throws. */
+// Once per 5 min per device (each ping is a billed Edge Function call).
 let lastWarmAt = 0
 export async function warmSwapIntent(): Promise<void> {
-  if (Date.now() - lastWarmAt < 20_000) return
+  if (Date.now() - lastWarmAt < 5 * 60_000) return
   lastWarmAt = Date.now()
   try {
     await ensureAnonSession()

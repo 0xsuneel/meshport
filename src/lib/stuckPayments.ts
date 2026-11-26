@@ -15,6 +15,7 @@ import { keccak256, parseGwei } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { arcRpcJson } from './arc'
 import { ARC_CHAIN_INLINE } from './arcService'
+import { ARC } from '@/blockchain/chains'
 
 export interface StuckPayments {
   /** The wallet's next nonce on Arc (nothing queued counts). */
@@ -23,8 +24,49 @@ export interface StuckPayments {
   stuck: { nonce: number; txHash: string }[]
 }
 
+/**
+ * Pure: whether Arc's node holds transactions queued for this wallet - its
+ * pending nonce above the latest one. Only queued payments can still run.
+ */
+export function hasQueuedTransactions(latestHex: unknown, pendingHex: unknown): boolean | null {
+  try {
+    if (typeof latestHex !== 'string' || typeof pendingHex !== 'string') return null
+    return BigInt(pendingHex) > BigInt(latestHex)
+  } catch { return null }
+}
+
+/**
+ * Asks Arc's public node directly (not the proxy, not Supabase): both nonces
+ * in one batch. null when it can't tell - the caller then asks the server.
+ */
+async function queuedOnArc(wallet: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(ARC.rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([
+        { jsonrpc: '2.0', id: 1, method: 'eth_getTransactionCount', params: [wallet, 'latest'] },
+        { jsonrpc: '2.0', id: 2, method: 'eth_getTransactionCount', params: [wallet, 'pending'] },
+      ]),
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return null
+    const out = await res.json()
+    if (!Array.isArray(out)) return null
+    const by = (id: number) => out.find((r: any) => r?.id === id)?.result
+    return hasQueuedTransactions(by(1), by(2))
+  } catch { return null }
+}
+
 /** This wallet's payments queued on Arc behind a missing nonce, or null if it can't tell. */
-export async function fetchStuckPayments(): Promise<StuckPayments | null> {
+export async function fetchStuckPayments(walletAddress?: string): Promise<StuckPayments | null> {
+  // Ran on every app open (a pay-intent call each, ~1 per session per
+  // person). Nothing queued on Arc - nearly always - means nothing can be
+  // stuck: answer here, and only ask the server when something is queued.
+  if (walletAddress) {
+    const queued = await queuedOnArc(walletAddress.toLowerCase())
+    if (queued === false) return { chainNonce: -1, stuck: [] }
+  }
   try {
     const { invokeLinked } = await import('./supabase')
     const { data, error } = await invokeLinked('pay-intent', { action: 'stuckPayments' })

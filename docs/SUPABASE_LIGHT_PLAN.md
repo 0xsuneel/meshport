@@ -59,10 +59,20 @@ not an unlimited place to move load either. Functions per deployment are
    - Dropped: same-origin rewrite for CORS preflights - preflights are tiny
      (no egress to speak of) and a Vercel rewrite would move the bytes onto
      Vercel's 10 GB Fast Origin Transfer instead.
-3. **User actions off Supabase Edge Functions**: pay/swap/bulkpay intents,
-   claim-submit, merchant API, name-register, rewards, login → one merged
-   Vercel route (`/api/tx?action=`) - or Cloudflare Workers if Vercel
-   Hobby's non-commercial rule applies (verify).
+3. **Fewer Edge Function calls per person.** Correction: moving them to
+   Vercel alone doesn't fit 10k users either (~1.2M calls/month vs Vercel
+   Hobby's 1M, with a 30-day pause when exceeded), so first cut calls that
+   do no work.
+   - Done 26 Nov: no pay-intent warm-up on every app open (main.tsx,
+     AppLayout) - only when a payment screen opens, at most every 5 min
+     (was every 20 s); swap-intent warm-up likewise. The stuck-payment check
+     (a pay-intent call on every session) asks Arc's node first - pending vs
+     latest nonce in one batch - and calls the server only when something
+     is queued. ensureNameOnchain remembers a confirmed on-chain name (was a
+     name-register call every session).
+   - Left per real action: create + markSubmitted (pay/swap/bulkpay), claim
+     submit, name registration once. Next: fold markSubmitted into a
+     database write under RLS (no function), then move what remains.
 4. **Realtime only while someone is looking** (done 26 Nov): every channel
    goes through subscribeWithRetry's live gate - closed 30 s after the app
    is hidden and after 3 idle minutes (not on /chat or /splits, where

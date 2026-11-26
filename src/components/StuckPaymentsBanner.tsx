@@ -21,7 +21,7 @@ export function StuckPaymentsBanner() {
   useEffect(() => {
     if (!key || !signer || checked.has(key)) return
     checked.set(key, null)
-    void import('@/lib/stuckPayments').then(m => m.fetchStuckPayments()).then(s => {
+    void import('@/lib/stuckPayments').then(m => m.fetchStuckPayments(key)).then(s => {
       checked.set(key, s)
       setStuck(s)
     })

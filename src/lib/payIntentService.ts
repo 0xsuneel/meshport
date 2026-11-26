@@ -29,16 +29,21 @@ export interface CreatePayIntentResult {
  * Warms the pay-intent Supabase Edge Function so the real payment call
  * doesn't pay a cold-start penalty. Called on PaySendPage and ChatPay
  * mount — long before the user hits Send — so the function is already
- * warm when it matters. Fire-and-forget; never throws; throttled to once
- * per 20s so a frequent page-mount loop can't spam it.
+ * warm when it matters. Fire-and-forget; never throws; throttled (see WARM_EVERY_MS)
+ * so a frequent page-mount loop can't spam it.
  *
  * The Edge Function's own /health route (or the cheap 'ping' action) keeps
  * the V8 isolate alive; cold-start time drops from ~500–1500ms to ~0ms on
  * the subsequent real call.
  */
+// Once per 5 min per device (was 20 s, and also on every app open): each ping
+// is a billed Edge Function call (docs/SUPABASE_LIGHT_PLAN.md, Phase 3). An
+// isolate stays warm for minutes, so a payment screen opened again soon after
+// still finds it warm.
+const WARM_EVERY_MS = 5 * 60_000
 let _lastWarmAt = 0
 export async function warmPayIntent(): Promise<void> {
-  if (Date.now() - _lastWarmAt < 20_000) return
+  if (Date.now() - _lastWarmAt < WARM_EVERY_MS) return
   _lastWarmAt = Date.now()
   try {
     await ensureAnonSession()

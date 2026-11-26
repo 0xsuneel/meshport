@@ -117,7 +117,8 @@ clearLegacyData()
     void import('./blockchain/BlockchainManager').then(m => {
       for (const asset of ['USDC', 'EURC', 'CIRBTC'] as const) m.readArcBalance(wallet, asset).catch(() => {})
     }).catch(() => {})
-    void import('./lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
+    // (No pay-intent warm-up here: it cost an Edge Function call on every app
+    // open; payment screens warm it when they open - preparePayments.)
   }
 }
 

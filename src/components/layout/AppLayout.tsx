@@ -198,7 +198,6 @@ export function AppLayout() {
     }
     const start = window.setTimeout(() => {
       import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
-      import('@/lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
       next(0)
     }, 1500)
     return () => {

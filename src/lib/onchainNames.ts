@@ -128,8 +128,13 @@ export async function onchainNameStatus(walletAddress: string): Promise<string> 
  *  background. Needs the wallet key on this device - otherwise next time. */
 export async function ensureNameOnchain(walletAddress: string, name: string, kind: AccountKind): Promise<void> {
   const key = `meshport_name_onchain_tried:${walletAddress.toLowerCase()}`
+  // A name confirmed on-chain stays there: once seen, never ask again (this
+  // was a name-register call on every session of every user).
+  const okKey = `meshport_name_onchain_ok:${walletAddress.toLowerCase()}`
+  try { if (localStorage.getItem(okKey)) return } catch { /* storage unavailable */ }
   try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1') } catch { /* storage unavailable */ }
   const status = await onchainNameStatus(walletAddress).catch(() => 'unknown')
+  if (status === 'registered') { try { localStorage.setItem(okKey, '1') } catch { /* storage unavailable */ } }
   if (status !== 'none' && status !== 'failed') return
   await registerNameOnchain({ walletAddress, name: name.replace(/\.arc$/i, ''), kind, displayName: '' }).catch(() => {})
 }
