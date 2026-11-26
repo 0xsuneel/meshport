@@ -14,13 +14,13 @@ describe('"Pay again" from history', () => {
     expect(payAgainUrl('shop', '0xabc', { merchantVia: 'shop_qr', merchantStore: 'Royal Salons' })).toBe('/paylink/shop')
     expect(payAgainUrl('shop', '0xabc', { merchantVia: 'shop_qr' })).toBe('/paylink/shop')
   })
-  it('names the shop as it was when paid (business · branch)', async () => {
+  it('names the shop as it was when paid - the store, else the business', async () => {
     const { shopNameOf } = await import('./ActivityPage')
-    expect(shopNameOf({ merchantName: 'Royal Salons', merchantStore: 'Cutting Edge' })).toBe('Royal Salons · Cutting Edge')
+    expect(shopNameOf({ merchantName: 'Royal Salons', merchantStore: 'Cutting Edge' })).toBe('Cutting Edge')
     expect(shopNameOf({ merchantName: 'Shop', merchantStore: 'Shop' })).toBe('Shop')
     expect(shopNameOf({ merchantName: 'Shop', merchantStore: '895bbfd4-00b3-4af2-8319-9dc636ff0161' })).toBe('Shop')
     // The business's own label for the store, even before customers see it.
-    expect(shopNameOf({ merchantName: 'Shop', merchantStore: null, merchantStoreLabel: 'Andheri Branch' })).toBe('Shop · Andheri Branch')
+    expect(shopNameOf({ merchantName: 'Shop', merchantStore: null, merchantStoreLabel: 'Andheri Branch' })).toBe('Andheri Branch')
   })
   it('anything else opens Pay as before', async () => {
     const { payAgainUrl } = await import('./ActivityPage')

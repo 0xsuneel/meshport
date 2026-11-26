@@ -193,15 +193,20 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
               {d.unit && <span style={{ fontSize: 18, fontWeight: 700, opacity: 0.8 }}>{d.unit}</span>}
             </div>
             {/* The tag on the left, when it happened on the right (19 Nov 2026). */}
-            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            {/* One row, side by side: the date never wraps, a long tag shortens with "…". */}
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               {d.pill ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 999, fontSize: 13.5, fontWeight: 700, background: 'rgba(0,0,0,.18)', flexShrink: 0 }}>
+                <span title={typeof d.pill === 'string' ? d.pill : d.pill.text}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: 'rgba(0,0,0,.18)', flex: '0 1 auto', minWidth: 0 }}>
                   {typeof d.pill === 'string'
-                    ? <><Zap size={14} color="#FFD25E" fill="#FFD25E" />{d.pill}</>
-                    : <><ActionIcon name={d.pill.icon} size={15} color="#fff" />{d.pill.text}</>}
+                    ? <Zap size={14} color="#FFD25E" fill="#FFD25E" style={{ flexShrink: 0 }} />
+                    : <span style={{ display: 'inline-flex', flexShrink: 0 }}><ActionIcon name={d.pill.icon} size={15} color="#fff" /></span>}
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {typeof d.pill === 'string' ? d.pill : d.pill.text}
+                  </span>
                 </span>
               ) : <span />}
-              <span style={{ textAlign: 'right', lineHeight: 1.3, marginLeft: 'auto' }}>
+              <span style={{ textAlign: 'right', lineHeight: 1.3, marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
                 <span style={{ display: 'block', fontSize: 11.5, fontWeight: 600, opacity: 0.75 }}>{d.whenLabel}</span>
                 <span style={{ display: 'block', fontSize: 13, fontWeight: 700 }}>{d.when}</span>
               </span>

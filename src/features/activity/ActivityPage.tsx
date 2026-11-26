@@ -22,7 +22,7 @@ import { TxDetailPage, type TxDetail, type TxParty } from '@/components/ui/TxDet
 import { SearchField } from '@/components/ui/SearchField'
 import { useMerchant, isMerchantClaim } from '@/lib/merchant'
 import { receiptNumber } from '@/lib/receiptNumber'
-import { orderTitle, shopReceivedTitle, shopFrom, displayOrderNumber, shortOrderNumber, type OrderKind } from '@/lib/merchantPay'
+import { orderTitle, shopReceivedTitle, displayOrderNumber, shortOrderNumber, type OrderKind } from '@/lib/merchantPay'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { TokenMenu } from '@/components/ui/TokenMenu'
@@ -416,10 +416,11 @@ function storeNameOf(md: Record<string, any> | null | undefined): string {
   const v = typeof md?.merchantStoreLabel === 'string' && md.merchantStoreLabel ? md.merchantStoreLabel : md?.merchantStore
   return typeof v === 'string' && !UUID_RE.test(v) ? v : ''
 }
-/** The shop a payment was made to, as it was named when paid:
- *  "Royal Salons", or "Royal Salons · Cutting Edge" for a branch. */
+/** The shop a payment was made to, as it was named when paid - one short
+ *  name for the "Received on …" tag: the store ("Sharma Jeneral Store"),
+ *  else the business. The details list the store separately. */
 export function shopNameOf(md: Record<string, any> | null | undefined): string {
-  return shopFrom(typeof md?.merchantName === 'string' ? md.merchantName : '', storeNameOf(md))
+  return storeNameOf(md) || (typeof md?.merchantName === 'string' ? md.merchantName : '')
 }
 export function payAgainUrl(cpName: string | null | undefined, counterparty: string | null | undefined, md: Record<string, any> | null | undefined): string {
   if (cpName && md?.merchantVia === 'shop_qr') {
