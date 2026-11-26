@@ -754,7 +754,7 @@ export function ClaimUsernamePage() {
   useEffect(() => {
     if (username) { navigate('/', { replace: true }); return }
     if (!walletAddress) { setChecking(false); return }
-    getUserByWalletAddress(walletAddress).then(existing => {
+    getUserByWalletAddress(walletAddress, { fresh: true }).then(existing => {
       if (existing?.username) {
         // Wallet already registered - restore the REAL id along with the
         // username, not just the username. At this point (before

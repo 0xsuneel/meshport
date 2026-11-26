@@ -47,8 +47,15 @@ not an unlimited place to move load either. Functions per deployment are
      device copy) - one full read, then only rows with a newer
      `updated_at`; live events go straight into it. Was ~3 MB/user/day
      (pages of up to 1,000 rows × ~520 B re-read by every screen).
-   - Next: one bootstrap read on open + local cache for profile/contacts/
-     chat lists; counterparty names cached.
+   - Done 26 Nov: public profiles by wallet cached on the device (6 h; "no
+     account" 5 min; sign-in/ownership/own profile always fresh; cleared on
+     profile edit); notifications-cleared watermark cached 10 min; known
+     contact pairs remembered (no lookup per payment) and the contact list
+     shared across screens for 60 s; Home's missed-payment catch-up at most
+     every 3 min (live listener covers payments while Home is open).
+     App start already uses one bootstrap call (lib/homeBootstrap.ts).
+   - Not cached on purpose: other people's chat public keys (a key rotated
+     on a new device must be seen at once).
    - Dropped: same-origin rewrite for CORS preflights - preflights are tiny
      (no egress to speak of) and a Vercel rewrite would move the bytes onto
      Vercel's 10 GB Fast Origin Transfer instead.

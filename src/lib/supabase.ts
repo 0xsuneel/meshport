@@ -689,6 +689,26 @@ export async function isUsernameTakenDb(username: string): Promise<boolean> {
 // dropped those columns for the full reasoning.
 
 // ─── CONTACTS ─────────────────────────────────────────────────────────────────
+// Device memory (docs/SUPABASE_LIGHT_PLAN.md): pairs known to be saved
+// contacts - upsertContactDb ran a lookup for every payment Home's catch-up
+// saw, on every visit - and the contact list shared by every screen for 60 s.
+const KNOWN_CONTACTS_KEY = 'meshport_contacts_known_v1'
+let knownContactPairs: Set<string> | null = null
+function knownContacts(): Set<string> {
+  if (knownContactPairs) return knownContactPairs
+  try { knownContactPairs = new Set(JSON.parse(localStorage.getItem(KNOWN_CONTACTS_KEY) || '[]')) } catch { knownContactPairs = new Set() }
+  return knownContactPairs!
+}
+function setKnownContact(ownerId: string, contactId: string, known: boolean) {
+  const set = knownContacts()
+  const key = `${ownerId}|${contactId}`
+  if (known) set.add(key); else set.delete(key)
+  try { localStorage.setItem(KNOWN_CONTACTS_KEY, JSON.stringify([...set].slice(-2000))) } catch { /* memory copy still works */ }
+}
+const CONTACT_LIST_TTL_MS = 60_000
+const contactLists = new Map<string, { at: number; p: Promise<DbUser[]> }>()
+function contactsChanged(ownerId: string) { contactLists.delete(ownerId) }
+
 /**
  * Add a contact to Supabase. Falls back to localStorage if no session.
  */
@@ -700,6 +720,8 @@ export async function addContactDb(
     .from('contacts')
     .upsert({ owner_id: ownerId, contact_id: contactId }, { onConflict: 'owner_id,contact_id' })
   if (error) { console.error('[Supabase] addContactDb:', error.message); return { error: error.message } }
+  setKnownContact(ownerId, contactId, true)
+  contactsChanged(ownerId)
   return { error: null }
 }
 
@@ -711,6 +733,7 @@ export async function addContactDb(
  */
 export async function upsertContactDb(ownerId: string, contactId: string): Promise<void> {
   if (!ownerId || !contactId || ownerId === contactId) return
+  if (knownContacts().has(`${ownerId}|${contactId}`)) return // saved already (this device saw it)
   try {
     const { data: existing } = await supabase
       .from('contacts')
@@ -718,12 +741,13 @@ export async function upsertContactDb(ownerId: string, contactId: string): Promi
       .eq('owner_id', ownerId)
       .eq('contact_id', contactId)
       .maybeSingle()
-    if (existing) return // already a saved contact - nothing to do
+    if (existing) { setKnownContact(ownerId, contactId, true); return } // already a saved contact
 
     const { error } = await supabase
       .from('contacts')
       .insert({ owner_id: ownerId, contact_id: contactId, is_favorite: false })
     if (error) console.error('[Supabase] upsertContactDb insert:', error.message)
+    else { setKnownContact(ownerId, contactId, true); contactsChanged(ownerId) }
   } catch (e) {
     console.error('[Supabase] upsertContactDb:', e)
   }
@@ -742,6 +766,15 @@ export async function fetchContactsDb(ownerId: string): Promise<DbUser[]> {
  * mistaking a network error for "no contacts".
  */
 export async function fetchContactsDbStrict(ownerId: string): Promise<DbUser[]> {
+  const hit = contactLists.get(ownerId)
+  if (hit && Date.now() - hit.at < CONTACT_LIST_TTL_MS) return hit.p
+  const p = readContacts(ownerId)
+  contactLists.set(ownerId, { at: Date.now(), p })
+  p.catch(() => { if (contactLists.get(ownerId)?.p === p) contactLists.delete(ownerId) }) // failures aren't kept
+  return p
+}
+
+async function readContacts(ownerId: string): Promise<DbUser[]> {
   // Get contact IDs
   const { data: contactRows, error } = await supabase
     .from('contacts')
@@ -753,6 +786,7 @@ export async function fetchContactsDbStrict(ownerId: string): Promise<DbUser[]> 
   if (!contactRows || contactRows.length === 0) return []
 
   const ids = contactRows.map((r: any) => r.contact_id)
+  for (const id of ids) setKnownContact(ownerId, id, true)
 
   // Fetch user profiles for those IDs
   const { data: users, error: usersError } = await supabase
@@ -770,6 +804,8 @@ export async function fetchContactsDbStrict(ownerId: string): Promise<DbUser[]> 
 export async function removeContactDb(ownerId: string, contactId: string): Promise<void> {
   await supabase.from('contacts').delete()
     .eq('owner_id', ownerId).eq('contact_id', contactId)
+  setKnownContact(ownerId, contactId, false)
+  contactsChanged(ownerId)
 }
 
 // ─── CHAT ─────────────────────────────────────────────────────────────────────
@@ -1098,17 +1134,65 @@ export async function markMessagesRead(conversationId: string, myId: string): Pr
   }
 }
 
+// ─── Public profiles, kept on the device (docs/SUPABASE_LIGHT_PLAN.md) ─────
+// Names/avatars by wallet were re-read on every screen and every deposit
+// alert (one address 24 times in an hour). Kept here for 6 h; "no MeshPort
+// account" only 5 min, so a new sign-up shows by name soon. Sign-in and
+// ownership checks pass { fresh: true } and always ask the server.
+const PROFILE_KEY = 'meshport_profiles_v1'
+const PROFILE_TTL_MS = 6 * 3600_000
+const PROFILE_MISS_TTL_MS = 5 * 60_000
+const PROFILE_MAX = 400
+type CachedProfile = { u: DbUser | null; at: number }
+let profileStore: Record<string, CachedProfile> | null = null
+function profileCache(): Record<string, CachedProfile> {
+  if (profileStore) return profileStore
+  try { profileStore = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}') || {} } catch { profileStore = {} }
+  return profileStore!
+}
+function saveProfileCache() {
+  const c = profileCache()
+  const keys = Object.keys(c)
+  if (keys.length > PROFILE_MAX) {
+    keys.sort((a, b) => c[a].at - c[b].at).slice(0, keys.length - PROFILE_MAX).forEach(k => { delete c[k] })
+  }
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(c)) } catch { /* memory copy still works */ }
+}
+/** The cached profile: a user, null (no account), or undefined (not known / expired). */
+function cachedProfile(addr: string): DbUser | null | undefined {
+  const hit = profileCache()[addr]
+  if (!hit) return undefined
+  const ttl = hit.u ? PROFILE_TTL_MS : PROFILE_MISS_TTL_MS
+  return Date.now() - hit.at < ttl ? hit.u : undefined
+}
+function rememberProfile(addr: string, u: DbUser | null) {
+  profileCache()[addr] = { u, at: Date.now() }
+}
+/** After a profile edit: the next lookup of that wallet (or all) asks the server. */
+export function forgetCachedProfile(walletAddress?: string) {
+  if (walletAddress) delete profileCache()[walletAddress.toLowerCase()]
+  else profileStore = {}
+  saveProfileCache()
+}
+
 // ─── Lookup profile by wallet address ─────────────────────────────────────────
 /** The single source of truth for wallet ownership.
- *  Checks Supabase by wallet_address - works for ALL user types. */
-export async function getUserByWalletAddress(walletAddress: string): Promise<DbUser | null> {
+ *  Checks Supabase by wallet_address - works for ALL user types.
+ *  `fresh`: skip the device cache (sign-in, ownership, your own profile). */
+export async function getUserByWalletAddress(walletAddress: string, opts: { fresh?: boolean } = {}): Promise<DbUser | null> {
   const addr = walletAddress.toLowerCase()
+  if (!opts.fresh) {
+    const hit = cachedProfile(addr)
+    if (hit !== undefined) return hit
+  }
   const { data, error } = await supabase
     .from('users')
     .select(USER_COLS)
     .ilike('wallet_address', addr)
     .maybeSingle()
   if (error) { console.error('[Supabase] getUserByWalletAddress:', error.message); return null }
+  rememberProfile(addr, (data as DbUser | null) ?? null)
+  saveProfileCache()
   return data as DbUser | null
 }
 
@@ -1132,15 +1216,27 @@ export async function lookupAccountByWallet(walletAddress: string): Promise<
 export async function getUsersByWalletAddresses(addresses: string[]): Promise<Map<string, DbUser>> {
   if (!addresses.length) return new Map()
   // Use supabase REST with ilike per-address - batch via or() filter
-  const addrs = addresses.map(a => a.toLowerCase())
+  const map = new Map<string, DbUser>()
+  const missing: string[] = []
+  for (const a of new Set(addresses.map(a => a.toLowerCase()))) {
+    const hit = cachedProfile(a)
+    if (hit === undefined) missing.push(a)
+    else if (hit) map.set(a, hit)
+  }
+  if (!missing.length) return map
   // Build OR filter: wallet_address.ilike.0x1a2b,wallet_address.ilike.0x3c4d
-  const orFilter = addrs.map(a => `wallet_address.ilike.${a}`).join(',')
+  const orFilter = missing.map(a => `wallet_address.ilike.${a}`).join(',')
   const { data, error } = await supabase
     .from('users').select(USER_COLS)
     .or(orFilter)
-  if (error) { console.error('[Supabase] getUsersByWalletAddresses:', error.message); return new Map() }
-  const map = new Map<string, DbUser>()
-  for (const u of (data || [])) map.set((u.wallet_address || '').toLowerCase(), u as DbUser)
+  if (error) { console.error('[Supabase] getUsersByWalletAddresses:', error.message); return map }
+  for (const a of missing) rememberProfile(a, null)
+  for (const u of (data || [])) {
+    const a = (u.wallet_address || '').toLowerCase()
+    map.set(a, u as DbUser)
+    rememberProfile(a, u as DbUser)
+  }
+  saveProfileCache()
   return map
 }
 
@@ -1425,3 +1521,21 @@ export async function fetchMySupportTickets(userId: string): Promise<SupportTick
   }))
 }
 
+
+// ─── Your notifications-cleared watermark ─────────────────────────────────────
+// Read by Home's catch-ups on every visit (users row, ~14 reads/hour for one
+// person). Kept in memory for 10 min; a Clear on this device updates it.
+const CLEARED_TTL_MS = 10 * 60_000
+const clearedAt = new Map<string, { v: string | null; at: number }>()
+export async function getNotificationsClearedAt(userId: string): Promise<string | null> {
+  const hit = clearedAt.get(userId)
+  if (hit && Date.now() - hit.at < CLEARED_TTL_MS) return hit.v
+  const { data, error } = await supabase.from('users').select('notifications_cleared_at').eq('id', userId).maybeSingle()
+  if (error) return hit?.v ?? null
+  const v = (data as any)?.notifications_cleared_at ?? null
+  clearedAt.set(userId, { v, at: Date.now() })
+  return v
+}
+export function noteNotificationsCleared(userId: string, iso: string) {
+  clearedAt.set(userId, { v: iso, at: Date.now() })
+}

@@ -534,10 +534,12 @@ export const useNotificationStore = create<NotificationStore>()((set, get) => ({
       // itself no longer depends on local storage surviving.
       const userId = useAuthStore.getState().user?.id
       if (userId) {
-        import('@/lib/supabase').then(({ supabase, resetAnonSession }) => {
+        import('@/lib/supabase').then(({ supabase, resetAnonSession, noteNotificationsCleared }) => {
           // Logging in again without a reload must set up a new session.
           resetAnonSession()
-          supabase.from('users').update({ notifications_cleared_at: new Date().toISOString() }).eq('id', userId)
+          const clearedIso = new Date().toISOString()
+          noteNotificationsCleared(userId, clearedIso)
+          supabase.from('users').update({ notifications_cleared_at: clearedIso }).eq('id', userId)
             .then(({ error }) => { if (error) console.warn('[notifications] failed to persist clear watermark:', error.message) })
         }).catch(() => {})
       }

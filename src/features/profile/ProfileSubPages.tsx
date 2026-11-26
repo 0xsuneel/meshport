@@ -884,6 +884,8 @@ export function EditProfilePage() {
         return
       }
 
+      // The device's profile cache must not keep showing the old name/photo.
+      import('@/lib/supabase').then(({ forgetCachedProfile }) => forgetCachedProfile(wa)).catch(() => {})
       // Update local Zustand store immediately
       updateDisplayName(displayName.trim())
       // Add cache-buster to force browser to load fresh image everywhere

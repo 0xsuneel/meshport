@@ -2440,6 +2440,10 @@ function BusinessApprovalBanner() {
 // Days in each Insights period (a constant - outside the component, so hooks need not list it).
 const PERIOD_DAYS: Record<'week' | 'month' | 'year', number> = { week: 7, month: 30, year: 365 }
 
+// Home's missed-payment catch-up: at most once per 3 min per person.
+const PAY_CATCHUP_MS = 3 * 60_000
+const payCatchupAt = new Map<string, number>()
+
 export function HomePage() {
   const navigate = useNavigate()
   const businessAccount = useBusinessTab()
@@ -3138,6 +3142,12 @@ export function HomePage() {
     // so the balance comes first.
     let stopped = false
     const run = async () => {
+      // Once per PAY_CATCHUP_MS per person: every return to Home re-read each
+      // chat's recent payments (2 reads per chat). Payments while Home is
+      // open arrive through the live listener above.
+      const lastCatchup = payCatchupAt.get(user.id!)
+      if (lastCatchup && Date.now() - lastCatchup < PAY_CATCHUP_MS) return
+      payCatchupAt.set(user.id!, Date.now())
       try {
         const { supabase } = await import('@/lib/supabase')
         const { authHeaders } = await import('@/lib/chatService')
@@ -3155,8 +3165,8 @@ export function HomePage() {
         const bootCleared = await bootPart('cleared_at', 'home-pay-catchup', { userId: user.id })
         if (bootCleared !== undefined) since = bootCleared || undefined
         else {
-          const { data: userRow } = await supabase.from('users').select('notifications_cleared_at').eq('id', user.id).maybeSingle()
-          since = userRow?.notifications_cleared_at || undefined
+          const { getNotificationsClearedAt } = await import('@/lib/supabase')
+          since = (await getNotificationsClearedAt(user.id)) || undefined
         }
         const sinceFilter = since ? `&created_at=gt.${encodeURIComponent(since)}` : ''
 
@@ -3373,9 +3383,8 @@ export function HomePage() {
         let fromUsername: string | undefined
         if (record.counterpartyAddress) {
           try {
-            const { supabase } = await import('@/lib/supabase')
-            const { data } = await supabase.from('users')
-              .select('id,username').eq('wallet_address', record.counterpartyAddress.toLowerCase()).maybeSingle()
+            const { getUserByWalletAddress } = await import('@/lib/supabase')
+            const data = await getUserByWalletAddress(record.counterpartyAddress)
             fromUsername = data?.username || undefined
             // A resolved username means the sender IS a registered MeshPort
             // user - auto-add them as a contact, same as the chat-message
@@ -3489,9 +3498,8 @@ export function HomePage() {
             const bootCleared = await bootPart('cleared_at', 'home-activity-catchup', { userId: user.id })
             if (bootCleared !== undefined) since = bootCleared || undefined
             else {
-              const { supabase } = await import('@/lib/supabase')
-              const { data } = await supabase.from('users').select('notifications_cleared_at').eq('id', user.id).maybeSingle()
-              since = data?.notifications_cleared_at || undefined
+              const { getNotificationsClearedAt } = await import('@/lib/supabase')
+              since = (await getNotificationsClearedAt(user.id)) || undefined
             }
           } catch {}
         }

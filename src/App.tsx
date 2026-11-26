@@ -193,7 +193,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       lastRun = Date.now()
       if (blocking) setChecking(true)
       import('@/lib/supabase').then(({ getUserByWalletAddress }) => {
-        getUserByWalletAddress(walletAddress).then(profile => {
+        getUserByWalletAddress(walletAddress, { fresh: true }).then(profile => {
           if (!live) return
           if (profile) {
             if (profile.username) setUsername(profile.username)
