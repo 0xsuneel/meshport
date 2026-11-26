@@ -303,6 +303,32 @@ export async function invokeLinked(name: string, body: Record<string, unknown>) 
 }
 
 /**
+ * Saves a broadcast transaction's hash on its attempt (pay / swap / bulk pay)
+ * through the mark_attempt_submitted database function - the same checks the
+ * Edge Functions' markSubmitted made (your wallet's attempt, a 0x hash), but
+ * no Edge Function call (docs/SUPABASE_LIGHT_PLAN.md, Phase 3). Re-links the
+ * session once if it isn't linked yet. null: couldn't use it here - the
+ * caller falls back to the Edge Function.
+ */
+export async function markAttemptSubmittedDb(attemptId: string, txHash: string): Promise<{ success: boolean; error?: string } | null> {
+  const call = () => supabase.rpc('mark_attempt_submitted', { p_attempt_id: attemptId, p_tx_hash: txHash })
+  try {
+    let { data, error } = await call()
+    if (!error && (data as any)?.error === 'not_linked') {
+      const { useAuthStore } = await import('@/store')
+      const st = useAuthStore.getState()
+      if (!(st.user?.id && st.signer && await syncAuthUidToProfile(st.user.id, st.signer, true))) return null
+      ;({ data, error } = await call())
+    }
+    const out = data as { success?: boolean; error?: string } | null
+    if (error || !out || out.error === 'not_linked') return null
+    return out.success ? { success: true } : { success: false, error: out.error ?? 'Failed to persist tx_hash' }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Headers for the /api/chat server routes: the caller's session token, after
  * making sure this session is linked to the signed-in account (the server
  * only accepts a sender id that is linked to the calling session).

@@ -9,11 +9,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const invokeMock = vi.fn()
 const ensureAnonSessionMock = vi.fn(async () => {})
+// The mark_attempt_submitted database path; null = unavailable (falls back to the function).
+const markDbMock = vi.fn(async (): Promise<{ success: boolean; error?: string } | null> => null)
 
 vi.mock('./supabase', () => ({
   supabase: { functions: { invoke: invokeMock } },
   ensureAnonSession: ensureAnonSessionMock,
   invokeLinked: (name: string, body: unknown) => invokeMock(name, { body }),
+  markAttemptSubmittedDb: markDbMock,
 }))
 
 const { createBulkPayIntent, markBulkPayAttemptSubmitted } = await import('./bulkPayIntentService')
@@ -34,6 +37,8 @@ const PARAMS = {
 beforeEach(() => {
   invokeMock.mockReset()
   ensureAnonSessionMock.mockClear()
+  markDbMock.mockReset()
+  markDbMock.mockResolvedValue(null)
 })
 
 describe('createBulkPayIntent', () => {
@@ -83,7 +88,22 @@ describe('createBulkPayIntent', () => {
 })
 
 describe('markBulkPayAttemptSubmitted (7. tx_hash persistence before receipt wait)', () => {
-  it('sends action=markSubmitted with the attemptId and txHash', async () => {
+  it('saves through the database function when it can - no Edge Function call', async () => {
+    markDbMock.mockResolvedValueOnce({ success: true })
+    const result = await markBulkPayAttemptSubmitted('attempt-1', '0xRealTxHash')
+    expect(result.success).toBe(true)
+    expect(markDbMock).toHaveBeenCalledWith('attempt-1', '0xRealTxHash')
+    expect(invokeMock).not.toHaveBeenCalled()
+  })
+
+  it('a refusal from the database function is the answer (no retry through the function)', async () => {
+    markDbMock.mockResolvedValueOnce({ success: false, error: 'Not your transaction' })
+    const result = await markBulkPayAttemptSubmitted('attempt-1', '0xRealTxHash')
+    expect(result).toEqual({ success: false, error: 'Not your transaction' })
+    expect(invokeMock).not.toHaveBeenCalled()
+  })
+
+  it('falls back to action=markSubmitted with the attemptId and txHash', async () => {
     invokeMock.mockResolvedValueOnce({ data: { success: true }, error: null })
     const result = await markBulkPayAttemptSubmitted('attempt-1', '0xRealTxHash')
     expect(result.success).toBe(true)

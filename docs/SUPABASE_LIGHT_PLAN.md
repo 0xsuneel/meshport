@@ -70,9 +70,16 @@ not an unlimited place to move load either. Functions per deployment are
      latest nonce in one batch - and calls the server only when something
      is queued. ensureNameOnchain remembers a confirmed on-chain name (was a
      name-register call every session).
-   - Left per real action: create + markSubmitted (pay/swap/bulkpay), claim
-     submit, name registration once. Next: fold markSubmitted into a
-     database write under RLS (no function), then move what remains.
+   - Done 26 Nov: markSubmitted (pay / swap / bulk pay) is the
+     mark_attempt_submitted database function - same checks (caller's
+     wallet via auth_uid, own attempt, 0x hash), same write, the confirm
+     trigger still fires; anon can't call it. The app re-links the session
+     once if needed and falls back to the Edge Function if the database
+     path can't be used. Verified live in a rolled-back transaction:
+     another wallet's attempt refused, bad hash refused, no login refused,
+     own attempt updated.
+   - Left per real action: create (pay/swap/bulkpay - nonce reservation
+     needs the server's RPC read), claim submit, name registration once.
 4. **Realtime only while someone is looking** (done 26 Nov): every channel
    goes through subscribeWithRetry's live gate - closed 30 s after the app
    is hidden and after 3 idle minutes (not on /chat or /splits, where

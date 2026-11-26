@@ -3,7 +3,7 @@
  * lifecycle. Mirrors bulkPayIntentService.ts's own shape exactly (the
  * same production-validated pattern), applied to Pay.
  */
-import { ensureAnonSession, invokeLinked } from './supabase'
+import { ensureAnonSession, invokeLinked, markAttemptSubmittedDb } from './supabase'
 import { describeFunctionsError } from './describeFunctionsError'
 import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
@@ -99,6 +99,9 @@ export async function createPayIntent(params: {
 export async function markPayAttemptSubmitted(attemptId: string, txHash: string): Promise<{ success: boolean; error?: string }> {
   try {
     await ensureAnonSession()
+    // A database call, not an Edge Function; the function stays the fallback.
+    const viaDb = await markAttemptSubmittedDb(attemptId, txHash)
+    if (viaDb) return viaDb
     const { data, error } = await invokeLinked('pay-intent', { action: 'markSubmitted', attemptId, txHash })
     if (error) return { success: false, error: await describeFunctionsError(error, 'Failed to persist tx_hash') }
     if (!data?.success) return { success: false, error: data?.error ?? 'Failed to persist tx_hash' }
