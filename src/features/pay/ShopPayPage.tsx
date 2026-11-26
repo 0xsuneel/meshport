@@ -8,7 +8,7 @@ import { ArrowLeft, BadgeCheck, MapPin, Phone, Store } from 'lucide-react'
 import { businessCurrency } from '@/lib/localCurrency'
 import { formatFiat } from '@/lib/currencyRegistry'
 import { supabase } from '@/lib/supabase'
-import { getShopLimits, shopSubline, type ShopInfo, type ShopLimits } from '@/lib/shop'
+import { getShopLimits, shopSubline, shopTitle, type ShopInfo, type ShopLimits } from '@/lib/shop'
 import { useAuthStore, useUIStore, useWalletStore } from '@/store'
 import { Avatar } from '@/components/ui/Avatar'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -144,7 +144,8 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
       here.searchParams.set('amount', String(value))
       navigate(`${here.pathname}${here.search}`, { replace: true })
       if (useAuthStore.getState().isAuthenticated && wallet && /^0x[0-9a-fA-F]{40}$/.test(wallet)) {
-        const to = `${shop.username}|${wallet}|${shop.businessName}|${shop.avatarUrl ?? ''}`
+        // Named as on this page (the store), so the confirm sheet matches it.
+        const to = `${shop.username}|${wallet}|${shopTitle(shop)}|${shop.avatarUrl ?? ''}`
         // &store: kept on the payment in history, so "Pay again" reopens this store.
         const storeQ = (shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : '')
           // What the payment screens show under the name instead of the username.
@@ -181,9 +182,9 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
       <div className={`flex-1 overflow-y-auto ${isDesktop ? '' : 'flex flex-col'}`}>
         {/* Who is being paid: photo, then the name with its badge. */}
         <div className="shrink-0 mx-auto w-full max-w-md flex flex-col items-center text-center px-5 pt-2">
-          <Avatar src={shop.avatarUrl ?? undefined} name={shop.businessName} size={short ? 'md' : 'lg'} />
+          <Avatar src={shop.avatarUrl ?? undefined} name={shopTitle(shop)} size={short ? 'md' : 'lg'} />
           <h1 className={`${short ? 'mt-2 text-[20px]' : 'mt-4 text-[22px]'} leading-tight font-bold text-text-primary flex items-center justify-center gap-2 max-w-full`}>
-            <span className="truncate">{shop.businessName}</span>
+            <span className="truncate">{shopTitle(shop)}</span>
             {shop.verified && <BadgeCheck className="w-6 h-6 shrink-0 text-brand-text" aria-label="Verified business" />}
           </h1>
           {/* What kind of business and which branch - like a payment app's

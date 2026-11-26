@@ -876,6 +876,11 @@ export function PaySendPage() {
       recipientUsername: recipient.isUsername ? recipient.display : undefined,
       memo: orderMemo('USDC'),
     })).catch(() => {})
+    // A Shop QR payment: "Pay" on the shop page goes straight to confirming
+    // (passcode / fingerprint, showing who and how much), as PhonePe and
+    // Google Pay do - no second screen with a second Pay button. Closing the
+    // sheet leaves this Review screen, with its Pay button, underneath.
+    if (reviewEntry && merchantOrderKind === 'shop') openPasscodeSheet()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, merchantPayCode, amountInvalid, recipient?.verified, recipient?.walletAddress, numAmount])
 

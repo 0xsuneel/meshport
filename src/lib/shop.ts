@@ -15,10 +15,18 @@ export type ShopInfo = {
   contact: string | null
 }
 
-/** The line under a shop's name on its pay page: "Restaurant / Café · Andheri branch". Never the username. */
+/** What a shop is called to its customers: the store's own (reviewed) name,
+ *  like Square's per-location business name - else the business name. */
+export function shopTitle(s: Pick<ShopInfo, 'businessName' | 'storeName'>): string {
+  return s.storeName?.trim() || s.businessName
+}
+
+/** The line under a shop's name: its category, and the business it belongs
+ *  to when that's a different name - "Retail store · Shop". Never the username. */
 export function shopSubline(s: Pick<ShopInfo, 'businessName' | 'storeName' | 'category'>): string {
-  const store = s.storeName && s.storeName.trim().toLowerCase() !== s.businessName.trim().toLowerCase() ? s.storeName.trim() : ''
-  return [s.category?.trim() || '', store].filter(Boolean).join(' · ')
+  const title = shopTitle(s).trim().toLowerCase()
+  const brand = s.businessName.trim() && s.businessName.trim().toLowerCase() !== title ? s.businessName.trim() : ''
+  return [s.category?.trim() || '', brand].filter(Boolean).join(' · ')
 }
 
 const shopCache = new Map<string, ShopInfo | null>()
