@@ -4,7 +4,7 @@ import type { MerchantStatus } from './merchant'
 
 export const ACCOUNT_LOCKED_MESSAGE = 'Available after your business is approved'
 
-export type AccountLockReason = Exclude<MerchantStatus, 'approved'> | null
+export type AccountLockReason = Exclude<MerchantStatus, 'approved' | 'revoked'> | null
 
 export type AccountLock = {
   /** Show the locked state. */
@@ -24,10 +24,13 @@ type Input = {
   accountType: 'personal' | 'business'
   status: MerchantStatus
 }
-type Hint = { approved: boolean; business: boolean | null } | null
+type Hint = { approved: boolean; business: boolean | null; revoked?: boolean } | null
 
 /**
- * The lock rule. Loaded: business && status !== 'approved'. Before the load
+ * The lock rule. Loaded: a business never approved (none / pending /
+ * rejected). A revoked business is not locked: it can still send and
+ * withdraw its own money - the server refuses its new payment requests,
+ * and Shop QR and bills need approval. Before the load
  * the last known status on this device decides (so an approved business
  * never flashes locked and a locked one never flashes unlocked); with no
  * usable hint the answer is "unknown" - not locked for display, but money
@@ -35,10 +38,10 @@ type Hint = { approved: boolean; business: boolean | null } | null
  */
 export function computeAccountLock(s: Input, hint: Hint): AccountLock {
   if (s.loaded) {
-    const locked = s.accountType === 'business' && s.status !== 'approved'
+    const locked = s.accountType === 'business' && s.status !== 'approved' && s.status !== 'revoked'
     return { locked, loaded: true, unknown: false, reason: locked ? (s.status as AccountLockReason) : null }
   }
-  if (hint && hint.approved) return { locked: false, loaded: false, unknown: false, reason: null }
+  if (hint && (hint.approved || hint.revoked)) return { locked: false, loaded: false, unknown: false, reason: null }
   if (hint && hint.business === true) return { locked: true, loaded: false, unknown: false, reason: 'none' }
   if (hint && hint.business === false) return { locked: false, loaded: false, unknown: false, reason: null }
   return { locked: false, loaded: false, unknown: true, reason: null }

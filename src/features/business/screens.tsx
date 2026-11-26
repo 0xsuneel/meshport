@@ -736,7 +736,10 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
   const card: { tone: StatusCardTone; title: string; text: string } =
     status === 'approved' ? { tone: 'success', title: 'Verified business', text: 'All business tools are on. Add your shops in Stores & staff.' }
     : status === 'pending' ? { tone: 'warning', title: 'Under review', text: "MeshPort is reviewing your business. You'll get a notification when it's approved." }
-    : closed ? { tone: 'danger', title: status === 'revoked' ? 'Business access removed' : 'Not approved', text: application?.reviewNote || 'Check the details and send it again.' }
+    : closed ? { tone: 'danger', title: status === 'revoked' ? 'Business access removed' : 'Not approved',
+        text: status === 'revoked'
+          ? `${application?.reviewNote ? application.reviewNote + ' ' : ''}You can still send and withdraw your funds; new payments are turned off.`
+          : application?.reviewNote || 'Check the details and send it again.' }
     : { tone: 'brand', title: 'Apply for business approval', text: 'Add your business name and tell MeshPort why you need a business account. Payments, orders and business tools turn on once approved.' }
 
   return (

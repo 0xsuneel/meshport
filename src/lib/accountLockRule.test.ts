@@ -9,9 +9,13 @@ const notLoaded = { loaded: false, accountType: 'personal' as const, status: 'no
 
 describe('computeAccountLock - loaded', () => {
   it('locks business accounts until approved', () => {
-    for (const status of ['none', 'pending', 'rejected', 'revoked'] as const) {
+    for (const status of ['none', 'pending', 'rejected'] as const) {
       expect(computeAccountLock(loaded('business', status), null)).toEqual({ locked: true, loaded: true, unknown: false, reason: status })
     }
+  })
+  it('a revoked business can still send and withdraw its money', () => {
+    expect(computeAccountLock(loaded('business', 'revoked'), null).locked).toBe(false)
+    expect(computeAccountLock(notLoaded, { approved: false, business: true, revoked: true })).toMatchObject({ locked: false, unknown: false })
   })
   it('leaves approved businesses unlocked', () => {
     expect(computeAccountLock(loaded('business', 'approved'), null).locked).toBe(false)

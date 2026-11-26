@@ -146,7 +146,8 @@ export function MerchantApplyPage() {
             <p className="text-xs text-text-secondary leading-relaxed max-w-[340px]">
               {status === 'pending' && 'MeshPort is reviewing your application. You’ll get a notification when it’s decided.'}
               {status === 'approved' && 'Your collections, payments and settlements are in the Business tab. Payments on other chains wait in Settlements until you tap Settle now.'}
-              {(status === 'rejected' || status === 'revoked') && (application.reviewNote || 'You can keep using MeshPort as usual.')}
+              {status === 'rejected' && (application.reviewNote || 'You can keep using MeshPort as usual.')}
+              {status === 'revoked' && `${application.reviewNote ? application.reviewNote + ' ' : ''}You can still send and withdraw your funds; new payments are turned off.`}
             </p>
             <p className="text-[11px] text-text-secondary">Applied {new Date(application.createdAt).toLocaleDateString()}</p>
             {status === 'approved' && (

@@ -63,7 +63,7 @@ type State = {
 let state: State = { loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null, pendingName: null }
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach(l => l())
-const set = (s: State) => { state = s; if (s.loaded) setRegisteredBusinessName(s.storeName || s.application?.businessName); emit(); if (s.loaded) rememberHint(s.status === 'approved', s.accountType === 'business') }
+const set = (s: State) => { state = s; if (s.loaded) setRegisteredBusinessName(s.storeName || s.application?.businessName); emit(); if (s.loaded) rememberHint(s.status === 'approved', s.accountType === 'business', s.status === 'revoked') }
 
 // Display hint only: the last known "is a merchant" for this wallet, so the
 // screen opens with the right labels (Cross-chain Transfer / Manage money) instead of
@@ -74,20 +74,20 @@ const HINT_KEY = 'meshport_merchant_hint'
 function currentWallet(): string {
   try { return (useAuthStore.getState().walletAddress || '').toLowerCase() } catch { return '' }
 }
-function rememberHint(approved: boolean, business: boolean) {
+function rememberHint(approved: boolean, business: boolean, revoked: boolean) {
   try {
     const w = currentWallet()
-    if (w) localStorage.setItem(HINT_KEY, JSON.stringify({ w, approved, business }))
+    if (w) localStorage.setItem(HINT_KEY, JSON.stringify({ w, approved, business, revoked }))
   } catch { /* storage unavailable */ }
 }
 /** Last known merchant status for this wallet, or null when there is none
  *  (first load on this device). `business` is null in hints written before
  *  the account type was remembered. */
-export function readMerchantHint(): { approved: boolean; business: boolean | null } | null {
+export function readMerchantHint(): { approved: boolean; business: boolean | null; revoked?: boolean } | null {
   try {
     const h = JSON.parse(localStorage.getItem(HINT_KEY) || 'null')
     if (!h || h.w !== currentWallet() || !h.w) return null
-    return { approved: h.approved === true, business: typeof h.business === 'boolean' ? h.business : null }
+    return { approved: h.approved === true, business: typeof h.business === 'boolean' ? h.business : null, revoked: h.revoked === true }
   } catch { return null }
 }
 function readHint(): boolean {
