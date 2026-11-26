@@ -173,6 +173,34 @@ function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
  *    up to 3 times with backoff. 4xx auth/validation errors are NOT
  *    retried since retrying the same bad request won't help.
  */
+// Rows this device already saved. A hashed row is written with
+// resolution=ignore-duplicates, so sending it again changes nothing on the
+// server - it only costs a request (+ CORS preflight). Home's payment
+// catch-up re-sent every recent chat payment on each visit: 26 Nov 2026,
+// one phone made ~520 such requests an hour. Per device, last 1,000 rows.
+const SAVED_KEY = 'meshport_activity_saved_v1'
+const SAVED_MAX = 1000
+let savedRows: string[] | null = null
+function savedList(): string[] {
+  if (savedRows) return savedRows
+  try { savedRows = JSON.parse(localStorage.getItem(SAVED_KEY) || '[]') } catch { savedRows = [] }
+  if (!Array.isArray(savedRows)) savedRows = []
+  return savedRows
+}
+/** Tests: forget what this "device" saved. */
+export function resetSavedActivityCache() {
+  savedRows = []
+  try { localStorage.removeItem(SAVED_KEY) } catch { /* no storage */ }
+}
+function alreadySaved(key: string): boolean { return savedList().includes(key) }
+function markSaved(key: string) {
+  const list = savedList()
+  if (list.includes(key)) return
+  list.push(key)
+  if (list.length > SAVED_MAX) list.splice(0, list.length - SAVED_MAX)
+  try { localStorage.setItem(SAVED_KEY, JSON.stringify(list)) } catch { /* memory copy still dedupes */ }
+}
+
 export async function saveActivity(p: SaveParams): Promise<boolean> {
   const SUPA_URL  = (import.meta.env.VITE_SUPABASE_URL  as string) || ''
 
@@ -206,6 +234,9 @@ export async function saveActivity(p: SaveParams): Promise<boolean> {
     ? 'return=minimal,resolution=ignore-duplicates'
     : 'return=minimal'
 
+  const savedKey = row.tx_hash ? `${row.wallet_address}|${row.tx_hash}` : ''
+  if (savedKey && alreadySaved(savedKey)) return true
+
   const { authHeaders } = await import('./chatService')
   let lastErr = ''
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -219,7 +250,10 @@ export async function saveActivity(p: SaveParams): Promise<boolean> {
         },
         body: JSON.stringify(row),
       })
-      if (res.ok || res.status === 409) return true // success, or benign duplicate
+      if (res.ok || res.status === 409) { // success, or benign duplicate
+        if (savedKey) markSaved(savedKey)
+        return true
+      }
       const txt = await res.text()
       lastErr = `${res.status}: ${txt}`
       // 4xx other than 409 is a bad request / auth problem - retrying the

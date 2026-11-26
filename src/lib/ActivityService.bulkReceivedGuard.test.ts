@@ -22,7 +22,7 @@ vi.mock('./chatService', () => ({
 vi.mock('./supabase', () => ({ supabase: {} }))
 
 // Imported AFTER the mock is registered, per vitest's hoisting semantics.
-const { Activity, hasAnyActivityForTx } = await import('./ActivityService')
+const { Activity, hasAnyActivityForTx, resetSavedActivityCache } = await import('./ActivityService')
 
 const WALLET = '0xWallet1'
 const WALLET_2 = '0xWallet2'
@@ -84,6 +84,7 @@ function recipientWalletsOf(posts: RecordedCall[]): Set<string> {
 
 beforeEach(() => {
   vi.unstubAllGlobals()
+  resetSavedActivityCache()
 })
 
 describe('hasAnyActivityForTx', () => {
@@ -227,5 +228,17 @@ describe('Activity.bulkReceived - the P0 guard', () => {
     // pre-existing, documented behavior.
     expect(result).toBe(true)
     expect(ownBulkReceivedPosts(second.calls)).toHaveLength(0)
+  })
+})
+
+describe('saveActivity device dedupe', () => {
+  it('sends a hashed row once per device; repeats (e.g. Home catch-up) make no request', async () => {
+    const first = mockFetch([])
+    await Activity.receive({ walletAddress: WALLET, txHash: '0xRepeatHash', amount: 1, fromAddress: WALLET_2 })
+    expect(first.calls.filter(c => c.method === 'POST')).toHaveLength(1)
+
+    const second = mockFetch([])
+    await Activity.receive({ walletAddress: WALLET, txHash: '0xRepeatHash', amount: 1, fromAddress: WALLET_2 })
+    expect(second.calls.filter(c => c.method === 'POST')).toHaveLength(0)
   })
 })
