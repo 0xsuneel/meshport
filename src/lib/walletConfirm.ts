@@ -22,6 +22,7 @@
 // (restoreWallet.restorePrivateKey) and approvals (walletApproval) accept it
 // as "the wallet checked the passcode" - the frame already opened the key.
 
+import { PAY_MAX_FEE } from './payFee'
 import { useAuthStore } from '@/store'
 import type { ConfirmIntent, ConfirmRequest, ConfirmScope, ConfirmSummary } from '@/wallet/protocol'
 import { issueWalletConfirmToken } from './walletConfirmToken'
@@ -156,9 +157,9 @@ export function batchPayScope(amount: number): ConfirmScope | null {
   return spendScope([{ asset: 'USDC', amount }], [{ address: MULTICALL3, label: 'Multicall3 (batch payments)' }])
 }
 
-// A Pay send's fees stay far under this (≈0.002 USDC on Arc); the wallet
-// shows it as the most the payment may spend on fees.
-const PAY_MAX_FEE = 50_000_000_000_000_000n // 0.05 USDC
+// A Pay send's fees stay far under this (≈0.005 USDC on Arc); the wallet
+// shows it as the most the payment may spend on fees. The send keeps its fee
+// cap inside it (lib/payFee).
 
 /** The exact transaction a Pay send will sign (arcService payTx), for the wallet to confirm. */
 export async function payConfirmIntent(token: 'USDC' | 'EURC' | 'cirBTC', to: string, amount: number, memo?: { code: string; label: string } | null): Promise<ConfirmIntent | null> {

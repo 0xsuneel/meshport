@@ -2,6 +2,7 @@
  * Arc Blockchain Service
  * Implemented exactly per Arc docs: https://docs.arc.io/integrate/exchanges/withdrawals
  */
+import { payFeeCapWithin } from './payFee'
 import { span, reportPayment } from './perfTrace'
 import { createPublicClient, parseUnits, encodeFunctionData, parseGwei, getAddress, isAddress, keccak256 } from 'viem'
 import type { WalletAccount } from '@/wallet'
@@ -653,7 +654,7 @@ export async function sendUSDC(params: {
   // failure must never block or fail an already-broadcast payment.
   // The same transaction the preflight estimated and the intent expects (payTx).
   const tx = payTx('USDC', destination, params.amount, params.memo)
-  const sent = await relaySend(account, { to: tx.to, value: tx.value ?? 0n, data: tx.data, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce, maxFeePerGas: feeCap },
+  const sent = await relaySend(account, { to: tx.to, value: tx.value ?? 0n, data: tx.data, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce, maxFeePerGas: payFeeCapWithin(feeCap, (gasEstimate * 120n) / 100n) },
     h => { void markPayAttemptSubmitted(attemptId, h).catch(() => { /* best-effort */ }) })
   const txHash = sent.txHash
 
@@ -797,7 +798,7 @@ export async function sendEURC(params: {
   // too. Runtime behavior is unaffected.
   // Signed here, sent and confirmed by the server in one request - see
   // relaySend (and sendUSDC's comments).
-  const sent = await relaySend(account, { to: EURC_CONTRACT as `0x${string}`, data: data as `0x${string}`, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce, maxFeePerGas: feeCap },
+  const sent = await relaySend(account, { to: EURC_CONTRACT as `0x${string}`, data: data as `0x${string}`, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce, maxFeePerGas: payFeeCapWithin(feeCap, (gasEstimate * 120n) / 100n) },
     h => { void markPayAttemptSubmitted(attemptId, h).catch(() => { /* best-effort */ }) })
   const txHash = sent.txHash
 
@@ -913,7 +914,7 @@ export async function sendCirBTC(params: {
   // with ARC_CHAIN_INLINE (env-driven, matches sendUSDC and now sendEURC).
   // Signed here, sent and confirmed by the server in one request - see
   // relaySend (and sendUSDC's comments).
-  const sent = await relaySend(account, { to: CIRBTC_CONTRACT as `0x${string}`, data: data as `0x${string}`, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce, maxFeePerGas: feeCap },
+  const sent = await relaySend(account, { to: CIRBTC_CONTRACT as `0x${string}`, data: data as `0x${string}`, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce, maxFeePerGas: payFeeCapWithin(feeCap, (gasEstimate * 120n) / 100n) },
     h => { void markPayAttemptSubmitted(attemptId, h).catch(() => { /* best-effort */ }) })
   const txHash = sent.txHash
 
