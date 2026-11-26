@@ -37,9 +37,11 @@ not an unlimited place to move load either. Functions per deployment are
 
 1. **Background load ≈ 0** (mostly done 26 Nov): Alchemy webhooks for 5
    chains, idle watchers gated, leftover chains every 10 min, activity
-   write storm fixed, claim-worker mint lookup fixed. Left: turn off
-   blockchain-indexer shadow/compare, idle heartbeat 10 → 30 min.
-   Target < 30 Edge calls/hour.
+   write storm fixed, claim-worker mint lookup fixed. Done 26 Nov
+   (migration 20261126130000): idle heartbeat 30 min per job, 11 more jobs
+   gated (nonce recovery, reconcile, broadcast recovery, ledger link, Arc
+   push sweep, deposit backstop, name sync), Arc index pass every 10 min,
+   shadow compare paused. Target < 30 Edge calls/hour.
 2. **≤ 10 Supabase requests/user/day** (biggest egress win): one bootstrap
    read on open + local cache; activity history from Alchemy via Vercel;
    same-origin Vercel rewrite for Supabase to drop CORS preflights.
