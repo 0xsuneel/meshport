@@ -45,15 +45,17 @@ export function orderKindOf(v: { kind?: string | null; personal?: boolean | null
  * Paid, receiver's side (`received`): "Bill ORD-00042 Received" /
  * "Request ORD-00043 Amount Received" / "Requested ORD-00044 Payment Received".
  * Shop QR (nobody requested it - no number shown): "Shop Payment" (both
- * before and after paying) / "Shop Payment Received".
+ * before and after paying) / "Received on Royal Salons" - the business name
+ * the merchant registered (`business`, else this device's own registered
+ * name; "Shop Payment Received" when neither is known).
  * `short` (history rows, card bands): "#42" numbers - "Bill #42", "Requested #44",
  * "Request Paid · #43", "Request #43 Received".
  */
-export function orderTitle(kind: OrderKind, number: string | null | undefined, opts: { paid?: boolean; received?: boolean; short?: boolean } = {}): string {
+export function orderTitle(kind: OrderKind, number: string | null | undefined, opts: { paid?: boolean; received?: boolean; short?: boolean; business?: string | null } = {}): string {
   const no = opts.short ? shortOrderNumber(number) : displayOrderNumber(number)
   if (opts.received) {
     if (kind === 'bill') return `Bill ${no} Received`
-    if (kind === 'shop') return 'Shop Payment Received'
+    if (kind === 'shop') return shopReceivedTitle(opts.business)
     if (kind === 'merchant_request') return opts.short ? `Requested ${no} Received` : `Requested ${no} Payment Received`
     return opts.short ? `Request ${no} Received` : `Request ${no} Amount Received`
   }
@@ -62,6 +64,26 @@ export function orderTitle(kind: OrderKind, number: string | null | undefined, o
   if (kind === 'shop') return 'Shop Payment'
   if (kind === 'merchant_request') return opts.paid ? `Requested Payment Paid${sep}${no}` : opts.short ? `Requested ${no}` : `Requested Payment ${no}`
   return opts.paid ? (opts.short ? `Request Paid · ${no}` : `Request Amount Paid ${no}`) : `Request ${no}`
+}
+
+// The business name this device's merchant registered (lib/merchant.ts sets
+// it once their application loads; kept on the device so it's there before
+// that load on the next start). Only the merchant themselves receives Shop QR
+// payments, so "received" titles can use it.
+const BUSINESS_NAME_KEY = 'meshport_business_name_v1'
+let registeredBusinessName: string | null = null
+try { registeredBusinessName = globalThis.localStorage?.getItem(BUSINESS_NAME_KEY) || null } catch { /* no storage */ }
+export function setRegisteredBusinessName(name: string | null | undefined): void {
+  const n = (name ?? '').trim() || null
+  if (n === registeredBusinessName) return
+  registeredBusinessName = n
+  try { if (n) globalThis.localStorage?.setItem(BUSINESS_NAME_KEY, n); else globalThis.localStorage?.removeItem(BUSINESS_NAME_KEY) } catch { /* no storage */ }
+}
+export function getRegisteredBusinessName(): string | null { return registeredBusinessName }
+/** A Shop QR payment on the business's side: "Received on Royal Salons". */
+export function shopReceivedTitle(business?: string | null): string {
+  const n = (business ?? '').trim() || registeredBusinessName
+  return n ? `Received on ${n}` : 'Shop Payment Received'
 }
 
 // A payment that settles an order ends with a tag naming it, e.g.

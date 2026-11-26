@@ -172,7 +172,7 @@ export function orderLabel(v: { code: string; orderNumber?: string | null }): st
 // How orders are named on screen: src/lib/orderLabels.ts (pure, no network).
 export {
   displayOrderNumber, shortOrderNumber, orderKindOf, orderTitle, PAYMENT_ORDER_TAG, paymentOrderTag, parsePaymentOrderTag,
-  paidTitleFromTag, orderCardPreview, shopFrom, type OrderKind,
+  paidTitleFromTag, orderCardPreview, shopFrom, shopReceivedTitle, type OrderKind,
 } from './orderLabels'
 import { displayOrderNumber, orderKindOf, type OrderKind } from './orderLabels'
 export const orderDisplay = (v: { code: string; orderNumber?: string | null }) => displayOrderNumber(orderLabel(v))

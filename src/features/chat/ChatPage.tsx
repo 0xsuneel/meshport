@@ -65,7 +65,7 @@ import {
   subscribeWithRetry,
   type ChatMessage,
 } from '@/lib/chatService'
-import { codeFromLink, billCardMessage, orderLabel, orderKindOf, orderTitle, displayOrderNumber, paymentOrderTag, parsePaymentOrderTag, paidTitleFromTag, orderCardPreview, BILL_PAY_EVENT, type PaymentView, type OrderKind } from '@/lib/merchantPay'
+import { codeFromLink, billCardMessage, orderLabel, orderKindOf, orderTitle, shopReceivedTitle, displayOrderNumber, paymentOrderTag, parsePaymentOrderTag, paidTitleFromTag, orderCardPreview, BILL_PAY_EVENT, type PaymentView, type OrderKind } from '@/lib/merchantPay'
 import { useMerchant } from '@/lib/merchant'
 import { ChatBillSheet } from '@/features/merchant/InvoiceComposer'
 import { ChatRequestSheet } from './ChatRequestSheet'
@@ -1568,7 +1568,8 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
     const created = new Date(msg.created_at)
     const sym = token === 'USDC' ? '$' : token === 'EURC' ? '€' : ''
     const peerName = peer.replace(/\.arc$/i, '')
-    const isOrder = !!parsePaymentOrderTag(String(msg.content ?? ''))
+    const payTag = parsePaymentOrderTag(String(msg.content ?? ''))
+    const isOrder = !!payTag
     const me: TxParty = { label: sent ? 'From' : 'To', name: 'You', you: true,
       handle: myName ? `${String(myName).replace(/\.arc$/i, '')}.arc` : undefined, address: myWallet || undefined }
     const them: TxParty = { label: sent ? 'To' : 'From', name: peerName.charAt(0).toUpperCase() + peerName.slice(1), handle: peer,
@@ -1590,7 +1591,8 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
       <TxDetailPage onClose={onClose} detail={{
         title: 'Payment details', status: st, amountLabel: 'Amount',
         amount: `${sym}${formatAmount(msg.payment_amount || 0, chatPayTokenDecimals(token))}`, unit: token,
-        pill: isOrder ? { icon: 'list', text: 'Order payment' } : { icon: 'chat', text: sent ? 'Paid' : 'Received' },
+        pill: payTag?.kind === 'shop' ? { icon: 'qr', text: sent ? 'Shop payment' : shopReceivedTitle() }
+          : isOrder ? { icon: 'list', text: payTag?.kind ? orderTitle(payTag.kind, payTag.number, sent ? { paid: true } : { received: true }) : 'Order payment' } : { icon: 'chat', text: sent ? 'Paid' : 'Received' },
         parties: [them, me],
         steps: ['Payment approved',
           <>Payment made by <b>{sent ? 'you' : peer}</b></>,

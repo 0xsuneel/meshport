@@ -1,6 +1,6 @@
 // How bills and payment requests are named on screen.
 import { describe, it, expect } from 'vitest'
-import { displayOrderNumber, shortOrderNumber, orderKindOf, orderTitle, paymentOrderTag, parsePaymentOrderTag, paidTitleFromTag, orderCardPreview, shopFrom } from './orderLabels'
+import { displayOrderNumber, shortOrderNumber, orderKindOf, orderTitle, paymentOrderTag, parsePaymentOrderTag, paidTitleFromTag, orderCardPreview, shopFrom, setRegisteredBusinessName, shopReceivedTitle } from './orderLabels'
 
 describe('displayOrderNumber', () => {
   it('shows the short #N form everywhere', () => {
@@ -98,6 +98,18 @@ describe('Shop QR payments', () => {
     expect(orderTitle('shop', 'ORD-100108', { paid: true })).toBe('Shop Payment')
     expect(orderTitle('shop', 'ORD-100108', { received: true, short: true })).toBe('Shop Payment Received')
     expect(orderTitle('shop', 'ORD-100108', { paid: true, short: true })).toBe('Shop Payment')
+  })
+  it("is titled with the merchant's registered business name when received", () => {
+    expect(orderTitle('shop', null, { received: true, business: 'Royal Salons' })).toBe('Received on Royal Salons')
+    setRegisteredBusinessName('Royal Salons')
+    try {
+      expect(orderTitle('shop', null, { received: true, short: true })).toBe('Received on Royal Salons')
+      expect(shopReceivedTitle()).toBe('Received on Royal Salons')
+      expect(paidTitleFromTag(parsePaymentOrderTag('Sent 1 USDC to royal.arc · Payment')!, true, true)).toBe('Received on Royal Salons')
+      expect(orderTitle('shop', null, { paid: true })).toBe('Shop Payment')
+      expect(orderTitle('bill', 'ORD-100042', { received: true })).toBe('Bill #42 Received')
+    } finally { setRegisteredBusinessName(null) }
+    expect(shopReceivedTitle()).toBe('Shop Payment Received')
   })
   it('round-trips through the chat payment tag', () => {
     const t = parsePaymentOrderTag('Sent 1 USDC to royal.arc' + paymentOrderTag('shop', 'ORD-100108'))!

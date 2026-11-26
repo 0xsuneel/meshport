@@ -165,7 +165,7 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
         <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 12, fontWeight: 700, lineHeight: 1.3, opacity: 0.92 }}>
           <span style={{ flexShrink: 0, display: 'flex', marginTop: 1 }}>{paid ? <CheckCircle2 size={13} /> : isBill ? <Receipt size={13} /> : <Clock size={13} />}</span>
           <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-            {orderTitle(orderKindOf(v), number, { paid, received: paid && isMine, short: true })}
+            {orderTitle(orderKindOf(v), number, { paid, received: paid && isMine, short: true, business: v.merchantName })}
           </span>
         </div>
         <div style={{ position: 'relative', fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px', lineHeight: 1.1, marginTop: 3 }}>
@@ -299,7 +299,7 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
     status,
     amountLabel: paid ? (isMine ? 'Amount received' : 'Amount paid') : closed ? title : 'Amount due',
     amount: `$${formatAmount(paid || closed ? v.amount : (due || v.amount))}`, unit: v.currency || 'USDC',
-    pill: { icon: orderKind === 'shop' ? 'qr' : 'list', text: orderTitle(orderKind, number, { paid, received: paid && isMine }) },
+    pill: { icon: orderKind === 'shop' ? 'qr' : 'list', text: orderTitle(orderKind, number, { paid, received: paid && isMine, business: v.merchantName }) },
     parties: customer.label === 'From' ? [customer, business] : [business, customer],
     steps: [],
     whenLabel: paid ? (isMine ? 'Received at' : 'Paid at') : 'Created at', when: whenFull,

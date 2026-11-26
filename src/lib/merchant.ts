@@ -14,6 +14,7 @@
 // signed-in session, never from this client. Status only changes via admins.
 
 import { useSyncExternalStore } from 'react'
+import { setRegisteredBusinessName } from './orderLabels'
 import { supabase } from './supabase'
 import { subscribeWithRetry } from './chatService'
 import { useAuthStore } from '@/store'
@@ -59,7 +60,7 @@ type State = {
 let state: State = { loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null }
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach(l => l())
-const set = (s: State) => { state = s; emit(); if (s.loaded) rememberHint(s.status === 'approved', s.accountType === 'business') }
+const set = (s: State) => { state = s; if (s.loaded) setRegisteredBusinessName(s.application?.businessName || s.storeName); emit(); if (s.loaded) rememberHint(s.status === 'approved', s.accountType === 'business') }
 
 // Display hint only: the last known "is a merchant" for this wallet, so the
 // screen opens with the right labels (Cross-chain Transfer / Manage money) instead of

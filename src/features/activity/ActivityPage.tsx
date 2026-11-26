@@ -21,7 +21,7 @@ import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { TxDetailPage, type TxDetail, type TxParty } from '@/components/ui/TxDetailPage'
 import { SearchField } from '@/components/ui/SearchField'
 import { useMerchant, isMerchantClaim } from '@/lib/merchant'
-import { orderTitle, displayOrderNumber, shortOrderNumber, type OrderKind } from '@/lib/merchantPay'
+import { orderTitle, shopReceivedTitle, displayOrderNumber, shortOrderNumber, type OrderKind } from '@/lib/merchantPay'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { TokenMenu } from '@/components/ui/TokenMenu'
@@ -326,7 +326,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   const title = isClaim && metadata.auto_convert ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
               : isClaim && isMerchantClaim(record as any) ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
               : merchantOrder ? paidOrderTitle(metadata, merchantOrder, isReceive, true)
-              : shopPay && isReceive ? 'Shop Payment Received'
+              : shopPay && isReceive ? shopReceivedTitle()
               : recoveredTitle ? recoveredTitle
               : refund ? 'Refund from'
               // A rewards claim that didn't go through (lib/rewards.ts).
@@ -665,7 +665,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const orderWord = merchantOrderDetail ? paidOrderTitle(metadata, merchantOrderDetail, type === 'receive') : ''
   const title = isClaim && (metadata as any)?.merchant ? `Payment received · ${chainLabel(sourceChain) || 'External'}`
               : merchantOrderDetail ? orderWord
-              : type === 'receive' && activityOrderKind(metadata) === 'shop' ? 'Shop Payment Received'
+              : type === 'receive' && activityOrderKind(metadata) === 'shop' ? shopReceivedTitle()
               : recoveredDetail && isClaim ? `${recoveredDetail} · ${chainLabel(sourceChain) || 'External'}`
               : recoveredDetail ? recoveredDetail
               : refundDetail ? `Refund from ${refundDetail.from}`
@@ -962,7 +962,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const typeRow = (rows as { label: string; value: string }[]).find(r => r.label === 'Type')
   const feeRow = (rows as { label: string; value: string }[]).find(r => /fee/i.test(r.label) && r.value)
   const pageRows = personal ? [
-    { label: 'Type', value: activityOrderKind(metadata) === 'shop' ? 'Shop payment' : typeRow?.value && typeRow.value !== type ? typeRow.value : type === 'send' ? 'Payment' : 'Received' },
+    { label: 'Type', value: activityOrderKind(metadata) === 'shop' ? (type === 'receive' ? shopReceivedTitle() : 'Shop payment') : typeRow?.value && typeRow.value !== type ? typeRow.value : type === 'send' ? 'Payment' : 'Received' },
     { label: 'Network', value: chain === 'Arc' || !chain ? 'Arc Testnet' : chain },
     ...(feeRow ? [{ label: 'Fee', value: feeRow.value }] : []),
     ...(txHash ? [toReceiptRow({ label: 'Transaction hash', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, copy: txHash })] : []),
@@ -1026,7 +1026,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     }
     txDetail = {
       title: 'Payment details', status: receiptStatus, amountLabel: 'Amount', amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC',
-      note: noteText || undefined, pill: shop ? { icon: 'qr', text: 'Shop payment' } : merchantOrderDetail ? { icon: 'list', text: orderWord }
+      note: noteText || undefined, pill: shop ? { icon: 'qr', text: type === 'receive' ? shopReceivedTitle() : 'Shop payment' } : merchantOrderDetail ? { icon: 'list', text: orderWord }
         : viaChat ? { icon: 'chat', text: type === 'send' ? 'Paid' : 'Received' }
         : type === 'send' ? { icon: 'pay', text: 'Paid' } : { icon: 'receive', text: 'Received' },
       reason: reasonNote ?? undefined,
