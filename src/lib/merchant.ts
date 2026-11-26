@@ -55,9 +55,12 @@ type State = {
   /** Chosen at sign-up. Business accounts get the Business tab at once; the
    *  merchant application (with its reason) can be completed later. */
   accountType: 'personal' | 'business'; storeName: string | null
+  /** An approved business's new name waiting for MeshPort's review (customers
+   *  keep seeing storeName until it's approved). */
+  pendingName: string | null
 }
 
-let state: State = { loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null }
+let state: State = { loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null, pendingName: null }
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach(l => l())
 const set = (s: State) => { state = s; if (s.loaded) setRegisteredBusinessName(s.storeName || s.application?.businessName); emit(); if (s.loaded) rememberHint(s.status === 'approved', s.accountType === 'business') }
@@ -137,7 +140,7 @@ export function refreshMerchant(): Promise<void> {
   loading = (async () => {
     try {
       const uid = await authUid()
-      if (!uid) { set({ loaded: true, status: 'none', application: null, accountType: 'personal', storeName: null }); return }
+      if (!uid) { set({ loaded: true, status: 'none', application: null, accountType: 'personal', storeName: null, pendingName: null }); return }
       const [{ data, error }, { data: meRows, error: meErr }] = await Promise.all([
         supabase.from('merchant_applications').select('*').eq('auth_uid', uid).order('created_at', { ascending: false }).limit(1),
         // Own profile via RPC - users.auth_uid isn't readable from the app.
@@ -147,8 +150,15 @@ export function refreshMerchant(): Promise<void> {
       const me = (Array.isArray(meRows) ? meRows[0] : meRows) as { account_type?: string | null; store_name?: string | null } | null | undefined
       failures = 0
       const app = data?.[0] ? mapRow(data[0]) : null
-      set({ loaded: true, status: app?.status ?? 'none', application: app,
-        accountType: me?.account_type === 'business' ? 'business' : 'personal', storeName: me?.store_name ?? null })
+      const accountType = me?.account_type === 'business' ? 'business' as const : 'personal' as const
+      // A name change waiting for review - only an approved business has one.
+      let pendingName: string | null = null
+      if (accountType === 'business' && app?.status === 'approved') {
+        const { data: nm } = await supabase.rpc('my_business_name')
+        const row = (Array.isArray(nm) ? nm[0] : nm) as { pending_name?: string | null } | null | undefined
+        pendingName = row?.pending_name ?? null
+      }
+      set({ loaded: true, status: app?.status ?? 'none', application: app, accountType, storeName: me?.store_name ?? null, pendingName })
       if (!app && recheckedUid !== uid) {
         recheckedUid = uid
         setTimeout(() => { loading = null; void refreshMerchant() }, 3000)
@@ -175,7 +185,7 @@ export function refreshMerchant(): Promise<void> {
 /** Clears cached merchant state (sign-out). */
 export function resetMerchant() {
   channel?.(); channel = null; channelUid = null
-  set({ loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null })
+  set({ loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null, pendingName: null })
 }
 
 /** True only for an approved merchant. Safe to call from non-React code. */
@@ -236,11 +246,15 @@ export function useMerchant(): State & { isMerchant: boolean; refresh: () => Pro
   return { ...s, isMerchant: s.loaded ? s.status === 'approved' : readHint(), refresh: refreshMerchant }
 }
 
-/** Business → the business's display name (empty clears it; the username shows then). */
-export async function setBusinessName(name: string): Promise<void> {
-  const { error } = await supabase.rpc('set_business_name', { p_name: name })
+/** Business → the business's display name (empty clears it). Once the
+ *  business is approved a new name is reviewed first (`pending`): customers
+ *  keep seeing the current one until MeshPort approves it. Clearing it, or
+ *  going back to the approved name, applies at once. */
+export async function setBusinessName(name: string): Promise<{ pending: boolean }> {
+  const { data, error } = await supabase.rpc('set_business_name', { p_name: name })
   if (error) throw new Error(error.message)
   await refreshMerchant()
+  return { pending: data == null && name.trim() !== '' }
 }
 
 /** Uploads one application document into the signed-in login's own folder.
@@ -300,6 +314,25 @@ export async function adminListMerchantApplications(): Promise<MerchantApplicati
   const { data, error } = await adminDb.from('merchant_applications').select('*').order('created_at', { ascending: false }).limit(500)
   if (error) throw new Error(error.message)
   return (data ?? []).map(mapRow)
+}
+
+export type BusinessNameChange = {
+  userId: string; username: string; currentName: string | null; approvedName: string | null
+  pendingName: string; pendingSince: string
+}
+/** Approved businesses' new names waiting for review. */
+export async function adminListBusinessNameChanges(): Promise<BusinessNameChange[]> {
+  const { adminDb } = await import('./adminDb')
+  const { data, error } = await adminDb.rpc('admin_business_name_changes')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as any[]).map(r => ({ userId: r.user_id, username: r.username, currentName: r.current_name ?? null,
+    approvedName: r.approved_name ?? null, pendingName: r.pending_name, pendingSince: r.pending_since }))
+}
+/** Approve (customers see it) or reject (the current name stays) a new name. */
+export async function adminReviewBusinessName(userId: string, approve: boolean, note: string | null): Promise<void> {
+  const { adminDb } = await import('./adminDb')
+  const { error } = await adminDb.rpc('admin_review_business_name', { p_user: userId, p_approve: approve, p_note: note })
+  if (error) throw new Error(error.message)
 }
 
 export async function adminReviewMerchant(id: string, status: 'approved' | 'rejected' | 'revoked', note: string | null, reviewer: string): Promise<void> {

@@ -685,7 +685,7 @@ function ShopLimitsCard({ open, handle }: { open: boolean; handle: string }) {
 
 export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack: () => void; handle: string }) {
   const toast = useUIStore(s => s.showToastMessage)
-  const { status, application, storeName } = useMerchant()
+  const { status, application, storeName, pendingName } = useMerchant()
   const navigate = useNavigate()
   const avatar = useAuthStore(s => s.user?.avatar ?? null)
   const [bizName, setBizName] = useState(storeName ?? '')
@@ -693,7 +693,13 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
   useEffect(() => { if (open) setBizName(storeName ?? '') }, [open, storeName])
   const saveName = async () => {
     setSavingName(true)
-    try { await setBusinessName(bizName); toast(bizName.trim() ? 'Business name saved' : 'Business name removed', 'success') }
+    try {
+      const { pending } = await setBusinessName(bizName)
+      // Approved businesses: a new name is checked first (as Stripe and
+      // Square do), so a verified shop can't take another brand's name.
+      if (pending) { toast('Sent for review - customers see your current name until it’s approved', 'info'); setBizName(storeName ?? '') }
+      else toast(bizName.trim() ? 'Business name saved' : 'Business name removed', 'success')
+    }
     catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
     setSavingName(false)
   }
@@ -752,7 +758,9 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
             </button>
           </div>
           {!canApply && (
-            <Field label="Business name" hint={`Customers see this. Leave empty to show ${handle}.`}>
+            <Field label="Business name" hint={pendingName ? `“${pendingName}” is waiting for MeshPort’s review. Customers see your current name until then.`
+              : status === 'approved' ? 'Customers see this. A new name is reviewed by MeshPort before customers see it.'
+              : `Customers see this. Leave empty to show ${handle}.`}>
               <div className="flex gap-2">
                 <TextInput value={bizName} onChange={e => setBizName(e.target.value)} maxLength={60} placeholder="e.g. Sharma Chai Corner" />
                 <button type="button" onClick={saveName} disabled={savingName || bizName.trim() === (storeName ?? '')}

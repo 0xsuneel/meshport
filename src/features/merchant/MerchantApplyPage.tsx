@@ -3,7 +3,9 @@
 // status (pending / approved / rejected / revoked), lets a rejected or
 // revoked business apply again, and lets a business whose sign-up
 // application didn't go through send it. Every application needs a reason.
-// Personal accounts don't apply - they see how to open a business account.
+// A personal account can apply too (like Venmo's business profile on a
+// personal account): it stays personal while MeshPort reviews it and becomes
+// a business account - same username, wallet and history - once approved.
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Store, Clock, CheckCircle2, XCircle } from 'lucide-react'
@@ -31,8 +33,8 @@ export function MerchantApplyPage() {
   const [docs, setDocs] = useState<BusinessDoc[]>([])
   const [submitting, setSubmitting] = useState(false)
 
-  const showForm = (status === 'none' && accountType === 'business') || ((status === 'rejected' || status === 'revoked') && reapply)
-  const personalOnly = status === 'none' && accountType === 'personal'
+  const showForm = status === 'none' || ((status === 'rejected' || status === 'revoked') && reapply)
+  const upgrading = accountType === 'personal'
 
   const submit = async () => {
     if (businessName.trim().length < 2) { showToastMessage('Enter your business name', 'error'); return }
@@ -61,21 +63,14 @@ export function MerchantApplyPage() {
               <ArrowLeft className="w-5 h-5 text-text-primary" />
             </button>
           )}
-          <h1 className="text-xl font-bold text-text-primary">{status === 'none' && accountType === 'business' ? 'Complete your business account' : 'Business account'}</h1>
+          <h1 className="text-xl font-bold text-text-primary">{status === 'none' && accountType === 'business' ? 'Complete your business account'
+            : upgrading && status !== 'approved' ? 'Get a business account' : 'Business account'}</h1>
         </div>
       </div>
 
       <div className="px-5 pb-10 pt-2 space-y-5 lg:max-w-[560px]">
         {!loaded ? (
           <div className="text-center py-10 text-sm text-text-secondary">Loading…</div>
-        ) : personalOnly ? (
-          <div className="bg-surface border border-border rounded-3xl p-6 flex flex-col items-center text-center gap-3">
-            <Store className="w-10 h-10 text-brand-text" />
-            <p className="text-base font-bold text-text-primary">Business tools are for business accounts</p>
-            <p className="text-sm text-text-secondary leading-relaxed max-w-[340px]">
-              This is a personal account. To accept payments as a store, create a business account: choose Business on the first sign-up screen and claim your store username.
-            </p>
-          </div>
         ) : showForm ? (
           <>
             <div className="bg-surface border border-border rounded-3xl p-5 flex gap-4 items-start">
@@ -86,6 +81,13 @@ export function MerchantApplyPage() {
                   Customers can pay you in USDC on supported chains. Payments are collected to your Arc wallet automatically and listed in your Business tab.
                   MeshPort reviews every application.
                 </p>
+                {upgrading && (
+                  <ul className="text-xs text-text-secondary mt-2 leading-relaxed list-disc pl-4 space-y-0.5">
+                    <li>You keep this account: same username, wallet, contacts and history.</li>
+                    <li>It stays personal while we review it. Once approved it becomes a business account with a Shop QR, bills and the Business tab - your Personal QR still works for friends.</li>
+                    <li>Business accounts don't earn rewards.</li>
+                  </ul>
+                )}
               </div>
             </div>
 

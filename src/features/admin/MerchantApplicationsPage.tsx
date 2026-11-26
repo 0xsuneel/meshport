@@ -7,7 +7,7 @@ import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { FileText, Store, X } from 'lucide-react'
 import { AdminCard } from '@/components/admin/AdminCard'
 import { useAdminStore } from '@/store/adminStore'
-import { adminListMerchantApplications, adminReviewMerchant, businessDocUrl, BUSINESS_DOC_KINDS, type MerchantApplication } from '@/lib/merchant'
+import { adminListMerchantApplications, adminReviewMerchant, adminListBusinessNameChanges, adminReviewBusinessName, businessDocUrl, BUSINESS_DOC_KINDS, type BusinessNameChange, type MerchantApplication } from '@/lib/merchant'
 
 const TABS: Array<{ key: 'pending' | 'approved' | 'rejected' | 'all'; label: string }> = [
   { key: 'pending',  label: 'Pending' },
@@ -29,6 +29,20 @@ export function MerchantApplicationsPage() {
   const [active, setActive] = useState<MerchantApplication | null>(null)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // Approved businesses' new names: customers see them only once approved.
+  const [names, setNames] = useState<BusinessNameChange[]>([])
+  const [nameBusy, setNameBusy] = useState<string | null>(null)
+  const loadNames = () => { adminListBusinessNameChanges().then(setNames).catch(e => setError(e instanceof Error ? e.message : String(e))) }
+  useEffect(() => { loadNames() }, [])
+  const decideName = async (c: BusinessNameChange, approve: boolean) => {
+    const reason = approve ? null : window.prompt(`Why is "${c.pendingName}" not approved? The business sees this.`)
+    if (!approve && !reason?.trim()) return
+    setNameBusy(c.userId)
+    try { await adminReviewBusinessName(c.userId, approve, reason); loadNames() }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    setNameBusy(null)
+  }
 
   const load = () => {
     setLoading(true)
@@ -83,6 +97,29 @@ export function MerchantApplicationsPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {error && <AdminCard><p style={{ margin: 0, fontSize: 13, color: 'var(--danger-text)' }}>{error}</p></AdminCard>}
+      {names.length > 0 && (
+        <AdminCard padding={14}>
+          <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Business name changes ({names.length})</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {names.map(c => (
+              <div key={c.userId} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, wordBreak: 'break-word' }}>
+                    {c.currentName || c.approvedName || c.username} → {c.pendingName}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-secondary)' }}>
+                    {c.username}.arc · approved as {c.approvedName ?? '-'} · {new Date(c.pendingSince).toLocaleString()}
+                  </p>
+                </div>
+                <button onClick={() => { void decideName(c, true) }} disabled={nameBusy === c.userId}
+                  style={{ padding: '8px 12px', borderRadius: 12, background: 'var(--success)', color: '#fff', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer' }}>Approve</button>
+                <button onClick={() => { void decideName(c, false) }} disabled={nameBusy === c.userId}
+                  style={{ padding: '8px 12px', borderRadius: 12, background: 'transparent', color: 'var(--danger-text)', fontSize: 12, fontWeight: 600, border: '1px solid var(--danger)', cursor: 'pointer' }}>Reject</button>
+              </div>
+            ))}
+          </div>
+        </AdminCard>
+      )}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
