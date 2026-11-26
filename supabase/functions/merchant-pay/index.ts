@@ -582,7 +582,7 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   }
   if (late && statusNow === 'cancelled') {
     await notifyMerchant(merchantWallet, 'merchant_payment_late', `Payment for cancelled ${orderName(i)}`,
-      `${label} from ${customerUsername ?? short(from)} arrived after the order was cancelled - reopen it in Orders to count the payment, or refund it.`)
+      `${label} from ${customerUsername ? `${customerUsername}.arc` : short(from)} arrived after ${orderName(i)} was cancelled - reopen it in Orders to count the payment, or refund it.`)
   }
   return { ok: true }
 }

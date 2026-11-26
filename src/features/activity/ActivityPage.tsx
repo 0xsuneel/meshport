@@ -21,6 +21,7 @@ import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { TxDetailPage, type TxDetail, type TxParty } from '@/components/ui/TxDetailPage'
 import { SearchField } from '@/components/ui/SearchField'
 import { useMerchant, isMerchantClaim } from '@/lib/merchant'
+import { receiptNumber } from '@/lib/receiptNumber'
 import { orderTitle, shopReceivedTitle, shopFrom, displayOrderNumber, shortOrderNumber, type OrderKind } from '@/lib/merchantPay'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
@@ -774,6 +775,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
 
   const move = activityMove(record)
   const moveLbl = moveLabels(isTransfer ? 'transfer' : 'bring', (record as any).counterpartyAddress, (record as any).walletAddress)
+  // A payment to or from a business (order, bill, Shop QR): it has a receipt number.
+  const isBusinessPayment = !!((metadata as any)?.merchantPayment || (metadata as any)?.merchantVia === 'shop_qr' || (metadata as any)?.merchantOrderKind)
   const rows = [
     { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Settlement from ${chain || 'other chain'}` : merchantOrderDetail ? orderWord : activityOrderKind(metadata) === 'shop' && (type === 'receive' || type === 'send') ? 'Payment' : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? bulkWord(metadata) : cashOutTitle(type, metadata) ?? type },
     { label: 'Chain',  value: chain },
@@ -781,6 +784,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Business', value: String((metadata as any).merchantName) }] : []),
     // The business's store that took the payment (merchant side).
     ...(type === 'receive' && storeNameOf(metadata) ? [{ label: 'Store', value: storeNameOf(metadata) }] : []),
+    ...(isBusinessPayment && receiptNumber(txHash) ? [{ label: 'Receipt no.', value: receiptNumber(txHash)! }] : []),
     ...(isClaim && (metadata as any)?.merchant && (record as any).walletAddress
       ? [{ label: 'Paid to', value: `${String((record as any).walletAddress).slice(0, 6)}…${String((record as any).walletAddress).slice(-6)}`, copy: String((record as any).walletAddress) }]
       : []),
@@ -979,6 +983,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const feeRow = (rows as { label: string; value: string }[]).find(r => /fee/i.test(r.label) && r.value)
   const pageRows = personal ? [
     { label: 'Type', value: activityOrderKind(metadata) === 'shop' ? (type === 'receive' ? shopReceivedTitle(shopNameOf(metadata)) : 'Shop payment') : typeRow?.value && typeRow.value !== type ? typeRow.value : type === 'send' ? 'Payment' : 'Received' },
+    // The same receipt number the business's receipt shows (lib/receiptNumber).
+    ...(isBusinessPayment && receiptNumber(txHash) ? [toReceiptRow({ label: 'Receipt no.', value: receiptNumber(txHash)!, copy: receiptNumber(txHash)! })] : []),
     { label: 'Network', value: chain === 'Arc' || !chain ? 'Arc Testnet' : chain },
     ...(feeRow ? [{ label: 'Fee', value: feeRow.value }] : []),
     ...(txHash ? [toReceiptRow({ label: 'Transaction hash', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, copy: txHash })] : []),

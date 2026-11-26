@@ -20,16 +20,19 @@ function tagFor(n: Pick<AppNotification, 'id' | 'source'>): string {
 }
 
 /** Where tapping it goes - the thing it is about, not the notification list. */
-export function urlFor(n: Pick<AppNotification, 'id' | 'tradeId' | 'type'>): string {
+export function urlFor(n: Pick<AppNotification, 'id' | 'tradeId' | 'type'> & { body?: string }): string {
   const type = String(n.type)
   if (n.tradeId) return `/p2p/trade/${n.tradeId}`
   if (n.id.startsWith('claim_')) return '/multichain'
+  // The payer's copies ("You paid …") are about their own payment: Activity.
+  if (type === 'merchant_order_paid' || (type === 'merchant_payment_partial' && /^You paid/i.test(n.body ?? ''))) return '/activity'
+  if (['merchant_approved', 'merchant_rejected', 'merchant_revoked'].includes(type)) return '/merchant'
   if (['merchant_payment_received', 'merchant_payment_partial', 'merchant_payment_arriving'].includes(type)) return '/business?tab=payments'
   if (['merchant_chain_payment', 'merchant_ledger_credited', 'merchant_ledger_moving', 'merchant_funds_moved'].includes(type)) return '/business?tab=settlements'
   if (type === 'merchant_refund' || type === 'merchant_order_completed' || type === 'payment_received') return '/activity'
   if (type === 'merchant_bill_reminder') return '/chat'
   if (type === 'reward_earned') return '/rewards'
-  if (type.startsWith('merchant_') || type.startsWith('business_')) return '/business'
+  if (type.startsWith('merchant_') || type.startsWith('business_') || type.startsWith('store_name_')) return '/business'
   return '/notifications'
 }
 

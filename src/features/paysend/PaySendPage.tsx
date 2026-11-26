@@ -235,6 +235,25 @@ export function PaySendPage() {
   // Café · Andheri branch"), shown under the name instead of the username.
   const shopLineParam = (searchParams.get('shopline') || '').slice(0, 120)
   const shopLine = merchantOrderKind === 'shop' ? (shopLineParam || 'Business') : null
+  // Paying an approved business by its username is a business payment - its
+  // shop page (name, category, store) - as UPI apps treat any payment to a
+  // merchant's ID, and as scanning its QR does. Not for an order already
+  // being paid, or a business's Personal QR (?personal=1).
+  const shopCheckedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (merchantPayCode || !recipient?.isUsername || searchParams.get('personal') === '1') return
+    const name = recipient.display.replace(/\.arc$/i, '')
+    if (!name || shopCheckedFor.current === name) return
+    shopCheckedFor.current = name
+    let live = true
+    import('@/lib/shop').then(m => m.getShopInfo(name, null)).then(shop => {
+      if (!live || !shop?.verified) return
+      const amt = Number(amount) > 0 ? `?amount=${encodeURIComponent(amount)}` : ''
+      navigate(`/paylink/${shop.username}${amt}`, { replace: true })
+    }).catch(() => {})
+    return () => { live = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once per recipient
+  }, [recipient?.display, recipient?.isUsername, merchantPayCode])
   // Order payments: amount, order number and recipient come from the order on
   // the server - not from the link - so they can't be changed by editing it.
   const recipientRef = useRef(recipient)

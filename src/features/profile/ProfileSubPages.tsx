@@ -1,3 +1,4 @@
+import { urlFor } from '@/lib/systemNotify'
 import { PinSheet } from '@/components/ui/PinSheet'
 import React, { useState, useRef, useEffect, startTransition } from 'react'
 
@@ -981,7 +982,11 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
     if (n.source === 'server' || P2P_TYPES.has(n.type)) {
       // Server-backed row (P2P or merchant): persist read on the server too.
       markP2PNotificationRead(n.id)
-      if (n.tradeId) { onClose?.(); navigate(`/p2p/trade/${n.tradeId}`) }
+      if (n.tradeId) { onClose?.(); navigate(`/p2p/trade/${n.tradeId}`); return }
+      // Payments and business updates open where they belong (as a payments
+      // app opens the transaction) - not just "mark as read".
+      const to = urlFor(n)
+      if (to !== '/notifications') { onClose?.(); navigate(to) }
     } else {
       useNotificationStore.getState().markRead(n.id)
     }
@@ -1050,6 +1055,11 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
     merchant_payment_late:     { icon: <ClockIcon className="w-4 h-4" />, bg: 'bg-warning/20 text-warning', dot: 'bg-warning' },
     merchant_payment_screened: { icon: <Ban className="w-4 h-4" />, bg: 'bg-danger/20 text-danger', dot: 'bg-danger' },
     business_staff_invite:     { icon: <Store className="w-4 h-4" />, bg: 'bg-brand/20 text-brand-text', dot: 'bg-brand' },
+    business_daily_summary:    { icon: <Wallet className="w-4 h-4" />, bg: 'bg-success/20 text-success', dot: 'bg-success' },
+    business_name_approved:    { icon: <Store className="w-4 h-4" />, bg: 'bg-success/20 text-success', dot: 'bg-success' },
+    business_name_rejected:    { icon: <Store className="w-4 h-4" />, bg: 'bg-danger/20 text-danger', dot: 'bg-danger' },
+    store_name_approved:       { icon: <Store className="w-4 h-4" />, bg: 'bg-success/20 text-success', dot: 'bg-success' },
+    store_name_rejected:       { icon: <Store className="w-4 h-4" />, bg: 'bg-danger/20 text-danger', dot: 'bg-danger' },
   }
 
   const defaultConfig = {

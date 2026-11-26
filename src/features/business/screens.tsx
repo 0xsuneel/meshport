@@ -20,7 +20,8 @@ import { qrCardFile } from '@/lib/qrCardImage'
 import { staffIntents } from '@/lib/businessTeam'
 import { Clock, Printer, Download, Share2 } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
-import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName, type BusinessDoc } from '@/lib/merchant'
+import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName, setShopContact, type BusinessDoc } from '@/lib/merchant'
+import { receiptNumber } from '@/lib/receiptNumber'
 import { BusinessDocsField } from '@/features/merchant/BusinessDocsField'
 import { BUSINESS_CATEGORIES, toCategory, useBizTerms, cap } from '@/lib/businessCategories'
 import { useNavigate } from 'react-router-dom'
@@ -99,7 +100,7 @@ function ShareSheet({ open, onClose, title, url, text, subject }: { open: boolea
 // ── Shop QR ──────────────────────────────────────────────────────────────
 
 /** The store's fixed QR: customers scan, type the amount and pay. */
-function ShopQrBody({ active, storeName, outlet, handle, payTo }: { active: boolean; storeName: string; outlet?: string | null; handle: string; payTo?: string }) {
+function ShopQrBody({ active, storeName, outlet, handle: _handle, payTo }: { active: boolean; storeName: string; outlet?: string | null; handle: string; payTo?: string }) {
   // payTo: whose pay link (staff mode: the business owner's, never the staff's own).
   // The QR names the outlet (?store=) so each store's payments land in that
   // store; it changes as soon as the owner switches stores.
@@ -110,7 +111,11 @@ function ShopQrBody({ active, storeName, outlet, handle, payTo }: { active: bool
   const url = shopPayLink(username ?? '', storeId)
   const qr = useQr(active && username ? url : null)
   const sticker = usePrint()
-  const sub = outlet ? `${outlet} · ${handle}` : handle
+  // Under the name: what kind of business (and which store) - not the
+  // username, as on a payments app's printed QR.
+  const { application } = useMerchant()
+  const category = application?.businessType ?? null
+  const sub = [outlet, category].filter(Boolean).join(' · ') || 'Scan, type the amount and pay'
   const from = shopFrom(storeName, outlet)
   const toast = useUIStore(s => s.showToastMessage)
   const { copy, copied } = useShare()
@@ -144,7 +149,7 @@ function ShopQrBody({ active, storeName, outlet, handle, payTo }: { active: bool
         <GhostBtn disabled={!qr} onClick={() => void downloadQr()}><span className="inline-flex items-center gap-2"><Download className="size-4" /> Download QR</span></GhostBtn>
         <GhostBtn disabled={!qr} onClick={() => void shareQr()}><span className="inline-flex items-center gap-2"><Share2 className="size-4" /> Share QR</span></GhostBtn>
       </div>
-      <GhostBtn disabled={!qr} onClick={() => sticker.print(<QrSticker dataUrl={qr} storeName={outlet ? `${storeName} · ${outlet}` : storeName} handle={handle} />)}>
+      <GhostBtn disabled={!qr} onClick={() => sticker.print(<QrSticker dataUrl={qr} storeName={outlet ? `${storeName} · ${outlet}` : storeName} handle={category ?? 'Scan & pay'} />)}>
         <span className="inline-flex items-center gap-2"><Printer className="size-4" /> Print counter sticker</span>
       </GhostBtn>
       {sticker.portal}
@@ -683,6 +688,37 @@ function ShopLimitsCard({ open, handle }: { open: boolean; handle: string }) {
   )
 }
 
+/** The contact customers see on the Shop QR page and receipts - only what
+ *  the business chooses to share (Square receipts show the seller's contact). */
+function ShopContactCard({ open }: { open: boolean }) {
+  const toast = useUIStore(s => s.showToastMessage)
+  const { shopContact } = useMerchant()
+  const [value, setValue] = useState(shopContact ?? '')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { if (open) setValue(shopContact ?? '') }, [open, shopContact])
+  const save = async () => {
+    setBusy(true)
+    try { await setShopContact(value); toast(value.trim() ? 'Contact saved - customers see it on your shop page and receipts' : 'Contact removed', 'success') }
+    catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
+    setBusy(false)
+  }
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl bg-surface border border-border p-4">
+      <span>
+        <span className="block text-sm font-semibold text-text-primary">Contact for customers</span>
+        <span className="block text-xs text-text-muted">Shown on your Shop QR page and receipts. Leave empty to keep it private.</span>
+      </span>
+      <div className="flex gap-2">
+        <TextInput value={value} onChange={e => setValue(e.target.value)} maxLength={120} placeholder="Phone, email or website" />
+        <button type="button" onClick={save} disabled={busy || value.trim() === (shopContact ?? '')}
+          className="shrink-0 min-h-[48px] px-4 rounded-2xl bg-brand text-white text-sm font-semibold disabled:opacity-40">
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack: () => void; handle: string }) {
   const toast = useUIStore(s => s.showToastMessage)
   const { status, application, storeName, pendingName } = useMerchant()
@@ -774,6 +810,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
             </Field>
           )}
         </div>
+        {status === 'approved' && <ShopContactCard open={open} />}
         {status === 'approved' && <ShopLimitsCard open={open} handle={handle} />}
         <ProfileStatusCard {...card} />
         {canApply ? (
@@ -882,7 +919,7 @@ export function ReportsScreen({ open, onBack, insights, statement, storePick }: 
 
 // ── Receipt ──────────────────────────────────────────────────────────────
 
-export function ReceiptScreen({ open, onBack, storeName, handle, payment, refunded, avatar, outlet, taxId }: {
+export function ReceiptScreen({ open, onBack, storeName, handle, payment, refunded, refundedAmount = 0, avatar, outlet, taxId, address }: {
   open: boolean; onBack: () => void; storeName: string; handle: string; payment: MerchantPayment | null; refunded: boolean
   /** The business's profile photo */
   avatar?: string | null
@@ -890,8 +927,13 @@ export function ReceiptScreen({ open, onBack, storeName, handle, payment, refund
   outlet?: string | null
   /** That store's tax ID (GSTIN, VAT number, EIN …), printed on the receipt */
   taxId?: string | null
+  /** Refunded so far (a part refund shows with what was kept) */
+  refundedAmount?: number
+  /** That store's address */
+  address?: string | null
 }) {
   const printer = usePrint()
+  const { application, shopContact } = useMerchant()
   const { share } = useShare()
   const terms = useBizTerms()
   if (!payment) return <BusinessScreen open={false} title="Receipt" onBack={onBack}>{null}</BusinessScreen>
@@ -903,7 +945,9 @@ export function ReceiptScreen({ open, onBack, storeName, handle, payment, refund
   const card = (printable: boolean) => (
     <ReceiptCard storeName={storeName} handle={handle} avatar={avatar} outlet={outlet} taxId={taxId} amount={money(payment.amount)} from={from}
       chainLabel={chainLabel(payment.chain)} order={forWhat} time={payment.createdAt} txHash={payment.txHash}
-      explorerUrl={explorerTxUrl(payment.chain, payment.txHash) ?? undefined} refunded={refunded} printable={printable} />
+      explorerUrl={explorerTxUrl(payment.chain, payment.txHash) ?? undefined} refunded={refunded} refundedAmount={refundedAmount}
+      receiptNo={receiptNumber(payment.txHash)} subline={application?.businessType ?? null} address={address} contact={shopContact}
+      printable={printable} />
   )
   const text = [`Receipt from ${storeName} (${handle})`, `${money(payment.amount)} USDC${refunded ? ' - refunded' : ''}`,
     payment.orderNumber ? `${cap(terms.order)} ${displayOrderNumber(payment.orderNumber)}` : '', `Paid by ${from} on ${chainLabel(payment.chain)}`,

@@ -59,9 +59,11 @@ type State = {
   /** An approved business's new name waiting for MeshPort's review (customers
    *  keep seeing storeName until it's approved). */
   pendingName: string | null
+  /** Phone / email / site the business shows on its Shop QR page and receipts. */
+  shopContact: string | null
 }
 
-let state: State = { loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null, pendingName: null }
+let state: State = { loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null, pendingName: null, shopContact: null }
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach(l => l())
 const set = (s: State) => { state = s; if (s.loaded) setRegisteredBusinessName(s.storeName || s.application?.businessName); emit(); if (s.loaded) rememberHint(s.status === 'approved', s.accountType === 'business') }
@@ -141,7 +143,7 @@ export function refreshMerchant(): Promise<void> {
   loading = (async () => {
     try {
       const uid = await authUid()
-      if (!uid) { set({ loaded: true, status: 'none', application: null, accountType: 'personal', storeName: null, pendingName: null }); return }
+      if (!uid) { set({ loaded: true, status: 'none', application: null, accountType: 'personal', storeName: null, pendingName: null, shopContact: null }); return }
       const [{ data, error }, { data: meRows, error: meErr }] = await Promise.all([
         supabase.from('merchant_applications').select('*').eq('auth_uid', uid).order('created_at', { ascending: false }).limit(1),
         // Own profile via RPC - users.auth_uid isn't readable from the app.
@@ -154,12 +156,14 @@ export function refreshMerchant(): Promise<void> {
       const accountType = me?.account_type === 'business' ? 'business' as const : 'personal' as const
       // A name change waiting for review - only an approved business has one.
       let pendingName: string | null = null
+      let shopContact: string | null = null
       if (accountType === 'business' && app?.status === 'approved') {
-        const { data: nm } = await supabase.rpc('my_business_name')
+        const [{ data: nm }, { data: contact }] = await Promise.all([supabase.rpc('my_business_name'), supabase.rpc('my_shop_contact')])
         const row = (Array.isArray(nm) ? nm[0] : nm) as { pending_name?: string | null } | null | undefined
         pendingName = row?.pending_name ?? null
+        shopContact = typeof contact === 'string' && contact ? contact : null
       }
-      set({ loaded: true, status: app?.status ?? 'none', application: app, accountType, storeName: me?.store_name ?? null, pendingName })
+      set({ loaded: true, status: app?.status ?? 'none', application: app, accountType, storeName: me?.store_name ?? null, pendingName, shopContact })
       if (accountType === 'business' || app) syncTimeZone()
       if (!app && recheckedUid !== uid) {
         recheckedUid = uid
@@ -200,7 +204,7 @@ function syncTimeZone() {
 /** Clears cached merchant state (sign-out). */
 export function resetMerchant() {
   channel?.(); channel = null; channelUid = null
-  set({ loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null, pendingName: null })
+  set({ loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null, pendingName: null, shopContact: null })
 }
 
 /** True only for an approved merchant. Safe to call from non-React code. */
@@ -270,6 +274,13 @@ export async function setBusinessName(name: string): Promise<{ pending: boolean 
   if (error) throw new Error(error.message)
   await refreshMerchant()
   return { pending: data == null && name.trim() !== '' }
+}
+
+/** The contact shown on the Shop QR page and receipts (empty removes it). */
+export async function setShopContact(contact: string): Promise<void> {
+  const { error } = await supabase.rpc('set_shop_contact', { p_contact: contact })
+  if (error) throw new Error(error.message)
+  await refreshMerchant()
 }
 
 /** Uploads one application document into the signed-in login's own folder.

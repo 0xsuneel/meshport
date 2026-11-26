@@ -4,7 +4,9 @@
 // Shop QR payment is recorded in the owner's Business tab with its store.
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BadgeCheck, MapPin, Store } from 'lucide-react'
+import { ArrowLeft, BadgeCheck, MapPin, Phone, Store } from 'lucide-react'
+import { businessCurrency } from '@/lib/localCurrency'
+import { formatFiat } from '@/lib/currencyRegistry'
 import { supabase } from '@/lib/supabase'
 import { getShopLimits, shopSubline, type ShopInfo, type ShopLimits } from '@/lib/shop'
 import { useAuthStore, useUIStore, useWalletStore } from '@/store'
@@ -16,10 +18,36 @@ import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 const SHOP_DECIMALS = 2
 const SHOP_MAX = 100000
 
+// The payer's own currency (their phone's region): how much the dollars are
+// locally, as Square shows a foreign card holder. One small read, cached 15 min.
+const FX_KEY = 'meshport_fx_rate_v1'
+function useLocalRate(): { currency: string; rate: number } | null {
+  const [fx, setFx] = useState<{ currency: string; rate: number } | null>(null)
+  useEffect(() => {
+    const currency = businessCurrency()
+    if (currency === 'USD') return
+    try {
+      const c = JSON.parse(sessionStorage.getItem(FX_KEY) || 'null')
+      if (c && c.currency === currency && Date.now() - c.at < 15 * 60_000 && c.rate > 0) { setFx({ currency, rate: c.rate }); return }
+    } catch { /* storage unavailable */ }
+    let live = true
+    void supabase.from('p2p_fx_rates').select('usd_rate').eq('currency', currency).maybeSingle().then(({ data }) => {
+      const rate = Number((data as { usd_rate?: number } | null)?.usd_rate)
+      if (!live || !(rate > 0)) return
+      setFx({ currency, rate })
+      try { sessionStorage.setItem(FX_KEY, JSON.stringify({ currency, rate, at: Date.now() })) } catch { /* storage unavailable */ }
+    })
+    return () => { live = false }
+  }, [])
+  return fx
+}
+
 // The amount as a big centred figure with a small raised $, grey while
 // nothing is typed, shrinking as it grows. Desktop types into it directly.
-function ShopAmount({ value, onType, balance, compact = false }: {
+function ShopAmount({ value, onType, balance, compact = false, approx }: {
   value: string; onType?: (raw: string) => void
+  /** The amount in the payer's own currency ("≈ £0.79"), when it isn't USD. */
+  approx?: string | null
   /** Signed in: the payer's Arc USDC balance (shown under the amount); null hides it. */
   balance?: number | null
   /** A short screen: smaller figure and less room around it. */
@@ -46,6 +74,7 @@ function ShopAmount({ value, onType, balance, compact = false }: {
       <span className={`${compact ? 'mt-2' : 'mt-3'} inline-flex items-center gap-1.5 rounded-full bg-surface border border-border px-3 py-1 text-xs font-semibold text-text-secondary`}>
         <img decoding="async" src="/logos/tokens/usdc.png" alt="" width={16} height={16} className="rounded-full" /> USDC
       </span>
+      {approx && <p className="mt-1.5 text-[13px] text-text-muted tabular-nums">{approx}</p>}
       {balance != null && (
         // Rounded down, so it never shows more than can be paid.
         <p className={`mt-2 text-[13px] ${Number(value) > balance ? 'text-danger font-semibold' : 'text-text-muted'}`}>
@@ -73,6 +102,7 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
   // The same Arc USDC balance the pay screen shows (kept per wallet by the store).
   const balance = useWalletStore(s => s.balance)
   const [amount, setAmount] = useState(() => initialAmount && Number(initialAmount) > 0 ? String(Number(initialAmount)) : '')
+  const localRate = useLocalRate()
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [limits, setLimits] = useState<ShopLimits>({ min: null, max: null })
@@ -163,6 +193,11 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
               <Store className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{shopSubline(shop)}</span>
             </p>
           )}
+          {shop.contact && !short && (
+            <p className="mt-0.5 text-[12px] text-text-muted flex items-center justify-center gap-1 max-w-full">
+              <Phone className="w-3 h-3 shrink-0" /> <span className="truncate">{shop.contact}</span>
+            </p>
+          )}
           {shop.address && !short && (
             <p className="mt-0.5 text-[12px] text-text-muted flex items-center justify-center gap-1 max-w-full">
               <MapPin className="w-3 h-3 shrink-0" /> <span className="truncate">{shop.address}</span>
@@ -173,7 +208,8 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
           {/* The amount, large and centred: typed straight in on desktop; on
               a phone the keys sit right in the page under it. */}
           <div className={isDesktop ? '' : 'flex-1 flex flex-col justify-center'}>
-            <ShopAmount value={amount} onType={isDesktop ? type : undefined} balance={signedIn ? balance : null} compact={short} />
+            <ShopAmount value={amount} onType={isDesktop ? type : undefined} balance={signedIn ? balance : null} compact={short}
+              approx={localRate && Number(amount) > 0 ? `≈ ${formatFiat(Number(amount) * localRate.rate, localRate.currency)}` : null} />
           </div>
           <div className="shrink-0 w-full max-w-[280px] mx-auto">
             <input

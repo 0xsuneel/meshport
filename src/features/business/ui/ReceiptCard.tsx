@@ -28,24 +28,41 @@ export interface ReceiptCardProps {
   /** The transaction on its own chain's explorer */
   explorerUrl?: string
   refunded?: boolean
+  /** Part of it refunded (USDC): shown with what the business kept. */
+  refundedAmount?: number
+  /** Receipt number (lib/receiptNumber), the same the customer sees. */
+  receiptNo?: string | null
+  /** Under the name instead of the username: the business's category. */
+  subline?: string | null
+  /** The store's address and the business's public contact. */
+  address?: string | null
+  contact?: string | null
   printable?: boolean
 }
 
 const INK = '#0F5C57'
+const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 export function ReceiptCard({
   storeName, handle, avatar, outlet, taxId, amount, from, chainLabel, order, time, txHash, explorerUrl,
-  refunded = false, printable = false,
+  refunded = false, refundedAmount = 0, receiptNo, subline, address, contact, printable = false,
 }: ReceiptCardProps) {
   const when = new Date(time)
   const date = when.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })
   const clock = when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   const [whole, cents] = amount.replace(/^\$/, '').split('.')
+  const paid = Number(amount.replace(/[^0-9.]/g, '')) || 0
+  // Part refunded: the receipt says how much went back and what was kept.
+  const partlyRefunded = !refunded && refundedAmount > 0
   const rows: { label: string; value: string; mono?: boolean }[] = [
+    ...(receiptNo ? [{ label: 'Receipt no.', value: receiptNo, mono: true }] : []),
     { label: 'Paid by', value: from },
     ...(order ? [{ label: 'For', value: order }] : []),
     ...(outlet ? [{ label: 'Store', value: outlet }] : []),
+    ...(address ? [{ label: 'Address', value: address }] : []),
+    ...(contact ? [{ label: 'Contact', value: contact }] : []),
     ...(taxId ? [{ label: 'Tax ID', value: taxId, mono: true }] : []),
+    ...(partlyRefunded ? [{ label: 'Refunded', value: usd(refundedAmount) }, { label: 'Kept', value: usd(Math.max(0, paid - refundedAmount)) }] : []),
     { label: 'Network', value: chainLabel },
     ...(txHash ? [{ label: 'Transaction hash', value: `${txHash.slice(0, 10)}…${txHash.slice(-6)}`, mono: true }] : []),
   ]
@@ -70,7 +87,8 @@ export function ReceiptCard({
               </span>
             )}
           <p className="mt-3 text-[18px] font-bold leading-tight text-center">{storeName}</p>
-          <p className="text-[13px] text-[#62676C] mt-0.5">{handle}</p>
+          {/* What kind of business - not its username (as a payments app's receipt). */}
+          <p className="text-[13px] text-[#62676C] mt-0.5">{subline ?? handle}</p>
         </div>
 
         {/* Status + amount */}

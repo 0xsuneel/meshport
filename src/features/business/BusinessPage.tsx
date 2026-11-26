@@ -835,7 +835,9 @@ function OwnerBusinessPage() {
       {level('receipt', (
         <ReceiptScreen open={stack.includes('receipt')} onBack={back} storeName={storeName} handle={handle} payment={receiptFor} refunded={!!(receiptFor && refundedIds.has(receiptFor.id))}
           avatar={userAvatar} outlet={stores.length > 1 && receiptFor ? stores.find(st => st.id === storeOf(receiptFor))?.publicName ?? null : null}
-          taxId={receiptFor ? (stores.find(st => st.id === storeOf(receiptFor)) ?? stores.find(st => st.isDefault))?.taxId ?? null : null} />
+          taxId={receiptFor ? (stores.find(st => st.id === storeOf(receiptFor)) ?? stores.find(st => st.isDefault))?.taxId ?? null : null}
+          address={receiptFor ? (stores.find(st => st.id === storeOf(receiptFor)) ?? stores.find(st => st.isDefault))?.address ?? null : null}
+          refundedAmount={receiptFor ? refundedOf(receiptFor.id) : 0} />
       ))}
       {level('help', (
         <HelpScreen open={stack.includes('help')} onBack={back} />
