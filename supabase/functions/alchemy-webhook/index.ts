@@ -70,8 +70,15 @@ Deno.serve(async (req) => {
     let recorded = 0
     for (const r of toInsert) {
       const { error: e } = await db.from('chain_events').insert(r)
-      if (!e) recorded++
-      else if (e.code !== '23505') { console.error('[alchemy-webhook] insert failed:', e.message); return json({ error: 'retry' }, 500) }
+      if (!e) { recorded++; continue }
+      if (e.code !== '23505') { console.error('[alchemy-webhook] insert failed:', e.message); return json({ error: 'retry' }, 500) }
+      // Already there (the scanner saw it first, as 'pending' until its own
+      // confirmation depth): Alchemy has it mined - confirm it now.
+      const { error: ce } = await db.from('chain_events')
+        .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
+        .eq('event_type', r.event_type).eq('chain_id', r.chain_id).eq('tx_hash', r.tx_hash)
+        .eq('wallet_address', r.wallet_address).eq('status', 'pending')
+      if (ce) console.error('[alchemy-webhook] confirm of existing row failed:', ce.message)
     }
     return json({ ok: true, chain: chain.id, recorded })
   }

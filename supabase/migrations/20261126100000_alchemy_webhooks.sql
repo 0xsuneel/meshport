@@ -75,3 +75,16 @@ as $$
 $$;
 revoke all on function public.alchemy_signing_keys() from public, anon, authenticated;
 grant execute on function public.alchemy_signing_keys() to service_role;
+
+-- The Alchemy auth token can also live in vault (secret 'alchemy_notify_token').
+create or replace function public.alchemy_notify_token()
+returns text
+language sql
+stable
+security definer
+set search_path = public, vault
+as $$
+  select decrypted_secret from vault.decrypted_secrets where name = 'alchemy_notify_token' limit 1
+$$;
+revoke all on function public.alchemy_notify_token() from public, anon, authenticated;
+grant execute on function public.alchemy_notify_token() to service_role;

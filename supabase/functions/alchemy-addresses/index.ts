@@ -36,12 +36,18 @@ async function patch(token: string, webhookId: string, add: string[], remove: st
 
 Deno.serve(async (req) => {
   if (!isCronOrLegacyServiceCaller(req)) return json({ error: 'Forbidden' }, 403)
-  const token = Deno.env.get('ALCHEMY_NOTIFY_TOKEN') ?? ''
-  if (!token) return json({ error: 'ALCHEMY_NOTIFY_TOKEN not set' }, 503)
   let body: { mode?: string; add?: unknown[]; remove?: unknown[] } = {}
   try { body = await req.json() } catch { /* empty body */ }
 
   const db = createClient(Deno.env.get('SUPABASE_URL') ?? '', getServiceRoleKey(), { auth: { persistSession: false } })
+  // The token: the ALCHEMY_NOTIFY_TOKEN secret, else the vault secret
+  // 'alchemy_notify_token' (public.alchemy_notify_token(), service role only).
+  let token = (Deno.env.get('ALCHEMY_NOTIFY_TOKEN') ?? '').trim()
+  if (!token) {
+    const { data } = await db.rpc('alchemy_notify_token')
+    token = String(data ?? '').trim()
+  }
+  if (!token) return json({ error: 'Alchemy auth token not set (secret ALCHEMY_NOTIFY_TOKEN or vault alchemy_notify_token)' }, 503)
   const { data: hooks, error } = await db.from('alchemy_webhooks').select('network, webhook_id').eq('active', true)
   if (error) return json({ error: error.message }, 500)
 
