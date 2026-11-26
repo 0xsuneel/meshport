@@ -706,9 +706,10 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         if (msg?.delivered_at && !msg?.is_read && msg?.content !== '[deleted]') return
         invalidateConversationsCache()
         loadConversations()
-      })
-      // Re-fetch conversations when any user profile updates (avatar, display name)
-      .on('postgres_changes', { event: 'UPDATE',  schema: 'public', table: 'users' },    () => { invalidateConversationsCache(); loadConversations() }),
+      }),
+      // (No `users` listener: every profile update by anyone reached every
+      // open chat list and reloaded it - users is out of the realtime
+      // publication now. New names/avatars show on the list's next load.)
       // Catch up on anything missed during a drop (a message that arrived
       // while the socket was down) the moment the connection comes back -
       // without this, the list wouldn't refresh again until the next

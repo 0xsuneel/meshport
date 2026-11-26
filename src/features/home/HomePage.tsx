@@ -2550,12 +2550,15 @@ export function HomePage() {
     let unsub: (() => void) | null = null
     Promise.all([import('@/lib/supabase'), import('@/lib/chatService')]).then(([{ supabase }, { subscribeWithRetry }]) => {
       if (stopped) return
+      // Only this person's trades (as buyer or as seller) - one filter each.
+      const onTrade = (payload: any) => {
+        const row = payload.new
+        if (row?.buyer_id !== user.id && row?.seller_id !== user.id) return
+        setTradeLiveById(prev => ({ ...prev, [row.id]: toLive(row) }))
+      }
       unsub = subscribeWithRetry(supabase, `p2p-trade-status-${user.id.slice(0, 8)}`, c => c
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'p2p_trades' }, (payload: any) => {
-          const row = payload.new
-          if (row?.buyer_id !== user.id && row?.seller_id !== user.id) return
-          setTradeLiveById(prev => ({ ...prev, [row.id]: toLive(row) }))
-        }))
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'p2p_trades', filter: `buyer_id=eq.${user.id}` }, onTrade)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'p2p_trades', filter: `seller_id=eq.${user.id}` }, onTrade))
     })
     return () => { stopped = true; unsub?.() }
   }, [user?.id])
@@ -3038,7 +3041,8 @@ export function HomePage() {
       // A gap while paused/dropped is covered by the missed-payment catch-up
       // below (it runs on 'meshport:live-resumed').
       unsubRecv = subscribeWithRetry(supabase, 'recv-' + user.id.slice(0, 8) + '-' + walletAddress.slice(2, 10).toLowerCase(), c => c
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload: any) => {
+        // Payment messages only - the handler ignores every other kind.
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: 'type=eq.payment_sent' }, async (payload: any) => {
           const msg = payload.new
           if (msg.type !== 'payment_sent') return
           if (!msg.payment_amount || msg.sender_id === user.id) return

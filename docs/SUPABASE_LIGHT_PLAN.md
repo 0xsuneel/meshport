@@ -73,9 +73,12 @@ not an unlimited place to move load either. Functions per deployment are
    `meshport:live-resumed`). Alerts while paused: Web Push, already sent for
    chat payments (api/chat), external deposits (chain-transfer-webhook)
    and claims (claim-worker / ub-claim-worker).
-   Still open: Home's messages listener and the P2P trade listener have no
-   row filter, so every change is checked for every connected client -
-   narrow them (Realtime message quota, 2M/month).
+   Follow-up done 26 Nov: `users` dropped from the Realtime publication (it
+   is readable by all and the chat list reloaded on every profile UPDATE by
+   anyone - a message per viewer per change); Home's payment listener
+   filtered to `type=eq.payment_sent`, its P2P listener to this person's
+   trades (buyer_id / seller_id). messages and p2p_trades are RLS-limited to
+   participants, so their other listeners only reach the people involved.
 5. **Retention**: rpc_usage, client_errors, cron history, net._http_response.
 
 ## Reference: how Acme (app.acme.money) does it
