@@ -42,9 +42,16 @@ not an unlimited place to move load either. Functions per deployment are
    gated (nonce recovery, reconcile, broadcast recovery, ledger link, Arc
    push sweep, deposit backstop, name sync), Arc index pass every 10 min,
    shadow compare paused. Target < 30 Edge calls/hour.
-2. **≤ 10 Supabase requests/user/day** (biggest egress win): one bootstrap
-   read on open + local cache; activity history from Alchemy via Vercel;
-   same-origin Vercel rewrite for Supabase to drop CORS preflights.
+2. **≤ 10 Supabase requests/user/day** (biggest egress win).
+   - Done 26 Nov: activity history kept on the device (ActivityService
+     device copy) - one full read, then only rows with a newer
+     `updated_at`; live events go straight into it. Was ~3 MB/user/day
+     (pages of up to 1,000 rows × ~520 B re-read by every screen).
+   - Next: one bootstrap read on open + local cache for profile/contacts/
+     chat lists; counterparty names cached.
+   - Dropped: same-origin rewrite for CORS preflights - preflights are tiny
+     (no egress to speak of) and a Vercel rewrite would move the bytes onto
+     Vercel's 10 GB Fast Origin Transfer instead.
 3. **User actions off Supabase Edge Functions**: pay/swap/bulkpay intents,
    claim-submit, merchant API, name-register, rewards, login → one merged
    Vercel route (`/api/tx?action=`) - or Cloudflare Workers if Vercel

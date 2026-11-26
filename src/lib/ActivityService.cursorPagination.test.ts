@@ -32,7 +32,11 @@ vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'test-anon-key')
 let fetchActivity: typeof import('./ActivityService').fetchActivity
 
 beforeAll(async () => {
-  ({ fetchActivity } = await import('./ActivityService'))
+  const svc = await import('./ActivityService')
+  fetchActivity = svc.fetchActivity
+  // These pin the server query; the device copy is tested in
+  // ActivityService.deviceCopy.test.ts.
+  svc.setActivityMirrorEnabled(false)
 })
 
 function mockFetchOnce(rows: unknown[] = []) {

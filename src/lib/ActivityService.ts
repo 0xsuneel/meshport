@@ -252,6 +252,7 @@ export async function saveActivity(p: SaveParams): Promise<boolean> {
       })
       if (res.ok || res.status === 409) { // success, or benign duplicate
         if (savedKey) markSaved(savedKey)
+        invalidateActivityMirror(row.wallet_address)
         return true
       }
       const txt = await res.text()
@@ -289,6 +290,7 @@ export async function updateActivityStatus(txHash: string, walletAddress: string
         body: JSON.stringify({ status, ...(error ? { error: error.slice(0, 300), last_error_at: new Date().toISOString() } : {}) }),
       },
     )
+    invalidateActivityMirror(walletAddress)
   } catch (e) {
     console.error('[ActivityService] updateActivityStatus failed:', txHash, e instanceof Error ? e.message : e)
   }
@@ -312,6 +314,7 @@ export async function setActivityDestinationTx(txHash: string, walletAddress: st
         body: JSON.stringify({ destination_tx_hash: destinationTxHash.toLowerCase() }),
       },
     )
+    invalidateActivityMirror(walletAddress)
   } catch (e) {
     console.error('[ActivityService] setActivityDestinationTx failed:', txHash, e instanceof Error ? e.message : e)
   }
@@ -519,6 +522,7 @@ export const Activity = {
         res = await patch()
       }
       const updated = res.ok ? await res.json() : []
+      invalidateActivityMirror(p.walletAddress)
       if (!res.ok || !Array.isArray(updated) || updated.length === 0) {
         // Fallback: no existing row to finalize - record it fresh, same as
         // the pre-existing behavior this replaces.
@@ -620,6 +624,7 @@ export const Activity = {
           metadata: { route: 'ub', claimed_amount: p.claimedAmount, ub_held: true, ...(p.merchant ? { merchant: true } : {}) },
         }),
       })
+      invalidateActivityMirror(p.walletAddress)
     } catch { /* best effort - the funds are safe either way */ }
   },
 
@@ -659,6 +664,7 @@ export const Activity = {
           metadata:            { route: 'ub', claimed_amount: p.claimedAmount, ...(p.recovered ? { recovered_via: 'ub' } : {}), ...(p.merchant ? { merchant: true } : {}) },
         }),
       })
+      invalidateActivityMirror(p.walletAddress)
       if (res.ok) {
         const rows = await res.json().catch(() => [])
         if (Array.isArray(rows) && rows.length > 0) return true
@@ -936,6 +942,164 @@ export async function resolveCounterpartyNames(records: ActivityRecord[]): Promi
   return withKnownCounterpartyNames(records)
 }
 
+// ── This wallet's activity, kept on the device (docs/SUPABASE_LIGHT_PLAN.md
+// Phase 2) ──────────────────────────────────────────────────────────────────
+// Every screen used to read its own page of up to 1,000 rows (~520 bytes
+// each) from Supabase - the same rows again and again, ~3 MB per user per
+// day, so egress (5 GB/month on the Free plan) ran out first. Now the device
+// keeps a copy of the wallet's rows and asks only for rows changed since
+// its newest `updated_at` (an empty answer when nothing changed). Live
+// INSERT/UPDATE events go straight into the copy. Filters, order and pages
+// are applied here exactly as the REST query did. A wallet with more rows
+// than MIRROR_MAX, or a text search, still asks the server.
+const MIRROR_MAX = 800            // PostgREST returns at most 1,000 rows a request
+const MIRROR_FRESH_MS = 10_000    // a read within this window uses the copy as is
+const MIRROR_FULL_MS = 24 * 3600_000 // full re-read once a day (catches deletions)
+const MIRROR_OVERLAP_MS = 120_000 // re-ask a little before the newest change (commit lag)
+const MIRROR_KEY = 'meshport_activity_mirror_v1:'
+type Mirror = { rows: Record<string, any>; maxUpdated: string | null; complete: boolean; syncedAt: number; fullAt: number }
+const mirrors = new Map<string, Mirror>()
+const mirrorSyncs = new Map<string, Promise<Mirror | null>>()
+
+/** Postgres timestamp text → microseconds, so sub-millisecond order survives. */
+function tsMicros(s: string | null | undefined): number {
+  if (!s) return Number.POSITIVE_INFINITY // NULL sorts first under DESC, as in Postgres
+  const m = /^(.*?T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(.*)$/.exec(s)
+  if (!m) return Date.parse(s) * 1000
+  return Date.parse(m[1] + (m[3] || 'Z')) * 1000 + Number(((m[2] || '') + '000000').slice(0, 6))
+}
+
+function loadMirror(addr: string): Mirror | null {
+  const mem = mirrors.get(addr)
+  if (mem) return mem
+  try {
+    const saved = JSON.parse(localStorage.getItem(MIRROR_KEY + addr) || 'null')
+    if (saved && typeof saved.rows === 'object') {
+      const m: Mirror = { rows: saved.rows, maxUpdated: saved.maxUpdated ?? null, complete: !!saved.complete, syncedAt: 0, fullAt: Number(saved.fullAt) || 0 }
+      mirrors.set(addr, m)
+      return m
+    }
+  } catch { /* no storage, or an old shape: read afresh */ }
+  return null
+}
+function saveMirror(addr: string, m: Mirror) {
+  mirrors.set(addr, m)
+  try {
+    localStorage.setItem(MIRROR_KEY + addr, JSON.stringify({ rows: m.rows, maxUpdated: m.maxUpdated, complete: m.complete, fullAt: m.fullAt }))
+  } catch { /* storage full: the in-memory copy still serves this session */ }
+}
+function putMirrorRows(m: Mirror, rows: any[]) {
+  for (const r of rows) {
+    if (!r?.id) continue
+    m.rows[r.id] = r
+    if (r.updated_at && (!m.maxUpdated || tsMicros(r.updated_at) > tsMicros(m.maxUpdated))) m.maxUpdated = r.updated_at
+  }
+  if (Object.keys(m.rows).length > MIRROR_MAX) m.complete = false
+}
+
+/** A row from a live INSERT/UPDATE event: into the device copy, no request. */
+export function mirrorActivityRow(row: any) {
+  const addr = String(row?.wallet_address ?? '').toLowerCase()
+  const m = addr ? loadMirror(addr) : null
+  if (!m) return
+  putMirrorRows(m, [row])
+  saveMirror(addr, m)
+}
+/** This device just wrote: the next read asks for what changed. */
+export function invalidateActivityMirror(walletAddress?: string) {
+  if (walletAddress) { const m = mirrors.get(walletAddress.toLowerCase()); if (m) m.syncedAt = 0; return }
+  for (const m of mirrors.values()) m.syncedAt = 0
+}
+let mirrorEnabled = true
+/** Tests of the server query itself switch the device copy off. */
+export function setActivityMirrorEnabled(on: boolean) { mirrorEnabled = on }
+/** Tests: forget every device copy. */
+export function resetActivityMirror() {
+  for (const addr of mirrors.keys()) { try { localStorage.removeItem(MIRROR_KEY + addr) } catch { /* no storage */ } }
+  mirrors.clear()
+  mirrorSyncs.clear()
+}
+
+async function syncMirror(addr: string): Promise<Mirror | null> {
+  const known = loadMirror(addr)
+  if (known?.complete && Date.now() - known.syncedAt < MIRROR_FRESH_MS) return known
+  const running = mirrorSyncs.get(addr)
+  if (running) return running
+  const p = (async (): Promise<Mirror | null> => {
+    const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
+    const { authHeaders } = await import('./chatService')
+    const headers = { ...(await authHeaders()), 'Accept': 'application/json' }
+    const base = `${SUPA_URL}/rest/v1/activity?wallet_address=eq.${encodeURIComponent(addr)}`
+    const full = !known || !known.complete || !known.maxUpdated || Date.now() - known.fullAt > MIRROR_FULL_MS
+    try {
+      if (full) {
+        const res = await fetch(`${base}&order=updated_at.desc,id.desc&limit=${MIRROR_MAX + 1}`, { headers })
+        if (!res.ok) return null
+        const rows: any[] = await res.json()
+        const m: Mirror = { rows: {}, maxUpdated: null, complete: rows.length <= MIRROR_MAX, syncedAt: Date.now(), fullAt: Date.now() }
+        if (!m.complete) { mirrors.set(addr, m); return m } // too big for the device: the server answers
+        putMirrorRows(m, rows)
+        saveMirror(addr, m)
+        return m
+      }
+      const after = new Date(tsMicros(known.maxUpdated) / 1000 - MIRROR_OVERLAP_MS).toISOString()
+      const res = await fetch(`${base}&updated_at=gt.${encodeURIComponent(after)}&order=updated_at.asc,id.asc&limit=${MIRROR_MAX + 1}`, { headers })
+      if (!res.ok) return null
+      const rows: any[] = await res.json()
+      if (rows.length > MIRROR_MAX) { known.fullAt = 0; known.complete = false; return known } // too much changed: re-read next time
+      putMirrorRows(known, rows)
+      known.syncedAt = Date.now()
+      saveMirror(addr, known)
+      return known
+    } catch {
+      return null // offline / server down: the normal query below reports it
+    }
+  })()
+  mirrorSyncs.set(addr, p)
+  try { return await p } finally { mirrorSyncs.delete(addr) }
+}
+
+const BRIDGE_TYPES = ['bridge', 'claim', 'withdraw']
+const P2P_TYPES = ['p2p_sell_order', 'p2p_refund', 'p2p_purchase']
+
+/** The REST query of fetchActivityRaw (no search), answered from the device copy. */
+function queryMirror(m: Mirror, addr: string, o: {
+  limit: number; offset: number; cursorCreatedAt?: string; cursorId?: string; activityType?: string
+  status?: string; since?: string; includePendingBridge: boolean
+}): any[] {
+  const sinceUs = o.since ? tsMicros(o.since) : null
+  const cursorUs = o.cursorCreatedAt && o.cursorId ? tsMicros(o.cursorCreatedAt) : null
+  const rows = Object.values(m.rows).filter((r: any) => {
+    if (String(r.wallet_address ?? '').toLowerCase() !== addr) return false
+    const t = r.activity_type
+    if (o.activityType === 'bridge') { if (!BRIDGE_TYPES.includes(t)) return false }
+    else if (o.activityType === 'p2p') { if (!P2P_TYPES.includes(t)) return false }
+    else if (o.activityType && t !== o.activityType) return false
+    if (o.status && r.status !== o.status) return false
+    if (sinceUs !== null && !(r.created_at && tsMicros(r.created_at) > sinceUs)) return false
+    if (!o.includePendingBridge) {
+      const meta = r.metadata ?? {}
+      const keep = (t != null && !BRIDGE_TYPES.includes(t))
+        || (r.status != null && r.status !== 'pending')
+        || String(meta.ub_stuck_transfer) === 'true'
+        || String(meta.ub_recovery) === 'true'
+      if (!keep) return false
+    }
+    if (cursorUs !== null) {
+      const c = tsMicros(r.created_at)
+      if (!(c < cursorUs || (c === cursorUs && String(r.id) < String(o.cursorId)))) return false
+    }
+    return true
+  })
+  rows.sort((a: any, b: any) => {
+    const d = tsMicros(b.created_at) - tsMicros(a.created_at)
+    if (d) return d
+    return String(b.id) < String(a.id) ? -1 : String(b.id) > String(a.id) ? 1 : 0
+  })
+  const start = cursorUs !== null ? 0 : o.offset
+  return rows.slice(start, start + o.limit)
+}
+
 async function fetchActivityRaw(
   walletAddress: string,
   opts: FetchOptions = {},
@@ -1054,20 +1218,28 @@ async function fetchActivityRaw(
   }
 
   try {
-    const { authHeaders } = await import('./chatService')
-    const res = await fetch(url, {
-      headers: {
-        ...(await authHeaders()),
-        'Accept': 'application/json',
-      },
-    })
-    if (!res.ok) {
-      const txt = await res.text()
-      console.error('[ActivityService] fetchActivity REST FAILED:', res.status, txt)
-      if (opts.meta) opts.meta.failed = true
-      return []
+    // The device copy answers whenever it can (no text search, wallet small
+    // enough); otherwise - or when it can't sync - the server, as before.
+    const mirror = rawSearch || !mirrorEnabled ? null : await syncMirror(addr)
+    let data: any[] | null = mirror?.complete
+      ? queryMirror(mirror, addr, { limit, offset, cursorCreatedAt, cursorId, activityType, status, since, includePendingBridge })
+      : null
+    if (data === null) {
+      const { authHeaders } = await import('./chatService')
+      const res = await fetch(url, {
+        headers: {
+          ...(await authHeaders()),
+          'Accept': 'application/json',
+        },
+      })
+      if (!res.ok) {
+        const txt = await res.text()
+        console.error('[ActivityService] fetchActivity REST FAILED:', res.status, txt)
+        if (opts.meta) opts.meta.failed = true
+        return []
+      }
+      data = await res.json()
     }
-    const data = await res.json()
     const rows: ActivityRecord[] = (data ?? []).map(fromRow)
     if (opts.meta) {
       opts.meta.rawCount = rows.length
@@ -1247,6 +1419,7 @@ export function subscribeToActivity(
         filter: `wallet_address=eq.${addr}`,
       },
       (payload) => {
+        mirrorActivityRow(payload.new)
         const rec = fromRow(payload.new)
         touchLastSeen(rec.createdAt)
         onNew(rec)
@@ -1254,7 +1427,7 @@ export function subscribeToActivity(
     ).on(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'activity', filter: `wallet_address=eq.${addr}` },
-      (payload) => { if (onUpdate) onUpdate(fromRow(payload.new)) },
+      (payload) => { mirrorActivityRow(payload.new); if (onUpdate) onUpdate(fromRow(payload.new)) },
     ),
     {
       // Fires on the very first successful subscribe too is NOT desired
