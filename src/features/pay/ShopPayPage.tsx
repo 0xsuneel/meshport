@@ -4,9 +4,9 @@
 // Shop QR payment is recorded in the owner's Business tab with its store.
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, BadgeCheck, Store } from 'lucide-react'
+import { ArrowLeft, BadgeCheck, MapPin, Store } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { getShopLimits, type ShopInfo, type ShopLimits } from '@/lib/shop'
+import { getShopLimits, shopSubline, type ShopInfo, type ShopLimits } from '@/lib/shop'
 import { useAuthStore, useUIStore, useWalletStore } from '@/store'
 import { Avatar } from '@/components/ui/Avatar'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -116,14 +116,16 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
       if (useAuthStore.getState().isAuthenticated && wallet && /^0x[0-9a-fA-F]{40}$/.test(wallet)) {
         const to = `${shop.username}|${wallet}|${shop.businessName}|${shop.avatarUrl ?? ''}`
         // &store: kept on the payment in history, so "Pay again" reopens this store.
-        const storeQ = shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : ''
+        const storeQ = (shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : '')
+          // What the payment screens show under the name instead of the username.
+          + (shopSubline(shop) ? `&shopline=${encodeURIComponent(shopSubline(shop))}` : '')
         navigate(`/pay?to=${encodeURIComponent(to)}&amount=${encodeURIComponent(String(value))}&merchantPay=${encodeURIComponent(String(data))}&review=1${storeQ}`)
         return
       }
       if (useAuthStore.getState().isAuthenticated) {
         const { getPayment, orderPaySendUrl, isOrderPayable } = await import('@/lib/merchantPay')
         const v = await getPayment(String(data)).catch(() => null)
-        if (v && isOrderPayable(v)) { navigate(`${orderPaySendUrl(v)}&review=1${shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : ''}`, { state: { merchantView: v } }); return }
+        if (v && isOrderPayable(v)) { navigate(`${orderPaySendUrl(v)}&review=1${shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : ''}${shopSubline(shop) ? `&shopline=${encodeURIComponent(shopSubline(shop))}` : ''}`, { state: { merchantView: v } }); return }
       }
       navigate(`/paylink/r/${data}`)
     } catch (e) {
@@ -154,10 +156,18 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
             <span className="truncate">{shop.businessName}</span>
             {shop.verified && <BadgeCheck className="w-6 h-6 shrink-0 text-brand-text" aria-label="Verified business" />}
           </h1>
-          <p className="mt-1 text-[13px] text-text-muted flex items-center justify-center gap-1.5">
-            {shop.username}.arc
-            {shop.storeName && <><span aria-hidden>·</span><Store className="w-3.5 h-3.5" /> {shop.storeName}</>}
-          </p>
+          {/* What kind of business and which branch - like a payment app's
+              merchant screen; the username isn't what a customer looks for. */}
+          {shopSubline(shop) && (
+            <p className="mt-1 text-[13px] text-text-muted flex items-center justify-center gap-1.5 max-w-full">
+              <Store className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{shopSubline(shop)}</span>
+            </p>
+          )}
+          {shop.address && !short && (
+            <p className="mt-0.5 text-[12px] text-text-muted flex items-center justify-center gap-1 max-w-full">
+              <MapPin className="w-3 h-3 shrink-0" /> <span className="truncate">{shop.address}</span>
+            </p>
+          )}
         </div>
         <div className={`mx-auto w-full max-w-md flex flex-col px-5 ${isDesktop ? '' : 'flex-1'} ${short ? 'gap-3 pt-3' : 'gap-5 pt-6'}`}>
           {/* The amount, large and centred: typed straight in on desktop; on

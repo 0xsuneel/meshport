@@ -5,6 +5,16 @@ import { supabase } from '@/lib/supabase'
 export type ShopInfo = {
   businessName: string; username: string; storeId: string | null; storeName: string | null
   avatarUrl: string | null; verified: boolean
+  /** What kind of business it is ("Restaurant / Café") - the store's own type, else the business's. */
+  category: string | null
+  /** The store's address, when the business added one. */
+  address: string | null
+}
+
+/** The line under a shop's name on its pay page: "Restaurant / Café · Andheri branch". Never the username. */
+export function shopSubline(s: Pick<ShopInfo, 'businessName' | 'storeName' | 'category'>): string {
+  const store = s.storeName && s.storeName.trim().toLowerCase() !== s.businessName.trim().toLowerCase() ? s.storeName.trim() : ''
+  return [s.category?.trim() || '', store].filter(Boolean).join(' · ')
 }
 
 const shopCache = new Map<string, ShopInfo | null>()
@@ -17,7 +27,7 @@ export async function getShopInfo(username: string, storeId: string | null): Pro
   if (error) throw new Error(error.message)
   const r = Array.isArray(data) ? data[0] : data
   const info = r ? { businessName: r.business_name, username: r.username, storeId: r.store_id ?? null, storeName: r.store_name ?? null,
-    avatarUrl: r.avatar_url ?? null, verified: !!r.verified } : null
+    avatarUrl: r.avatar_url ?? null, verified: !!r.verified, category: r.category ?? null, address: r.address ?? null } : null
   shopCache.set(key, info)
   return info
 }

@@ -231,6 +231,10 @@ export function PaySendPage() {
   // The Shop QR's store (branch), kept on the payment so "Pay again" reopens it.
   // (Only a Shop QR's own page sets it; it names a branch and moves no money.)
   const merchantStoreId = searchParams.get('store')
+  // A Shop QR payment: what kind of business and which branch ("Restaurant /
+  // Café · Andheri branch"), shown under the name instead of the username.
+  const shopLineParam = (searchParams.get('shopline') || '').slice(0, 120)
+  const shopLine = merchantOrderKind === 'shop' ? (shopLineParam || 'Business') : null
   // Order payments: amount, order number and recipient come from the order on
   // the server - not from the link - so they can't be changed by editing it.
   const recipientRef = useRef(recipient)
@@ -1467,7 +1471,9 @@ export function PaySendPage() {
                   {recipient.isUsername ? (
                     <>
                       <p className="text-[15px] font-bold text-text-primary truncate">{recipient.displayName}</p>
-                      <p className="text-[12px] font-mono mt-0.5 truncate text-link">{recipient.display}</p>
+                      {shopLine
+                        ? <p className="text-[12px] mt-0.5 truncate" style={{ color: 'var(--text-secondary)' }}>{shopLine}</p>
+                        : <p className="text-[12px] font-mono mt-0.5 truncate text-link">{recipient.display}</p>}
                       {recipient.enteredViaAddress && (
                         <p className="text-[11px] font-mono mt-0.5 truncate" style={{ color: 'var(--text-secondary)' }}>{midShortenAddress(recipient.walletAddress)}</p>
                       )}
@@ -1712,7 +1718,7 @@ export function PaySendPage() {
                   chip: payPending ? 'On its way' : 'Paid',
                   payee: recipient.isUsername
                     ? { name: recipient.displayName || recipient.display.replace(/\.arc$/i, ''), initial: initialsOf(recipient.displayName || recipient.display),
-                        handle: recipient.display, amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))}`, copy: { value: recipient.display, what: 'Username' } }
+                        handle: shopLine ?? recipient.display, amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))}`, copy: { value: recipient.display, what: 'Username' } }
                     : { name: midShortenAddress(recipient.walletAddress), initial: recipient.walletAddress.slice(2, 4).toUpperCase(),
                         amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))}`, handle: 'Wallet address', copy: { value: recipient.walletAddress, what: 'Address' } },
                   rows: [
@@ -1860,7 +1866,9 @@ export function PaySendPage() {
                           {recipient.isUsername ? (
                             <>
                               <p className="text-[15px] font-bold text-text-primary truncate">{recipient.displayName}</p>
-                              <p className="text-[12px] font-mono mt-0.5 truncate text-link">{recipient.display}</p>
+                              {shopLine
+                        ? <p className="text-[12px] mt-0.5 truncate" style={{ color: 'var(--text-secondary)' }}>{shopLine}</p>
+                        : <p className="text-[12px] font-mono mt-0.5 truncate text-link">{recipient.display}</p>}
                               {recipient.enteredViaAddress && (
                                 <p className="text-[11px] font-mono mt-0.5" style={{ color: 'var(--text-secondary)', wordBreak: 'break-all', whiteSpace: 'normal' }}>{recipient.walletAddress}</p>
                               )}
@@ -1944,7 +1952,7 @@ export function PaySendPage() {
         amountLabel={`${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token}`}
         card={recipient ? {
           label: 'Paying', name: recipient.displayName || recipient.display,
-          detail: recipient.display && recipient.display !== recipient.displayName ? recipient.display : undefined,
+          detail: shopLine ?? (recipient.display && recipient.display !== recipient.displayName ? recipient.display : undefined),
           amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))}`, unit: token,
         } : undefined}
         bioVerb="Pay"
