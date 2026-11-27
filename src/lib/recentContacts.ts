@@ -15,6 +15,14 @@
 import { getUsersByWalletAddresses } from './supabase'
 import { getRemovedContacts } from './removedContacts'
 
+/** A payment to / from a business through its Shop QR, a bill or an order (not its personal account). */
+export function isShopPayment(meta: unknown): boolean {
+  if (!meta || typeof meta !== 'object') return false
+  const m = meta as Record<string, unknown>
+  const merchant = m.merchantVia === 'shop_qr' || m.merchantPayment === true || m.merchantPayment === 'true'
+  return merchant && m.merchantPersonal !== true && m.merchantPersonal !== 'true'
+}
+
 export interface RecentContact {
   id: string
   wallet_address: string
@@ -83,8 +91,8 @@ export async function fetchRecentContacts(
     const { authHeaders } = await import('./chatService')
     const headers = await authHeaders()
     const [sentRes, recvRes] = await Promise.all([
-      fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.send&status=neq.failed&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at`, { headers }),
-      fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.receive&status=neq.failed&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at`, { headers }),
+      fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.send&status=neq.failed&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at,metadata`, { headers }),
+      fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.receive&status=neq.failed&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at,metadata`, { headers }),
     ])
     ;[sentRows, recvRows] = await Promise.all([sentRes.json(), recvRes.json()])
   }
@@ -106,6 +114,9 @@ export async function fetchRecentContacts(
     // lets callers label this entry "You" instead of resolving it as if it
     // were an ordinary contact.
     if (!addr) continue
+    // A shop payment (Shop QR, bill, order) is a purchase, not a person you
+    // pay: never a recent contact (the startup call filters the same way).
+    if (isShopPayment(r.metadata)) continue
     // ...but not a 0 USDC one to yourself: that's a stuck payment being
     // cancelled (lib/stuckPayments.ts), not a payment.
     if (addr === myAddr && !(parseFloat(r.amount || 0) > 0)) continue
