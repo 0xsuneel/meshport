@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { mySplits, money, isSettled, SPLITS_CHANGED_EVENT, type MySplitMade, type MySplitOwe } from '@/lib/splits'
 import { SplitHeader, ListCard, card, rowStyle, subStyle, nameStyle, amountStyle, when, SplitListSkeleton } from './splitUi'
+import { errorText } from '@/lib/errorText'
 
 type Tab = 'open' | 'settled'
 const oweOpen = (o: MySplitOwe) => (o.status === 'pending' || o.status === 'partially_paid') && o.left > 0
@@ -14,7 +15,7 @@ export function SplitsPage() {
   const [data, setData] = useState<{ made: MySplitMade[]; owe: MySplitOwe[] } | null>(null)
   const [error, setError] = useState('')
   const [tab, setTab] = useState<Tab>('open')
-  const load = useCallback(() => mySplits().then(d => { setData(d); setError('') }).catch(e => setError(e instanceof Error ? e.message : 'Could not load splits')), [])
+  const load = useCallback(() => mySplits().then(d => { setData(d); setError('') }).catch(e => setError(errorText(e, 'Could not load splits'))), [])
   useEffect(() => {
     void load()
     const on = () => void load()

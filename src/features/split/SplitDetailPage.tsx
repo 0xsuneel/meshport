@@ -15,6 +15,7 @@ import {
 import { canRemindAt } from '@/lib/businessBills'
 import { useAuthStore, useUIStore } from '@/store'
 import { SplitHeader, SplitAvatar, ProgressBar, Pill, Btn, card, rowStyle, subStyle, nameStyle, amountStyle, when, SplitDetailSkeleton, SplitPeopleSkeleton } from './splitUi'
+import { errorText } from '@/lib/errorText'
 
 type Item =
   | { kind: 'msg'; at: string; m: SplitMessage }
@@ -35,7 +36,7 @@ export function SplitDetailPage() {
   const [sending, setSending] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
 
-  const load = useCallback(() => getSplit(id).then(v => { setS(v); setError('') }).catch(e => setError(e instanceof Error ? e.message : 'Could not load the split')), [id])
+  const load = useCallback(() => getSplit(id).then(v => { setS(v); setError('') }).catch(e => setError(errorText(e, 'Could not load the split'))), [id])
   // The thread belongs to the group (every split made with "Split again with
   // group" shares it): keyed by the group's first split.
   const groupId = s?.id === id ? s.groupId : null
@@ -95,13 +96,13 @@ export function SplitDetailPage() {
   const remind = async (m: SplitMember) => {
     setBusy(`r:${m.id}`)
     try { await remindSplitMember(m.id); toast(`Reminded ${m.name ?? m.username}`, 'success'); await load() }
-    catch (e) { toast(e instanceof Error ? e.message : 'Could not remind', 'error') }
+    catch (e) { toast(errorText(e, 'Could not remind'), 'error') }
     finally { setBusy(null) }
   }
   const received = async (m: SplitMember) => {
     setBusy(`c:${m.id}`)
     try { await markSplitReceived(m.code); toast(`${m.name ?? m.username}'s share marked as received`, 'success'); await load() }
-    catch (e) { toast(e instanceof Error ? e.message : 'Could not update', 'error') }
+    catch (e) { toast(errorText(e, 'Could not update'), 'error') }
     finally { setBusy(null) }
   }
   const payMine = async (code: string) => {
@@ -109,7 +110,7 @@ export function SplitDetailPage() {
     try {
       const { getPayment, orderPaySendUrl } = await import('@/lib/merchantPay')
       navigate(orderPaySendUrl(await getPayment(code)))
-    } catch (e) { toast(e instanceof Error ? e.message : 'Could not open the payment', 'error') }
+    } catch (e) { toast(errorText(e, 'Could not open the payment'), 'error') }
     finally { setBusy(null) }
   }
   const send = async () => {
@@ -120,7 +121,7 @@ export function SplitDetailPage() {
       const m = await sendSplitMessage(s?.groupId ?? id, text)
       setMsgs(cur => cur.some(x => x.id === m.id) ? cur : [...cur, m])
       setDraft('')
-    } catch (e) { toast(e instanceof Error ? e.message : 'Could not send', 'error') }
+    } catch (e) { toast(errorText(e, 'Could not send'), 'error') }
     finally { setSending(false) }
   }
 

@@ -8,6 +8,7 @@ import {
   uploadBusinessDoc, removeBusinessDoc, BUSINESS_DOC_KINDS, MAX_BUSINESS_DOCS,
   type BusinessDoc, type BusinessDocKind,
 } from '@/lib/merchant'
+import { errorText } from '@/lib/errorText'
 
 const kindLabel = (k: BusinessDocKind) => BUSINESS_DOC_KINDS.find(x => x.id === k)?.label ?? 'Document'
 
@@ -29,7 +30,7 @@ export function BusinessDocsField({ docs, onChange, onError }: {
       onChange([...docs, doc])
       if (kind === 'id') setKind('shop_photo')
     } catch (e) {
-      onError(e instanceof Error ? e.message : 'Could not upload - try again')
+      onError(errorText(e, 'Could not upload - try again'))
     }
     setUploading(false)
     if (input.current) input.current.value = ''

@@ -6,6 +6,7 @@
 // My ads. USDC moves through the escrow contract on Arc; the fiat payment
 // happens between the two people, outside the app.
 
+import { currencyForLocale } from '@/lib/localCurrency'
 import { notifyActivityChanged } from '@/lib/activityChanged'
 import { prepareSigner, getReadySigner } from '@/lib/paymentReadiness'
 import { useLatched } from '@/hooks/useLatched'
@@ -506,7 +507,11 @@ export function P2PCreateOfferPage() {
 
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [offerType, setOfferType] = useState<OfferType>('sell')
-  const [currency, setCurrency] = useState('INR')
+  // The phone's own currency when the market trades it, else USD - not one country's.
+  const [currency, setCurrency] = useState(() => {
+    const local = currencyForLocale(typeof navigator !== 'undefined' ? (navigator.languages?.[0] || navigator.language) : null)
+    return CURRENCIES.some(c => c.code === local) ? local : 'USD'
+  })
   const [price, setPrice] = useState('')
   const [priceType, setPriceType] = useState<'fixed' | 'floating'>('fixed')
   const [margin, setMargin] = useState('0')

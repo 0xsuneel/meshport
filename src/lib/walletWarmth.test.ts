@@ -7,7 +7,7 @@ const subs: Array<() => void> = []
 vi.mock('@/store', () => ({ useAuthStore: { getState: () => state, subscribe: (f: () => void) => { subs.push(f) } } }))
 
 const listeners: Record<string, Array<() => void>> = {}
-let visibility = 'visible'
+const visibility = 'visible'
 beforeEach(() => {
   vi.useFakeTimers()
   vi.stubGlobal('window', { addEventListener: (t: string, f: () => void) => { (listeners['win:' + t] ??= []).push(f) } })

@@ -15,6 +15,7 @@ import {
   SplitHeader, SplitAvatar, ListCard, ProgressBar, Pill, ActionBar, Btn, Tick,
   card, rowStyle, subStyle, nameStyle, amountStyle, SPLIT_CATEGORIES, categoryForTitle, categoryForEmoji,
 } from './splitUi'
+import { errorText } from '@/lib/errorText'
 
 type Step = 'amount' | 'people' | 'how' | 'review' | 'sent'
 type Mode = 'equal' | 'amounts' | 'percent'
@@ -178,7 +179,7 @@ export function SplitNewPage() {
       setCreated(out)
       setStep('sent')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not create the split - try again')
+      setError(errorText(e, 'Could not create the split - try again'))
     } finally { setBusy(false) }
   }
 

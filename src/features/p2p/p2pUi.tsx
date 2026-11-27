@@ -10,16 +10,12 @@ import { ShieldCheck, X as XIcon, Check } from 'lucide-react'
 import { ActionSheet } from '@/components/ui/ActionSheet'
 import { savePaymentMethod, paymentMethodSummary, type P2PPaymentMethod, type MerchantStats } from '@/lib/p2pService'
 
-// Each type lists the details a buyer needs to pay it.
+// Each type lists the details a buyer needs to pay it. Global methods first;
+// country-specific ones (UPI, IMPS) after them.
 export const PAYMENT_METHOD_TYPES: { id: string; color: string; fields: { key: string; label: string; placeholder: string }[] }[] = [
-  { id: 'UPI', color: '#F5A524', fields: [{ key: 'upi_id', label: 'UPI ID', placeholder: 'name@okaxis' }] },
-  { id: 'IMPS', color: '#1E5AA8', fields: [
-    { key: 'account', label: 'Account number', placeholder: '000123456789' },
-    { key: 'ifsc', label: 'IFSC', placeholder: 'HDFC0001234' },
-    { key: 'bank', label: 'Bank', placeholder: 'HDFC Bank' }] },
   { id: 'Bank Transfer', color: '#16A37A', fields: [
     { key: 'account', label: 'Account number', placeholder: '000123456789' },
-    { key: 'ifsc', label: 'IFSC / routing / SWIFT', placeholder: 'HDFC0001234' },
+    { key: 'ifsc', label: 'SWIFT / routing / IFSC', placeholder: 'e.g. CHASUS33' },
     { key: 'bank', label: 'Bank', placeholder: 'Bank name' }] },
   { id: 'SEPA', color: '#003399', fields: [{ key: 'iban', label: 'IBAN', placeholder: 'DE89 3704 0044 0532 0130 00' }, { key: 'bank', label: 'Bank', placeholder: 'Bank name' }] },
   { id: 'Wise', color: '#9FE870', fields: [{ key: 'email', label: 'Wise email', placeholder: 'you@example.com' }] },
@@ -28,6 +24,11 @@ export const PAYMENT_METHOD_TYPES: { id: string; color: string; fields: { key: s
   { id: 'Zelle', color: '#6D1ED4', fields: [{ key: 'email', label: 'Zelle email or phone', placeholder: 'you@example.com' }] },
   { id: 'Cash App', color: '#00D632', fields: [{ key: 'phone', label: '$Cashtag', placeholder: '$yourtag' }] },
   { id: 'Venmo', color: '#3D95CE', fields: [{ key: 'phone', label: 'Venmo @username', placeholder: '@you' }] },
+  { id: 'UPI', color: '#F5A524', fields: [{ key: 'upi_id', label: 'UPI ID', placeholder: 'name@okaxis' }] },
+  { id: 'IMPS', color: '#1E5AA8', fields: [
+    { key: 'account', label: 'Account number', placeholder: '000123456789' },
+    { key: 'ifsc', label: 'IFSC', placeholder: 'HDFC0001234' },
+    { key: 'bank', label: 'Bank', placeholder: 'HDFC Bank' }] },
 ]
 
 export function methodColor(name: string): string {
@@ -110,7 +111,7 @@ export function PaymentMethodSheet({ open, onClose, userId, editing, defaultName
   editing?: P2PPaymentMethod | null; defaultName?: string
   onSaved: (m: P2PPaymentMethod) => void
 }) {
-  const [type, setType] = useState(editing?.method ?? 'UPI')
+  const [type, setType] = useState(editing?.method ?? 'Bank Transfer')
   const [holder, setHolder] = useState(editing?.holderName ?? defaultName ?? '')
   const [details, setDetails] = useState<Record<string, string>>(editing?.details ?? {})
   const [saving, setSaving] = useState(false)

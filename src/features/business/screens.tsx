@@ -62,6 +62,7 @@ import { logBusiness, type ActivityAction } from '@/lib/businessActivity'
 import { khataByCustomer, customerKey, isOutstanding, totalOutstanding } from '@/lib/businessKhata'
 import { sortCustomers, repeatCount, CUSTOMER_SORTS, type CustomerSort } from './customerSort'
 import { Sheet, ShareChannels } from './ui'
+import { errorText } from '@/lib/errorText'
 
 /** How Charge / Payment link / Bill create requests: the owner's own
  *  (createPaymentRequest, for the active store) or, in staff mode, one that
@@ -453,7 +454,7 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
         : what === 'reopen' ? (v.status === 'paid' ? `${cap(t.order)} reopened - paid in full` : v.received > 0 ? `${cap(t.order)} reopened - ${money(v.received)} counted` : `${cap(t.order)} reopened`)
         : 'Marked as completed', 'success')
       await load()
-    } catch (e) { toast(e instanceof Error ? e.message : 'Could not update', 'error') }
+    } catch (e) { toast(errorText(e, 'Could not update'), 'error') }
     setBusy(null)
   }
   const remind = async (i: MerchantIntent) => {
@@ -463,7 +464,7 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
       void logBusiness('reminder_sent', { target: i.orderNumber ?? i.code, amount: i.amount - i.received, meta: { customer: i.customerUsername } })
       toast(`Reminder sent to ${i.customerUsername}.arc`, 'success')
       await load()
-    } catch (e) { toast(e instanceof Error ? e.message : 'Could not send the reminder', 'error') }
+    } catch (e) { toast(errorText(e, 'Could not send the reminder'), 'error') }
     setBusy(null)
   }
   // What can still go back on a payment, after its refunds so far.
@@ -665,7 +666,7 @@ function ShopLimitsCard({ open, handle }: { open: boolean; handle: string }) {
   const save = async () => {
     setBusy(true)
     try { await setShopLimits(lo, hi); setSaved({ min, max }); void logBusiness('limits_changed', { meta: { min: lo, max: hi } }); toast(lo == null && hi == null ? 'Limits removed' : 'Limits saved', 'success') }
-    catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
+    catch (e) { toast(errorText(e, 'Could not save'), 'error') }
     setBusy(false)
   }
   const clean = (v: string) => v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').slice(0, 9)
@@ -699,7 +700,7 @@ function ShopContactCard({ open }: { open: boolean }) {
   const save = async () => {
     setBusy(true)
     try { await setShopContact(value); toast(value.trim() ? 'Contact saved - customers see it on your shop page and receipts' : 'Contact removed', 'success') }
-    catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
+    catch (e) { toast(errorText(e, 'Could not save'), 'error') }
     setBusy(false)
   }
   return (
@@ -736,7 +737,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
       if (pending) { toast('Sent for review - customers see your current name until it’s approved', 'info'); setBizName(storeName ?? '') }
       else toast(bizName.trim() ? 'Business name saved' : 'Business name removed', 'success')
     }
-    catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
+    catch (e) { toast(errorText(e, 'Could not save'), 'error') }
     setSavingName(false)
   }
   const [contact, setContact] = useState(() => application?.contact || '')
@@ -765,7 +766,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
       if (bizName.trim() !== (storeName ?? '')) await setBusinessName(bizName).catch(() => {})
       toast('Sent for review', 'success'); setAgain(false); setDocs([]); setRegistration('')
     }
-    catch (e) { toast(e instanceof Error ? e.message : 'Could not send', 'error') }
+    catch (e) { toast(errorText(e, 'Could not send'), 'error') }
     setBusy(false)
   }
 
@@ -1011,14 +1012,14 @@ export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void
         : { tone: 'warning', title: 'Still checking', text: 'The transaction is not confirmed yet. Try again in a minute.' })
       load()
     } catch (e) {
-      setResult({ tone: 'danger', title: 'Not a payment to you', text: e instanceof Error ? e.message : 'MeshPort could not match this transaction.' })
+      setResult({ tone: 'danger', title: 'Not a payment to you', text: errorText(e, 'MeshPort could not match this transaction.') })
     }
     setBusy(false)
   }
   const assign = async (id: string) => {
     if (!order) { toast(`Pick an open ${t.order} first`, 'error'); return }
     try { await assignDeposit(id, order); toast('Payment assigned', 'success'); load() }
-    catch (e) { toast(e instanceof Error ? e.message : 'Could not assign', 'error') }
+    catch (e) { toast(errorText(e, 'Could not assign'), 'error') }
   }
 
   return (
@@ -1123,7 +1124,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
       await remindBill(i.id)
       void logBusiness('reminder_sent', { target: i.orderNumber ?? i.code, amount: i.amount - i.received, meta: { customer: i.customerUsername } })
       toast(`Reminder sent to ${i.customerUsername}.arc`, 'success'); onOrdersChanged?.()
-    } catch (e) { toast(e instanceof Error ? e.message : 'Could not send the reminder', 'error') }
+    } catch (e) { toast(errorText(e, 'Could not send the reminder'), 'error') }
     setBusy(null)
   }
   const remindAll = async (c: Customer) => {
@@ -1133,7 +1134,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
       const n = await remindCustomer(c.username)
       void logBusiness('reminder_sent', { target: c.name, amount: khata.get(c.key)?.outstanding ?? null, meta: { customer: c.username, bills: n } })
       toast(`Reminder sent to ${c.name} for ${n} ${n === 1 ? t.order : t.orders.toLowerCase()}`, 'success'); onOrdersChanged?.()
-    } catch (e) { toast(e instanceof Error ? e.message : 'Could not send the reminder', 'error') }
+    } catch (e) { toast(errorText(e, 'Could not send the reminder'), 'error') }
     setBusy(null)
   }
 

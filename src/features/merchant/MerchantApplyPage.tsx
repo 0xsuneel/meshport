@@ -14,6 +14,7 @@ import { useUIStore } from '@/store'
 import { useMerchant, applyForMerchant, type BusinessDoc } from '@/lib/merchant'
 import { BusinessDocsField } from './BusinessDocsField'
 import { BUSINESS_CATEGORIES, toCategory } from '@/lib/businessCategories'
+import { errorText } from '@/lib/errorText'
 
 const TYPES = BUSINESS_CATEGORIES
 
@@ -47,7 +48,7 @@ export function MerchantApplyPage() {
       try { localStorage.removeItem('meshport_business_draft') } catch { /* storage unavailable */ }
       showToastMessage('Sent for review - we’ll let you know once it’s approved', 'success')
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Could not submit - try again', 'error')
+      showToastMessage(errorText(e, 'Could not submit - try again'), 'error')
     }
     setSubmitting(false)
   }

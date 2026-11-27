@@ -30,6 +30,7 @@ import { decideAccountAccess, foundAccountOf, type AuthMode, type AccessDecision
 import { AccountRuleNotice } from './AccountRuleNotice'
 import { refreshMerchant } from '@/lib/merchant'
 import type { User } from '@/types'
+import { errorText } from '@/lib/errorText'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -331,7 +332,7 @@ export function CreateWalletPage() {
       const { wordCount } = await walletStatus(signer.address)
       setWalletData({ address: signer.address, signer, wordCount: wordCount || 12 }); setStep('backup')
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : "Couldn't create a wallet", 'error')
+      showToastMessage(errorText(e, "Couldn't create a wallet"), 'error')
     } finally { setLoading(false) }
   }
 

@@ -161,6 +161,7 @@ export function PaymentReceivedWatcher() {
     const onVisible = () => { if (visible()) { sayWaiting(); void check() } }
     document.addEventListener('visibilitychange', onVisible)
     return () => { live = false; stop(); clearInterval(t); document.removeEventListener('visibilitychange', onVisible) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- showCards only calls setCards (stable); re-subscribing on every render would be wrong
   }, [business, wallet])
 
   // Each card closes by itself after 8 s; the next one waiting follows.

@@ -11,7 +11,7 @@ import { TokenMenu } from '@/components/ui/TokenMenu'
 import { SearchField } from '@/components/ui/SearchField'
 import type { Payment } from './types'
 import { groupByDay, formatTime } from './types'
-import { Skeleton, ChainLogo, StatusDot, Divider } from './primitives'
+import { Skeleton, StatusDot, Divider } from './primitives'
 import { PayerAvatar } from './OverviewView'
 import { ExportButton } from './ExportButton'
 

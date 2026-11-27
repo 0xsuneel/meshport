@@ -28,6 +28,7 @@ import { businessCurrency, setBusinessCurrency } from '@/lib/localCurrency'
 import { unlockSigner } from './settlement'
 import { usePasscodeGate } from './passcodeGate'
 import { p2pScope } from '@/lib/walletConfirm'
+import { errorText } from '@/lib/errorText'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const short = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
@@ -112,7 +113,7 @@ export function CashOutScreen({ open, onBack }: { open: boolean; onBack: () => v
         refreshBalancesAfterTx(wallet, { spent: value })
         setNames(m => new Map(m).set(t.buyerId, buyerName(buyer)))
         setAmount(''); setPicked(undefined); setTradeId(t.id); load()
-      } catch (e) { toast(e instanceof Error ? e.message : 'Could not start the cash out', 'error') }
+      } catch (e) { toast(errorText(e, 'Could not start the cash out'), 'error') }
       setBusy(false)
     }, p2pScope(value))
   }
@@ -276,7 +277,7 @@ function CashOutTradeScreen({ tradeId, accounts, buyerNames, onBack, gate }: {
 
   const act = async (name: string, fn: () => Promise<{ success: boolean; message: string }>) => {
     setBusy(name)
-    const r = await fn().catch(e => ({ success: false, message: e instanceof Error ? e.message : 'Failed' }))
+    const r = await fn().catch(e => ({ success: false, message: errorText(e, 'Failed') }))
     toast(r.message, r.success ? 'success' : 'error')
     if (tradeId) fetchTrade(tradeId).then(t => { if (t) setTrade(t) }).catch(() => {})
     setBusy(undefined)

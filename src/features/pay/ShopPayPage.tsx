@@ -13,6 +13,7 @@ import { useAuthStore, useUIStore, useWalletStore } from '@/store'
 import { Avatar } from '@/components/ui/Avatar'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
+import { errorText } from '@/lib/errorText'
 
 // Shop payments: cents, up to $100,000 - the same caps typed and on the keys.
 const SHOP_DECIMALS = 2
@@ -161,7 +162,7 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
       }
       navigate(`/paylink/r/${data}`)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not start the payment', 'error')
+      toast(errorText(e, 'Could not start the payment'), 'error')
       setBusy(false)
     }
   }

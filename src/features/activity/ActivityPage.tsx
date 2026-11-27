@@ -33,6 +33,7 @@ import { fetchPointHistory, rewardsUserId, rewardTaskOf } from '@/lib/rewards'
 import { fetchScratchHistory, fmtUsdcMicro } from '@/lib/scratchCards'
 import { pressable } from '@/lib/pressable'
 import { PersonHistory, InPersonHistory, type HistoryWith } from './PersonHistory'
+import { errorText } from '@/lib/errorText'
 
 type ActivityTab = ActivityType | 'all' | 'p2p' | 'merchant' | 'rewards'
 
@@ -603,7 +604,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       onClose()
       navigate(`/chat/${id}`)
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Could not open the chat', 'error')
+      showToastMessage(errorText(e, 'Could not open the chat'), 'error')
     } finally { setOpeningChat(false) }
   }
   const isRecovery = needsRecovery(record)

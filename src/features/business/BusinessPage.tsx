@@ -57,6 +57,7 @@ import {
   DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, ScreenLevel, PushLayer, useHubShift,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
+import { errorText } from '@/lib/errorText'
 
 type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools' | 'activity'
 /** Screens a link (?screen=) can open - all but a payment's receipt. */
@@ -116,7 +117,7 @@ function OwnerBusinessPage() {
       const { cacheOtherUser } = await import('@/features/chat/ChatPage')
       cacheOtherUser(id, other)
       navigate(`/chat/${id}`)
-    } catch (e) { toast(e instanceof Error ? e.message : 'Could not open the chat', 'error') }
+    } catch (e) { toast(errorText(e, 'Could not open the chat'), 'error') }
   }
 
   // ── Payments and refunds (live; the pop-up and voice alert for a new
@@ -468,7 +469,7 @@ function OwnerBusinessPage() {
       refreshArc(true)
       toast(`Refunded ${money(amount)} to ${who(refundFor)} on ${chainLabel(refundFor.chain)}`, 'success')
       setRefundFor(null)
-    } catch (e) { setRefundError(e instanceof Error ? e.message : 'Refund failed') }
+    } catch (e) { setRefundError(errorText(e, 'Refund failed')) }
     setRefundBusy(false)
   }
   // Not enough USDC on the payment's chain for the route picked.

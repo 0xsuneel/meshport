@@ -7,6 +7,7 @@ import {
   fetchNewsPage, fetchLiveStatusNotices, newsDate, readNewsIds, NEWS_PAGE_SIZE, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT,
   type NewsItem, type NewsSource,
 } from '@/lib/news'
+import { errorText } from '@/lib/errorText'
 
 // /news - every story, newest first, with source filters. Live Arc network
 // notices are pinned at the top. Tapping a story opens /news/:id.
@@ -91,7 +92,7 @@ export function NewsPage() {
       setMore(page.length === NEWS_PAGE_SIZE)
     } catch (e) {
       // A failed quiet refresh keeps the list that is already showing.
-      if (id === reqId.current && !quiet) setError(e instanceof Error ? e.message : 'Could not load updates')
+      if (id === reqId.current && !quiet) setError(errorText(e, 'Could not load updates'))
     } finally {
       if (id === reqId.current) setLoading(false)
     }

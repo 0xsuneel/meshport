@@ -40,6 +40,7 @@ import { QrCard } from '@/features/business/ui/QrCard'
 import { qrCardFile } from '@/lib/qrCardImage'
 import { SearchField } from '@/components/ui/SearchField'
 import { ownAccountName } from '@/lib/ownName'
+import { errorText } from '@/lib/errorText'
 
 /** Chat text for a request / bill - the chat renders it as a live card. */
 const chatMessageFor = (i: MerchantIntent): string => chatCardMessage(i, formatAmount(i.amount))
@@ -379,7 +380,7 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
       if (r.cctp > 0 && !only) setLast(Date.now())
       onClaimed?.()
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Claim All failed'
+      const msg = errorText(e, 'Claim All failed')
       // Chains that never started show the reason instead of "Waiting".
       setSteps(prev => {
         const next = { ...prev }
@@ -572,13 +573,13 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
       if (!convId) throw new Error('Could not open the chat')
       navigate(`/chat/${convId}`, { state: { autoSend: chatMessageFor(intent) } })
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Could not open the chat', 'error')
+      showToastMessage(errorText(e, 'Could not open the chat'), 'error')
     }
   }
 
   const cancel = async () => {
     setBusy(true)
-    try { await cancelPayment(code); onChanged() } catch (e) { showToastMessage(e instanceof Error ? e.message : 'Could not cancel', 'error') }
+    try { await cancelPayment(code); onChanged() } catch (e) { showToastMessage(errorText(e, 'Could not cancel'), 'error') }
     setBusy(false)
   }
 
@@ -589,7 +590,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
       showToastMessage(v.pending ? 'Not confirmed on-chain yet - try again shortly' : 'Payment checked', v.pending ? 'info' : 'success')
       setVerifyOpen(false); setVHash(''); onChanged()
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Could not verify', 'error')
+      showToastMessage(errorText(e, 'Could not verify'), 'error')
     }
     setBusy(false)
   }
@@ -607,7 +608,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
       showToastMessage(`${intent ? orderTitle(orderKindOf(intent), orderLabel(intent)) : 'Order'} marked as completed`, 'success')
       setCompleteOpen(false); setCompleteNote(''); onChanged()
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Could not complete the order', 'error')
+      showToastMessage(errorText(e, 'Could not complete the order'), 'error')
     }
     setBusy(false)
   }
@@ -897,7 +898,7 @@ function NeedsReview({ deposits, intents, onDone }: { deposits: UnmatchedDeposit
   const act = async (key: string, fn: () => Promise<unknown>, ok: string) => {
     setBusy(key)
     try { await fn(); showToastMessage(ok, 'success'); onDone() }
-    catch (e) { showToastMessage(e instanceof Error ? e.message : 'Something went wrong', 'error') }
+    catch (e) { showToastMessage(errorText(e, 'Something went wrong'), 'error') }
     setBusy(null)
   }
   return (

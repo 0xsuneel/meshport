@@ -385,7 +385,8 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   const chainsOnly = mode === 'chains'
   const isDesktop   = useMediaQuery('(min-width: 980px)')
   // Phones narrower than ~400px (SE, small Androids): compact tab labels.
-  const narrow      = useMediaQuery('(max-width: 399px)')
+  // Phones (most are 360-430px wide): short tab labels, or "Transfer Funds" was cut off.
+  const narrow      = useMediaQuery('(max-width: 479px)')
   // Approved merchants get Manage money (CCTP chains, Claim All) instead of Bring Funds.
   const isMerchant  = useMerchant().isMerchant
   const accountKind = useAccountKind()

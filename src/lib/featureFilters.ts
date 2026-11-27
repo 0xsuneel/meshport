@@ -118,9 +118,8 @@ export const CHAIN_CCTP_OVERRIDE_FEATURE_MAP: Record<string, string> = {
 // No overrides and no fallbacks: a route is offered only when its own switch
 // is on (and the chain can do it), and a chain is offered only when its
 // switch is on and at least one of its routes is. Both routes off = the chain
-// is off. A switch whose row hasn't loaded yet counts as on - except the
-// Transfer CCTP route on Unified Balance chains, which has always started off
-// (Solana: on) - so nothing breaks before the rows exist.
+// is off. A switch whose row hasn't loaded yet counts as on, so nothing
+// breaks before the rows exist.
 
 export type AccountKind = 'personal' | 'business'
 export type Route = 'ub' | 'cctp'
@@ -135,9 +134,6 @@ const on = (settings: SettingsMap, feature: string | null, dflt = true) => {
   const row = settings[feature]
   return row ? row.enabled : dflt
 }
-
-// Chains whose Transfer CCTP route is on until a row says otherwise.
-const CCTP_DEFAULT_ON = new Set(['sol'])
 
 /** The setting keys for one chain, for one kind of account. */
 export function transferKeys(kind: AccountKind, chainId: string) {

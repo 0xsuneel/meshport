@@ -20,6 +20,7 @@ import { SOLANA_USDC_MINT } from '@/lib/solana'
 import { useSolanaWallet } from '@/wallet/useSolanaWallet'
 import { drawMeshportQr } from '@/lib/qrLogo'
 import { AmountHero } from '@/components/ui/AmountHero'
+import { errorText } from '@/lib/errorText'
 
 
 const box: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 16 }
@@ -165,7 +166,7 @@ export function MerchantQrPanel() {
       const it = await createPaymentRequest({ amount: n, expiresInMinutes: expiry || null })
       setLive(null); setOrder(it)
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Could not create the payment QR', 'error')
+      showToastMessage(errorText(e, 'Could not create the payment QR'), 'error')
     }
     setBusy(false)
   }

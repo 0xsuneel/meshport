@@ -20,6 +20,7 @@ import { chainLabel } from './settlement'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY } from '@/lib/motion'
 import { DesktopHistoryPanel, DesktopHistoryEmpty } from '@/components/ui/DesktopHistoryPanel'
+import { errorText } from '@/lib/errorText'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
@@ -66,7 +67,7 @@ export function StaffModePage() {
           onOpen={async () => {
             if (m.status === 'invited') {
               try { await acceptInvite(m.id); toast(`You joined ${m.ownerName}`, 'success'); await load() }
-              catch (e) { toast(e instanceof Error ? e.message : 'Could not accept', 'error'); return }
+              catch (e) { toast(errorText(e, 'Could not accept'), 'error'); return }
             }
             setActiveId(m.id)
           }} />

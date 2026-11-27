@@ -29,6 +29,7 @@ import { usePasscodeGate } from './passcodeGate'
 import { batchPayScope } from '@/lib/walletConfirm'
 import { unlockSigner } from './settlement'
 import { SearchField } from '@/components/ui/SearchField'
+import { errorText } from '@/lib/errorText'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const short = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
@@ -224,7 +225,7 @@ export function PayoutsScreen({ open, onBack }: { open: boolean; onBack: () => v
         if (saved && pay) startRun({ id: saved.id, name: saved.name, recipients: saved.recipients, nextDue: saved.nextDue, repeat: saved.repeat })
         else load()
       }} onDelete={async id => {
-        try { await deletePayout(id); setDraft(null); load() } catch (e) { toast(e instanceof Error ? e.message : 'Could not delete', 'error') }
+        try { await deletePayout(id); setDraft(null); load() } catch (e) { toast(errorText(e, 'Could not delete'), 'error') }
       }} />}
     </ScreenLevel.Provider>
     </>
@@ -278,7 +279,7 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
     gate.ask('Pay staff', `${money(total)} to ${people(chosen.length)}`, async code => {
       setPhase({ kind: 'sending', status: 'Checking everyone can be paid…' })
       const recipients: BatchRecipient[] = chosen.map(r => ({ ...r.payee!, id: r.key, amount: Number(r.amount) }))
-      try { await unlockSigner(code) } catch (e) { setPhase({ kind: 'failed', error: e instanceof Error ? e.message : 'Wallet is locked' }); return }
+      try { await unlockSigner(code) } catch (e) { setPhase({ kind: 'failed', error: errorText(e, 'Wallet is locked') }); return }
       const prepared = prepareBatch(recipients)
       const refused = await findUnpayable(recipients)
       if (refused.size) {
@@ -479,7 +480,7 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
       const saved = await savePayout({ id: draft.id, name: draft.name, recipients, repeat: draft.repeat, nextDue: draft.repeat === 'none' ? null : draft.nextDue || null })
       if (!pay) toast('Pay group saved', 'success')
       onDone(saved, pay)
-    } catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
+    } catch (e) { toast(errorText(e, 'Could not save'), 'error') }
     setBusy(false)
   }
 

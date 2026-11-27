@@ -18,6 +18,7 @@ import { DUE_PRESETS, duePresetDate, dueText, isoDay, type DuePresetId } from '@
 import type { SavedItem } from '@/lib/businessItems'
 import { StorePicker, type PickerStore } from './StorePicker'
 import { BarcodeScanner } from './BarcodeScanner'
+import { errorText } from '@/lib/errorText'
 
 export const MAX_BILL_ITEMS = 50 // the database's limit
 type Row = { id: number; name: string; qty: string; price: string }
@@ -158,7 +159,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
     try {
       await onCreate({ items: valid, total, taxPercent: taxPct || undefined, note: note.trim() || undefined, dueDate })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send the bill')
+      setError(errorText(e, 'Could not send the bill'))
     } finally { setBusy(false) }
   }
 

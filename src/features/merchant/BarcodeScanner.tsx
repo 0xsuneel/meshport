@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom'
 import { X, Keyboard, ScanLine } from 'lucide-react'
 import { nativeBarcodeDetector, detectNativeBarcode, zxingReader, luminance, centreStrip } from '@/lib/barcodeDecode'
 import { cleanBarcode, itemForBarcode, type SavedItem } from '@/lib/businessItems'
+import { errorText } from '@/lib/errorText'
 
 const SAME_CODE_MS = 2200 // the same barcode held in view counts once
 const TICK_MS = 140
@@ -118,7 +119,7 @@ export function BarcodeScanner({ open, items, onAdd, onSaveNew, onClose }: {
       setLast({ text: `Saved and added ${it.name} · $${it.price.toFixed(2)}`, tone: 'ok' })
       setUnknown(null)
       lastCode.current = { code: unknown, at: Date.now() }
-    } catch (e) { setFormError(e instanceof Error ? e.message : 'Could not save') }
+    } catch (e) { setFormError(errorText(e, 'Could not save')) }
     setBusy(false)
   }
   const submitManual = () => {

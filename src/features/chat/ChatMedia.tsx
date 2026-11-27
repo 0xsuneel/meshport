@@ -7,6 +7,7 @@ import { motion } from 'framer-motion'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { X, Loader2 } from 'lucide-react'
 import { cachedMedia, loadMedia, metaOf, fmtBytes, extOf, mimeOf, saveNameFor } from './chatMediaStore'
+import { errorText } from '@/lib/errorText'
 
 // ── progress ring ───────────────────────────────────────────────────────────
 export function ProgressRing({ progress, size = 46, onCancel, label }: { progress: number; size?: number; onCancel?: () => void; label?: string }) {
@@ -159,7 +160,7 @@ export function ChatFile({ name, url, iv, convKey, isMine, upload, failed, onRet
       const r = await loadMedia(url, iv, convKey, p => setProgress(p), mimeOf(name), { received: !isMine })
       setReady(r); setProgress(null)
     } catch (e) {
-      setProgress(null); setError(e instanceof Error ? e.message : 'Download failed')
+      setProgress(null); setError(errorText(e, 'Download failed'))
     }
   }
   const open = () => {

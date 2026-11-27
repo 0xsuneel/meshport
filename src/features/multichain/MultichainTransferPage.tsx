@@ -1428,7 +1428,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     const activeKey = useAuthStore.getState().signer ?? quoteAccount(senderAddress)
     if (!silent) setFeeEstimate(f => ({ ...f, loading: true, error: '' }))
     try {
-      const { AppKit, JsonRpcProvider, FallbackProvider } = await loadSdkModules()
+      const { AppKit, JsonRpcProvider } = await loadSdkModules()
       const { createWalletAdapter } = await import('@/wallet')
 
       const kit = sharedKit(AppKit)
@@ -1924,7 +1924,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       }
 
       // ── 5. Load SDK modules (cached if pre-warmed) ────────────────────────
-      const { AppKit, KitError, JsonRpcProvider, FallbackProvider } = await loadSdkModules()
+      const { AppKit, KitError, JsonRpcProvider } = await loadSdkModules()
       const { createWalletAdapter } = await import('@/wallet')
 
       const kit = sharedKit(AppKit)

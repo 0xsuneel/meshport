@@ -84,6 +84,7 @@ import { useActivityChangedCount } from '@/lib/activityChanged'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { SplitGroupRow, useSplitGroups } from '@/features/split/SplitGroupRow'
 import type { SplitGroup } from '@/lib/splits'
+import { errorText } from '@/lib/errorText'
 
 /** Chats and split groups in one list: pinned chats first, then everything
  *  by its latest activity (a group by its newest message or payment). */
@@ -340,11 +341,11 @@ function getHiddenChats(addr: string | null): Set<string> {
 }
 function hideChat(convId: string, addr: string | null) {
   const m = getHiddenChatsMap(addr); m[convId] = new Date().toISOString()
-  localStorage.setItem(hiddenKey(addr), JSON.stringify(m))
+  try { localStorage.setItem(hiddenKey(addr), JSON.stringify(m)) } catch { /* storage full or blocked: this visit only */ }
 }
 function unhideChat(convId: string, addr: string | null) {
   const m = getHiddenChatsMap(addr); delete m[convId]
-  localStorage.setItem(hiddenKey(addr), JSON.stringify(m))
+  try { localStorage.setItem(hiddenKey(addr), JSON.stringify(m)) } catch { /* storage full or blocked: this visit only */ }
 }
 
 /** Desktop: Contact info / Transaction History open as a panel on the right of the conversation. */
@@ -774,7 +775,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
       return false
     })
     setArchivedConvs(archived)
-    if (hiddenChanged) localStorage.setItem(hiddenKey(chatWalletAddr), JSON.stringify(hiddenMap))
+    if (hiddenChanged) { try { localStorage.setItem(hiddenKey(chatWalletAddr), JSON.stringify(hiddenMap)) } catch { /* storage full or blocked */ } }
     if (deletedChanged) setDeletedChatsMap(chatWalletAddr, deletedMap)
     // Save to module-level cache so next mount is instant
     _cachedConversations = filtered
@@ -3919,7 +3920,7 @@ export function ChatConversationPage() {
             .then(v => window.dispatchEvent(new CustomEvent(BILL_UPDATED_EVENT, { detail: v })))
         }).catch(e => {
           console.error('[Chat] order payment confirm failed:', e)
-          showToastMessage(e instanceof Error ? e.message : 'Could not confirm the order payment', 'error')
+          showToastMessage(errorText(e, 'Could not confirm the order payment'), 'error')
         })
       }
 

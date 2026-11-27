@@ -14,6 +14,7 @@ import { pendingOrdersLabel } from '@/lib/orderLabels'
 import {
   listChatPendingOrders, getPayment, paidLocally, subscribeMerchantPayments, orderLabel, orderKindOf, orderTitle, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type ChatPendingOrder,
 } from '@/lib/merchantPay'
+import { errorText } from '@/lib/errorText'
 
 // Last known open orders per chat partner. The strip sits above the
 // messages, so it must be there from the chat's first frame: appearing a
@@ -104,7 +105,7 @@ export function ChatPendingOrders({ otherUserId, refreshKey }: { otherUserId: st
       window.dispatchEvent(new CustomEvent(BILL_PAY_EVENT, { detail: v }))
       setOpen(false)
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Could not open the payment', 'error')
+      showToastMessage(errorText(e, 'Could not open the payment'), 'error')
     }
     setBusy(null)
   }

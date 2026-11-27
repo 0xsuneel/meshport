@@ -10,6 +10,7 @@ import { AmountField } from '@/components/ui/AmountField'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
 import { sheetInputClass, sheetInputStyle } from '@/components/ui/ActionSheet'
 import { formatAmount } from '@/lib/utils'
+import { errorText } from '@/lib/errorText'
 
 export const MAX_REQUEST = 1_000_000 // the database's limit for one request
 const QUICK = ['5', '10', '20', '50']
@@ -69,7 +70,7 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
     try {
       await onSubmit(n, note.trim())
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not create the request')
+      setError(errorText(e, 'Could not create the request'))
     } finally { setBusy(false) }
   }
 

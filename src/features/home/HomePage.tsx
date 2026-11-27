@@ -41,7 +41,6 @@ import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/li
 import { markBalanceRead, useStaleBalanceLabel } from '@/lib/balanceFreshness'
 import { useSettingsStore } from '@/store/settingsStore'
 import { activitySign, type ActivityRecord } from '@/lib/ActivityService'
-import { projectMomentum } from '@/lib/gesture'
 import type { BalanceTrend } from '@/lib/balanceTrend'
 // Reused so the desktop "Recent Activity" panel shows the exact same
 // title wording as the Activity page itself (Paid to / Received from /
@@ -2006,8 +2005,10 @@ function AdTile({ ad, idx, count, title, height, moved, swipe, onOpen }: {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ad.body}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 6, minHeight: 16 }}>
+          {/* Two lines when there's no Sponsored tag under it (one line cut longer text short). */}
+          <div style={{ fontSize: 13, lineHeight: '17px', color: 'var(--text-secondary)', marginTop: 2, overflow: 'hidden',
+            display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: ad.sponsor ? 1 : 2 }}>{ad.body}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: ad.sponsor || count > 1 ? 6 : 0, minHeight: ad.sponsor || count > 1 ? 16 : 0 }}>
             {ad.sponsor && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)', borderRadius: 6, padding: '2px 7px' }}>Sponsored</span>}
             {count > 1 && (
               <span style={{ position: 'relative', display: 'flex', gap: 4 }}>

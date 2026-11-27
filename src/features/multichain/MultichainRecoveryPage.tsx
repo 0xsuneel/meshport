@@ -27,6 +27,7 @@ import {
   listPendingUbRecoveries, type RecoveryItem, type CctpDiagnosis,
 } from '@/lib/cctpRecovery'
 import { useLeaveGuard } from '@/lib/leaveGuard'
+import { errorText } from '@/lib/errorText'
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--soft-edge)', boxShadow: 'var(--soft-card)', borderRadius: 16, padding: 16 }
 // How long Circle's hold on a failed delivery can last before the 7-day
@@ -148,7 +149,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
         } catch { setUbHeld([]); setUbDust([]); setUbStuck([]); setUbArc(0) }
       }
     } catch (e) {
-      setResult(p => ({ ...p, _list: { error: e instanceof Error ? e.message : String(e) } }))
+      setResult(p => ({ ...p, _list: { error: errorText(e, 'Something went wrong - try again') } }))
     }
     setLoading(false)
   }, [walletAddress])
@@ -163,7 +164,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
       setResult(p => ({ ...p, [key]: { diag } }))
       if (diag.state === 'already_minted' || diag.state === 'relay_queued') setTimeout(() => { void load() }, 1500)
     } catch (e) {
-      setResult(p => ({ ...p, [key]: { error: e instanceof Error ? e.message : String(e) } }))
+      setResult(p => ({ ...p, [key]: { error: errorText(e, 'Something went wrong - try again') } }))
     }
     setBusy(null)
   }
@@ -184,7 +185,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
       else if (r.completed > 0) setResult(p => ({ ...p, ub: {} }))
       await load()
     } catch (e) {
-      setResult(p => ({ ...p, ub: { error: e instanceof Error ? e.message : String(e) } }))
+      setResult(p => ({ ...p, ub: { error: errorText(e, 'Something went wrong - try again') } }))
     }
     setBusy(null)
   }
@@ -209,7 +210,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
         : `${out.received.toFixed(2)} USDC sent to Arc` } } }))
       setTimeout(() => { void load() }, 1500)
     } catch (e) {
-      setResult(p => ({ ...p, [key]: { error: e instanceof Error ? e.message : String(e) } }))
+      setResult(p => ({ ...p, [key]: { error: errorText(e, 'Something went wrong - try again') } }))
     }
     setBusy(null)
   }
@@ -231,7 +232,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
       setResult(p => ({ ...p, [key]: { diag: { state: 'already_minted', detail: `${out.received.toFixed(2)} USDC moved to your Arc wallet` } } }))
       setTimeout(() => { void load() }, 1500)
     } catch (e) {
-      setResult(p => ({ ...p, [key]: { error: e instanceof Error ? e.message : String(e) } }))
+      setResult(p => ({ ...p, [key]: { error: errorText(e, 'Something went wrong - try again') } }))
     }
     setBusy(null)
   }
@@ -252,7 +253,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
       setResult(p => ({ ...p, [key]: { diag: { state: 'already_minted', detail: `${out.received.toFixed(2)} USDC sent to Arc` } } }))
       setTimeout(() => { void load() }, 1500)
     } catch (e) {
-      setResult(p => ({ ...p, [key]: { error: e instanceof Error ? e.message : String(e) } }))
+      setResult(p => ({ ...p, [key]: { error: errorText(e, 'Something went wrong - try again') } }))
     }
     setBusy(null)
   }
@@ -274,7 +275,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
       setResult(r => ({ ...r, [key]: { diag: { state: 'already_minted', detail: `Withdrawal started - ${p.amount.toFixed(2)} USDC returns to ${where} in 7 days.` } } }))
       setTimeout(() => { void load() }, 1500)
     } catch (e) {
-      setResult(r => ({ ...r, [key]: { error: e instanceof Error ? e.message : String(e) } }))
+      setResult(r => ({ ...r, [key]: { error: errorText(e, 'Something went wrong - try again') } }))
     }
     setBusy(null)
   }
@@ -290,7 +291,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
       setResult(p => ({ ...p, [key]: { diag: { state: 'already_minted', detail: `${out.received.toFixed(2)} USDC sent to ${where}` } } }))
       setTimeout(() => { void load() }, 1500)
     } catch (e) {
-      setResult(p => ({ ...p, [key]: { error: e instanceof Error ? e.message : String(e) } }))
+      setResult(p => ({ ...p, [key]: { error: errorText(e, 'Something went wrong - try again') } }))
     }
     setBusy(null)
   }

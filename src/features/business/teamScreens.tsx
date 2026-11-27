@@ -8,6 +8,7 @@ import { useMerchant } from '@/lib/merchant'
 import {
   BusinessScreen, StoresView, StoreForm, StaffView, StaffForm, Skeleton,
 } from './ui'
+import { errorText } from '@/lib/errorText'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
@@ -32,7 +33,7 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
     if (!edit) return
     setLogoBusy(true)
     try { const url = await uploadStoreLogo(file, edit.id ?? 'new'); setEdit(e => e ? { ...e, logoUrl: url } : e) }
-    catch (e) { toast(e instanceof Error ? e.message : 'Could not upload the logo', 'error') }
+    catch (e) { toast(errorText(e, 'Could not upload the logo'), 'error') }
     setLogoBusy(false)
   }
   const [busy, setBusy] = useState(false)
@@ -53,13 +54,13 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
       if (saved.nameInReview || saved.logoInReview) toast(`Saved - customers see the new ${saved.nameInReview && saved.logoInReview ? 'name and logo' : saved.nameInReview ? 'store name' : 'logo'} once MeshPort approves it`, 'info')
       changeEdit(null); await load()
     }
-    catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
+    catch (e) { toast(errorText(e, 'Could not save'), 'error') }
     setBusy(false)
   }
   const remove = async () => {
     if (!edit?.id) return
     setBusy(true)
-    try { await deleteStore(edit.id); changeEdit(null); await load() } catch (e) { toast(e instanceof Error ? e.message : 'Could not delete', 'error') }
+    try { await deleteStore(edit.id); changeEdit(null); await load() } catch (e) { toast(errorText(e, 'Could not delete'), 'error') }
     setBusy(false)
   }
 
@@ -79,7 +80,7 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
           })}
             onAdd={() => changeEdit({ name: '', type: defaultType, address: '', taxId: '' })}
             onEdit={id => { const s = stores.find(x => x.id === id); if (s) changeEdit({ id, name: s.name, type: s.type ?? STORE_TYPES[0], address: s.address ?? '', taxId: s.taxId ?? '', logoUrl: s.logoUrl }) }}
-            onSetPrimary={async id => { try { await setDefaultStore(id); await load(); toast('Main store updated', 'success') } catch (e) { toast(e instanceof Error ? e.message : 'Could not update', 'error') } }}
+            onSetPrimary={async id => { try { await setDefaultStore(id); await load(); toast('Main store updated', 'success') } catch (e) { toast(errorText(e, 'Could not update'), 'error') } }}
             onQr={onQr} addLockedNote={addLockedNote} />
         )}
       </div>
@@ -107,7 +108,7 @@ function StaffBody({ open, onEditing, stores }: { open: boolean; onEditing: (e: 
       if (edit.id) await updateStaff(edit.id, edit.role, edit.store || null)
       else await inviteStaff(edit.username, edit.role, edit.store || null)
       toast(edit.id ? 'Saved' : 'Invite sent', 'success'); changeEdit(null); await load()
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not save') }
+    } catch (e) { setError(errorText(e, 'Could not save')) }
     setBusy(false)
   }
 
@@ -121,7 +122,7 @@ function StaffBody({ open, onEditing, stores }: { open: boolean; onEditing: (e: 
           <StaffView staff={staff.map(m => ({ id: m.id, name: `${m.username}.arc`, role: m.role, status: m.status, store: m.storeId ? storeName.get(m.storeId) : undefined }))}
             onInvite={() => { setError(undefined); changeEdit({ username: '', role: 'cashier', store: '' }) }}
             onEdit={id => { const m = staff.find(x => x.id === id); if (m) { setError(undefined); changeEdit({ id, username: m.username, role: m.role, store: m.storeId ?? '' }) } }}
-            onRemove={async id => { try { await removeStaff(id); await load() } catch (e) { toast(e instanceof Error ? e.message : 'Could not remove', 'error') } }} />
+            onRemove={async id => { try { await removeStaff(id); await load() } catch (e) { toast(errorText(e, 'Could not remove'), 'error') } }} />
         )}
       </div>
   )
