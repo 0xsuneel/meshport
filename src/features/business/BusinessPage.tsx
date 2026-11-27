@@ -24,6 +24,7 @@ import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
 import { copyToClipboard } from '@/lib/utils'
 import { useArcAssets } from './useArcAssets'
+import { getBusinessAlerts, saveBusinessAlerts, alertsSummary, hourLabel, WEEKDAYS, DEFAULT_ALERTS, type BusinessAlerts } from '@/lib/businessAlerts'
 import { useAuthStore, useWalletStore, useNotificationStore, useChatUnreadStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
@@ -55,7 +56,7 @@ import { bridgeScope } from '@/lib/walletConfirm'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton } from '@/components/ui/DesktopHistoryPanel'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
-  BusinessHeader, SetupBanner, BizHomeView, BizBalanceView, LockedHubView, PaymentsView, PaymentDetailSheet, PaymentRow,
+  BusinessHeader, SetupBanner, BizHomeView, BizBalanceView, SummarySheet, LockedHubView, PaymentsView, PaymentDetailSheet, PaymentRow,
   SettlementsView, SettleProgressSheet, VoiceSheet, RefundSheet, TrendChip,
   DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, ScreenLevel, PushLayer, useHubShift,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
@@ -328,6 +329,19 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per link, when the list is in
   }, [payParam, loaded])
   const [voiceOpen, setVoiceOpen] = useState(false)
+  // Summaries & cash-out day: sent by the server, set here (Account).
+  const [alerts, setAlerts] = useState<BusinessAlerts | null>(null)
+  const [alertsOpen, setAlertsOpen] = useState(false)
+  const [alertsSaving, setAlertsSaving] = useState(false)
+  useEffect(() => { if (root === 'account' && isMerchant) getBusinessAlerts().then(setAlerts).catch(() => {}) }, [root, isMerchant])
+  const changeAlerts = (v: Omit<BusinessAlerts, 'timeZone'>) => {
+    const before = alerts
+    const next = { ...(alerts ?? DEFAULT_ALERTS), ...v }
+    setAlerts(next); setAlertsSaving(true)
+    saveBusinessAlerts(next)
+      .catch(e => { setAlerts(before); toast(errorText(e, 'Could not save'), 'error') })
+      .finally(() => setAlertsSaving(false))
+  }
   // Payment alerts → Today: this store's payments since midnight, newest first.
   const alertsToday = useMemo(() => {
     const start = new Date(); start.setHours(0, 0, 0, 0)
@@ -394,6 +408,14 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
     const t = q.get('tab')
     if (t === 'payments' || t === 'settlements') { setStack(rootScreen ? [rootScreen] : []); setTab(t) }
   }, [location.search, rootScreen])
+  // Money on other networks lives in the Balance tab: any way into the old
+  // Manage money view (a link, a notification) opens Balance instead.
+  useEffect(() => {
+    if (tab !== 'settlements') return
+    setTab('overview')
+    if (root !== 'balance') navigate('/biz/balance', { replace: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the tab changes
+  }, [tab])
   // Home's Charge / Bill open Collect payment on that part.
   // Pay link: the business's payment page, shared (or copied) - like Paytm's links.
   const sharePayLink = () => {
@@ -429,7 +451,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
   const beginSettle = (retry?: string[]) => {
     if (settle.running) { setProgressOpen(true); return }
     // Settle all once per cooldown (retrying failed chains is part of the same run).
-    if (!retry && !settle.ready) { setTab('settlements'); return }
+    if (!retry && !settle.ready) { if (root !== 'balance') navigate('/biz/balance'); return }
     if (settle.needsPasscode) { askPin({ kind: 'settle', retry }); return }
     setProgressOpen(true)
     logSettle(retry)
@@ -700,7 +722,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
               onPayLink={sharePayLink}
               available={stores.length > 1 ? money(today.onArc) : money(arcBalance)} availableLabel={stores.length > 1 ? 'On Arc' : undefined}
               arriving={settle.total > 0 ? money(settle.total) : null} arrivingBusy={scanning && settle.total <= 0}
-              onMove={() => beginSettle()} onMoney={() => setTab('settlements')}
+              onMove={() => beginSettle()} onMoney={() => navigate('/biz/balance')}
               onCashOut={open('cashout')} onPayStaff={open('payouts')}
               attention={[
                 ...(pending && pending.count > 0 ? [{ id: 'orders', label: `${pending.count} open ${pending.count === 1 ? terms.order.toLowerCase() : terms.orders.toLowerCase()}`, onClick: openOrders }] : []),
@@ -728,6 +750,8 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
                 label: settle.running ? 'Moving…' : !settle.ready ? `Move all again in ${inWords(settle.nextAt - Date.now())}` : `Move all to Arc · ${money(settle.total)}` }}
               onMoveAll={() => beginSettle()} onRefresh={settle.rescan}
               onCashOut={open('cashout')} onPayStaff={open('payouts')} onSwap={() => navigate('/swap')}
+              history={historyItems} onHistory={id => { setProgressOpen(false); setHistoryAsCard(true); setHistoryId(id) }}
+              lastRun={settle.run.length ? { running: settle.running, onOpen: () => { setHistoryId(null); setProgressOpen(true) } } : undefined}
               footer={<AutoSettleCard schedule={autoSettle.settings.schedule} time={autoSettle.settings.time}
                 onSchedule={s => autoSettle.update({ schedule: s })} onTime={t => autoSettle.update({ time: t, lastPrompt: Date.now() })} nextLabel={autoSettle.nextLabel} />} />
           </div>
@@ -790,7 +814,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
       </SubLayer>
 
       <PaymentDetailSheet payment={detail} explorerUrl={rawDetail ? explorerTxUrl(rawDetail.chain, rawDetail.txHash) ?? undefined : undefined}
-        onClose={() => setDetail(null)} onSettle={() => { setDetail(null); setTab('settlements') }}
+        onClose={() => setDetail(null)} onSettle={() => { setDetail(null); navigate('/biz/balance') }}
         onReceipt={() => { if (rawDetail) { setReceiptFor(rawDetail); setDetail(null); child('receipt') } }}
         onRefund={rawDetail && detailCanRefund && sender?.id === rawDetail.id && sender.check?.refundable ? () => { openRefund(rawDetail); setDetail(null) } : undefined}
         refundNote={sender?.id === detail?.id ? (sender?.check ? sender.check.reason : 'Checking who sent this payment…') : undefined}
@@ -840,6 +864,9 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
         value={pinValue} onChange={v => { setPinValue(v); setPinError(undefined) }}
         error={pinError} onComplete={code => { void onPin(code) }} onClose={() => setPin(null)} />
 
+      <SummarySheet open={alertsOpen} onClose={() => setAlertsOpen(false)} value={alerts ?? DEFAULT_ALERTS}
+        timeZone={(alerts ?? DEFAULT_ALERTS).timeZone} saving={alertsSaving} hourLabel={hourLabel} weekdays={WEEKDAYS}
+        onChange={changeAlerts} />
       <VoiceSheet open={voiceOpen} enabled={voice.enabled} vibrate={voice.vibrate}
         minAmount={voice.minAmount} minChoices={MIN_AMOUNTS} testLine={spokenLine(24.5)} today={alertsToday}
         onToggle={() => setVoiceAlerts({ enabled: !voice.enabled })}
@@ -851,6 +878,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
         <ToolsScreen open={stack.includes('tools')} onBack={back} title={rootScreen === 'tools' ? 'Account' : 'Business tools'}
           onOpen={(id: ToolId) => {
             if (id === 'voice') { setVoiceOpen(true); return }
+            if (id === 'summaries') { setAlertsOpen(true); if (!alerts) getBusinessAlerts().then(setAlerts).catch(() => {}); return }
             const link: Partial<Record<ToolId, string>> = { pay: '/pay', swap: '/swap', multichain: '/multichain', settings: '/profile' }
             const to = link[id]
             if (to) { navigate(to); return }
@@ -873,6 +901,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
             ] },
             { title: 'Settings', rows: [
               { id: 'voice', label: 'Payment alerts', hint: voice.enabled ? `Voice on${voice.minAmount ? ` · above $${voice.minAmount}` : ''}` : 'Voice off' },
+              { id: 'summaries', label: 'Summaries & cash-out day', hint: alerts ? alertsSummary(alerts) : 'Daily and weekly sales, a cash-out reminder' },
               { id: 'settings', label: 'Security & app settings', hint: 'Passcode, appearance, backup, sign out' },
               { id: 'help', label: 'Help & disputes', hint: 'Customer says they paid' },
             ] },
@@ -919,7 +948,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
 
       <SettleDueSheet open={!locked && autoSettle.due && settle.ready && settle.due.length > 0 && !settle.running} amount={money(settle.total)}
         chains={settle.due.map(c => ({ label: c.label, logo: c.logo }))}
-        onSettle={() => { autoSettle.dismiss(); setTab('settlements'); beginSettle() }} onLater={autoSettle.dismiss} />
+        onSettle={() => { autoSettle.dismiss(); beginSettle() }} onLater={autoSettle.dismiss} />
 
       <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: qrStore?.id ?? null, canBill: true, chat: true }}>
       {level('qr', (

@@ -8,6 +8,8 @@
 import { RefreshCw, ArrowDownToLine, Banknote, Send, ArrowLeftRight, Loader2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { ChainLogo, Skeleton } from './primitives'
+import { HistoryRow } from './SettlementsView'
+import type { SettlementHistoryItem } from './types'
 
 export interface BizBalanceToken { symbol: string; name: string; icon: string; amount: string; value: string | null }
 export interface BizBalanceChain { id: string; label: string; logo?: string; amount: string; onMove: () => void; moveDisabled?: boolean }
@@ -27,7 +29,11 @@ export interface BizBalanceViewProps {
   onCashOut: () => void
   onPayStaff: () => void
   onSwap: () => void
-  /** Auto-move schedule card, under the networks. */
+  /** Past moves to Arc (newest first) and the move running / just run. */
+  history?: SettlementHistoryItem[]
+  onHistory?: (id: string) => void
+  lastRun?: { running: boolean; onOpen: () => void }
+  /** Move reminder card, under the networks. */
   footer?: ReactNode
 }
 
@@ -166,7 +172,28 @@ export function BizBalanceView(p: BizBalanceViewProps) {
         </div>
       </Section>
 
+      {p.lastRun && (
+        <div className="mx-5 -mt-2">
+          <button type="button" onClick={p.lastRun.onOpen}
+            className={`${card} w-full flex items-center justify-between gap-3 px-4 py-3 text-left active:opacity-80`}>
+            <span className="flex items-center gap-2 text-[13.5px] font-semibold text-text-primary">
+              {p.lastRun.running && <Loader2 className="size-4 text-brand-text animate-spin" />}
+              {p.lastRun.running ? 'Moving to Arc…' : 'Last move'}
+            </span>
+            <span className="text-[13px] font-semibold text-brand-text">See progress ›</span>
+          </button>
+        </div>
+      )}
+
       {p.footer && <div className="mx-5">{p.footer}</div>}
+
+      {p.history && p.history.length > 0 && p.onHistory && (
+        <Section title="Past moves" hint="Money moved from other networks to Arc">
+          <div className={`${card} px-3.5 divide-y divide-border`}>
+            {p.history.slice(0, 5).map(h => <HistoryRow key={h.id} item={h} onClick={p.onHistory!} />)}
+          </div>
+        </Section>
+      )}
     </div>
   )
 }

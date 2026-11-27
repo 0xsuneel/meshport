@@ -72,7 +72,7 @@ function ChainBalanceRow({
 
 // ─── History row ─────────────────────────────────────────────────────────────
 
-function HistoryRow({
+export function HistoryRow({
   item,
   onClick,
 }: {

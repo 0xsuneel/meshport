@@ -10,15 +10,17 @@ import { useUIStore } from '@/store'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { myMemberships, acceptInvite, staffCreateRequest, staffPayments, staffRefunds, type Membership } from '@/lib/businessTeam'
 import type { MerchantRefund } from '@/lib/merchantRefunds'
-import { ChevronRight, ClipboardList, FileText } from 'lucide-react'
+import { ChevronRight, ClipboardList, FileText, QrCode, BadgeDollarSign, ReceiptText, ListChecks } from 'lucide-react'
 import { displayOrderNumber, myAuthUid, type MerchantPayment } from '@/lib/merchantPay'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, StatementBody } from './screens'
 import { setDueDate } from '@/lib/businessBills'
 import { logBusiness } from '@/lib/businessActivity'
-import { StaffBanner, StaffModeHeader, PaymentsView, OverviewView, PaymentRow, Skeleton, BusinessScreen, useHubShift, type Payment } from './ui'
+import { StaffBanner, StaffModeHeader, PaymentsView, BizHomeView, PaymentRow, Skeleton, BusinessScreen, useHubShift, type Payment } from './ui'
 import { chainLabel } from './settlement'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DESKTOP_QUERY } from '@/lib/motion'
+import { DESKTOP_QUERY, PUSH_OPEN_MS } from '@/lib/motion'
+import { useStatusBarTint } from '@/lib/statusBarTint'
+import { useThemeStore, resolveTheme } from '@/store/themeStore'
 import { DesktopHistoryPanel, DesktopHistoryEmpty } from '@/components/ui/DesktopHistoryPanel'
 import { errorText } from '@/lib/errorText'
 
@@ -32,11 +34,27 @@ export function StaffModePage() {
   const [raw, setRaw] = useState<MerchantPayment[]>([])
   const [screen, setScreen] = useState<'qr' | 'receive' | 'payments' | 'requests' | 'statement' | null>(null)
   const [me, setMe] = useState<string | null>(null)
+  // Charge or Bill: each its own page, like the owner's.
+  const [collect, setCollect] = useState<'charge' | 'bill'>('charge')
   useEffect(() => { void myAuthUid().then(setMe) }, [])
   const [refunds, setRefunds] = useState<MerchantRefund[]>([])
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
+  const themeMode = useThemeStore(t => t.mode)
+  const bandTint = !isDesktop && !!activeId ? (resolveTheme(themeMode) === 'dark' ? '#0E4F49' : '#12665F') : null
+  useStatusBarTint(bandTint, () => PUSH_OPEN_MS)
 
-  const load = () => myMemberships().then(setList).catch(() => setList([]))
+  const load = () => {
+    if (import.meta.env.VITE_E2E === '1') {
+      try {
+        const role = localStorage.getItem('meshport_e2e_staff')
+        if (role === 'cashier' || role === 'manager') {
+          setList([{ id: 'e2e', role, status: 'active', ownerName: 'Sharma General Store', storeName: null, ownerAuthUid: 'o', ownerUsername: 'shop', storeId: null, storePublicName: null } as unknown as Membership])
+          return Promise.resolve()
+        }
+      } catch { /* storage off */ }
+    }
+    return myMemberships().then(setList).catch(() => setList([]))
+  }
   useEffect(() => { void load() }, [])
   const active = list?.find(m => m.id === activeId && m.status === 'active') ?? null
   useEffect(() => {
@@ -94,20 +112,30 @@ export function StaffModePage() {
       phoneMainClassName="flex flex-col h-full min-h-0 bg-bg"
       main={<>
       <div className="flex-1 min-h-0 flex flex-col" style={homeShift}>
-      <div style={{ paddingTop: isDesktop ? 0 : 'calc(var(--safe-top) + 8px)' }}>
-        <StaffModeHeader store={active.storeName ? `${active.ownerName} · ${active.storeName}` : active.ownerName} role={active.role} onExit={() => setActiveId(null)} />
-      </div>
-      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: isDesktop ? 24 : 'calc(var(--safe-bottom) + 96px)' }}>
-        <OverviewView loading={false} periodLabel="Today" hideRecent={isDesktop}
-          collection={{ total: money(total), count: today.length, average: money(today.length ? total / today.length : 0), customers: new Set(today.map(who)).size }}
-          toSettle={{ total: '—', chainCount: 0, hidden: true }} refunded={{ total: '—', count: 0 }} recent={payments.slice(0, 4)}
-          onShowQr={() => setScreen('qr')} onReceive={() => setScreen('receive')}
-          onToSettle={() => toast('Settlements are done by the owner', 'info')}
-          onRefunded={() => toast('Refunds are done by the owner', 'info')}
-          onSeeAllPayments={() => setScreen('payments')} onPayment={() => {}} />
+      {/* The business look (27 Nov): the owner's Home, limited by role - the
+          store on the teal band, today's sales, the ways to get paid
+          (cashier: QR, Charge, Payments; manager: Bill too) and the latest
+          payments. No balances, settling or cash out: those are the owner's. */}
+      <div className="flex-1 overflow-y-auto relative" style={{ paddingBottom: isDesktop ? 24 : 'calc(var(--safe-bottom) + 96px)' }}>
+        {!isDesktop && <div aria-hidden className="absolute left-0 right-0 top-0 pointer-events-none" style={{ height: 'calc(var(--safe-top) + 235px)', background: 'var(--home-band)' }} />}
+        <div className="relative" style={{ paddingTop: isDesktop ? 0 : 'var(--safe-top)' }}>
+          <StaffModeHeader onBand={!isDesktop} store={active.storeName ? `${active.ownerName} · ${active.storeName}` : active.ownerName} role={active.role} onExit={() => setActiveId(null)} />
+        </div>
+        <BizHomeView loading={false} periodLabel="Today" total={money(total)}
+          stats={{ count: today.length, average: money(today.length ? total / today.length : 0), openOrders: null }}
+          third={{ value: new Set(today.map(who)).size, label: 'Customers' }}
+          hideMoney attention={[]}
+          quick={[
+            { id: 'qr', icon: QrCode, label: 'Show QR', tint: 'mint', onClick: () => setScreen('qr') },
+            { id: 'charge', icon: BadgeDollarSign, label: 'Charge', tint: 'butter', onClick: () => { setCollect('charge'); setScreen('receive') } },
+            ...(manager ? [{ id: 'bill', icon: ReceiptText, label: 'Bill', tint: 'peach', onClick: () => { setCollect('bill'); setScreen('receive') } }] : []),
+            { id: 'payments', icon: ListChecks, label: 'Payments', tint: manager ? 'mint' : 'peach', onClick: () => setScreen('payments') },
+          ]}
+          recent={payments.slice(0, 5)} onSeeAll={() => setScreen('payments')} onPayment={() => {}} hideRecent={isDesktop}
+          emptyHint="Show the QR at the counter to take the first payment" />
         {/* Managers: the store's requests and its statement. */}
         {manager && (
-          <div className="mx-5 mt-4 rounded-2xl bg-surface soft-card overflow-hidden divide-y divide-border">
+          <div className="mx-5 mt-1 rounded-[20px] bg-card border border-border overflow-hidden divide-y divide-border">
             {row(<ClipboardList className="size-[18px]" />, 'Requests', 'Requests and bills · share, cancel your own', () => setScreen('requests'))}
             {row(<FileText className="size-[18px]" />, 'Statement', 'CSV or PDF of the store\'s payments', openStatement)}
           </div>
@@ -137,7 +165,7 @@ export function StaffModePage() {
         log: (action, x) => { void logBusiness(action, { ...x, owner: active.ownerAuthUid }) },
       }}>
         <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={active.ownerName} outlet={active.storePublicName} handle={`${active.ownerUsername}.arc`} payTo={active.ownerUsername} />
-        <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={active.ownerName} />
+        <ReceiveScreen key={collect} only={collect} open={screen === 'receive'} onBack={back} storeName={active.ownerName} />
       </RequestMaker.Provider>
       {/* Same page push and header as every other Business screen. */}
       <BusinessScreen open={screen === 'payments'} title="Payments" onBack={back}>

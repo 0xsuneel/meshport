@@ -118,6 +118,19 @@ function BusinessOnly({ children }: { children: React.ReactNode }) {
   return useBusinessTab() ? <>{children}</> : <Navigate to="/" replace />
 }
 
+// Old Business links (notifications, ?screen=, ?tab=) for a business account
+// open the business app's own tabs; staff keep the Business page.
+function BusinessLink() {
+  const business = useBusinessTab()
+  const location = useLocation()
+  if (!business) return <BusinessPage />
+  const q = new URLSearchParams(location.search)
+  const tab = q.get('tab')
+  if (tab === 'payments') return <Navigate to="/biz/payments" replace />
+  if (tab === 'settlements' || q.get('claim')) return <Navigate to="/biz/balance" replace />
+  return <Navigate to={`/${location.search}`} replace />
+}
+
 function RenamedPathRedirect({ from, to }: { from: string; to: string }) {
   const location = useLocation()
   const rest = location.pathname.slice(from.length)
@@ -505,7 +518,7 @@ const router = createBrowserRouter([
       { path: 'receive',                    element: <Unlocked title="Receive"><FeatureGate feature="receive_enabled"><ReceivePage /></FeatureGate></Unlocked> },
       { path: 'receive/requests',           element: <Unlocked title="Requests"><FeatureGate feature="receive_enabled"><MyRequestsPage /></FeatureGate></Unlocked> },
       { path: 'rewards',                    element: <Unlocked title="Rewards"><PersonalOnly><FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate></PersonalOnly></Unlocked> },
-      { path: 'business',                   element: <BusinessPage /> },
+      { path: 'business',                   element: <BusinessLink /> },
       { path: 'biz/payments',               element: <BusinessOnly><BusinessPage key="payments" root="payments" /></BusinessOnly> },
       { path: 'biz/balance',                element: <BusinessOnly><BusinessPage key="balance" root="balance" /></BusinessOnly> },
       { path: 'biz/collect',                element: <BusinessOnly><Unlocked title="Collect"><BusinessPage key="collect" root="collect" /></Unlocked></BusinessOnly> },

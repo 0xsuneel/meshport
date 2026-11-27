@@ -11,6 +11,8 @@ import type { Payment, ReactNode } from './types'
 import { Skeleton } from './primitives'
 import { PaymentRow } from './OverviewView'
 
+export interface BizHomeQuick { id: string; label: string; icon: React.ElementType; tint: string; onClick: () => void }
+
 export interface BizHomeAttention { id: string; label: string; onClick: () => void; tone?: 'warning' | 'brand' }
 
 export interface BizHomeViewProps {
@@ -21,25 +23,32 @@ export interface BizHomeViewProps {
   total: string
   trend?: ReactNode
   stats: { count: number; average: string; openOrders: number | null }
-  onOpenOrders: () => void
-  onQr: () => void
-  onCharge: () => void
-  onBill: () => void
-  onPayLink: () => void
-  available: string
+  onOpenOrders?: () => void
+  onQr?: () => void
+  onCharge?: () => void
+  onBill?: () => void
+  onPayLink?: () => void
+  /** Staff: their own quick row in place of Show QR / Charge / Bill / Pay link. */
+  quick?: BizHomeQuick[]
+  /** The third figure under the sales (default Open orders). */
+  third?: { value: string | number; label: string; onClick?: () => void }
+  /** Staff: no money card (balances stay with the owner). */
+  hideMoney?: boolean
+  available?: string
   availableLabel?: string
   /** "$42.10" waiting on other networks, or null. */
-  arriving: string | null
+  arriving?: string | null
   arrivingBusy?: boolean
-  onMove: () => void
-  onMoney: () => void
-  onCashOut: () => void
-  onPayStaff: () => void
+  onMove?: () => void
+  onMoney?: () => void
+  onCashOut?: () => void
+  onPayStaff?: () => void
   attention: BizHomeAttention[]
   recent: Payment[]
   onSeeAll: () => void
   onPayment: (p: Payment) => void
   hideRecent?: boolean
+  emptyHint?: string
 }
 
 const card = 'rounded-[20px] bg-card border border-border'
@@ -81,23 +90,36 @@ export function BizHomeView(p: BizHomeViewProps) {
           <div className="grid grid-cols-3 mt-3.5 pt-3 border-t border-border text-center">
             <div><p className="text-[15px] font-bold tabular-nums text-text-primary">{p.loading ? '–' : p.stats.count}</p><p className="text-[11px] text-text-muted">Payments</p></div>
             <div><p className="text-[15px] font-bold tabular-nums text-text-primary">{p.loading ? '–' : p.stats.average}</p><p className="text-[11px] text-text-muted">Average</p></div>
-            <button type="button" onClick={p.onOpenOrders} className="active:opacity-70">
-              <p className="text-[15px] font-bold tabular-nums text-text-primary">{p.stats.openOrders ?? '–'}</p><p className="text-[11px] text-text-muted">Open orders</p>
-            </button>
+            {p.third ? (
+              <button type="button" onClick={p.third.onClick} disabled={!p.third.onClick} className="active:opacity-70">
+                <p className="text-[15px] font-bold tabular-nums text-text-primary">{p.loading ? '–' : p.third.value}</p><p className="text-[11px] text-text-muted">{p.third.label}</p>
+              </button>
+            ) : (
+              <button type="button" onClick={p.onOpenOrders} className="active:opacity-70">
+                <p className="text-[15px] font-bold tabular-nums text-text-primary">{p.stats.openOrders ?? '–'}</p><p className="text-[11px] text-text-muted">Open orders</p>
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Ways to get paid */}
-      <div className="mx-5 grid grid-cols-4 gap-2">
-        <Quick icon={QrCode} label="Show QR" tint="mint" onClick={p.onQr} />
-        <Quick icon={BadgeDollarSign} label="Charge" tint="butter" onClick={p.onCharge} />
-        <Quick icon={ReceiptText} label="Bill" tint="peach" onClick={p.onBill} />
-        <Quick icon={Link2} label="Pay link" tint="mint" onClick={p.onPayLink} />
-      </div>
+      {(() => {
+        const items: BizHomeQuick[] = p.quick ?? [
+          { id: 'qr', icon: QrCode, label: 'Show QR', tint: 'mint', onClick: () => p.onQr?.() },
+          { id: 'charge', icon: BadgeDollarSign, label: 'Charge', tint: 'butter', onClick: () => p.onCharge?.() },
+          { id: 'bill', icon: ReceiptText, label: 'Bill', tint: 'peach', onClick: () => p.onBill?.() },
+          { id: 'link', icon: Link2, label: 'Pay link', tint: 'mint', onClick: () => p.onPayLink?.() },
+        ]
+        return (
+          <div className="mx-5 grid gap-2" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
+            {items.map(q => <Quick key={q.id} icon={q.icon} label={q.label} tint={q.tint} onClick={q.onClick} />)}
+          </div>
+        )
+      })()}
 
       {/* Money */}
-      <div className="mx-5">
+      {!p.hideMoney && <div className="mx-5">
         <div className={`${card} p-3.5`}>
           <button type="button" onClick={p.onMoney} className="w-full flex items-center justify-between gap-3 text-left active:opacity-70">
             <span className="text-[13px] font-semibold text-text-muted">{p.availableLabel ?? 'Available'}</span>
@@ -117,7 +139,7 @@ export function BizHomeView(p: BizHomeViewProps) {
               style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', boxShadow: 'inset 0 0 0 1px var(--border)' }}>Pay staff</button>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Needs attention - only when there is something */}
       {p.attention.length > 0 && (
@@ -158,7 +180,7 @@ export function BizHomeView(p: BizHomeViewProps) {
             <div className="flex flex-col items-center text-center px-6 py-5">
               <span className="inline-flex items-center justify-center size-10 rounded-2xl bg-surface border border-border mb-2"><CreditCard className="size-[18px] text-text-muted" /></span>
               <p className="text-sm font-medium text-text-secondary">No payments yet</p>
-              <p className="text-xs text-text-muted mt-1">Show your QR to take your first payment</p>
+              <p className="text-xs text-text-muted mt-1">{p.emptyHint ?? 'Show your QR to take your first payment'}</p>
             </div>
           ) : (
             <div className="divide-y divide-border">{p.recent.slice(0, 5).map(r => <PaymentRow key={r.id} payment={r} onClick={p.onPayment} />)}</div>

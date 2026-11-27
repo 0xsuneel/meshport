@@ -30,7 +30,7 @@ export interface VoiceSheetProps {
   onClose: () => void
 }
 
-function Switch({ on, label, onClick, disabled }: { on: boolean; label: string; onClick: () => void; disabled?: boolean }) {
+export function AlertSwitch({ on, label, onClick, disabled }: { on: boolean; label: string; onClick: () => void; disabled?: boolean }) {
   return (
     <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={onClick} disabled={disabled}
       className={`relative inline-flex items-center h-7 w-12 rounded-full transition-colors shrink-0 disabled:opacity-40 ${on ? 'bg-brand' : 'bg-border'}`}>
@@ -39,7 +39,7 @@ function Switch({ on, label, onClick, disabled }: { on: boolean; label: string; 
   )
 }
 
-function Row({ title, sub, children, dim }: { title: string; sub: string; children: React.ReactNode; dim?: boolean }) {
+export function AlertRow({ title, sub, children, dim }: { title: string; sub: string; children: React.ReactNode; dim?: boolean }) {
   return (
     <div className={`flex items-center gap-3 px-4 py-3.5 ${dim ? 'opacity-40 pointer-events-none' : ''}`}>
       <div className="flex-1 min-w-0">
@@ -67,9 +67,9 @@ export function VoiceSheet({
         </div>
 
         <div className="rounded-2xl bg-surface soft-card divide-y divide-border overflow-hidden">
-          <Row title="Voice alerts" sub="Say each payment out loud">
-            <Switch on={enabled} label="Voice alerts" onClick={onToggle} />
-          </Row>
+          <AlertRow title="Voice alerts" sub="Say each payment out loud">
+            <AlertSwitch on={enabled} label="Voice alerts" onClick={onToggle} />
+          </AlertRow>
           <button type="button" onClick={onTest} disabled={!enabled}
             className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-border/20 disabled:opacity-40">
             <span className="flex items-center justify-center size-10 rounded-full bg-brand text-white shrink-0"><Play className="size-4 ml-0.5" fill="currentColor" /></span>
@@ -78,7 +78,7 @@ export function VoiceSheet({
               <span className="block text-[13px] text-text-muted mt-0.5 text-pretty">&ldquo;{testLine}&rdquo;</span>
             </span>
           </button>
-          <Row title="Voice" sub="English · Emma" dim={!enabled}><span /></Row>
+          <AlertRow title="Voice" sub="English · Emma" dim={!enabled}><span /></AlertRow>
           <div className={`px-4 py-3.5 ${enabled ? '' : 'opacity-40 pointer-events-none'}`}>
             <p className="text-[15px] font-semibold text-text-primary">Only say payments above</p>
             <p className="text-[13px] text-text-muted mt-0.5">Smaller ones just chime</p>
@@ -91,9 +91,9 @@ export function VoiceSheet({
               ))}
             </div>
           </div>
-          <Row title="Vibrate too" sub="For when the phone is on silent">
-            <Switch on={vibrate} label="Vibrate with alerts" onClick={onVibrate} />
-          </Row>
+          <AlertRow title="Vibrate too" sub="For when the phone is on silent">
+            <AlertSwitch on={vibrate} label="Vibrate with alerts" onClick={onVibrate} />
+          </AlertRow>
         </div>
 
         <p className="text-[12.5px] text-text-muted leading-relaxed px-2 mt-3">

@@ -32,6 +32,8 @@ export function urlFor(n: Pick<AppNotification, 'id' | 'tradeId' | 'type'> & { b
   if (type === 'merchant_refund' || type === 'merchant_order_completed' || type === 'payment_received') return '/activity'
   if (type === 'merchant_bill_reminder') return '/chat'
   if (type === 'reward_earned') return '/rewards'
+  if (type === 'business_daily_summary' || type === 'business_weekly_summary') return '/business?tab=payments'
+  if (type === 'business_cashout_due') return '/business?screen=cashout'
   if (type.startsWith('merchant_') || type.startsWith('business_') || type.startsWith('store_name_') || type.startsWith('store_logo_')) return '/business'
   return '/notifications'
 }

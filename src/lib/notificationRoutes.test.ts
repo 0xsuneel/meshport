@@ -12,7 +12,9 @@ describe('where a business notification opens', () => {
   it("the business's notifications go to Business", () => {
     expect(urlFor(n('merchant_payment_received'))).toBe('/business?tab=payments')
     expect(urlFor(n('merchant_payment_partial', 'vrsun.arc paid $2.00 of $5.00 USDC'))).toBe('/business?tab=payments')
-    expect(urlFor(n('business_daily_summary'))).toBe('/business')
+    expect(urlFor(n('business_daily_summary'))).toBe('/business?tab=payments')
+    expect(urlFor(n('business_weekly_summary'))).toBe('/business?tab=payments')
+    expect(urlFor(n('business_cashout_due'))).toBe('/business?screen=cashout')
     expect(urlFor(n('store_name_approved'))).toBe('/business')
     expect(urlFor(n('store_logo_rejected'))).toBe('/business')
     expect(urlFor(n('merchant_revoked'))).toBe('/merchant')

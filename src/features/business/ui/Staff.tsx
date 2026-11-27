@@ -305,8 +305,23 @@ export interface StaffModeHeaderProps {
   onExit: () => void
 }
 
-export function StaffModeHeader({ store, role, onExit }: StaffModeHeaderProps) {
+export function StaffModeHeader({ store, role, onExit, onBand }: StaffModeHeaderProps & { onBand?: boolean }) {
   const legend = ROLE_LEGEND[role]
+  if (onBand) return (
+    <header className="relative flex items-center gap-3 px-5 pt-4 pb-3">
+      <span className="size-10 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--home-pill)', color: '#B8F0E0' }}>
+        <ShieldCheck className="size-5" />
+      </span>
+      <div className="flex-1 min-w-0">
+        <p className="text-[15px] font-bold text-white truncate">{store}</p>
+        <p className="text-xs" style={{ color: 'var(--home-band-sub)' }}>{legend.label} mode</p>
+      </div>
+      <button type="button" onClick={onExit}
+        className="shrink-0 h-9 px-4 rounded-full text-white text-sm font-semibold active:opacity-80" style={{ background: 'var(--home-pill)' }}>
+        Exit
+      </button>
+    </header>
+  )
   return (
     <header className="flex items-center gap-3 px-5 pt-5 pb-3">
       <span className={`size-9 rounded-xl flex items-center justify-center shrink-0 ${legend.color}`}>

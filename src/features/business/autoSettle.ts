@@ -43,7 +43,7 @@ export function useAutoSettle(waitingTotal: number) {
       update({ lastPrompt: Date.now() })
       try {
         if ('Notification' in window && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
-          new Notification('Time to settle', { body: `$${waitingTotal.toFixed(2)} USDC is waiting on other chains. Open Business to move it to Arc.` })
+          new Notification('Time to move your money', { body: `$${waitingTotal.toFixed(2)} USDC is waiting on other networks. Open Balance to move it to Arc.` })
         }
       } catch { /* notifications unavailable */ }
     }

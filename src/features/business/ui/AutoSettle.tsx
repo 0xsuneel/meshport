@@ -1,6 +1,6 @@
 /**
  * AutoSettleCard — "Auto-settle reminder" schedule card.
- * SettleDueSheet — "Time to settle $X" bottom sheet.
+ * SettleDueSheet — "Time to move $X" bottom sheet.
  */
 import React from 'react'
 import { Bell } from 'lucide-react'
@@ -32,7 +32,7 @@ export function AutoSettleCard({
           <Bell className="size-4.5" />
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-text-primary">Auto-settle reminder</p>
+          <p className="text-sm font-semibold text-text-primary">Move reminder</p>
           <p className="text-xs text-text-muted">Get notified when funds are waiting</p>
         </div>
       </div>
@@ -91,7 +91,7 @@ export interface SettleDueSheetProps {
 export function SettleDueSheet({ open, amount, chains, onSettle, onLater }: SettleDueSheetProps) {
   return (
     <Sheet open={open} onClose={onLater}>
-      <p className="text-base font-semibold text-text-primary mb-4">Time to settle</p>
+      <p className="text-base font-semibold text-text-primary mb-4">Time to move your money</p>
       {/* Chain logo stack */}
       <div className="flex items-center gap-2 mb-2">
         <div className="flex -space-x-2">
@@ -115,7 +115,7 @@ export function SettleDueSheet({ open, amount, chains, onSettle, onLater }: Sett
           onClick={onSettle}
           className="w-full h-13 rounded-2xl bg-brand text-white font-semibold text-base"
         >
-          Settle now
+          Move to Arc
         </button>
         <button
           type="button"
