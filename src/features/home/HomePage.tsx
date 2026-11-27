@@ -1983,7 +1983,7 @@ const HUB_BUTTONS = [
 // one is cut off.
 // The banner's slides are the ads from Admin → Ads (lib/ads, 19 Nov 2026).
 function FeatureBanner({ height, onOpen, docked, inCard, tile }: { height: number; onOpen: (path: string) => void; docked?: boolean; inCard?: boolean
-  /** Phone Home (27 Nov): the big tile - large logo, title and text, Sponsored + dots, a round arrow; the whole card taps. */
+  /** Phone Home (27 Nov): the 92px tile - large logo, title and text, Sponsored + dots, a round arrow; the whole card taps. */
   tile?: boolean }) {
   const hub = useHubLabel()
   const ads = useAds('home')
@@ -2027,14 +2027,14 @@ function FeatureBanner({ height, onOpen, docked, inCard, tile }: { height: numbe
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAd(b, onOpen) } }}
         style={{ position: 'relative', overflow: 'hidden', height, borderRadius: 22, cursor: 'pointer', boxSizing: 'border-box',
           background: 'linear-gradient(135deg, color-mix(in srgb, var(--brand) 92%, #fff), color-mix(in srgb, var(--brand) 70%, #000))',
-          border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 16, padding: '0 18px' }}>
+          border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 14, padding: '0 16px' }}>
         <div aria-hidden style={{ position: 'absolute', left: -20, top: -40, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
-        <div key={idx} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 220ms var(--ease-out)' : undefined }}>
-          <AdArt ad={b} size={76} radius={22} onBrand />
+        <div key={idx} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 220ms var(--ease-out)' : undefined }}>
+          <AdArt ad={b} size={58} radius={17} onBrand />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 19, fontWeight: 800, color: '#fff', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.body}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9, minHeight: 18 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#fff', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.body}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, minHeight: 16 }}>
               {b.sponsor && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#fff', background: 'rgba(255,255,255,0.16)', borderRadius: 6, padding: '2px 7px' }}>Sponsored</span>}
               {n > 1 && (
                 <span style={{ position: 'relative', display: 'flex', gap: 4 }}>
@@ -2046,7 +2046,7 @@ function FeatureBanner({ height, onOpen, docked, inCard, tile }: { height: numbe
             </div>
           </div>
         </div>
-        <span aria-hidden style={{ position: 'relative', flexShrink: 0, width: 40, height: 40, borderRadius: '50%', background: '#fff', color: 'color-mix(in srgb, var(--brand) 75%, #000)', display: 'grid', placeItems: 'center' }}>
+        <span aria-hidden style={{ position: 'relative', flexShrink: 0, width: 36, height: 36, borderRadius: '50%', background: '#fff', color: 'color-mix(in srgb, var(--brand) 75%, #000)', display: 'grid', placeItems: 'center' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </span>
         <style>{`@keyframes mpBannerIn { from { opacity: 0.5; transform: translateX(14px) } to { opacity: 1; transform: none } }`}</style>
@@ -4145,7 +4145,7 @@ export function HomePage() {
                   dot={ongoingTradesCount > 0 && !homeTileIds.includes('p2p')} />
               </>
             } />
-            <FeatureBanner height={116} tile onOpen={path => navigate(path)} />
+            <FeatureBanner height={92} tile onOpen={path => navigate(path)} />
           </>
         ))}
 
