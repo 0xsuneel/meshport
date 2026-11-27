@@ -2,24 +2,29 @@
 // taking payments (stores, staff, customers, reports, payouts, cash out,
 // profile and limits, voice alerts, help, activity log). Opened from the home tile and
 // the header's menu button.
-import { ChevronRight, Store, Users, UserRound, BarChart2, Send, Banknote, ShieldCheck, Mic, HelpCircle, History } from 'lucide-react'
+import { ChevronRight, Store, Users, UserRound, BarChart2, Send, Banknote, ShieldCheck, Mic, HelpCircle, History, SendHorizontal, ArrowLeftRight, Globe, Settings } from 'lucide-react'
 import { BusinessScreen } from './ui'
 
 export type ToolId = 'team' | 'customers' | 'reports' | 'activity' | 'payouts' | 'cashout' | 'profile' | 'voice' | 'help'
+  // Account tab (27 Nov): links out of Business - pay, swap, cross-chain, the app's settings.
+  | 'pay' | 'swap' | 'multichain' | 'settings'
 
 const ICONS: Record<ToolId, React.ElementType> = {
   team: Store, customers: UserRound, reports: BarChart2, activity: History, payouts: Send, cashout: Banknote, profile: ShieldCheck, voice: Mic, help: HelpCircle,
+  pay: SendHorizontal, swap: ArrowLeftRight, multichain: Globe, settings: Settings,
 }
 
 export type ToolRow = { id: ToolId; label: string; hint: string }
 
-export function ToolsScreen({ open, onBack, groups, onOpen }: {
+export function ToolsScreen({ open, onBack, groups, onOpen, title = 'Business tools' }: {
   open: boolean; onBack: () => void
+  /** "Account" when it is the business's Account tab. */
+  title?: string
   groups: Array<{ title: string; rows: ToolRow[] }>
   onOpen: (id: ToolId) => void
 }) {
   return (
-    <BusinessScreen open={open} title="Business tools" onBack={onBack}>
+    <BusinessScreen open={open} title={title} onBack={onBack}>
       <div className="flex flex-col gap-5 px-5 pt-4 pb-8">
         {groups.map(g => (
           <div key={g.title}>
@@ -33,7 +38,7 @@ export function ToolsScreen({ open, onBack, groups, onOpen }: {
                     <span className="inline-flex items-center justify-center size-9 rounded-xl bg-brand/10 text-brand-text shrink-0"><Icon className="size-[18px]" /></span>
                     <span className="flex-1 min-w-0">
                       <span className="block text-[15px] font-semibold text-text-primary">{r.label}</span>
-                      <span className="block text-xs text-text-muted truncate">{r.hint}</span>
+                      {r.hint && <span className="block text-xs text-text-muted truncate">{r.hint}</span>}
                     </span>
                     <ChevronRight className="size-4 text-text-muted shrink-0" />
                   </button>

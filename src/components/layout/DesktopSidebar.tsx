@@ -9,7 +9,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { isSettingsPath } from './SettingsDesktopSplit'
 import { NavIcon, type NavIconName } from './navIcons'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
-import { HomeIcon, ChatsIcon, RewardsIcon, ActivityIcon, BusinessIcon, getActiveTabId } from './BottomNav'
+import { HomeIcon, ChatsIcon, RewardsIcon, ActivityIcon, BusinessIcon, PaymentsIcon, CustomersIcon, AccountIcon, getActiveTabId } from './BottomNav'
 import { useChatUnreadStore, useP2PTradesCountStore } from '@/store'
 import { useHubLabel, useBusinessTab } from '@/lib/merchant'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
@@ -28,8 +28,16 @@ const items = [
   { id: 'activity',         label: 'Activity',            path: '/activity' },
   { id: 'settings',         label: 'Settings',            path: '/profile' },
 ]
-// Merchants: Business takes Rewards' place.
-const businessItems = items.map(i => i.id === 'rewards' ? { id: 'business', label: 'Business', path: '/business' } : i)
+// A business account (27 Nov): the business app's own sections, like the
+// phone's business tabs - Home, Payments, Collect, Customers, Chats, Account.
+const businessItems = [
+  { id: 'home',      label: 'Home',      path: '/' },
+  { id: 'payments',  label: 'Payments',  path: '/biz/payments' },
+  { id: 'collect',   label: 'Collect',   path: '/biz/collect' },
+  { id: 'customers', label: 'Customers', path: '/biz/customers' },
+  { id: 'chat',      label: 'Chats',     path: '/chat' },
+  { id: 'account',   label: 'Account',   path: '/biz/account' },
+]
 
 // Home, Chats, Rewards, Activity, Settings: same outline icons as the phone bar (navIcons.tsx).
 const sideIcon = (name: NavIconName) => ({ active }: { active: boolean }) =>
@@ -124,6 +132,10 @@ export function DesktopSidebar() {
                 {item.id === 'activity'         && <ActivityIcon active={active} />}
                 {item.id === 'rewards'          && <RewardsIcon active={active} />}
                 {item.id === 'business'         && <BusinessIcon active={active} />}
+                {item.id === 'payments'         && <PaymentsIcon active={active} />}
+                {item.id === 'collect'          && <ReceiveIcon active={active} />}
+                {item.id === 'customers'        && <CustomersIcon active={active} />}
+                {item.id === 'account'          && <AccountIcon active={active} />}
                 {item.id === 'settings'         && <SettingsIcon active={active} />}
               </span>
               {hub(item.label)}

@@ -36,7 +36,7 @@ const noNavRoutes = [
 // Pages that scroll under the frosted bottom nav, like Home (each pads the
 // end of its own scroll box with --nav-space). Every other page with the
 // nav stops above it.
-const UNDER_NAV = /^\/(chat|chat\/new|rewards|activity|business|news|recent-paid|asset\/[^/]+)?\/?$/
+const UNDER_NAV = /^\/(chat|chat\/new|rewards|activity|business|biz\/(payments|collect|customers|account)|news|recent-paid|asset\/[^/]+)?\/?$/
 function runsUnderNav(pathname: string) { return UNDER_NAV.test(pathname) }
 
 function isNoNavRoute(pathname: string) {

@@ -3,7 +3,7 @@
  * Shows store name, .arc handle, verification badge, voice toggle, and menu button.
  */
 import React from 'react'
-import { Mic, MicOff, ShieldCheck, Clock, User, ChevronDown, Menu } from 'lucide-react'
+import { Mic, MicOff, ShieldCheck, Clock, User, ChevronDown, Menu, Bell } from 'lucide-react'
 
 export type VerificationStatus = 'verified' | 'review' | 'unverified'
 
@@ -28,6 +28,10 @@ export interface BusinessHeaderProps {
   /** Desktop: a page title like the other desktop pages (the top bar already
    *  shows the account's avatar and name). */
   desktop?: boolean
+  /** Phone Home (27 Nov): on the teal band - white text, the bell in place of the menu. */
+  onBand?: boolean
+  onBell?: () => void
+  bellDot?: boolean
 }
 
 export function BusinessHeader({
@@ -43,6 +47,9 @@ export function BusinessHeader({
   avatarName,
   avatarUrl,
   desktop = false,
+  onBand = false,
+  onBell,
+  bellDot = false,
 }: BusinessHeaderProps) {
   const menuAction = onMenu ?? onProfile
   const initials = (avatarName ?? storeName).split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'B'
@@ -51,7 +58,19 @@ export function BusinessHeader({
   // small second line, round outlined icon buttons on the right.
   const roundBtn = 'inline-flex items-center justify-center size-[38px] rounded-full shrink-0 active:scale-95 transition-transform'
   const roundStyle = { background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)' }
-  const buttons = (
+  // On the band: voice and the bell share one darker-teal pill, like Home's search + bell.
+  const buttons = onBand ? (
+    <div className="flex items-center gap-0.5 shrink-0 h-[38px] px-1 rounded-full" style={{ background: 'var(--home-pill)' }}>
+      <button type="button" aria-label={voiceOn ? 'Voice alerts on' : 'Voice alerts off'} onClick={onVoice} className="inline-flex items-center justify-center size-[34px] rounded-full active:scale-95">
+        {voiceOn ? <Mic className="size-4 text-white" /> : <MicOff className="size-4 text-white/70" />}
+      </button>
+      <span aria-hidden className="w-px h-4" style={{ background: 'rgba(255,255,255,0.25)' }} />
+      <button type="button" aria-label="Notifications" onClick={onBell} className="relative inline-flex items-center justify-center size-[34px] rounded-full active:scale-95">
+        <Bell className="size-4 text-white" />
+        {bellDot && <span className="absolute top-[7px] right-[8px] size-1.5 rounded-full" style={{ background: 'var(--danger)' }} />}
+      </button>
+    </div>
+  ) : (
     <div className="flex items-center gap-2 shrink-0">
       <button type="button" aria-label={voiceOn ? 'Voice alerts on' : 'Voice alerts off'} onClick={onVoice}
         className={roundBtn} style={roundStyle}>
@@ -82,7 +101,8 @@ export function BusinessHeader({
     </header>
   )
   return (
-    <header className="mp-glass-header sticky top-0 z-20 flex items-center gap-3 px-5 pb-3" style={{ paddingTop: 'calc(var(--safe-top) + var(--home-header-gap, 14px))' }}>
+    <header className={`mp-glass-header ${onBand ? 'mp-on-band' : ''} sticky top-0 z-20 flex items-center gap-3 px-5 pb-3`}
+      style={{ paddingTop: 'calc(var(--safe-top) + var(--home-header-gap, 14px))', ...(onBand ? { ['--frost-tint' as string]: 'var(--home-band-top)' } : null) }}>
       <button
         type="button"
         onClick={onSwitchStore}
@@ -90,7 +110,7 @@ export function BusinessHeader({
         aria-label={onSwitchStore ? `Switch store, now ${storeName}` : undefined}
         className="flex-1 min-w-0 flex items-center gap-2.5 text-left disabled:cursor-default"
       >
-        <span className="shrink-0 rounded-full p-[2px] bg-brand" style={{ width: 47, height: 47 }}>
+        <span className="shrink-0 rounded-full p-[2px] bg-brand" style={{ width: 47, height: 47, ...(onBand ? { background: '#8FE9CB' } : null) }}>
           {avatarUrl
             ? <img decoding="async" src={avatarUrl.split('?')[0]} alt="" className="w-full h-full rounded-full object-cover" style={{ border: '2px solid var(--bg)' }} />
             : <span className="flex items-center justify-center w-full h-full rounded-full bg-brand text-white text-[17px] font-bold" style={{ border: '2px solid var(--bg)' }}>
@@ -99,12 +119,12 @@ export function BusinessHeader({
         </span>
         <span className="min-w-0">
           <span className="flex items-center gap-1">
-            <span className="text-[15px] font-bold text-text-primary truncate" style={{ letterSpacing: '-0.3px' }}>{storeName}</span>
-            {status === 'verified' && <ShieldCheck className="size-4 text-brand-text shrink-0" aria-label="Verified" />}
+            <span className={`text-[15px] font-bold truncate ${onBand ? 'text-white' : 'text-text-primary'}`} style={{ letterSpacing: '-0.3px' }}>{storeName}</span>
+            {status === 'verified' && <ShieldCheck className={`size-4 shrink-0 ${onBand ? '' : 'text-brand-text'}`} style={onBand ? { color: '#8FE9CB' } : undefined} aria-label="Verified" />}
             {status === 'review' && <Clock className="size-3.5 text-warning shrink-0" aria-label="Under review" />}
-            {onSwitchStore && <ChevronDown className="size-4 text-text-muted shrink-0" />}
+            {onSwitchStore && <ChevronDown className={`size-4 shrink-0 ${onBand ? 'text-white/80' : 'text-text-muted'}`} />}
           </span>
-          <span className="flex items-center gap-1 mt-0.5 text-[12px] text-link truncate" style={{ fontFamily: 'monospace' }}>
+          <span className={`flex items-center gap-1 mt-0.5 text-[12px] truncate ${onBand ? '' : 'text-link'}`} style={{ fontFamily: 'monospace', ...(onBand ? { color: 'var(--home-band-sub)' } : null) }}>
             {outlet ? `${outlet} · ${handle}` : storeName === handle ? 'Business account' : handle}
           </span>
         </span>

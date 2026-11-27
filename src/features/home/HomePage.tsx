@@ -1987,7 +1987,7 @@ function AssetBox({ icon, fallbackColor, fallbackChar, name, value, amount, hidd
 }
 
 // Bottom-nav roots (useNavDirection's TAB_ROOTS): switching to one is instant.
-const HOME_TAB_ROOTS = new Set(['/', '/chat', '/scanner', '/rewards', '/business', '/activity'])
+const HOME_TAB_ROOTS = new Set(['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/collect', '/biz/customers', '/biz/account'])
 
 const PAY_BUTTONS = [
   { label: 'Pay',     path: '/pay',     icon: 'pay' as const,     accent: true },

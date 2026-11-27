@@ -142,6 +142,17 @@ export function refreshMerchant(): Promise<void> {
   if (loading) return loading
   loading = (async () => {
     try {
+      // Test builds only (vite --mode e2e): a business account without the
+      // database, so the business screens can be checked in a browser. In a
+      // normal build VITE_E2E is undefined and this is removed.
+      if (import.meta.env.VITE_E2E === '1') {
+        try {
+          if (localStorage.getItem('meshport_e2e_business') === '1') {
+            set({ loaded: true, status: 'approved', application: null, accountType: 'business', storeName: 'Sharma General Store', pendingName: null, shopContact: null })
+            return
+          }
+        } catch { /* storage off */ }
+      }
       const uid = await authUid()
       if (!uid) { set({ loaded: true, status: 'none', application: null, accountType: 'personal', storeName: null, pendingName: null, shopContact: null }); return }
       const [{ data, error }, { data: meRows, error: meErr }] = await Promise.all([

@@ -154,7 +154,7 @@ export function LockedHubView({ banner, terms = bizTerms(null) }: { banner: Reac
     [Settings2, 'Business tools', `${terms.stores}, staff, reports and payouts`],
   ]
   return (
-    <div className="flex flex-col gap-3 pb-8">
+    <div className="relative flex flex-col gap-3 pb-8">
       {banner}
       <div className="mx-5">
         <div className="rounded-2xl bg-card soft-card overflow-hidden">

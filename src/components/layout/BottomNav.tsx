@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore, useChatUnreadStore } from '@/store'
 import { NavIcon, type NavIconName } from './navIcons'
-import { Store } from 'lucide-react'
+import { Store, ReceiptText, Users, CircleUserRound } from 'lucide-react'
 import { useBusinessTab } from '@/lib/merchant'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 import { backLayerPop } from '@/lib/backLayers'
@@ -29,6 +29,19 @@ export const BusinessIcon = ({ active, filled }: NavIconProps) =>
   <Store size={filled === undefined ? 22 : 24} strokeWidth={active ? 2.3 : 1.8} color={colorOf(active, filled)} />
 // Option A (8 Nov): a scan-frame mark (four corners and a line) - reads as
 // "scan" at a glance, lighter than the dense QR glyph it replaces.
+export const PaymentsIcon = ({ active, filled }: NavIconProps) =>
+  <ReceiptText size={filled === undefined ? 22 : 23} strokeWidth={active ? 2.3 : 1.8} color={colorOf(active, filled)} />
+export const CustomersIcon = ({ active, filled }: NavIconProps) =>
+  <Users size={filled === undefined ? 22 : 23} strokeWidth={active ? 2.3 : 1.8} color={colorOf(active, filled)} />
+export const AccountIcon = ({ active, filled }: NavIconProps) =>
+  <CircleUserRound size={filled === undefined ? 22 : 23} strokeWidth={active ? 2.3 : 1.8} color={colorOf(active, filled)} />
+// Business centre button: a QR (take a payment), not Scan (make one).
+const CollectIcon = () => (
+  <svg width={25} height={25} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.4" /><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.4" />
+    <rect x="3.5" y="14" width="6.5" height="6.5" rx="1.4" /><path d="M14 14h2.5v2.5H14zM20.5 14v.01M14 20.5h.01M17.5 18v2.5h3" />
+  </svg>
+)
 const ScannerIcon = () => (
   <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M4 8V6a2 2 0 0 1 2-2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v2" />
@@ -45,7 +58,16 @@ const tabs = [
   { id: 'activity', label: 'Activity', path: '/activity' },
 ]
 // Merchants: Business takes Rewards' place. Everyone else keeps Rewards.
-const businessTabs = tabs.map(t => t.id === 'rewards' ? { id: 'business', label: 'Business', path: '/business' } : t)
+// A business account's app is the business (27 Nov): Home (the business
+// home), Payments, Collect (centre: show the QR, charge, bill), Customers
+// (with chats) and Account.
+export const businessTabs = [
+  { id: 'home',      label: 'Home',      path: '/' },
+  { id: 'payments',  label: 'Payments',  path: '/biz/payments' },
+  { id: 'collect',   label: 'Collect',   path: '/biz/collect' },
+  { id: 'customers', label: 'Customers', path: '/biz/customers' },
+  { id: 'account',   label: 'Account',   path: '/biz/account' },
+]
 
 // Same "which tab is active" expression BottomNav always used, just given a
 // name so DesktopSidebar can share it exactly instead of hand-copying it.
@@ -155,7 +177,7 @@ export function BottomNav() {
   }, [user?.id, setUnreadChats])
 
   // Tab root paths - back button on any of these goes to Home (or exits if already Home)
-  const TAB_ROOTS = ['/', '/chat', '/scanner', '/rewards', '/business', '/activity']
+  const TAB_ROOTS = ['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/collect', '/biz/customers', '/biz/account']
 
   useEffect(() => {
     const isTabRoot = TAB_ROOTS.includes(location.pathname)
@@ -211,8 +233,8 @@ export function BottomNav() {
       }}>
         {tabList.map(tab => {
           const isActive = activeTab === tab.id
-          const isScanner = tab.id === 'scanner'
-          const isChat = tab.id === 'chat'
+          const isScanner = tab.id === 'scanner' || tab.id === 'collect'
+          const isChat = tab.id === 'chat' || tab.id === 'customers'
           const badgeCount = isChat ? unreadChats : 0
 
           return (
@@ -230,7 +252,7 @@ export function BottomNav() {
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, marginTop: -26 }}>
                   <motion.div
                     whileTap={{ scale: 0.92 }}
-                    aria-label="Scan"
+                    aria-label={tab.label}
                     style={{
                       width: 56, height: 56, borderRadius: '50%', boxSizing: 'border-box',
                       background: 'var(--brand)',
@@ -239,7 +261,7 @@ export function BottomNav() {
                       boxShadow: '0 6px 16px rgb(var(--brand-rgb) / 0.32)',
                       flexShrink: 0,
                     }}>
-                    <ScannerIcon />
+                    {tab.id === 'collect' ? <CollectIcon /> : <ScannerIcon />}
                   </motion.div>
                   <span style={{
                     fontSize: 11, fontWeight: 700, color: 'var(--brand-text)',
@@ -274,6 +296,9 @@ export function BottomNav() {
                       {tab.id === 'rewards'  && <RewardsIcon active={isActive} filled />}
                       {tab.id === 'business' && <BusinessIcon active={isActive} filled />}
                       {tab.id === 'activity' && <ActivityIcon active={isActive} filled />}
+                      {tab.id === 'payments' && <PaymentsIcon active={isActive} filled />}
+                      {tab.id === 'customers' && <CustomersIcon active={isActive} filled />}
+                      {tab.id === 'account'  && <AccountIcon active={isActive} filled />}
                     </motion.div>
                     {badgeCount > 0 && (
                       <motion.span

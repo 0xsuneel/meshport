@@ -106,7 +106,16 @@ function LegacyMultichainRedirect({ tab }: { tab: 'transfer' | 'bring' }) {
 // Rewards (daily tasks, points) is for personal accounts only - a business
 // account that lands here (an old link, a saved shortcut) goes to Business.
 function PersonalOnly({ children }: { children: React.ReactNode }) {
-  return useBusinessTab() ? <Navigate to="/business" replace /> : <>{children}</>
+  return useBusinessTab() ? <Navigate to="/" replace /> : <>{children}</>
+}
+// A business account's app is the business (27 Nov): its Home is the business
+// home; personal accounts keep the wallet Home.
+function HomeRoute() {
+  return useBusinessTab() ? <BusinessPage root="home" /> : <HomePage />
+}
+// The business tabs are for business accounts; anyone else lands on Home.
+function BusinessOnly({ children }: { children: React.ReactNode }) {
+  return useBusinessTab() ? <>{children}</> : <Navigate to="/" replace />
 }
 
 function RenamedPathRedirect({ from, to }: { from: string; to: string }) {
@@ -455,7 +464,7 @@ const router = createBrowserRouter([
     path: '/',
     element: <MaintenanceGate><RootGate /></MaintenanceGate>,
     children: [
-      { index: true,                        element: <HomePage /> },
+      { index: true,                        element: <HomeRoute /> },
       { path: 'scanner',                    element: <Unlocked title="Scan"><FeatureGate feature="qr_payments_enabled"><ScannerPage /></FeatureGate></Unlocked> },
       {
         // Pathless layout wrapper - paths/params/navigation for these two
@@ -497,6 +506,10 @@ const router = createBrowserRouter([
       { path: 'receive/requests',           element: <Unlocked title="Requests"><FeatureGate feature="receive_enabled"><MyRequestsPage /></FeatureGate></Unlocked> },
       { path: 'rewards',                    element: <Unlocked title="Rewards"><PersonalOnly><FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate></PersonalOnly></Unlocked> },
       { path: 'business',                   element: <BusinessPage /> },
+      { path: 'biz/payments',               element: <BusinessOnly><BusinessPage key="payments" root="payments" /></BusinessOnly> },
+      { path: 'biz/collect',                element: <BusinessOnly><Unlocked title="Collect"><BusinessPage key="collect" root="collect" /></Unlocked></BusinessOnly> },
+      { path: 'biz/customers',              element: <BusinessOnly><BusinessPage key="customers" root="customers" /></BusinessOnly> },
+      { path: 'biz/account',                element: <BusinessOnly><BusinessPage key="account" root="account" /></BusinessOnly> },
       { path: 'recent-paid',                element: <Unlocked title="Recent"><RecentPaidPage /></Unlocked> },
       { path: 'splits',                     element: <Unlocked title="Split Expense"><SplitsPage /></Unlocked> },
       { path: 'splits/new',                 element: <Unlocked title="Split Expense"><SplitNewPage /></Unlocked> },

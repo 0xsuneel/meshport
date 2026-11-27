@@ -35,7 +35,7 @@ export interface BusinessScreenProps {
 /** Where a screen sits in the Business screen stack: `level` 0 is opened from
  *  the tab, 1 from a level-0 screen, …; `covered` = another screen is on top
  *  of it right now. Set by BusinessPage (and CashOut for its trade screen). */
-export const ScreenLevel = React.createContext<{ level: number; covered: boolean }>({ level: 0, covered: false })
+export const ScreenLevel = React.createContext<{ level: number; covered: boolean; root?: boolean }>({ level: 0, covered: false })
 export const useScreenLevel = () => React.useContext(ScreenLevel)
 
 // Opening/closing is the app's one page push (PageTransition / ScreenPush),
@@ -46,12 +46,41 @@ export const useScreenLevel = () => React.useContext(ScreenLevel)
 // the content area, like desktop pages (no sliding over the sidebar).
 
 export function BusinessScreen({ open, title, onBack, children, footer, step = '', fill = false, action, heading }: BusinessScreenProps) {
-  const { level, covered } = useScreenLevel()
+  const { level, covered, root = false } = useScreenLevel()
   // Desktop: fills Business's main column like the other desktop pages'
   // flows (the phone width left a narrow strip floating mid-page).
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
-  // Phone / browser Back = the header's back arrow (a step inside first).
-  useBackLayer(open, onBack)
+  // Phone / browser Back = the header's back arrow (a step inside first). A
+  // tab's own screen (root) has no back of its own - only its inner steps.
+  useBackLayer(open && (!root || !!step), onBack)
+  if (root) {
+    // A business tab (Payments, Collect, Customers, Account): the page itself,
+    // under the bottom nav - no slide-in, no back arrow on its first view.
+    return (
+      <div className="absolute inset-0 flex flex-col bg-bg" style={{ zIndex: 1 }}>
+        <ScreenPush screenKey={step || '·'} back={!step} style={{ width: '100%', maxWidth: isDesktop ? undefined : 448, margin: '0 auto' }}>
+          <header className={`shrink-0 header-row mp-glass-header gap-3 px-5 ${isDesktop ? 'pt-0' : 'pt-header'} pb-header sticky top-0 z-10`}>
+            {step && (
+              <button type="button" aria-label="Go back" onClick={onBack} className="back-btn">
+                <ArrowLeft className="w-5 h-5 text-text-primary" />
+              </button>
+            )}
+            {heading ? <><h2 className="sr-only">{title}</h2>{heading}</> : <h2 className="header-title flex-1 truncate">{title}</h2>}
+            {action}
+          </header>
+          <div className={fill ? 'flex-1 min-h-0 flex flex-col' : 'flex-1 overflow-y-auto overscroll-contain'}
+            style={{ paddingBottom: footer || isDesktop ? undefined : 'var(--nav-space)' }}>
+            {children}
+          </div>
+          {footer && (
+            <footer className="shrink-0 px-5 pt-3 bg-bg border-t border-border" style={{ paddingBottom: isDesktop ? 16 : 'calc(var(--nav-space) + 8px)' }}>
+              {footer}
+            </footer>
+          )}
+        </ScreenPush>
+      </div>
+    )
+  }
   return (
     // Above the Manage orders / money panel (z-40), each level above the last.
     <PushLayer open={open} covered={covered} zIndex={41 + level}>

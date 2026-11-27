@@ -14,14 +14,16 @@ import { useLatched } from '@/hooks/useLatched'
 import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { DESKTOP_QUERY } from '@/lib/motion'
+import { DESKTOP_QUERY, PUSH_OPEN_MS } from '@/lib/motion'
+import { useStatusBarTint } from '@/lib/statusBarTint'
+import { useThemeStore, resolveTheme } from '@/store/themeStore'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useBackLayer } from '@/lib/backLayers'
 import { useBizTerms } from '@/lib/businessCategories'
 import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
 import { copyToClipboard } from '@/lib/utils'
-import { useAuthStore, useWalletStore } from '@/store'
+import { useAuthStore, useWalletStore, useNotificationStore, useChatUnreadStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLogoSrc } from '@/lib/chainLogos'
@@ -52,7 +54,7 @@ import { bridgeScope } from '@/lib/walletConfirm'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton } from '@/components/ui/DesktopHistoryPanel'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
-  BusinessHeader, SetupBanner, HubView, LockedHubView, PaymentsView, PaymentDetailSheet, PaymentRow,
+  BusinessHeader, SetupBanner, BizHomeView, LockedHubView, PaymentsView, PaymentDetailSheet, PaymentRow,
   SettlementsView, SettleProgressSheet, VoiceSheet, RefundSheet, TrendChip,
   DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, ScreenLevel, PushLayer, useHubShift,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
@@ -82,15 +84,38 @@ const inWords = (ms: number) => {
 const bizCache = new Map<string, { raw: MerchantPayment[]; intents: MerchantIntent[] | null; stores: Store[]; refunds: MerchantRefund[] }>()
 
 /** Business accounts get their Business tab; staff of a business get staff mode. */
-export function BusinessPage() {
+/** Which business tab this page is (27 Nov: a business account's app is the
+ *  business - Home, Payments, Collect, Customers and Account are its tabs). */
+const TAB_PATHS = new Set(['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/collect', '/biz/customers', '/biz/account'])
+export type BusinessRoot = 'home' | 'payments' | 'collect' | 'customers' | 'account'
+const ROOT_SCREEN: Partial<Record<BusinessRoot, ScreenId>> = { collect: 'receive', customers: 'customers', account: 'tools' }
+
+/** Manage orders / money: a pushed page - or, on the Payments tab, the page itself. */
+function SubLayer({ root, open, covered, children }: { root: boolean; open: boolean; covered: boolean; children: ReactNode }) {
+  if (root) return <div className="absolute inset-0 flex flex-col items-center bg-bg" style={{ zIndex: 1 }}>{children}</div>
+  return <PushLayer open={open} covered={covered} zIndex={40}>{children}</PushLayer>
+}
+
+export function BusinessPage({ root = 'home' }: { root?: BusinessRoot } = {}) {
   const business = useBusinessTab()
   const { loaded } = useMerchant()
   // Wait for the account type before choosing (no flash of staff mode).
   if (!business && !loaded) return <div className="h-full bg-bg" />
-  return business ? <OwnerBusinessPage /> : <StaffModePage />
+  return business ? <OwnerBusinessPage root={root} /> : <StaffModePage />
 }
 
-function OwnerBusinessPage() {
+function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
+  const unreadCount = useNotificationStore(s => s.unreadCount)
+  const chatsUnread = useChatUnreadStore(s => s.unreadChats)
+  // Phone Home: the status bar takes the band's teal, as on personal Home -
+  // held through a page slide, dropped at once for a tab switch.
+  const homeTint = typeof window !== 'undefined' && !window.matchMedia(DESKTOP_QUERY).matches && root === 'home'
+  const themeMode = useThemeStore(t => t.mode)
+  useStatusBarTint(homeTint ? (resolveTheme(themeMode) === 'dark' ? '#0E4F49' : '#12665F') : null,
+    () => (TAB_PATHS.has(window.location.pathname.replace(/\/$/, '') || '/') ? 0 : PUSH_OPEN_MS))
+  // This tab's own screen (Collect, Customers, Account): the bottom of the
+  // stack, shown as the page itself - never closed, no back arrow.
+  const rootScreen = ROOT_SCREEN[root] ?? null
   const location = useLocation()
   const query = new URLSearchParams(location.search)
   const { isMerchant, status, application, storeName: accountStoreName } = useMerchant()
@@ -100,6 +125,7 @@ function OwnerBusinessPage() {
   const voice = useVoiceAlerts()
 
   const [tab, setTab] = useState<BusinessTab>(() => {
+    if (root === 'payments') return 'payments'
     if (query.get('claim')) return 'settlements'
     const t = (location.state as { btab?: BusinessTab } | null)?.btab ?? query.get('tab')
     return t === 'payments' || t === 'settlements' ? t : 'overview'
@@ -332,7 +358,11 @@ function OwnerBusinessPage() {
   // Reports; search opens any of them). ?tab=payments / settlements opens
   // Manage orders / Manage money.
   const linkedScreen = useRef<ScreenId | null>(linkedScreenOf(query))
-  const [stack, setStack] = useState<ScreenId[]>(() => query.get('apply') ? ['profile'] : linkedScreen.current ? [linkedScreen.current] : [])
+  const [stack, setStack] = useState<ScreenId[]>(() => {
+    const base = rootScreen ? [rootScreen] : []
+    if (query.get('apply')) return [...base, 'profile']
+    return linkedScreen.current && linkedScreen.current !== rootScreen ? [...base, linkedScreen.current] : base
+  })
   const screen = stack.length ? stack[stack.length - 1] : null
   // Back from Cash out or Payouts: USDC may have moved (escrow, staff pay).
   const prevScreen = useRef(screen)
@@ -347,9 +377,9 @@ function OwnerBusinessPage() {
   const terms = useBizTerms()
   useEffect(() => {
     if (!locked) return
-    if (tab !== 'overview') setTab('overview')
-    if (stack.some(id => id !== 'profile' && id !== 'help')) setStack([])
-  }, [locked, tab, stack])
+    if (tab !== 'overview' && root !== 'payments') setTab('overview')
+    if (stack.some(id => id !== 'profile' && id !== 'help' && id !== rootScreen)) setStack(rootScreen ? [rootScreen] : [])
+  }, [locked, tab, stack, root, rootScreen])
   // A link while Business is already open (search from the desktop header).
   const lastSearch = useRef(location.search)
   useEffect(() => {
@@ -357,13 +387,24 @@ function OwnerBusinessPage() {
     lastSearch.current = location.search
     const q = new URLSearchParams(location.search)
     const id = linkedScreenOf(q)
-    if (id) { linkedScreen.current = id; setStack([id]) }
+    if (id) { linkedScreen.current = id; setStack(rootScreen && id !== rootScreen ? [rootScreen, id] : [id]) }
     const t = q.get('tab')
-    if (t === 'payments' || t === 'settlements') { setStack([]); setTab(t) }
-  }, [location.search])
-  const open = (id: ScreenId) => () => setStack([id])
-  const close = () => setStack([])
+    if (t === 'payments' || t === 'settlements') { setStack(rootScreen ? [rootScreen] : []); setTab(t) }
+  }, [location.search, rootScreen])
+  // Home's Charge / Bill open Collect payment on that part.
+  // Pay link: the business's payment page, shared (or copied) - like Paytm's links.
+  const sharePayLink = () => {
+    const url = `${window.location.origin}/paylink/${(username || '').replace(/\.arc$/i, '')}${stores.length > 1 && activeStore ? `?store=${encodeURIComponent(activeStore.id)}` : ''}`
+    const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> }
+    if (nav.share) { nav.share({ title: storeName, text: `Pay ${storeName}`, url }).catch(() => {}); return }
+    void copyToClipboard(url).then(ok => toast(ok ? 'Payment link copied' : 'Could not copy', ok ? 'success' : 'error'))
+  }
+  const [collectStart, setCollectStart] = useState<'qr' | 'charge' | 'bill' | undefined>(undefined)
+  const open = (id: ScreenId) => () => setStack(rootScreen && id !== rootScreen ? [rootScreen, id] : [id])
+  const close = () => setStack(rootScreen ? [rootScreen] : [])
   const back = () => {
+    // The tab's own screen stays (it is the page).
+    if (rootScreen && stack.length <= 1) return
     // Opened from Home's More → Business Insights: Back returns Home (like
     // Back on any tab), not to the Business overview it never showed.
     if (linkedScreen.current && stack.length === 1 && stack[0] === linkedScreen.current) {
@@ -379,7 +420,7 @@ function OwnerBusinessPage() {
   /** Where a screen sits in the stack (BusinessScreen reads it). */
   const level = (id: ScreenId, children: ReactNode) => {
     const i = stack.indexOf(id)
-    return <ScreenLevel.Provider value={{ level: Math.max(0, i), covered: i >= 0 && i < stack.length - 1 }}>{children}</ScreenLevel.Provider>
+    return <ScreenLevel.Provider value={{ level: Math.max(0, i), covered: i >= 0 && i < stack.length - 1, root: id === rootScreen }}>{children}</ScreenLevel.Provider>
   }
 
   const beginSettle = (retry?: string[]) => {
@@ -587,16 +628,18 @@ function OwnerBusinessPage() {
   // same edge shadow - the exact PageTransition / ScreenPush look. (Screen
   // overlays below already supply this themselves.)
   const subOpen = tab !== 'overview'
+  // Payments tab: Manage orders / payments is the page itself (no slide, no back).
+  const subRoot = root === 'payments' && tab === 'payments'
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
   // Desktop: screens fade in the content area (no sliding), nothing shifts.
-  const hubCovered = !isDesktop && (!!screen || subOpen)
+  const hubCovered = !isDesktop && (!!screen || subOpen) && root === 'home'
   // The hub (and the bottom tab bar) parallaxes left under a pushed page.
   const hubShift = useHubShift(hubCovered)
   // Manage orders / money shifts left too when a screen opens over it.
   const subCovered = !isDesktop && !!screen
   // Phone / browser Back from Manage orders / money returns to the overview.
-  const closeSub = () => { setPayFilter('all'); setTab('overview') }
-  useBackLayer(subOpen, closeSub)
+  const closeSub = () => { if (root === 'payments') { setTab('payments'); return } setPayFilter('all'); setTab('overview') }
+  useBackLayer(subOpen && !subRoot, closeSub)
   // The hub shows the bottom nav, so its body clears it (65px + safe area).
   // A sub-view covers the nav (like every other detail page), so its body
   // only needs the safe area.
@@ -613,7 +656,11 @@ function OwnerBusinessPage() {
   const hubTop = <>
     <BusinessHeader desktop={isDesktop} storeName={storeName} handle={handle}
       status={headerStatus} voiceOn={voice.enabled}
-      onVoice={() => setVoiceOpen(true)} onMenu={open(locked ? 'profile' : 'tools')}
+      onVoice={() => setVoiceOpen(true)}
+      // Phone Home: on the teal band, the bell in place of the menu (Account is a tab).
+      {...(!isDesktop && root === 'home'
+        ? { onBand: true, onBell: () => navigate('/notifications'), bellDot: unreadCount > 0 }
+        : { onMenu: open(locked ? 'profile' : 'tools') })}
       avatarName={storeName} avatarUrl={userAvatar ?? undefined} />
     {stores.length > 1 && activeStore && (
       <div className="px-5 pb-2">
@@ -627,42 +674,53 @@ function OwnerBusinessPage() {
       phoneClassName="relative flex flex-col h-full min-h-0 bg-bg overflow-hidden"
       main={<>
       {/* ── Overview hub: always mounted; parallaxes left under a sub-view ── */}
-      <div className="flex-1 min-h-0 flex flex-col" style={hubShift}>
+      {root === 'home' && <div className="flex-1 min-h-0 flex flex-col" style={hubShift}>
         {/* The business, then (several stores) the one store everything below
             is for, with Switch - never every store mixed together. */}
         {isDesktop && hubTop}
-        <div className="flex-1 min-h-0 overflow-y-auto" style={bodyPad}>
+        <div className="flex-1 min-h-0 overflow-y-auto relative" style={bodyPad}>
+          {/* Phone: the brand-teal band behind the header and the top of the
+              sales card, fading into the page (same as personal Home). */}
+          {!isDesktop && <div aria-hidden className="absolute left-0 right-0 top-0 pointer-events-none" style={{ height: 'calc(var(--safe-top) + 235px)', background: 'var(--home-band)' }} />}
           {/* Phone: the header sits inside the scroll box (sticky glass), so
               the hub scrolls under it like Home. */}
           {!isDesktop && hubTop}
           {locked && <LockedHubView banner={banner} terms={terms} />}
           {!locked && (
-            <HubView terms={terms} loading={!loaded} banner={banner} periodLabel={period.label} onPeriod={() => setPeriodSheet(true)}
-              sales={{ total: money(today.total), trend: <TrendChip pct={trend} compare={period.compareLabel} /> }}
-              pending={pending ? { count: pending.count, due: money(pending.due) } : null}
-              available={stores.length > 1 ? money(today.onArc) : money(arcBalance)} availableLabel={stores.length > 1 ? 'On Arc' : undefined} onPending={openOrders} onAvailable={() => setTab('settlements')}
-              collect={{ badge: stores.length > 1 ? `${activeStore?.name} QR` : 'Show your QR', tone: 'brand', onClick: open('receive') }}
-              orders={{ badge: !pending ? 'Loading…' : pending.count ? `${pending.count} open` : `No open ${terms.orders.toLowerCase()}`, tone: pending?.count ? 'warning' : 'neutral', onClick: openOrders }}
-              money={{ badge: settle.total > 0 ? `${money(settle.total)} to settle` : scanning ? 'Checking chains…' : 'All on Arc', tone: settle.total > 0 ? 'brand' : 'neutral', onClick: () => setTab('settlements') }}
-              tools={{ badge: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'}` : isMerchant ? 'Add a store' : 'Profile & help', onClick: open('tools') }}
-              recent={payments.slice(0, 4)} onSeeAll={seeAllPayments} onPayment={setDetail} hideRecent={isDesktop} />
+            <BizHomeView loading={!loaded} banner={banner} periodLabel={period.label} onPeriod={() => setPeriodSheet(true)}
+              total={money(today.total)} trend={<TrendChip pct={trend} compare={period.compareLabel} />}
+              stats={{ count: today.count, average: money(today.average), openOrders: pending ? pending.count : null }}
+              onOpenOrders={openOrders}
+              onQr={() => navigate('/biz/collect')}
+              onCharge={() => { setCollectStart('charge'); open('receive')() }}
+              onBill={() => { setCollectStart('bill'); open('receive')() }}
+              onPayLink={sharePayLink}
+              available={stores.length > 1 ? money(today.onArc) : money(arcBalance)} availableLabel={stores.length > 1 ? 'On Arc' : undefined}
+              arriving={settle.total > 0 ? money(settle.total) : null} arrivingBusy={scanning && settle.total <= 0}
+              onMove={() => beginSettle()} onMoney={() => setTab('settlements')}
+              onCashOut={open('cashout')} onPayStaff={open('payouts')}
+              attention={[
+                ...(pending && pending.count > 0 ? [{ id: 'orders', label: `${pending.count} open ${pending.count === 1 ? terms.order.toLowerCase() : terms.orders.toLowerCase()}`, onClick: openOrders }] : []),
+                ...(pendingCredit > 0 ? [{ id: 'credit', label: `${money(pendingCredit)} owed by ${terms.customers.toLowerCase()}`, tone: 'warning' as const, onClick: () => navigate('/biz/customers') }] : []),
+              ]}
+              recent={payments.slice(0, 5)} onSeeAll={() => navigate('/biz/payments')} onPayment={setDetail} hideRecent={isDesktop} />
           )}
         </div>
-      </div>
+      </div>}
 
       {/* ── Manage orders / Manage money: a full page that slides in from the
           right over a dim veil with the edge shadow - the same page push the
           rest of the app uses. Like every other detail page (Pay, Receive) and
           the Business screens, it covers the bottom nav (fixed, z-40). ── */}
-      <PushLayer open={subOpen} covered={subCovered} zIndex={40}>
+      <SubLayer root={subRoot} open={subOpen} covered={subCovered}>
              <div className={`relative w-full flex flex-col h-full ${isDesktop ? '' : 'max-w-md'}`}>
               {/* Payments and Settlements open from Overview (See all, the settle
                   bar, the menu) and come back with the arrow - no tab bar. */}
               <header className={`header-row gap-3 px-5 ${isDesktop ? 'pt-0' : 'pt-header'} pb-header`}>
-                <button type="button" aria-label="Back to overview" onClick={closeSub} className="back-btn">
+                {!subRoot && <button type="button" aria-label="Back to overview" onClick={closeSub} className="back-btn">
                   <ArrowLeft className="w-5 h-5 text-text-primary" />
-                </button>
-                <h1 className="header-title">{tab === 'payments' ? `Manage ${terms.orders.toLowerCase()}` : 'Manage money'}</h1>
+                </button>}
+                <h1 className="header-title">{subRoot ? 'Payments' : tab === 'payments' ? `Manage ${terms.orders.toLowerCase()}` : 'Manage money'}</h1>
                 {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name}</span>}
               </header>
               {tab === 'payments' && <div className="px-5 pt-2">
@@ -675,7 +733,7 @@ function OwnerBusinessPage() {
                   ))}
                 </div>
               </div>}
-              <div className="flex-1 min-h-0 overflow-y-auto" style={panelPad}>
+              <div className="flex-1 min-h-0 overflow-y-auto" style={subRoot ? bodyPad : panelPad}>
                 {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} mainStoreId={mainStoreId}
                   storeName={storeName} storeNameOf={i => stores.find(st => st.id === (i.storeId ?? mainStoreId))?.name ?? null} paymentsOf={i => paymentsByIntent.get(i.id) ?? []} refundedOf={p => refundedOf(p.id)} onRefund={refundFromOrder} />}
                 {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter}
@@ -703,7 +761,7 @@ function OwnerBusinessPage() {
                 )}
               </div>
              </div>
-      </PushLayer>
+      </SubLayer>
 
       <PaymentDetailSheet payment={detail} explorerUrl={rawDetail ? explorerTxUrl(rawDetail.chain, rawDetail.txHash) ?? undefined : undefined}
         onClose={() => setDetail(null)} onSettle={() => { setDetail(null); setTab('settlements') }}
@@ -764,9 +822,35 @@ function OwnerBusinessPage() {
         onTest={() => speakPayment(24.5, { test: true })} onClose={() => setVoiceOpen(false)} />
 
       {level('tools', (
-        <ToolsScreen open={stack.includes('tools')} onBack={back}
-          onOpen={(id: ToolId) => { if (id === 'voice') { setVoiceOpen(true); return } child(id) }}
-          groups={[
+        <ToolsScreen open={stack.includes('tools')} onBack={back} title={rootScreen === 'tools' ? 'Account' : 'Business tools'}
+          onOpen={(id: ToolId) => {
+            if (id === 'voice') { setVoiceOpen(true); return }
+            const link: Partial<Record<ToolId, string>> = { pay: '/pay', swap: '/swap', multichain: '/multichain', settings: '/profile' }
+            const to = link[id]
+            if (to) { navigate(to); return }
+            child(id as ScreenId)
+          }}
+          groups={rootScreen === 'tools' ? [
+            // The Account tab: the business, its money, settings.
+            { title: 'Business', rows: [
+              { id: 'profile', label: 'Business profile', hint: `${headerStatus === 'verified' ? 'Verified' : 'Complete your application'} · name, logo, tax ID` },
+              { id: 'team', label: `${terms.stores} & staff`, hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers' },
+              { id: 'reports', label: 'Reports', hint: 'Sales and statement · CSV and PDF' },
+              { id: 'activity', label: 'Activity log', hint: 'Who billed, refunded, settled' },
+            ] },
+            { title: 'Money', rows: [
+              { id: 'cashout', label: 'Cash out', hint: 'To your bank, in your currency' },
+              { id: 'payouts', label: 'Pay staff & suppliers', hint: 'Everyone in one payment' },
+              { id: 'pay', label: 'Pay someone', hint: '' },
+              { id: 'swap', label: 'Swap', hint: 'USDC ⇄ EURC' },
+              { id: 'multichain', label: 'Multichain', hint: 'Move USDC to other networks' },
+            ] },
+            { title: 'Settings', rows: [
+              { id: 'voice', label: 'Payment alerts', hint: voice.enabled ? `Voice on${voice.minAmount ? ` · above $${voice.minAmount}` : ''}` : 'Voice off' },
+              { id: 'settings', label: 'Security & app settings', hint: 'Passcode, appearance, backup, sign out' },
+              { id: 'help', label: 'Help & disputes', hint: 'Customer says they paid' },
+            ] },
+          ] : [
             { title: 'Business', rows: [
               { id: 'team', label: `${terms.stores} & staff`, hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers' },
               { id: 'customers', label: terms.customers, hint: pendingCredit > 0 ? `${money(pendingCredit)} outstanding · history and reminders` : 'Everyone who paid, with their history' },
@@ -816,11 +900,12 @@ function OwnerBusinessPage() {
         <ShopQrScreen open={stack.includes('qr')} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.publicName : null} handle={handle} storePick={screenStorePick} avatar={qrStore?.publicLogoUrl ?? userAvatar} />
       ))}
       {level('receive', (
-        <ReceiveScreen open={stack.includes('receive')} onBack={() => { back(); reloadIntents() }} onChanged={reloadIntents} storeName={storeName}
+        <ReceiveScreen key={collectStart ?? 'qr'} startTab={rootScreen === 'receive' ? undefined : collectStart} open={stack.includes('receive')} onBack={() => { back(); reloadIntents(); setCollectStart(undefined) }} onChanged={reloadIntents} storeName={storeName}
           shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.publicName : null }} storePick={screenStorePick} avatar={qrStore?.publicLogoUrl ?? userAvatar} />
       ))}
       {level('customers', (
-        <CustomersScreen open={stack.includes('customers')} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundedOf(p.id) > 0 && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
+        <CustomersScreen open={stack.includes('customers')} onBack={back}
+          onChats={rootScreen === 'customers' ? () => navigate('/chat') : undefined} chatsUnread={chatsUnread} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundedOf(p.id) > 0 && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
           onPayment={p => setDetail(toRow(p))} onChat={u => { close(); void openChat(u) }}
           orders={(intents ?? []).filter(i => !activeStore || inStore(i, activeStore.id))} onOrdersChanged={reloadIntents} />
       ))}

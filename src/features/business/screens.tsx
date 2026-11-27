@@ -18,7 +18,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { shopPayLink } from '@/lib/payLinks'
 import { qrCardFile } from '@/lib/qrCardImage'
 import { staffIntents } from '@/lib/businessTeam'
-import { Clock, Printer, Download, Share2 } from 'lucide-react'
+import { Clock, Printer, Download, Share2, MessageCircle } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName, setShopContact, type BusinessDoc } from '@/lib/merchant'
 import { receiptNumber } from '@/lib/receiptNumber'
@@ -191,8 +191,10 @@ const cleanUsername = (v: string) => v.trim().replace(/^@/, '').replace(/\.arc$/
  *  composer (BillComposer), so they look and work the same; the order they
  *  make then shows here as a counter QR and a link, live until it's paid.
  *  Without `shopQr` (staff mode) only Request (and Bill for managers). */
-export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, storePick, avatar }: {
+export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, storePick, avatar, startTab }: {
   open: boolean; onBack: () => void; storeName: string
+  /** Opened on this part (Home's Charge / Bill shortcuts); default the Shop QR. */
+  startTab?: CollectTab
   /** The business's logo, in the phone's title. */
   avatar?: string | null
   shopQr?: { outlet?: string | null; handle: string }
@@ -212,7 +214,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   const { canBill, savedItems = true, log = defaultLog, chat = false } = useContext(RequestMaker)
   const navigate = useNavigate()
   const validFor: readonly { id: ValidFor; label: string }[] = canBill ? VALID_FOR : VALID_FOR.slice(0, 2)
-  const [tab, setTab] = useState<CollectTab>(shopQr ? 'qr' : 'charge')
+  const [tab, setTab] = useState<CollectTab>(startTab ?? (shopQr ? 'qr' : 'charge'))
   // The customer: searched like Pay's recipients, picked as a chip. Only a
   // real MeshPort user can be named on an order.
   const [customerQuery, setCustomerQuery] = useState('')
@@ -1056,8 +1058,11 @@ const ZERO_WALLET = /^0x0{40}$/i
 const shortWallet = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`
 const toKhataOrder = (i: MerchantIntent) => ({ customerUsername: i.customerUsername, amount: i.amount, received: i.received, status: i.status, expiresAt: i.expiresAt, dueDate: i.dueDate ?? null, completedByMerchant: i.completedByMerchant })
 
-export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment, onChat, orders = [], onOrdersChanged }: {
+export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment, onChat, orders = [], onOrdersChanged, onChats, chatsUnread = 0 }: {
   open: boolean; onBack: () => void; payments: MerchantPayment[]
+  /** Customers tab (27 Nov): chats live here - a Chats button in the title row. */
+  onChats?: () => void
+  chatsUnread?: number
   /** Refunded payments still list the customer but don't count in totals */
   refundedIds: Set<string>
   onPayment: (p: MerchantPayment) => void; onChat: (username: string) => void
@@ -1154,7 +1159,14 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
   )
 
   return (
-    <BusinessScreen open={open} title={current ? current.name : title} onBack={current ? () => setSelected(null) : onBack} step={current?.key ?? ''}>
+    <BusinessScreen open={open} title={current ? current.name : title} onBack={current ? () => setSelected(null) : onBack} step={current?.key ?? ''}
+      action={onChats && !current ? (
+        <button type="button" onClick={onChats} aria-label={chatsUnread ? `Chats, ${chatsUnread} unread` : 'Chats'}
+          className="relative ml-auto inline-flex items-center gap-1.5 min-h-[36px] px-3.5 rounded-full bg-surface border border-border text-[13px] font-semibold text-text-primary active:bg-border/30">
+          <MessageCircle className="size-4 text-brand-text" /> Chats
+          {chatsUnread > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[11px] font-bold inline-flex items-center justify-center">{chatsUnread > 99 ? '99+' : chatsUnread}</span>}
+        </button>
+      ) : undefined}>
       {current ? (
         <div className="flex flex-col gap-5 px-5 pt-2 pb-6">
           <div className="flex items-center gap-3 rounded-2xl bg-surface soft-card p-4">

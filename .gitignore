@@ -56,3 +56,4 @@ android/.gradle/
 /vite.config.d.ts
 /vitest.config.js
 /vitest.config.d.ts
+dist-e2e
