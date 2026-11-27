@@ -35,6 +35,8 @@ import { filterServices } from '@/lib/searchServices'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 import { LockBadge } from '@/components/LockedFeature'
 import { RecentNewsRow } from './RecentNewsRow'
+import { useStatusBarTint } from '@/lib/statusBarTint'
+import { useThemeStore, resolveTheme } from '@/store/themeStore'
 import { HomeTabs, TabAction, PayAgainCard } from './HomeTabs'
 import { BALANCES_STALE_EVENT, msSinceLastTx, pendingTxBalance, isLaggingRead } from '@/lib/balanceRefresh'
 import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
@@ -2683,6 +2685,9 @@ export function HomePage() {
   // not the window - MyQrCard's scroll-linked reveal measures against it.
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const stickyHeaderRef = useRef<HTMLDivElement>(null)
+  // Phone: the status bar takes the top band's teal while Home is up.
+  const themeMode = useThemeStore(s => s.mode)
+  useStatusBarTint(isDesktop ? null : resolveTheme(themeMode) === 'dark' ? '#0E4F49' : '#12665F')
   // The header frosts only once something has scrolled under it: its blur
   // reaches past its bottom edge (index.css, "Frosted bars"), so at the top
   // of the page it picked up the balance card's teal. Written straight to the
@@ -3802,6 +3807,12 @@ export function HomePage() {
   const displayName = user.displayName || username || (user.username || '').replace(/\.arc$/, '') || 'User'
   const shortAddr = walletAddress ? walletAddress.slice(0, 6) + '...' + walletAddress.slice(-6) : ''
   const arcHandle = (username || '').replace(/\.arc$/, '') + '.arc'
+  // Phone header sits on the teal band: white text, see-through white chips.
+  const onBand = !isDesktop && !searchOpen
+  const headerChip: React.CSSProperties = onBand
+    ? { background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.22)' }
+    : { background: 'var(--glass-fill)', border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-chip)' }
+  const headerIcon = onBand ? '#fff' : 'var(--brand-text)'
 
   return (
     <div ref={scrollContainerRef} style={{
@@ -3814,19 +3825,25 @@ export function HomePage() {
       // so content remains fully reachable by scrolling if the user zooms
       // their browser in past 100% (accessibility), rather than being clipped.
       display: isDesktop ? 'flex' : undefined, flexDirection: isDesktop ? 'column' : undefined,
+      position: 'relative',
     }}>
+      {/* Phone: the brand-teal band at the top of Home (27 Nov, C2) - from the
+          status bar down past the balance card, fading into the page. It
+          scrolls away with the page; the header stays teal glass. */}
+      {!isDesktop && <div aria-hidden style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 'calc(var(--safe-top) + 300px)', background: 'var(--home-band)', pointerEvents: 'none' }} />}
 
       {/* ── HEADER - floating card, no border ─────────────────────────────── */}
       {/* Desktop: DesktopHeader already covers profile/search/notifications
           app-wide, so this block only mounts there while actively searching
           (opened via DesktopHeader's search box, see isDesktop above). */}
       {(!isDesktop || searchOpen) && (
-      <div ref={stickyHeaderRef} data-frost="bg" className="mp-glass-header" style={{
+      <div ref={stickyHeaderRef} data-frost="bg" className={onBand ? 'mp-glass-header mp-on-band' : 'mp-glass-header'} style={{
         // Above the page's cards while search is open (its results float over them).
         position: 'sticky', top: 0, zIndex: searchOpen ? 40 : 20,
         // Frosted like the bottom nav (index.css, "Frosted bars"): the cards
         // that scroll under it turn into a soft blur of colour.
-        ['--frost-tint' as string]: 'var(--bg)',
+        // Phone: teal glass on the band, so the white greeting stays readable when scrolled.
+        ['--frost-tint' as string]: onBand ? 'var(--home-band-top)' : 'var(--bg)',
         paddingTop: 'calc(var(--safe-top) + var(--home-header-gap, 14px))',
         paddingBottom: 4, paddingLeft: 20, paddingRight: 20,
         boxSizing: 'border-box',
@@ -3848,7 +3865,7 @@ export function HomePage() {
                   search, bell and the profile avatar on the right. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Hello, {displayName.trim().split(/\s+/)[0]}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: onBand ? '#fff' : 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Hello, {displayName.trim().split(/\s+/)[0]}</div>
                   <button className="mp-hit" aria-label="Copy username"
                     onClick={async (e) => {
                       e.stopPropagation()
@@ -3858,28 +3875,27 @@ export function HomePage() {
                       setTimeout(() => setHandleCopied(false), 1500)
                     }}
                     style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, background: 'none', border: 'none', padding: 0, cursor: 'pointer', maxWidth: '100%', minWidth: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--brand-text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: onBand ? 'var(--home-band-sub)' : 'var(--brand-text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
                     {handleCopied
                       ? <Check data-tick className="w-3 h-3 text-success flex-shrink-0" />
-                      : <Copy className="w-3 h-3 text-link flex-shrink-0" />}
+                      : <Copy className={onBand ? 'w-3 h-3 flex-shrink-0' : 'w-3 h-3 text-link flex-shrink-0'} style={onBand ? { color: 'var(--home-band-sub)' } : undefined} />}
                   </button>
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                 {/* Search */}
                 <button onClick={() => setSearchOpen(true)} aria-label="Search" className="mp-press"
-                  style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--glass-fill)',
-                    border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-chip)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  style={{ width: 38, height: 38, borderRadius: '50%', ...headerChip, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={headerIcon} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </button>
                 {/* Bell - notifications */}
                 <button onClick={() => navigate('/notifications')} aria-label="Notifications" className="mp-press"
                   style={{ position: 'relative', width: 38, height: 38, borderRadius: '50%',
-                    background: 'var(--glass-fill)', border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-chip)',
+                    ...headerChip,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-                    <path d="M9 1.5A5.5 5.5 0 0113.5 7v3l1.5 2H3L4.5 10V7A5.5 5.5 0 019 1.5z" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M7 13.5a2 2 0 004 0" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round"/>
+                    <path d="M9 1.5A5.5 5.5 0 0113.5 7v3l1.5 2H3L4.5 10V7A5.5 5.5 0 019 1.5z" stroke={headerIcon} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M7 13.5a2 2 0 004 0" stroke={headerIcon} strokeWidth="1.4" strokeLinecap="round"/>
                   </svg>
                   {(unreadCount > 0 || badgeLabel) && (
                     <span style={{ position: 'absolute', top: 7, right: 8, width: 6, height: 6,
@@ -3890,7 +3906,7 @@ export function HomePage() {
                 {/* Same size as search and the bell, with the brand ring the
                     Chats header puts around your picture. */}
                 <div {...pressable(() => navigate('/profile'), 'Open profile')} className="mp-press"
-                  style={{ cursor: 'pointer', flexShrink: 0, width: 38, height: 38, borderRadius: '50%', padding: 2, background: 'var(--brand)', boxSizing: 'border-box' }}>
+                  style={{ cursor: 'pointer', flexShrink: 0, width: 38, height: 38, borderRadius: '50%', padding: 2, background: onBand ? 'rgba(255,255,255,0.9)' : 'var(--brand)', boxSizing: 'border-box' }}>
                   <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--bg)', boxSizing: 'border-box',
                     background: 'var(--brand)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700 }}>
                     {user?.avatar
@@ -3962,6 +3978,7 @@ export function HomePage() {
       <div className="lg:max-w-[1500px] lg:mx-auto lg:w-full" style={{
         padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 18, paddingBottom: 12,
         flex: isDesktop ? 1 : undefined, minHeight: isDesktop ? 0 : undefined,
+        position: 'relative', zIndex: 1,
       }}>
 
         {/* ── P2P ORDER TICKER - new order received / payment marked as paid ──

@@ -190,6 +190,9 @@
   /* Home hero cards (27 Nov): brand-tinted text and buttons, teal Pay/Transfer. */
   --hero-ink: #E8F5F2;  --hero-ink-2: #B5D6D0;  --hero-up: #4FD1B9;
   --hero-btn: #0F2A27;  --hero-btn-ink: #D5EEE9;  --hero-btn-line: #1A3E3A;  --hero-pay: #1E9488;
+  /* Home's top band (27 Nov, C2): brand teal fading into the page, a mint glow top-right. */
+  --home-band-top: #0E4F49;  --home-band-sub: #9FE3D2;
+  --home-band: radial-gradient(70% 60% at 100% 0%, rgba(36,161,147,.55), transparent 70%), linear-gradient(180deg, #0E4F49 0%, #0B3B37 50%, rgba(0,0,0,0) 100%);
   --shadow-1: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
   --shadow-2: 0 4px 16px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
   --shadow-3: 0 12px 32px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.08);
@@ -268,6 +271,9 @@
   /* Home hero cards (27 Nov): brand-tinted text and buttons, teal Pay/Transfer. */
   --hero-ink: #E8F5F2;  --hero-ink-2: #B5D6D0;  --hero-up: #4FD1B9;
   --hero-btn: #0F2A27;  --hero-btn-ink: #D5EEE9;  --hero-btn-line: #1A3E3A;  --hero-pay: #1E9488;
+  /* Home's top band (27 Nov, C2): brand teal fading into the page, a mint glow top-right. */
+  --home-band-top: #0E4F49;  --home-band-sub: #9FE3D2;
+  --home-band: radial-gradient(70% 60% at 100% 0%, rgba(36,161,147,.55), transparent 70%), linear-gradient(180deg, #0E4F49 0%, #0B3B37 50%, rgba(0,0,0,0) 100%);
   --shadow-1: 0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.24);
   --shadow-2: 0 4px 16px rgba(0,0,0,0.40), 0 2px 6px rgba(0,0,0,0.24);
   --shadow-3: 0 12px 32px rgba(0,0,0,0.50), 0 4px 12px rgba(0,0,0,0.30);
@@ -347,6 +353,9 @@
   /* Home hero cards (27 Nov): brand-tinted text and buttons, teal Pay/Transfer. */
   --hero-ink: #0F3D39;  --hero-ink-2: #36605A;  --hero-up: #12665F;
   --hero-btn: #EEF5F3;  --hero-btn-ink: #0F4F49;  --hero-btn-line: #D9E8E4;  --hero-pay: #12665F;
+  /* Home's top band (27 Nov, C2): brand teal fading into the page, a mint glow top-right. */
+  --home-band-top: #12665F;  --home-band-sub: #D2EFE8;
+  --home-band: radial-gradient(70% 60% at 100% 0%, rgba(143,233,203,.55), transparent 70%), linear-gradient(180deg, #12665F 0%, #2A8077 45%, rgba(245,244,240,0) 100%);
   --shadow-1: 0 1px 3px rgba(16,24,32,0.06), 0 1px 2px rgba(16,24,32,0.04);
   --shadow-2: 0 4px 16px rgba(16,24,32,0.08), 0 2px 6px rgba(16,24,32,0.04);
   --shadow-3: 0 12px 32px rgba(16,24,32,0.12), 0 4px 12px rgba(16,24,32,0.06);
@@ -1029,6 +1038,8 @@ html.mp-theme-curtain::view-transition-new(root) { animation: mpThemeCurtain 0.5
 .mp-glass-header[data-scrolled] { background: transparent !important; }
 #root .mp-glass-header::before { opacity: 0; transition: opacity .2s ease; }
 #root .mp-glass-header[data-scrolled]::before { opacity: 1; }
+/* Home's header on the teal top band: see-through until the page scrolls, so the band's glow shows. */
+.mp-glass-header.mp-on-band:not([data-scrolled]) { background: transparent !important; }
 /* The bottom nav's last 3px are solid: at the very bottom of the screen the
    blur has nothing below it to read and drew a dark line there. */
 #root .mp-frost-bottom::after {
