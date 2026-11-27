@@ -8,7 +8,7 @@
 import { useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, Check, ChevronDown, Clock, Copy, ExternalLink, Share2, X, Zap } from 'lucide-react'
+import { ArrowLeft, BadgeCheck, Check, ChevronDown, Clock, Copy, ExternalLink, Share2, X, Zap } from 'lucide-react'
 import { useBackLayer } from '@/lib/backLayers'
 import { DESKTOP_QUERY, EASE_OUT, PAGE_TRANSITION } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -34,6 +34,10 @@ export interface TxParty {
   you?: boolean
   /** A small tag beside the name, e.g. "SHOP". */
   tag?: string
+  /** A verified business: a check after its name. */
+  verified?: boolean
+  /** A picture for the circle (a store's logo) instead of the person's photo. */
+  photo?: string
   actions?: { label: string; onClick: () => void; busy?: boolean }[]
 }
 
@@ -56,6 +60,8 @@ export interface TxDetail {
   steps: ReactNode[]
   whenLabel: string
   when: string
+  /** Short references shown in full with a copy button, e.g. a receipt number. */
+  refs?: { label: string; value: string }[]
   hashes: { label: string; hash: string }[]
   detailsTitle: string
   details: { label: string; value: ReactNode; href?: string; tone?: 'ok' | 'bad' }[]
@@ -142,6 +148,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
       `Status: ${d.status === 'success' ? 'Successful' : d.status === 'pending' ? 'Processing' : 'Failed'}`,
       ...(d.parties ?? []).map(p => `${p.label}: ${p.you ? 'You' : p.name}${p.handle ? ` (${p.handle})` : ''}${p.address ? ` ${p.address}` : ''}${p.chain ? ` on ${p.chain}` : ''}`),
       `${d.whenLabel}: ${d.when}`,
+      ...(d.refs ?? []).map(r => `${r.label} ${r.value}`),
       ...d.hashes.map(h => `${h.label}: ${h.hash}`),
       ...d.details.filter(r => typeof r.value === 'string' && !r.href).map(r => `${r.label}: ${r.value}`),
       ...d.details.filter(r => r.href).flatMap(r => ['', `${typeof r.value === 'string' ? r.value : r.label}:`, r.href!]),
@@ -244,6 +251,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                     <div style={{ fontSize: 13, fontWeight: 700, color: muted }}>{p.label}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 19, fontWeight: 800, letterSpacing: '-.3px', marginTop: 4, minWidth: 0 }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.you ? 'You' : p.name}</span>
+                      {p.verified && <BadgeCheck size={19} color="#fff" fill="var(--success)" aria-label="Verified business" style={{ flexShrink: 0 }} />}
                       {p.tag && <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 6, color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 12%, transparent)', flexShrink: 0 }}>{p.tag}</span>}
                     </div>
                     {p.chain && (
@@ -277,8 +285,10 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                   <span aria-hidden style={{ position: 'relative', overflow: 'hidden', width: 50, height: 50, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 17,
                     color: p.you ? 'var(--warning-text)' : 'var(--brand-text)',
                     background: p.you ? 'color-mix(in srgb, var(--warning) 16%, transparent)' : 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>
-                    {initials(p.handle || p.name)}
-                    <UserPhoto name={p.handle} />
+                    {initials(p.photo ? p.name : p.handle || p.name)}
+                    {p.photo
+                      ? <img src={p.photo} alt="" onError={e => { e.currentTarget.style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', background: 'var(--surface)' }} />
+                      : <UserPhoto name={p.handle} />}
                   </span>
                 </div>
               </Rv>
@@ -298,8 +308,13 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
             </Rv>)}
 
             <Rv i={2 + Math.max(d.parties?.length ?? 0, d.recipients?.length ? 1 : 0)}>
-            {d.hashes.length > 0 && line}
+            {(d.hashes.length > 0 || !!d.refs?.length) && line}
             <div style={{ fontSize: 14, lineHeight: 1.9 }}>
+              {(d.refs ?? []).map(r => (
+                <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ color: muted }}>{r.label}</span> <b style={{ fontWeight: 700 }}>{r.value}</b> <CopyBtn value={r.value} what={r.label.replace(/\.$/, '')} />
+                </div>
+              ))}
               {d.hashes.map(h => (
                 <div key={h.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ color: muted }}>{h.label}</span> {short(h.hash)} <CopyBtn value={h.hash} what="Transaction hash" />
