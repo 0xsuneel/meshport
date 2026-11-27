@@ -464,12 +464,14 @@ export function activityMove(record: ActivityRecord): MoveBreakdown | null {
 export const networkFeeLabel = (record: ActivityRecord) =>
   (record.metadata as any)?.route === 'ub' ? 'Gateway fee' : 'Circle fee'
 
-export function ActivityRow({ record, onSelect, flash, inPanel }: {
+export function ActivityRow({ record, onSelect, flash, inPanel, textScale = 1 }: {
   record: ActivityRecord; isFirst: boolean; isLast: boolean; onSelect: () => void
   /** The row whose details were just closed - flashes once. */
   flash?: boolean
   /** Inside a desktop history panel (16px sides, like Swap's). */
   inPanel?: boolean
+  /** Text size factor (Home's Recent activity: 0.9). */
+  textScale?: number
 }) {
   const {
     metadata, amount, tokenSymbol, createdAt,
@@ -520,14 +522,14 @@ export function ActivityRow({ record, onSelect, flash, inPanel }: {
 
       {/* Details */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', ...oneLine }}>{title}</div>
+        <div style={{ fontSize: 14 * textScale, fontWeight: 600, color: 'var(--text-primary)', ...oneLine }}>{title}</div>
         {subtitle ? (
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 11 * textScale, color: 'var(--text-secondary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {subtitle}
           </div>
         ) : null}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, ...oneLine }}>
-          <span style={{ fontSize: 11, color: statusColor, fontWeight: 600, flexShrink: 0 }}>{statusLabel}</span>
+          <span style={{ fontSize: 11 * textScale, color: statusColor, fontWeight: 600, flexShrink: 0 }}>{statusLabel}</span>
           {/* BUG FIX: claim rows already show the source chain as the
               subtitle right above ("Claimed from" / "Linea") - showing it
               again here duplicated the chain name on the same card, and
@@ -542,24 +544,24 @@ export function ActivityRow({ record, onSelect, flash, inPanel }: {
               on top of the row below it. Every swap on this app happens on
               Arc anyway (there's no cross-chain swap), so the chain label
               wasn't adding information here, just length. */}
-          {(chain && !isClaim && !isSwap) ? <><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{chain}</span></> : null}
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>· {timeAgo(createdAt)}</span>
+          {(chain && !isClaim && !isSwap) ? <><span style={{ fontSize: 11 * textScale, color: 'var(--text-muted)' }}>·</span><span style={{ fontSize: 11 * textScale, color: 'var(--text-muted)' }}>{chain}</span></> : null}
+          <span style={{ fontSize: 11 * textScale, color: 'var(--text-muted)', flexShrink: 0 }}>· {timeAgo(createdAt)}</span>
         </div>
         {/* Why it failed - one line here, the full sentence in the receipt. */}
         {isRecovery ? (
-          <div style={{ fontSize: 11, color: 'var(--warning-text)', marginTop: 2, ...oneLine }}>Tap to finish it in Recover</div>
+          <div style={{ fontSize: 11 * textScale, color: 'var(--warning-text)', marginTop: 2, ...oneLine }}>Tap to finish it in Recover</div>
         ) : reason ? (
-          <div style={{ fontSize: 11, color: 'var(--danger-text)', marginTop: 2, ...oneLine }} title={reason}>{reason}</div>
+          <div style={{ fontSize: 11 * textScale, color: 'var(--danger-text)', marginTop: 2, ...oneLine }} title={reason}>{reason}</div>
         ) : null}
       </div>
 
       {/* Amount */}
       {isSwap && !isFailed ? (
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: 12 * textScale, fontWeight: 600, color: 'var(--text-secondary)' }}>
             -{formatAmt(metadata.amountIn ?? amount, metadata.tokenIn || tokenSymbol)} {metadata.tokenIn || tokenSymbol || 'USDC'}
           </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--success-text)', marginTop: 2 }}>
+          <div style={{ fontSize: 14 * textScale, fontWeight: 700, color: 'var(--success-text)', marginTop: 2 }}>
             +{formatAmt(metadata.amountOut ?? 0, metadata.tokenOut)} {metadata.tokenOut || '?'}
           </div>
         </div>
@@ -569,7 +571,7 @@ export function ActivityRow({ record, onSelect, flash, inPanel }: {
         // shortens instead. Only if even that can't fit, the token moves under
         // the number - the number itself never breaks.
         <div style={{ textAlign: 'right', flex: '0 1 auto', minWidth: 'min-content' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: amountColor, textDecoration: isFailed && !isRecovery ? 'line-through' : undefined }}>
+          <div style={{ fontSize: 14 * textScale, fontWeight: 700, color: amountColor, textDecoration: isFailed && !isRecovery ? 'line-through' : undefined }}>
             <span style={{ whiteSpace: 'nowrap' }}>{amountPrefix}{formatAmt(isSwap ? (metadata.amountIn ?? amount) : amount, isSwap ? (metadata.tokenIn || tokenSymbol) : tokenSymbol)}</span>{' '}
             <span style={{ whiteSpace: 'nowrap' }}>{(isSwap ? metadata.tokenIn : null) || tokenSymbol || 'USDC'}</span>
           </div>

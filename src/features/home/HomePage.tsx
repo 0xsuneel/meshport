@@ -1779,9 +1779,9 @@ function MultichainHubCard({
             )}
           </button>
         </span>
-        <span style={{ width: 31, height: 31, borderRadius: '50%', background: 'var(--accent)',
+        <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <ActionIcon name="hub" size={16} />
+          <ActionIcon name="hub" size={14} />
         </span>
       </div>
 
@@ -1807,9 +1807,6 @@ function MultichainHubCard({
         </div>
       </div>
 
-      {/* Bottom room, kept so the card is the same height: the figures grew
-          by what this gave up (the pager dots moved under the pills). */}
-      <div aria-hidden style={{ height: 11 }} />
 
     </BowedShapeCard>
   )
@@ -1980,10 +1977,10 @@ function AssetBox({ icon, fallbackColor, fallbackChar, name, value, amount, hidd
         {ok
           ? <img src={icon} alt="" width={22} height={22} decoding="async" onError={() => setOk(false)} style={{ borderRadius: '50%', flexShrink: 0 }} />
           : <span style={{ width: 22, height: 22, borderRadius: '50%', background: fallbackColor, color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{fallbackChar}</span>}
-        <span style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+        <span style={{ fontSize: 11.25, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
       </span>
-      <span style={{ display: 'block', marginTop: 5, fontSize: 16, fontWeight: 750, letterSpacing: '-0.3px', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums' }}>{hidden ? '••••' : value}</span>
-      <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums' }}>{hidden ? '••••' : amount}</span>
+      <span style={{ display: 'block', marginTop: 5, fontSize: 14.5, fontWeight: 750, letterSpacing: '-0.3px', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums' }}>{hidden ? '••••' : value}</span>
+      <span style={{ display: 'block', fontSize: 10, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums' }}>{hidden ? '••••' : amount}</span>
     </button>
   )
 }
@@ -4305,8 +4302,8 @@ export function HomePage() {
           <>
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.3px' }}>Assets</span>
-              <button onClick={handleFaucet} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 15, color: 'var(--brand-text)', fontWeight: 500 }}>
+              <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.3px' }}>Assets</span>
+              <button onClick={handleFaucet} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13.5, color: 'var(--brand-text)', fontWeight: 500 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3s6 6.5 6 10.5a6 6 0 01-12 0C6 9.5 12 3 12 3z" stroke="var(--brand-text)" strokeWidth="1.8" strokeLinejoin="round"/></svg>
                 Faucet
               </button>
@@ -4322,8 +4319,8 @@ export function HomePage() {
           </div>
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.3px' }}>Recent activity</span>
-              <button type="button" onClick={() => navigate('/activity')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 15, fontWeight: 500, color: 'var(--brand-text)' }}>View all ›</button>
+              <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.3px' }}>Recent activity</span>
+              <button type="button" onClick={() => navigate('/activity')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13.5, fontWeight: 500, color: 'var(--brand-text)' }}>View all ›</button>
             </div>
             <div style={{ background: 'var(--glass-fill)', borderRadius: 22, border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--glass-card)', padding: '2px 0' }}>
               {!homeActivityLoaded ? (
@@ -4341,12 +4338,12 @@ export function HomePage() {
                 </div>
               ) : homeRecentActivity.length === 0 ? (
                 <div style={{ padding: '18px 16px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>No payments yet</div>
-                  <button type="button" onClick={() => navigate('/pay')} style={{ marginTop: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>Pay someone ›</button>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>No payments yet</div>
+                  <button type="button" onClick={() => navigate('/pay')} style={{ marginTop: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, color: 'var(--brand-text)' }}>Pay someone ›</button>
                 </div>
               ) : homeRecentActivity.slice(0, 3).map((r, i, list) => (
                 <ActivityRow key={r.id} record={r} isFirst={i === 0} isLast={i === list.length - 1}
-                  onSelect={() => { recentFlash.opened(); setSelectedActivity(r) }} flash={r.id === recentFlash.flashId} />
+                  onSelect={() => { recentFlash.opened(); setSelectedActivity(r) }} flash={r.id === recentFlash.flashId} textScale={0.9} />
               ))}
             </div>
           </div>
