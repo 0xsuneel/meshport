@@ -36,6 +36,7 @@ import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 import { LockBadge } from '@/components/LockedFeature'
 import { RecentNewsRow } from './RecentNewsRow'
 import { useStatusBarTint } from '@/lib/statusBarTint'
+import { PUSH_OPEN_MS } from '@/lib/motion'
 import { useThemeStore, resolveTheme } from '@/store/themeStore'
 import { HomeTabs, TabAction } from './HomeTabs'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -1985,6 +1986,9 @@ function AssetBox({ icon, fallbackColor, fallbackChar, name, value, amount, hidd
   )
 }
 
+// Bottom-nav roots (useNavDirection's TAB_ROOTS): switching to one is instant.
+const HOME_TAB_ROOTS = new Set(['/', '/chat', '/scanner', '/rewards', '/business', '/activity'])
+
 const PAY_BUTTONS = [
   { label: 'Pay',     path: '/pay',     icon: 'pay' as const,     accent: true },
   { label: 'Receive', path: '/receive', icon: 'receive' as const, accent: false },
@@ -2706,7 +2710,11 @@ export function HomePage() {
   const stickyHeaderRef = useRef<HTMLDivElement>(null)
   // Phone: the status bar takes the top band's teal while Home is up.
   const themeMode = useThemeStore(s => s.mode)
-  useStatusBarTint(isDesktop ? null : resolveTheme(themeMode) === 'dark' ? '#0E4F49' : '#12665F')
+  // Held through the page slide (PUSH_OPEN_MS) when a page opens over Home, so
+  // the bar doesn't change while Home is still on view; a bottom-tab switch is
+  // instant, so then it goes at once.
+  useStatusBarTint(isDesktop ? null : resolveTheme(themeMode) === 'dark' ? '#0E4F49' : '#12665F',
+    () => (HOME_TAB_ROOTS.has(window.location.pathname.replace(/\/$/, '') || '/') ? 0 : PUSH_OPEN_MS))
   // The header frosts only once something has scrolled under it: its blur
   // reaches past its bottom edge (index.css, "Frosted bars"), so at the top
   // of the page it picked up the balance card's teal. Written straight to the

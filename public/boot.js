@@ -44,6 +44,17 @@
           var mtc = document.createElement('meta');
           mtc.name = 'theme-color'; mtc.id = 'mp-theme-color';
           mtc.content = resolved === 'dark' ? '#000000' : '#F3F5F7';
+          // Opening straight onto Home on a phone (signed in, no lock screen):
+          // the bar starts in Home's teal band colour, so it doesn't go page
+          // colour first and then teal (HomePage tints it the same).
+          try {
+            var a = JSON.parse(localStorage.getItem('meshport-auth-v4') || 'null');
+            var st = a && a.state;
+            if (st && st.isAuthenticated && !st.isLocked && !st.passcodeLockEnabled
+                && (location.pathname === '/' || location.pathname === '') && window.innerWidth < 980) {
+              mtc.content = resolved === 'dark' ? '#0E4F49' : '#12665F';
+            }
+          } catch (e2) { /* page colour */ }
           document.head.insertBefore(mtc, document.head.firstChild);
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'dark');
