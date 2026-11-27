@@ -1982,7 +1982,9 @@ const HUB_BUTTONS = [
 // Taglines stay short (~24 characters): beside "Try now" on a phone a longer
 // one is cut off.
 // The banner's slides are the ads from Admin → Ads (lib/ads, 19 Nov 2026).
-function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onOpen: (path: string) => void; docked?: boolean; inCard?: boolean }) {
+function FeatureBanner({ height, onOpen, docked, inCard, tile }: { height: number; onOpen: (path: string) => void; docked?: boolean; inCard?: boolean
+  /** Phone Home (27 Nov): the big tile - large logo, title and text, Sponsored + dots, a round arrow; the whole card taps. */
+  tile?: boolean }) {
   const hub = useHubLabel()
   const ads = useAds('home')
   const [idx0, setIdx] = useState(0)
@@ -2008,19 +2010,56 @@ function FeatureBanner({ height, onOpen, docked, inCard }: { height: number; onO
   const bannerMoved = useRef(false)
   if (idx !== firstIdx.current) bannerMoved.current = true
   if (!b) return null
+  const swipe = {
+    onTouchStart: (e: React.TouchEvent) => { touchX.current = e.touches[0].clientX },
+    onTouchEnd: (e: React.TouchEvent) => {
+      if (touchX.current === null) return
+      const dx = e.changedTouches[0].clientX - touchX.current
+      touchX.current = null
+      if (Math.abs(dx) > 40) { e.preventDefault(); setUserMoved(true); setIdx(i => (i + (dx < 0 ? 1 : n - 1)) % n) }
+    },
+  }
+  if (tile) {
+    const title = b.sponsor ? b.title : hub(b.title)
+    return (
+      <div role="button" tabIndex={0} aria-label={`${title}: ${b.body}`} className="mp-press" {...swipe}
+        onClick={() => openAd(b, onOpen)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAd(b, onOpen) } }}
+        style={{ position: 'relative', overflow: 'hidden', height, borderRadius: 22, cursor: 'pointer', boxSizing: 'border-box',
+          background: 'linear-gradient(135deg, color-mix(in srgb, var(--brand) 92%, #fff), color-mix(in srgb, var(--brand) 70%, #000))',
+          border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 16, padding: '0 18px' }}>
+        <div aria-hidden style={{ position: 'absolute', left: -20, top: -40, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
+        <div key={idx} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 220ms var(--ease-out)' : undefined }}>
+          <AdArt ad={b} size={76} radius={22} onBrand />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 19, fontWeight: 800, color: '#fff', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.body}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 9, minHeight: 18 }}>
+              {b.sponsor && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#fff', background: 'rgba(255,255,255,0.16)', borderRadius: 6, padding: '2px 7px' }}>Sponsored</span>}
+              {n > 1 && (
+                <span style={{ position: 'relative', display: 'flex', gap: 4 }}>
+                  {ads.map((_, i) => <span key={i} style={{ width: 5, height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.35)' }} />)}
+                  <span aria-hidden style={{ position: 'absolute', top: 0, left: -5.5, width: 16, height: 5, borderRadius: 3, background: '#fff',
+                    transform: `translateX(${idx * 9}px)`, transition: 'transform 200ms var(--ease-out)' }} />
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        <span aria-hidden style={{ position: 'relative', flexShrink: 0, width: 40, height: 40, borderRadius: '50%', background: '#fff', color: 'color-mix(in srgb, var(--brand) 75%, #000)', display: 'grid', placeItems: 'center' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </span>
+        <style>{`@keyframes mpBannerIn { from { opacity: 0.5; transform: translateX(14px) } to { opacity: 1; transform: none } }`}</style>
+      </div>
+    )
+  }
   return (
     <div
       role="button"
       aria-label={b ? `${b.sponsor ? b.title : hub(b.title)}: ${b.body}` : undefined}
       className={docked ? undefined : 'mp-press'}
       onClick={() => { if (b) openAd(b, onOpen) }}
-      onTouchStart={e => { touchX.current = e.touches[0].clientX }}
-      onTouchEnd={e => {
-        if (touchX.current === null) return
-        const dx = e.changedTouches[0].clientX - touchX.current
-        touchX.current = null
-        if (Math.abs(dx) > 40) { e.preventDefault(); setUserMoved(true); setIdx(i => (i + (dx < 0 ? 1 : n - 1)) % n) }
-      }}
+      {...swipe}
       style={docked ? {
         // Its own card 14px under the hero card (the column's gap is 18).
         position: 'relative', zIndex: 1, overflow: 'hidden', cursor: 'pointer',
@@ -4106,7 +4145,7 @@ export function HomePage() {
                   dot={ongoingTradesCount > 0 && !homeTileIds.includes('p2p')} />
               </>
             } />
-            <FeatureBanner height={64} onOpen={path => navigate(path)} />
+            <FeatureBanner height={116} tile onOpen={path => navigate(path)} />
           </>
         ))}
 
