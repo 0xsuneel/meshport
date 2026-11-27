@@ -93,7 +93,9 @@ export function moveSteps(p: {
     { label: 'Mint on Arc', upcoming: 'USDC lands in your Arc wallet', active: "Circle's forwarder is minting on Arc…", done: 'USDC is in your Arc wallet', eta: 'a few seconds' },
   ]
   return [
-    { label: `Deposit on ${from}`, upcoming: `Move ${usdc} into Unified Balance`, active: `Moving ${usdc} into Unified Balance on ${from}…`, done: 'USDC is in your Unified Balance', eta: 'under a minute' },
+    // Circle Gateway counts a deposit only once the source chain makes it
+    // final (the step below) - until then it is sent, not yet usable.
+    { label: `Deposit on ${from}`, upcoming: `Move ${usdc} into Unified Balance`, active: `Moving ${usdc} into Unified Balance on ${from}…`, done: p.fastFinality ? 'USDC is in your Unified Balance' : `Sent to your Unified Balance – counted once ${from} makes it final`, eta: 'under a minute' },
     { label: 'Sign transfer', upcoming: 'Authorize the move to Arc', active: 'Signing and handing it to MeshPort…', done: 'MeshPort finishes the rest', eta: 'a second or two' },
     { label: `${from} finality`, upcoming: 'Needed before Circle Gateway can send it', active: `Waiting for ${from} to make the deposit final…`, done: `${from} confirmed the deposit`, eta: p.fastFinality ? 'under a minute' : 'up to 15 minutes' },
     { label: 'Mint on Arc', upcoming: 'USDC lands in your Arc wallet', active: 'Circle Gateway is sending to your Arc wallet…', done: 'USDC is in your Arc wallet', eta: 'a few seconds' },
