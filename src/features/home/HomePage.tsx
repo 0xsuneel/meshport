@@ -1756,22 +1756,22 @@ function MultichainHubCard({
           on the right (replaces the old centered title + translucent
           globe badge, per the approved reference layout). */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.6, fontWeight: 500, letterSpacing: '0.2px', color: 'var(--text-secondary)' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, letterSpacing: '0.1px', color: 'var(--text-secondary)' }}>
           {hub('Multichain Hub')}
           <button onClick={onToggleHidden} aria-label="Toggle balance visibility" className="mp-hit"
             style={{ width: 24, height: 24, borderRadius: '50%', background: 'transparent', border: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             {balanceHidden ? (
               <svg width="17" height="14" viewBox="0 0 22 18" fill="none">
-                <path d="M2 2l18 14" stroke="var(--text-secondary)" strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke="var(--text-secondary)" strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke="var(--text-secondary)" strokeWidth="1.5" strokeLinecap="round"/>
-                <circle cx="11" cy="9" r="3" stroke="var(--text-secondary)" strokeWidth="1.5"/>
+                <path d="M2 2l18 14" stroke="var(--text-secondary)" strokeWidth="1.9" strokeLinecap="round"/>
+                <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke="var(--text-secondary)" strokeWidth="1.9" strokeLinecap="round"/>
+                <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke="var(--text-secondary)" strokeWidth="1.9" strokeLinecap="round"/>
+                <circle cx="11" cy="9" r="3" stroke="var(--text-secondary)" strokeWidth="1.9"/>
               </svg>
             ) : (
               <svg width="17" height="12" viewBox="0 0 22 16" fill="none">
-                <ellipse cx="11" cy="8" rx="10" ry="7" stroke="var(--text-secondary)" strokeWidth="1.5"/>
-                <circle cx="11" cy="8" r="3" stroke="var(--text-secondary)" strokeWidth="1.5"/>
+                <ellipse cx="11" cy="8" rx="10" ry="7" stroke="var(--text-secondary)" strokeWidth="1.9"/>
+                <circle cx="11" cy="8" r="3" stroke="var(--text-secondary)" strokeWidth="1.9"/>
               </svg>
             )}
           </button>
@@ -1895,22 +1895,22 @@ function AvailableBalanceCard({
   return (
     <BowedShapeCard background="var(--glass-fill)" cardRef={cardRef} flat>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.7, color: 'var(--text-secondary)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
           Total balance
           <button onClick={onToggleHidden} aria-label="Toggle balance visibility" className="mp-hit"
             style={{ width: 24, height: 24, borderRadius: '50%', background: 'transparent', border: 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             {balanceHidden ? (
               <svg width="15" height="12.5" viewBox="0 0 22 18" fill="none">
-                <path d="M2 2l18 14" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke={eyeStroke} strokeWidth="1.5" strokeLinecap="round"/>
-                <circle cx="11" cy="9" r="3" stroke={eyeStroke} strokeWidth="1.5"/>
+                <path d="M2 2l18 14" stroke={eyeStroke} strokeWidth="1.9" strokeLinecap="round"/>
+                <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke={eyeStroke} strokeWidth="1.9" strokeLinecap="round"/>
+                <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke={eyeStroke} strokeWidth="1.9" strokeLinecap="round"/>
+                <circle cx="11" cy="9" r="3" stroke={eyeStroke} strokeWidth="1.9"/>
               </svg>
             ) : (
               <svg width="15" height="11" viewBox="0 0 22 16" fill="none">
-                <ellipse cx="11" cy="8" rx="10" ry="7" stroke={eyeStroke} strokeWidth="1.5"/>
-                <circle cx="11" cy="8" r="3" stroke={eyeStroke} strokeWidth="1.5"/>
+                <ellipse cx="11" cy="8" rx="10" ry="7" stroke={eyeStroke} strokeWidth="1.9"/>
+                <circle cx="11" cy="8" r="3" stroke={eyeStroke} strokeWidth="1.9"/>
               </svg>
             )}
           </button>
@@ -2707,6 +2707,15 @@ export function HomePage() {
   const tileView = useTileView()
   const saveHomeTileIds = useCallback((ids: string[]) => { setSavedHomeTiles(ids); saveHomeTiles(ids) }, [])
   // Mobile hero cards (27 Nov): each card's own buttons - 40px pills.
+  // Personal hero rail: which card is on screen (for the pager dots).
+  const heroRailRef = useRef<HTMLDivElement>(null)
+  const [heroIdx, setHeroIdx] = useState(0)
+  const onHeroRailScroll = () => {
+    const r = heroRailRef.current
+    if (!r || !r.clientWidth) return
+    const i = r.scrollLeft > r.clientWidth / 2 ? 1 : 0
+    setHeroIdx(prev => (prev === i ? prev : i))
+  }
   const heroCardStyle: React.CSSProperties = {
     // 27 Nov: the same card as the rest of Home (no brand teal) - dark grey or white with the theme.
     padding: '12px 0 14px', background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: 20,
@@ -4095,11 +4104,14 @@ export function HomePage() {
                 {heroButtons(PAY_BUTTONS)}
               </div>
             ) : (
-              <div className="no-scrollbar" aria-label="Balance and Multichain Hub" style={{
-                display: 'flex', gap: 10, overflowX: 'auto', overflowY: 'hidden', scrollSnapType: 'x mandatory', overscrollBehaviorX: 'contain',
+              // Personal (27 Nov): full-width cards, the same size as a business
+              // account's balance card; swipe (or tap a dot) for the Multichain Hub.
+              <>
+              <div ref={heroRailRef} className="no-scrollbar" aria-label="Balance and Multichain Hub" onScroll={onHeroRailScroll} style={{
+                display: 'flex', gap: 20, overflowX: 'auto', overflowY: 'hidden', scrollSnapType: 'x mandatory', overscrollBehaviorX: 'contain',
                 margin: '0 -20px', padding: '0 20px', scrollPaddingInline: 20, WebkitOverflowScrolling: 'touch',
               }}>
-                <div style={{ ...heroCardStyle, flex: '0 0 calc(100% - 30px)', scrollSnapAlign: 'start' }}>
+                <div style={{ ...heroCardStyle, flex: '0 0 100%', scrollSnapAlign: 'start', scrollSnapStop: 'always' }}>
                   <AvailableBalanceCard
                     portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
                     walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
@@ -4107,7 +4119,7 @@ export function HomePage() {
                   />
                   {heroButtons(PAY_BUTTONS)}
                 </div>
-                <div style={{ ...heroCardStyle, flex: '0 0 calc(100% - 30px)', scrollSnapAlign: 'end' }}>
+                <div style={{ ...heroCardStyle, flex: '0 0 100%', scrollSnapAlign: 'start', scrollSnapStop: 'always' }}>
                   {/* Same content as before; it fills the card so its figures sit
                       level with the balance card's beside it. */}
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -4119,6 +4131,17 @@ export function HomePage() {
                   {heroButtons(HUB_BUTTONS)}
                 </div>
               </div>
+              {/* Pager dots: the white pill slides to the card on screen. */}
+              <div role="tablist" aria-label="Hero cards" style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
+                {[0, 1].map(i => (
+                  <button key={i} type="button" role="tab" aria-selected={heroIdx === i} aria-label={i === 0 ? 'Balance card' : 'Multichain Hub card'}
+                    onClick={() => { const r = heroRailRef.current; if (r) r.scrollTo({ left: i * (r.clientWidth), behavior: 'smooth' }) }}
+                    style={{ width: heroIdx === i ? 18 : 6, height: 6, padding: 0, border: 'none', borderRadius: 3, cursor: 'pointer',
+                      background: heroIdx === i ? 'var(--hero-pay)' : 'color-mix(in srgb, var(--text-primary) 22%, transparent)',
+                      transition: 'width .2s var(--ease-out), background .2s' }} />
+                ))}
+              </div>
+              </>
             )}
           </div>
         )}

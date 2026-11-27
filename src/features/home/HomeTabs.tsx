@@ -40,7 +40,7 @@ export function TabAction({ icon, label, ariaLabel, tone, onClick, dot, locked }
         {dot && <span aria-label="Open P2P trade" style={{ position: 'absolute', top: -3, right: -3, width: 11, height: 11, borderRadius: '50%', background: 'var(--danger)', border: '2px solid var(--surface)' }} />}
         {locked && <LockBadge />}
       </span>
-      <span style={{ maxWidth: '100%', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      <span style={{ maxWidth: '100%', fontSize: 'min(12px, 2.9vw)', letterSpacing: '-0.15px', fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
     </button>
   )
 }
