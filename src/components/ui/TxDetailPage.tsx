@@ -270,15 +270,6 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                       </div>
                     )}
                     {p.sub && <div style={{ fontSize: 13.5, color: muted, marginTop: 4 }}>{p.sub}</div>}
-                    {!!p.actions?.length && (
-                      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                        {p.actions.map(a => (
-                          <button key={a.label} type="button" onClick={a.onClick} disabled={a.busy}
-                            style={{ whiteSpace: 'nowrap', padding: '7px 14px', borderRadius: 999, border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--brand-text)',
-                              fontSize: 13.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: a.busy ? 0.6 : 1 }}>{a.busy ? 'Opening…' : a.label}</button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                   <span aria-hidden style={{ position: 'relative', overflow: 'hidden', width: 50, height: 50, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 17,
                     color: p.you ? 'var(--warning-text)' : 'var(--brand-text)',
@@ -289,6 +280,16 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                       : <UserPhoto name={p.handle} />}
                   </span>
                 </div>
+                {/* The buttons side by side across the card, never stacked. */}
+                {!!p.actions?.length && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    {p.actions.map(a => (
+                      <button key={a.label} type="button" onClick={a.onClick} disabled={a.busy}
+                        style={{ flex: '1 1 0', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '8px 6px', borderRadius: 999, border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--brand-text)',
+                          fontSize: 13.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: a.busy ? 0.6 : 1 }}>{a.busy ? 'Opening…' : a.label}</button>
+                    ))}
+                  </div>
+                )}
               </Rv>
             ))}
 

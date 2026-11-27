@@ -1075,12 +1075,12 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
         ...(shop && type === 'receive' ? [] : [{ label: type === 'send' ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(type === 'send' ? payAgainUrl(cpName, counterparty, metadata) : payAgainUrl(cpName, counterparty, null)) } }]),
         // A shop is paid, not chatted with (no chat card for Shop QR payments).
         ...(cpName && !biz && !shop ? [{ label: 'Chat', onClick: () => { void openChatWith(cpName) }, busy: openingChat }] : []),
-        ...(counterparty && !inHistory ? [{ label: 'View history', onClick: () => setHistoryWith({ address: counterparty, name: theirName, handle: theirHandle }) }] : []),
+        ...(counterparty && !inHistory ? [{ label: cpName && !biz && !shop ? 'History' : 'View history', onClick: () => setHistoryWith({ address: counterparty, name: theirName, handle: theirHandle }) }] : []),
       ],
     }
     txDetail = {
       title: 'Payment details', status: receiptStatus, amountLabel: 'Amount', amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC',
-      note: noteText || undefined, pill: shop ? { icon: 'qr', text: type === 'receive' ? 'Paid via Shop QR' : biz?.category || 'Shop payment' } : merchantOrderDetail ? { icon: 'list', text: orderWord }
+      note: noteText || undefined, pill: shop ? { icon: type === 'receive' ? 'receive' : 'qr', text: type === 'receive' ? 'Received' : biz?.category || 'Shop payment' } : merchantOrderDetail ? { icon: 'list', text: orderWord }
         : viaChat ? { icon: 'chat', text: type === 'send' ? 'Paid' : 'Received' }
         : type === 'send' ? { icon: 'pay', text: 'Paid' } : { icon: 'receive', text: 'Received' },
       reason: reasonNote ?? undefined,
