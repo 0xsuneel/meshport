@@ -14,12 +14,17 @@
 //     (MeshPort may be its event rent payer)
 //   - MeshPort's key appears in no instruction except as those rent payers,
 //     so it can't be a transfer source, owner or authority
+//   - a CCTP burn must pay MeshPort's Bring fee (feePolicy solanaBringFee)
+//     to the fee payer's own USDC account in the same transaction; that
+//     account can receive, never send. The burn's rent comes back to MeshPort
+//     5 days later (server/solana/reclaim.ts).
 //   - no address lookup tables, at most MAX_INSTRUCTIONS instructions
 
 import {
   createKeyPairFromBytes, getBase58Encoder, getCompiledTransactionMessageDecoder, getTransactionDecoder,
   partiallySignTransaction, type Address, type Transaction,
 } from '@solana/kit'
+import { solanaBringFee, FEE_ACCEPT_PCT } from '../../src/lib/feePolicy'
 
 export const USDC_MINT_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'
 export const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
@@ -58,10 +63,18 @@ export interface CheckedTransaction {
   accountsOpened: number
   /** CCTP burns to Arc (Bring Funds / settlement), in base units. */
   burnUnits: bigint
+  /** USDC paid to MeshPort's fee account in this transaction (a Bring's fee). */
+  feeUnits: bigint
 }
 
-/** Decode and check a user-signed transaction against the rules above. */
-export function checkFeePayerTransaction(bytes: Uint8Array, feePayer: string, usdcMint = USDC_MINT_DEVNET): CheckedTransaction {
+/**
+ * Decode and check a user-signed transaction against the rules above.
+ * `feeAccount` (MeshPort's fee payer's USDC account): a transaction with a
+ * CCTP burn must also pay MeshPort's Bring fee there (feePolicy
+ * solanaBringFee - the same rule as an EVM Bring), at least FEE_ACCEPT_PCT %
+ * of it, like the EVM relayer accepts.
+ */
+export function checkFeePayerTransaction(bytes: Uint8Array, feePayer: string, usdcMint = USDC_MINT_DEVNET, feeAccount?: string): CheckedTransaction {
   if (bytes.length === 0 || bytes.length > MAX_TX_BYTES) refuse('Transaction size is not valid')
   let transaction: Transaction
   try { transaction = getTransactionDecoder().decode(bytes) } catch { return refuse('Not a Solana transaction') }
@@ -83,6 +96,7 @@ export function checkFeePayerTransaction(bytes: Uint8Array, feePayer: string, us
   let usdcUnits = 0n
   let accountsOpened = 0
   let burnUnits = 0n
+  let feeUnits = 0n
   for (const ix of instructions) {
     const program = accounts[ix.programAddressIndex]
     const keys = (ix.accountIndices ?? []).map(i => accounts[i])
@@ -114,7 +128,9 @@ export function checkFeePayerTransaction(bytes: Uint8Array, feePayer: string, us
       if (keys.length < 4 || keys[1] !== usdcMint) refuse('Only USDC transfers are allowed')
       if (data[9] !== 6) refuse('USDC has 6 decimals')
       if (keys.includes(feePayer)) refuse("MeshPort's fee payer can't take part in a transfer")
-      usdcUnits += u64le(data, 1)
+      if (feeAccount && keys[0] === feeAccount) refuse("MeshPort's fee account can't send")
+      if (feeAccount && keys[2] === feeAccount) feeUnits += u64le(data, 1)
+      else usdcUnits += u64le(data, 1)
       continue
     }
 
@@ -147,7 +163,11 @@ export function checkFeePayerTransaction(bytes: Uint8Array, feePayer: string, us
 
     refuse('This kind of transaction is not paid for by MeshPort')
   }
-  return { transaction, usdcUnits, accountsOpened, burnUnits }
+  if (feeAccount && burnUnits > 0n) {
+    const required = solanaBringFee(burnUnits + feeUnits)
+    if (feeUnits * 100n < required * FEE_ACCEPT_PCT) refuse("MeshPort's fee is missing from this Bring - refresh the app and try again")
+  }
+  return { transaction, usdcUnits, accountsOpened, burnUnits, feeUnits }
 }
 
 /** MeshPort's fee payer keys from its 64-byte secret (base58, as stored in Vercel). */

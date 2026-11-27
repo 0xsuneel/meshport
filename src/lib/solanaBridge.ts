@@ -10,6 +10,7 @@
 
 import { getBase64Decoder } from '@solana/kit'
 import { buildSolanaBurnToArc, quoteSolanaToArc } from './solanaCctp'
+import { solanaBringFee } from './feePolicy'
 
 async function api<T>(body?: unknown): Promise<T> {
   const { authApiHeaders } = await import('@/lib/supabase')
@@ -40,6 +41,8 @@ export interface SolanaBring {
   signature: string
   /** USDC (base units) burned; Arc receives this minus Circle's fee. */
   amount: bigint
+  /** MeshPort's fee (base units), paid in the same transaction. */
+  fee: bigint
   maxFee: bigint
   confirmed: boolean
 }
@@ -60,10 +63,15 @@ export async function bringAccountSolanaToArc(arcAddress: string, amountUsdc: nu
 export async function bringSolanaToArc(p: {
   owner: string; arcRecipient: string; amount: bigint; sign: (wire: Uint8Array) => Promise<Uint8Array>
 }): Promise<SolanaBring> {
-  const [{ maxFee }, payer] = await Promise.all([quoteSolanaToArc(p.amount), solanaFeePayer()])
-  const unsigned = await buildSolanaBurnToArc({ owner: p.owner, arcRecipient: p.arcRecipient, amount: p.amount, maxFee, feePayer: payer })
+  // `amount` leaves the wallet: MeshPort's fee (the same rule as an EVM Bring)
+  // and the rest burned - as the EVM router does.
+  const fee = solanaBringFee(p.amount)
+  if (fee >= p.amount) throw new Error('This amount is too small to bring - nothing was sent.')
+  const burn = p.amount - fee
+  const [{ maxFee }, payer] = await Promise.all([quoteSolanaToArc(burn), solanaFeePayer()])
+  const unsigned = await buildSolanaBurnToArc({ owner: p.owner, arcRecipient: p.arcRecipient, amount: burn, maxFee, feePayer: payer, meshportFee: fee })
   const signed = await p.sign(unsigned)
   const transaction = getBase64Decoder().decode(signed)
   const r = await api<{ signature: string; confirmed: boolean }>({ transaction })
-  return { signature: r.signature, amount: p.amount, maxFee, confirmed: r.confirmed }
+  return { signature: r.signature, amount: burn, fee, maxFee, confirmed: r.confirmed }
 }

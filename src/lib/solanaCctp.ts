@@ -117,6 +117,8 @@ async function latestBlockhash(fetchImpl: typeof fetch): Promise<{ blockhash: Bl
  */
 export async function buildSolanaBurnToArc(p: {
   owner: string; arcRecipient: string; amount: bigint; maxFee: bigint; feePayer: string; fetchImpl?: typeof fetch
+  /** MeshPort's Bring fee (USDC units), paid in this same transaction to the fee payer's USDC account. */
+  meshportFee?: bigint
 }): Promise<Uint8Array> {
   if (p.amount <= 0n) throw new Error('Amount must be more than 0')
   if (p.maxFee >= p.amount) throw new Error('The amount must be more than the fee')
@@ -160,12 +162,25 @@ export async function buildSolanaBurnToArc(p: {
     ],
     data: burnData({ amount: p.amount, destinationDomain: ARC_DOMAIN, mintRecipient: evmToBytes32(p.arcRecipient), maxFee: p.maxFee, minFinality: FAST_FINALITY, hook: FORWARD_HOOK }),
   }
+  // MeshPort's fee: a USDC TransferChecked from the user's account to the fee
+  // payer's USDC account, in the same transaction as the burn (both or neither).
+  const fee = p.meshportFee ?? 0n
+  const feeIx: Instruction[] = fee > 0n ? [{
+    programAddress: TOKEN_PROGRAM,
+    accounts: [
+      { address: burnAccount, role: R.WRITABLE },
+      { address: mint, role: R.READONLY },
+      { address: await usdcTokenAccount(p.feePayer), role: R.WRITABLE },
+      { address: owner, role: R.READONLY_SIGNER },
+    ],
+    data: new Uint8Array([12, ...u64(fee), 6]),
+  }] : []
   const lifetime = await latestBlockhash(p.fetchImpl ?? fetch)
   const message = pipe(
     createTransactionMessage({ version: 0 }),
     m => setTransactionMessageFeePayer(feePayer, m),
     m => setTransactionMessageLifetimeUsingBlockhash(lifetime, m),
-    m => appendTransactionMessageInstructions([burn], m),
+    m => appendTransactionMessageInstructions([...feeIx, burn], m),
   )
   const tx = await partiallySignTransaction([event.keyPair], compileTransaction(message))
   return new Uint8Array(getTransactionEncoder().encode(tx))

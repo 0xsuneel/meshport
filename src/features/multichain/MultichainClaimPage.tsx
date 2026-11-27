@@ -986,9 +986,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     if (isSolanaChain(chainId)) {
       try {
         const { quoteSolanaToArc } = await import('@/lib/solanaBridge')
-        const q = await quoteSolanaToArc(BigInt(Math.round(amount * 1e6)))
+        // MeshPort's fee (as an EVM Bring) comes first; Circle's is on the rest.
+        const { solanaBringFee } = await import('@/lib/feePolicy')
+        const total = BigInt(Math.round(amount * 1e6))
+        const fee = solanaBringFee(total)
+        const q = await quoteSolanaToArc(total > fee ? total - fee : 0n)
         const bridgeFee = Number(q.maxFee) / 1e6
-        setFeeEstimate({ loading: false, error: '', totalFee: bridgeFee, receiverGets: Math.max(0, amount - bridgeFee), forKey: key, networkFee: 0, bridgeFee })
+        const networkFee = Number(fee) / 1e6
+        setFeeEstimate({ loading: false, error: '', totalFee: bridgeFee + networkFee, receiverGets: Math.max(0, amount - bridgeFee - networkFee), forKey: key, networkFee, bridgeFee })
       } catch (e: any) {
         setFeeEstimate({ loading: false, error: e?.message || 'Fee estimate unavailable', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0 })
       }
@@ -1486,12 +1491,12 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               amount: BigInt(Math.round(claimAmount * 1e6)), sign: signSolanaTransaction,
             })
             burned = true
-            setClaimFees(prev => ({ ...prev, [chain.chainId]: { meshport: 0, circleCap: Number(r.maxFee) / 1e6 } }))
+            setClaimFees(prev => ({ ...prev, [chain.chainId]: { meshport: Number(r.fee) / 1e6, circleCap: Number(r.maxFee) / 1e6 } }))
             setIsSubmitted(true)
             setChain(chain.chainId, 'attesting', 'Burn confirmed - Circle processing…', 65, { txHash: r.signature })
             notifyExternalBalanceChanged(chain.chainId, wallet.addr, { spent: claimAmount })
-            // No MeshPort fee: the whole amount was burned (Circle's fee comes out on Arc).
-            handOffBurn(chain.chainId, r.signature, claimAmount, 0)
+            // The claim is the burned amount: MeshPort's fee was paid in the same transaction.
+            handOffBurn(chain.chainId, r.signature, Number(r.amount) / 1e6, Number(r.fee) / 1e6)
             return { chainId: chain.chainId, amount: claimAmount }
           }
 

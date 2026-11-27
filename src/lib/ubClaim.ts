@@ -840,7 +840,7 @@ export async function merchantClaimAll(p: {
         if (c.chainId === 'Solana_Devnet') {
           const { bringAccountSolanaToArc } = await import('./solanaBridge')
           const r = await bringAccountSolanaToArc(p.walletAddress, amount)
-          const claim = await submitClaim({ walletAddress: p.walletAddress, sourceChain: c.chainId, amount, txHash: r.signature, meshportFee: 0 })
+          const claim = await submitClaim({ walletAddress: p.walletAddress, sourceChain: c.chainId, amount: Number(r.amount) / 1e6, txHash: r.signature, meshportFee: Number(r.fee) / 1e6 })
           out.cctp += amount
           step(c.chainId, 'done', 'On its way to Arc · about a minute', claim.claimId)
           continue

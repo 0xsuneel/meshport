@@ -65,6 +65,16 @@ export function arcWeiToUsdcUnits(wei: bigint): bigint {
   return (wei + 999_999_999_999n) / 1_000_000_000_000n
 }
 
+/**
+ * MeshPort's fee on a Solana Bring of `total` USDC units (fee included), the
+ * same rule as an EVM Bring. Paid in USDC inside the burn transaction, to
+ * MeshPort's fee payer's USDC account; MeshPort pays the SOL network fee and
+ * the burn's rent (returned to it 5 days later - server/solana/reclaim.ts).
+ */
+export function solanaBringFee(total: bigint): bigint {
+  return meshportFee(total, 0n, usdRule(CROSS_CHAIN_FEE, 6))
+}
+
 /** The relayer accepts a fee down to this share of its own quote (price moves since the quote); never below the gas floor. */
 export const FEE_ACCEPT_PCT = 90n
 export function feeAcceptable(fee: bigint, required: bigint, gasCost: bigint): boolean {

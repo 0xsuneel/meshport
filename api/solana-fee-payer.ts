@@ -15,6 +15,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getBase58Encoder, getBase64EncodedWireTransaction, getSignatureFromTransaction } from '@solana/kit'
 import { checkFeePayerTransaction, coSign, FeePayerError, feePayerKeys, openUsdcAccountTransaction, usdcTokenAccount } from '../server/solana/feePayer'
+import { attestedMessage, burnSignatureOf, reclaimableAccounts, reclaimTransaction } from '../server/solana/reclaim'
 
 const SOLANA_RPC = 'https://api.devnet.solana.com'
 const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
@@ -81,6 +82,73 @@ async function rpc<T>(method: string, params: unknown[]): Promise<T> {
   return j.result as T
 }
 
+async function sendAndConfirm(wireB64: string, signature: string): Promise<'confirmed' | 'failed' | 'sent'> {
+  await rpc('sendTransaction', [wireB64, { encoding: 'base64', preflightCommitment: 'confirmed' }])
+  for (let i = 0; i < 20; i++) {
+    await new Promise(r => setTimeout(r, 750))
+    const st = await rpc<{ value: Array<{ confirmationStatus?: string; err?: unknown } | null> }>('getSignatureStatuses', [[signature]]).catch(() => null)
+    const s = st?.value?.[0]
+    if (s?.err) return 'failed'
+    if (s?.confirmationStatus === 'confirmed' || s?.confirmationStatus === 'finalized') return 'confirmed'
+  }
+  return 'sent'
+}
+
+// MeshPort's fee on a Solana Bring is paid to the fee payer's own USDC
+// account (feePolicy solanaBringFee); opened once, the first time it's needed.
+let feeAccountReady: Promise<string> | null = null
+function ensureFeeAccount(): Promise<string> {
+  if (!feeAccountReady) {
+    feeAccountReady = (async () => {
+      const { keys, address } = await getPayer()
+      const account = await usdcTokenAccount(address)
+      const info = await rpc<{ value: unknown | null }>('getAccountInfo', [account, { encoding: 'base64', commitment: 'confirmed' }])
+      if (info.value) return account
+      const lt = await rpc<{ value: { blockhash: string; lastValidBlockHeight: number } }>('getLatestBlockhash', [{ commitment: 'confirmed' }])
+      const tx = await openUsdcAccountTransaction(address, keys, address, { blockhash: lt.value.blockhash, lastValidBlockHeight: BigInt(lt.value.lastValidBlockHeight) })
+      const outcome = await sendAndConfirm(getBase64EncodedWireTransaction(tx), getSignatureFromTransaction(tx))
+      if (outcome === 'failed') throw new Error("Couldn't open MeshPort's USDC fee account on Solana")
+      return account
+    })()
+    feeAccountReady.catch(() => { feeAccountReady = null })
+  }
+  return feeAccountReady
+}
+
+// Rent back from Circle (server/solana/reclaim.ts): MeshPort paid ~0.003 SOL
+// rent per Solana Bring's event account; 5 days later reclaim_event_account
+// returns it. POST { action: 'reclaim' } from MeshPort's daily job only
+// (Authorization: the internal secret /api/push uses), a few per run.
+function internalSecretOk(req: VercelRequest): boolean {
+  const secret = (process.env.PUSH_INTERNAL_SECRET || '').trim()
+  const h = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  if (!secret || h.length !== secret.length) return false
+  let diff = 0
+  for (let i = 0; i < secret.length; i++) diff |= secret.charCodeAt(i) ^ h.charCodeAt(i)
+  return diff === 0
+}
+const IRIS_SANDBOX = 'https://iris-api-sandbox.circle.com'
+async function reclaimRent(max = 6) {
+  const { keys, address } = await getPayer()
+  const due = await reclaimableAccounts(rpc, address, Math.floor(Date.now() / 1000))
+  const out: Array<{ account: string; lamports: number; result: string; signature?: string }> = []
+  for (const a of due.slice(0, max)) {
+    try {
+      const burn = await burnSignatureOf(rpc, a.account)
+      const att = burn ? await attestedMessage(IRIS_SANDBOX, burn) : null
+      if (!att) { out.push({ account: a.account, lamports: a.lamports, result: 'no attestation' }); continue }
+      const lt = await rpc<{ value: { blockhash: string; lastValidBlockHeight: number } }>('getLatestBlockhash', [{ commitment: 'confirmed' }])
+      const tx = await reclaimTransaction({ eventAccount: a.account, attestation: att.attestation, message: att.message, keys, feePayer: address,
+        lifetime: { blockhash: lt.value.blockhash, lastValidBlockHeight: BigInt(lt.value.lastValidBlockHeight) } })
+      const signature = getSignatureFromTransaction(tx)
+      out.push({ account: a.account, lamports: a.lamports, result: await sendAndConfirm(getBase64EncodedWireTransaction(tx), signature), signature })
+    } catch (e) {
+      out.push({ account: a.account, lamports: a.lamports, result: (e instanceof Error ? e.message : String(e)).slice(0, 120) })
+    }
+  }
+  return { due: due.length, done: out }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const started = Date.now()
   const send = (status: number, payload: unknown, note = '') => {
@@ -92,6 +160,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try { return send(200, { feePayer: (await getPayer()).address }) } catch { return send(503, { error: 'Solana fees are not available right now' }) }
   }
   if (req.method !== 'POST') return send(405, { error: 'GET or POST only' })
+
+  if ((req.body as { action?: string } | undefined)?.action === 'reclaim') {
+    if (!internalSecretOk(req)) return send(403, { error: 'Forbidden' })
+    try {
+      const r = await reclaimRent()
+      const back = r.done.filter(d => d.result === 'confirmed' || d.result === 'sent').reduce((s, d) => s + d.lamports, 0)
+      return send(200, r, ` reclaim: ${r.done.length}/${r.due} ${back / 1e9} SOL`)
+    } catch (e) {
+      console.error('[solana-fee-payer] reclaim', e instanceof Error ? e.message : e)
+      return send(502, { error: 'Reclaim failed' })
+    }
+  }
 
   const who = await caller(req)
   if (!who) return send(401, { error: 'Sign in to MeshPort first' })
@@ -138,7 +218,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const { keys, address } = await getPayer()
-    const checked = checkFeePayerTransaction(new Uint8Array(Buffer.from(b64, 'base64')), address)
+    const feeAccount = await usdcTokenAccount(address)
+    const checked = checkFeePayerTransaction(new Uint8Array(Buffer.from(b64, 'base64')), address, undefined, feeAccount)
+    // A Bring pays MeshPort's fee into that account: it must exist first (once).
+    if (checked.burnUnits > 0n) await ensureFeeAccount()
     // Accounts opened inside the transaction cost MeshPort rent too: same daily cap.
     if (checked.accountsOpened > 0 && !allowOpens(acct, clientIp(req), checked.accountsOpened)) {
       return send(429, { error: 'Too many new Solana accounts today - try again tomorrow' })
@@ -155,7 +238,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (s?.err) return send(422, { error: 'The transaction failed on Solana', signature }, ' failed on-chain')
       confirmed = s?.confirmationStatus === 'confirmed' || s?.confirmationStatus === 'finalized'
     }
-    return send(200, { signature, confirmed }, ` usdc=${checked.usdcUnits} opened=${checked.accountsOpened} burn=${checked.burnUnits}`)
+    return send(200, { signature, confirmed }, ` usdc=${checked.usdcUnits} opened=${checked.accountsOpened} burn=${checked.burnUnits} fee=${checked.feeUnits}`)
   } catch (e) {
     if (e instanceof FeePayerError) return send(400, { error: e.message }, ' refused')
     console.error('[solana-fee-payer]', e instanceof Error ? e.message : e)

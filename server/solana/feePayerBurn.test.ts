@@ -66,3 +66,20 @@ describe('Solana → Arc burn and the fee payer', () => {
     expect(() => checkFeePayerTransaction(swap(new TextEncoder().encode('cctp-forward'), new TextEncoder().encode('xxxx-forward')), payer)).toThrow(/Forwarding Service/)
   })
 })
+
+describe("MeshPort's fee on a Solana Bring", () => {
+  it('a burn paying the fee to the fee account is accepted; one without it is refused', async () => {
+    const { usdcTokenAccount } = await import('./feePayer')
+    const { solanaBringFee } = await import('../../src/lib/feePolicy')
+    const feeAccount = await usdcTokenAccount(payer)
+    const fee = solanaBringFee(2_000_000n)
+    const withFee = await buildSolanaBurnToArc({ owner: user, arcRecipient: ARC_ME, amount: 2_000_000n - fee, maxFee: 40_000n, feePayer: payer, meshportFee: fee, fetchImpl: blockhashRpc })
+    const checked = checkFeePayerTransaction(await userSigned(withFee), payer, undefined, feeAccount)
+    expect(checked.feeUnits).toBe(fee)
+    expect(checked.burnUnits).toBe(2_000_000n - fee)
+    const noFee = await buildSolanaBurnToArc({ owner: user, arcRecipient: ARC_ME, amount: 2_000_000n, maxFee: 40_000n, feePayer: payer, fetchImpl: blockhashRpc })
+    expect(() => checkFeePayerTransaction(noFee, payer, undefined, feeAccount)).toThrow()
+    const signedNoFee = await userSigned(noFee)
+    expect(() => checkFeePayerTransaction(signedNoFee, payer, undefined, feeAccount)).toThrow(/fee is missing/)
+  })
+})
