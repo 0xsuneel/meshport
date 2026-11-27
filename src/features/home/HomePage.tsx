@@ -3828,9 +3828,9 @@ export function HomePage() {
       position: 'relative',
     }}>
       {/* Phone: the brand-teal band at the top of Home (27 Nov, C2) - from the
-          status bar down past the balance card, fading into the page. It
+          status bar down behind the balance card, fading out before its bottom edge. It
           scrolls away with the page; the header stays teal glass. */}
-      {!isDesktop && <div aria-hidden style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 'calc(var(--safe-top) + 300px)', background: 'var(--home-band)', pointerEvents: 'none' }} />}
+      {!isDesktop && <div aria-hidden style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 'calc(var(--safe-top) + 235px)', background: 'var(--home-band)', pointerEvents: 'none' }} />}
 
       {/* ── HEADER - floating card, no border ─────────────────────────────── */}
       {/* Desktop: DesktopHeader already covers profile/search/notifications
