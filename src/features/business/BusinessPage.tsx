@@ -89,9 +89,9 @@ const bizCache = new Map<string, { raw: MerchantPayment[]; intents: MerchantInte
 /** Business accounts get their Business tab; staff of a business get staff mode. */
 /** Which business tab this page is (27 Nov: a business account's app is the
  *  business - Home, Payments, Collect, Customers and Account are its tabs). */
-const TAB_PATHS = new Set(['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/balance', '/biz/collect', '/biz/customers', '/biz/account'])
-export type BusinessRoot = 'home' | 'payments' | 'balance' | 'collect' | 'customers' | 'account'
-const ROOT_SCREEN: Partial<Record<BusinessRoot, ScreenId>> = { collect: 'receive', customers: 'customers', account: 'tools' }
+const TAB_PATHS = new Set(['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/balance', '/biz/customers', '/biz/account'])
+export type BusinessRoot = 'home' | 'payments' | 'balance' | 'customers' | 'account'
+const ROOT_SCREEN: Partial<Record<BusinessRoot, ScreenId>> = { customers: 'customers', account: 'tools' }
 
 /** Manage orders / money: a pushed page - or, on the Payments tab, the page itself. */
 function SubLayer({ root, open, covered, children }: { root: boolean; open: boolean; covered: boolean; children: ReactNode }) {
@@ -955,7 +955,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
         <ShopQrScreen open={stack.includes('qr')} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.publicName : null} handle={handle} storePick={screenStorePick} avatar={qrStore?.publicLogoUrl ?? userAvatar} />
       ))}
       {level('receive', (
-        <ReceiveScreen key={collectStart ?? 'qr'} only={rootScreen === 'receive' ? 'qr' : collectStart} open={stack.includes('receive')} onBack={() => { back(); reloadIntents(); setCollectStart(undefined) }} onChanged={reloadIntents} storeName={storeName}
+        <ReceiveScreen key={collectStart ?? 'qr'} only={collectStart} open={stack.includes('receive')} onBack={() => { back(); reloadIntents(); setCollectStart(undefined) }} onChanged={reloadIntents} storeName={storeName}
           shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.publicName : null }} storePick={screenStorePick} avatar={qrStore?.publicLogoUrl ?? userAvatar} />
       ))}
       {level('customers', (

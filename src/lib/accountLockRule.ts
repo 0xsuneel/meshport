@@ -51,7 +51,7 @@ export function computeAccountLock(s: Input, hint: Hint): AccountLock {
 // Routes a business that isn't approved can't open: the ones that take
 // payments. Everything else - sending, swaps, cross-chain, P2P, chat, Home,
 // Activity, settings, the Business tab and the application - stays open.
-const LOCKED_PREFIXES = ['/receive', '/splits', '/biz/collect']
+const LOCKED_PREFIXES = ['/receive', '/splits']
 export function isLockedPath(path: string): boolean {
   const p = (path.split(/[?#]/)[0] || '/').replace(/\/+$/, '') || '/'
   return LOCKED_PREFIXES.some(x => p === x || p.startsWith(x + '/'))

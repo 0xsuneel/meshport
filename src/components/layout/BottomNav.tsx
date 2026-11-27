@@ -78,7 +78,7 @@ export function getActiveTabId(pathname: string, tabList: { id: string; path: st
   return tabList.find(t => {
     if (t.path === '/') return pathname === '/'
     return pathname.startsWith(t.path)
-  })?.id ?? 'home'
+  })?.id ?? (pathname.startsWith('/business') ? '' : 'home')
 }
 
 export function BottomNav() {
@@ -180,7 +180,7 @@ export function BottomNav() {
   }, [user?.id, setUnreadChats])
 
   // Tab root paths - back button on any of these goes to Home (or exits if already Home)
-  const TAB_ROOTS = ['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/balance', '/biz/collect', '/biz/customers', '/biz/account']
+  const TAB_ROOTS = ['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/balance', '/biz/customers', '/biz/account']
 
   useEffect(() => {
     const isTabRoot = TAB_ROOTS.includes(location.pathname)

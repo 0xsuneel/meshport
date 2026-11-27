@@ -16,7 +16,7 @@ export type NavKind = 'forward' | 'back' | 'tab' | 'none'
 // Every bottom-nav root (merchants see /business where others see /rewards) -
 // must match BottomNav's own TAB_ROOTS so switching to/from the Business tab
 // cross-fades like every other tab instead of sliding like an opened page.
-const TAB_ROOTS = new Set(['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/balance', '/biz/collect', '/biz/customers', '/biz/account'])
+const TAB_ROOTS = new Set(['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/balance', '/biz/customers', '/biz/account'])
 const isAncestor = (a: string, b: string) => a !== '/' && b.startsWith(a.endsWith('/') ? a : a + '/')
 
 let last: { path: string; kind: NavKind } = { path: '', kind: 'none' }
