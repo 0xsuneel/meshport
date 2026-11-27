@@ -191,10 +191,12 @@ const cleanUsername = (v: string) => v.trim().replace(/^@/, '').replace(/\.arc$/
  *  composer (BillComposer), so they look and work the same; the order they
  *  make then shows here as a counter QR and a link, live until it's paid.
  *  Without `shopQr` (staff mode) only Request (and Bill for managers). */
-export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, storePick, avatar, startTab }: {
+export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, storePick, avatar, startTab, only }: {
   open: boolean; onBack: () => void; storeName: string
   /** Opened on this part (Home's Charge / Bill shortcuts); default the Shop QR. */
   startTab?: CollectTab
+  /** Its own page (business app): just this part - Shop QR, Charge or Bill - no tabs. */
+  only?: CollectTab
   /** The business's logo, in the phone's title. */
   avatar?: string | null
   shopQr?: { outlet?: string | null; handle: string }
@@ -214,7 +216,8 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   const { canBill, savedItems = true, log = defaultLog, chat = false } = useContext(RequestMaker)
   const navigate = useNavigate()
   const validFor: readonly { id: ValidFor; label: string }[] = canBill ? VALID_FOR : VALID_FOR.slice(0, 2)
-  const [tab, setTab] = useState<CollectTab>(startTab ?? (shopQr ? 'qr' : 'charge'))
+  const firstTab: CollectTab = only ?? startTab ?? (shopQr ? 'qr' : 'charge')
+  const [tab, setTab] = useState<CollectTab>(firstTab)
   // The customer: searched like Pay's recipients, picked as a chip. Only a
   // real MeshPort user can be named on an order.
   const [customerQuery, setCustomerQuery] = useState('')
@@ -243,7 +246,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { if (paid && !owner) speakPayment(view!.received) }, [paid])
-  const reset = () => { setTab(shopQr ? 'qr' : 'charge'); setCustomerQuery(''); setPicked(null); setExpiry('15'); setIntent(null); sender.reset() }
+  const reset = () => { setTab(only ?? (shopQr ? 'qr' : 'charge')); setCustomerQuery(''); setPicked(null); setExpiry('15'); setIntent(null); sender.reset() }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { if (!open) reset() }, [open])
   const newPayment = () => { setIntent(null); sender.reset() }
@@ -284,11 +287,12 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
     setIntent(null)
   }
 
-  const tabs: { id: CollectTab; label: string }[] = [
+  const allTabs: { id: CollectTab; label: string }[] = [
     ...(shopQr ? [{ id: 'qr' as const, label: 'Shop QR' }] : []),
-    { id: 'charge', label: 'Request' },
+    { id: 'charge', label: 'Charge' },
     ...(canBill ? [{ id: 'bill' as const, label: 'Bill' }] : []),
   ]
+  const tabs = only ? allTabs.filter(x => x.id === only) : allTabs
   const outlet = shopQr?.outlet ?? null
   // The store's handle beside its name (not twice when the name is the handle).
   const handle = shopQr && cleanUsername(shopQr.handle) !== cleanUsername(storeName) ? shopQr.handle : null
@@ -302,7 +306,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   const heading = isDesktop ? undefined : intent
     ? <BusinessTitle business={storeName} avatar={avatar} line={[`${intent.kind === 'invoice' ? 'Bill' : 'Request'} ${intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''}`.trim(),
         intent.kind === 'invoice' && intent.customerUsername ? `for ${cleanUsername(intent.customerUsername)}.arc` : null, outlet].filter(Boolean).join(' · ')} />
-    : businessHeading(storeName, avatar, shopQr?.handle ?? 'Collect payment', storePick)
+    : businessHeading(storeName, avatar, only === 'charge' ? 'Charge' : only === 'bill' ? 'Bill' : shopQr?.handle ?? 'Collect payment', storePick)
   const head = (compact: boolean) => (
     <div>
       {isDesktop && <SheetPerson label="Collect payment" name={storeName} username={handle} compact={compact} onClose={onBack} sub={outlet} />}
@@ -354,7 +358,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
     )
   } else {
     body = (
-      <RequestAmountForm open={open} isDesktop={isDesktop} header={head} verb="Request" busyText="Creating…" places={2}
+      <RequestAmountForm open={open} isDesktop={isDesktop} header={head} verb="Charge" busyText="Creating…" places={2}
         ariaLabel="Amount to request in USDC" hint={`${t.customer} scans the QR or opens the link`}
         options={{
           summary: <>Valid for <b className="font-semibold text-text-primary">{validLabel}</b>{canBill && (who

@@ -4,7 +4,7 @@
 // optional note and a due date, then Send / Create bill. The database
 // recomputes the total from the items.
 //
-// Built for long bills: finished items collapse to one line ("Masala dosa ·
+// Built for long bills: finished items collapse to one line ("Coffee ·
 // 2 × $3.50 · $7.00"), only the item being edited opens up, and only the
 // list scrolls - the person at the top and the total + Send at the bottom
 // stay put. With the phone keyboard up, the header and footer shrink to one
@@ -238,7 +238,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
                 className="px-3.5 py-3" style={{ borderTop: top, background: 'color-mix(in srgb, var(--brand) 9%, transparent)' }}>
                 <div className="flex items-center gap-2">
                   <input ref={el => { if (el) nameRefs.current.set(r.id, el); else nameRefs.current.delete(r.id) }}
-                    value={r.name} maxLength={80} placeholder={idx === 0 ? 'Item name, e.g. Masala dosa' : 'Item name'} aria-label={`Item ${idx + 1} name`}
+                    value={r.name} maxLength={80} placeholder={idx === 0 ? 'Item name, e.g. Coffee' : 'Item name'} aria-label={`Item ${idx + 1} name`}
                     enterKeyHint="next" autoComplete="off"
                     onChange={e => update(r.id, { name: e.target.value })}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); priceRefs.current.get(r.id)?.focus() } }}
