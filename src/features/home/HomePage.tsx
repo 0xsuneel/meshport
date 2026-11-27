@@ -3809,10 +3809,11 @@ export function HomePage() {
   const arcHandle = (username || '').replace(/\.arc$/, '') + '.arc'
   // Phone header sits on the teal band: white text, see-through white chips.
   const onBand = !isDesktop && !searchOpen
+  // On the band (27 Nov, A): solid white circles with teal icons and a soft shadow.
   const headerChip: React.CSSProperties = onBand
-    ? { background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.22)' }
+    ? { background: 'var(--home-chip)', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }
     : { background: 'var(--glass-fill)', border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-chip)' }
-  const headerIcon = onBand ? '#fff' : 'var(--brand-text)'
+  const headerIcon = onBand ? '#12665F' : 'var(--brand-text)'
 
   return (
     <div ref={scrollContainerRef} style={{
@@ -3906,8 +3907,8 @@ export function HomePage() {
                 {/* Same size as search and the bell, with the brand ring the
                     Chats header puts around your picture. */}
                 <div {...pressable(() => navigate('/profile'), 'Open profile')} className="mp-press"
-                  style={{ cursor: 'pointer', flexShrink: 0, width: 38, height: 38, borderRadius: '50%', padding: 2, background: onBand ? 'rgba(255,255,255,0.9)' : 'var(--brand)', boxSizing: 'border-box' }}>
-                  <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--bg)', boxSizing: 'border-box',
+                  style={{ cursor: 'pointer', flexShrink: 0, width: 38, height: 38, borderRadius: '50%', padding: 2, background: onBand ? '#8FE9CB' : 'var(--brand)', boxSizing: 'border-box' }}>
+                  <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', border: onBand ? 'none' : '2px solid var(--bg)', boxSizing: 'border-box',
                     background: 'var(--brand)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700 }}>
                     {user?.avatar
                       ? <img src={user.avatar.split('?')[0]} alt="avatar" loading="eager" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
