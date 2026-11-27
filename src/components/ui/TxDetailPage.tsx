@@ -60,8 +60,6 @@ export interface TxDetail {
   steps: ReactNode[]
   whenLabel: string
   when: string
-  /** Short references shown in full with a copy button, e.g. a receipt number. */
-  refs?: { label: string; value: string }[]
   hashes: { label: string; hash: string }[]
   detailsTitle: string
   details: { label: string; value: ReactNode; href?: string; tone?: 'ok' | 'bad' }[]
@@ -148,7 +146,6 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
       `Status: ${d.status === 'success' ? 'Successful' : d.status === 'pending' ? 'Processing' : 'Failed'}`,
       ...(d.parties ?? []).map(p => `${p.label}: ${p.you ? 'You' : p.name}${p.handle ? ` (${p.handle})` : ''}${p.address ? ` ${p.address}` : ''}${p.chain ? ` on ${p.chain}` : ''}`),
       `${d.whenLabel}: ${d.when}`,
-      ...(d.refs ?? []).map(r => `${r.label} ${r.value}`),
       ...d.hashes.map(h => `${h.label}: ${h.hash}`),
       ...d.details.filter(r => typeof r.value === 'string' && !r.href).map(r => `${r.label}: ${r.value}`),
       ...d.details.filter(r => r.href).flatMap(r => ['', `${typeof r.value === 'string' ? r.value : r.label}:`, r.href!]),
@@ -308,13 +305,8 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
             </Rv>)}
 
             <Rv i={2 + Math.max(d.parties?.length ?? 0, d.recipients?.length ? 1 : 0)}>
-            {(d.hashes.length > 0 || !!d.refs?.length) && line}
+            {d.hashes.length > 0 && line}
             <div style={{ fontSize: 14, lineHeight: 1.9 }}>
-              {(d.refs ?? []).map(r => (
-                <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ color: muted }}>{r.label}</span> <b style={{ fontWeight: 700 }}>{r.value}</b> <CopyBtn value={r.value} what={r.label.replace(/\.$/, '')} />
-                </div>
-              ))}
               {d.hashes.map(h => (
                 <div key={h.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ color: muted }}>{h.label}</span> {short(h.hash)} <CopyBtn value={h.hash} what="Transaction hash" />

@@ -1066,7 +1066,6 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
         ...(counterparty && !inHistory ? [{ label: 'View history', onClick: () => setHistoryWith({ address: counterparty, name: theirName, handle: theirHandle }) }] : []),
       ],
     }
-    const ref = isBusinessPayment ? receiptNumber(txHash) : null
     txDetail = {
       title: 'Payment details', status: receiptStatus, amountLabel: 'Amount', amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC',
       note: noteText || undefined, pill: shop ? { icon: 'qr', text: type === 'receive' ? shopReceivedTitle(shopNameOf(metadata)) : biz?.category || 'Shop payment' } : merchantOrderDetail ? { icon: 'list', text: orderWord }
@@ -1078,7 +1077,6 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
         <>Payment made by <b>{type === 'send' ? 'you' : theirLabel}</b></>,
         <>Payment received by <b>{type === 'send' ? theirLabel : 'you'}</b></>],
       whenLabel: type === 'send' ? 'Paid at' : 'Received at', when: whenFull,
-      refs: ref ? [{ label: 'Receipt no.', value: ref }] : undefined,
       hashes: txHash ? [{ label: 'Transaction hash', hash: txHash }] : [],
       detailsTitle: 'Payment details',
       details: [statusDetail, networkDetail, ...(anyFee ? [{ label: 'Network fee', value: anyFee.value }] : []),
