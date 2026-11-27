@@ -35,6 +35,7 @@ import { filterServices } from '@/lib/searchServices'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 import { LockBadge } from '@/components/LockedFeature'
 import { RecentNewsRow } from './RecentNewsRow'
+import { HomeTabs, TabAction } from './HomeTabs'
 import { BALANCES_STALE_EVENT, msSinceLastTx, pendingTxBalance, isLaggingRead } from '@/lib/balanceRefresh'
 import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { markBalanceRead, useStaleBalanceLabel } from '@/lib/balanceFreshness'
@@ -63,7 +64,6 @@ import { pressable } from '@/lib/pressable'
 import { StuckPaymentsBanner } from '@/components/StuckPaymentsBanner'
 import { DueRemindersPopup } from '@/components/DueRemindersPopup'
 import { qrRevealPose } from '@/lib/qrReveal'
-import { QuickIcon } from '@/components/ui/QuickIcon'
 
 function copyText(text: string) { try { void navigator.clipboard.writeText(text).then(() => { try { navigator.vibrate?.(8) } catch { /* no vibration */ } }) } catch {} }
 
@@ -586,9 +586,10 @@ const TILE_GROUPS: { title: string; ids: string[] }[] = [
   { title: 'Move money', ids: ['bulk', 'hub', 'p2p', 'request', 'scan', 'swap'] },
   { title: 'More', ids: ['rewards', 'insights', 'staff', 'help'] },
 ]
-const HOME_TILE_COUNT = 3
-const DEFAULT_HOME_TILES = ['p2p', 'hub', 'insights']
-const HOME_TILE_TONES: TileTone[] = ['peach', 'mint', 'butter'] // Home's row: by position
+// Home's Quick Actions tab: four of these, then More (27 Nov: was three).
+const HOME_TILE_COUNT = 4
+const DEFAULT_HOME_TILES = ['hub', 'insights', 'p2p', 'bulk']
+const HOME_TILE_TONES: TileTone[] = ['peach', 'mint', 'butter', 'peach'] // Home's row: by position
 const HOME_TILES_KEY = 'mp_home_tiles'
 // Staff mode comes and goes with an invite - never one of Home's three.
 const homeTileAllowed = (id: string, business: boolean) => id in TILE_DEFS && id !== 'staff' && !(business && id === 'rewards')
@@ -596,7 +597,8 @@ const homeTileAllowed = (id: string, business: boolean) => id in TILE_DEFS && id
 function loadHomeTiles(): string[] {
   try {
     const v = JSON.parse(localStorage.getItem(HOME_TILES_KEY) || 'null')
-    if (Array.isArray(v) && v.length === HOME_TILE_COUNT && new Set(v).size === HOME_TILE_COUNT && v.every(id => typeof id === 'string' && id in TILE_DEFS)) return v
+    // A three-tile save from before Home had four is kept; homeTilesFor tops it up.
+    if (Array.isArray(v) && v.length >= 3 && v.length <= HOME_TILE_COUNT && new Set(v).size === v.length && v.every(id => typeof id === 'string' && id in TILE_DEFS)) return v
   } catch { /* none saved */ }
   return DEFAULT_HOME_TILES
 }
@@ -702,7 +704,7 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P, homeTiles, onSaveHo
   const editing = draft !== null
   const addToHome = (id: string) => {
     if (!draft) return
-    if (draft.length >= HOME_TILE_COUNT) { setDraftNote('Home has 3 already. Tap one above to take it off first.'); return }
+    if (draft.length >= HOME_TILE_COUNT) { setDraftNote(`Home has ${HOME_TILE_COUNT} already. Tap one above to take it off first.`); return }
     setDraft([...draft, id]); setDraftNote('')
   }
   const sectionTitle = (t: string) => (
@@ -4065,26 +4067,6 @@ export function HomePage() {
           </div>
         )}
 
-        {/* ── QUICK ACTIONS - four across: the person's three + More ───────── */}
-        {!isDesktop && (
-          <div>
-            <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.3px', margin: '0 2px 12px' }}>Quick Actions</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
-              {/* The person's three (Edit Home in See all), colours by position. */}
-              {homeTileIds.map((id, i) => {
-                const def = tileView(id)
-                return <QuickIcon key={id} icon={def.icon} label={def.label.replace(/ Hub$/, '')} ariaLabel={def.label}
-                  color={`var(--tile-${HOME_TILE_TONES[i]}-ink)`} dim={accountLock.locked && isLockedPath(def.path)} locked={accountLock.locked && isLockedPath(def.path)}
-                  dot={id === 'p2p' && ongoingTradesCount > 0}
-                  onClick={() => { if (def.path === '/scanner') prewarmCamera(); navigate(def.path) }} />
-              })}
-              {/* An open P2P trade, when P2P isn't one of Home's three: on More. */}
-              <QuickIcon icon="more" label="More" color="var(--brand-text)" onClick={() => setShowMore(true)}
-                dot={ongoingTradesCount > 0 && !homeTileIds.includes('p2p')} />
-            </div>
-          </div>
-        )}
-
         {/* Business accounts not approved yet: the approval notice, under the action panel. */}
         {!isDesktop && businessAccount && <BusinessApprovalBanner />}
 
@@ -4100,13 +4082,32 @@ export function HomePage() {
             for approval); everything else stays. */}
         {/* ── RECENT + UPDATES - side by side. On the phone they share one card
              with the promo banner, which sits at its foot. ─────────────────── */}
+        {/* Phone (27 Nov): Quick Actions / Pay again / Updates as three tabs
+            in one card, each a single row; the promo banner under it, just
+            above Assets. */}
         {(isDesktop ? (
           <>
             <FeatureBanner height={64} onOpen={path => navigate(path)} />
             <RecentNewsRow navigate={navigate} />
           </>
         ) : (
-          <RecentNewsRow navigate={navigate} footer={<FeatureBanner height={75} docked inCard onOpen={path => navigate(path)} />} />
+          <>
+            <HomeTabs navigate={navigate} actions={
+              <>
+                {homeTileIds.map((id, i) => {
+                  const def = tileView(id)
+                  const locked = accountLock.locked && isLockedPath(def.path)
+                  return <TabAction key={id} icon={def.icon} label={def.label.replace(/ Hub$/, '')} ariaLabel={def.label} tone={HOME_TILE_TONES[i]}
+                    locked={locked} dot={id === 'p2p' && ongoingTradesCount > 0}
+                    onClick={() => { if (def.path === '/scanner') prewarmCamera(); navigate(def.path) }} />
+                })}
+                {/* An open P2P trade, when P2P isn't one of Home's four: on More. */}
+                <TabAction icon="more" label="More" tone="mint" onClick={() => setShowMore(true)}
+                  dot={ongoingTradesCount > 0 && !homeTileIds.includes('p2p')} />
+              </>
+            } />
+            <FeatureBanner height={64} onOpen={path => navigate(path)} />
+          </>
         ))}
 
         {/* ── ASSETS - all 3 tokens ────────────────────────────────────────── */}
