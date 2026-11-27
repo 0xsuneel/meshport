@@ -3,7 +3,7 @@
 // one shows its single row underneath: Home's four actions + More, or the
 // latest updates as cards to swipe. The row keeps one height on both tabs, so
 // the page under it never jumps; the last tab used is remembered. Pay again
-// (the last five people you paid) is its own card, under the ad.
+// (the last four people you paid, View all on the right) is its own card, under the ad.
 
 import { useEffect, useState, type ReactNode } from 'react'
 import type { NavigateFunction } from 'react-router-dom'
@@ -65,7 +65,7 @@ function Face({ c, i }: { c: RecentContact; i: number }) {
 const cell = { minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 } as const
 const cellLabel = { maxWidth: '100%', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const
 
-function PayAgainRow({ navigate, onCount }: { navigate: NavigateFunction; onCount: (n: number) => void }) {
+function PayAgainRow({ navigate }: { navigate: NavigateFunction }) {
   const walletAddress = useAuthStore(s => s.walletAddress)
   // Same cache key as Home's Recent box always used, so the faces are there at once.
   const cacheKey = walletAddress ? `meshport_recents_${walletAddress.toLowerCase()}_5` : ''
@@ -89,7 +89,6 @@ function PayAgainRow({ navigate, onCount }: { navigate: NavigateFunction; onCoun
     return () => { cancelled = true }
   }, [walletAddress, cacheKey, reconnects, changed])
 
-  useEffect(() => { onCount(people.length) }, [people.length, onCount])
   if (!loaded && people.length === 0) {
     return (
       <div aria-busy="true" aria-label="Loading recent people" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', justifyItems: 'center', paddingBottom: 18 }}>
@@ -108,13 +107,21 @@ function PayAgainRow({ navigate, onCount }: { navigate: NavigateFunction; onCoun
   }
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
-      {people.slice(0, 5).map((c, i) => (
+      {people.slice(0, 4).map((c, i) => (
         <button key={c.wallet_address} type="button" className="mp-press" aria-label={`Pay ${recentShortName(c)}`} style={cell}
           onClick={() => navigate(`/pay?to=${encodeURIComponent(recentSendTarget(c))}`, { state: { returnTo: '/' } })}>
           <Face c={c} i={i} />
           <span style={cellLabel}>{recentShortName(c)}</span>
         </button>
       ))}
+      {Array.from({ length: Math.max(0, 4 - people.length) }, (_, i) => <span key={`gap-${i}`} />)}
+      {/* View all: a round button at the right end of the row. */}
+      <button type="button" className="mp-press" style={cell} onClick={() => navigate('/recent-paid', { state: { from: '/' } })}>
+        <span style={{ width: FACE, height: FACE, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', boxShadow: 'inset 0 0 0 1px var(--border)', display: 'grid', placeItems: 'center', color: 'var(--text-primary)' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6" /></svg>
+        </span>
+        <span style={cellLabel}>View all</span>
+      </button>
     </div>
   )
 }
@@ -189,21 +196,14 @@ export function HomeTabs({ navigate, actions }: { navigate: NavigateFunction; ac
   )
 }
 
-/** Pay again: its own card under the ad - title, View all, the last five people. */
+/** Pay again: a heading (like Assets), then a card - the last four people you paid, View all on the right. */
 export function PayAgainCard({ navigate }: { navigate: NavigateFunction }) {
-  const [count, setCount] = useState(0)
   return (
-    <div style={{ background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: 20, boxShadow: 'var(--glass-card)', padding: '12px 8px 12px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '0 8px 10px' }}>
-        <span style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text-primary)' }}>Pay again</span>
-        {count > 0 && (
-          <button type="button" onClick={() => navigate('/recent-paid', { state: { from: '/' } })}
-            style={{ background: 'none', border: 'none', padding: '4px 0', margin: '-4px 0', cursor: 'pointer', font: 'inherit', fontSize: 12.5, fontWeight: 600, color: 'var(--brand-text)' }}>
-            View all ›
-          </button>
-        )}
+    <div>
+      <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.3px', color: 'var(--text-primary)', margin: '0 2px 10px' }}>Pay again</div>
+      <div style={{ background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: 20, boxShadow: 'var(--glass-card)', padding: '12px 6px' }}>
+        <PayAgainRow navigate={navigate} />
       </div>
-      <PayAgainRow navigate={navigate} onCount={setCount} />
     </div>
   )
 }
