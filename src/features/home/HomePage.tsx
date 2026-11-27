@@ -3809,11 +3809,12 @@ export function HomePage() {
   const arcHandle = (username || '').replace(/\.arc$/, '') + '.arc'
   // Phone header sits on the teal band: white text, see-through white chips.
   const onBand = !isDesktop && !searchOpen
-  // On the band (27 Nov, A): solid white circles with teal icons and a soft shadow.
+  // On the band (27 Nov, 8): search and bell share one darker-teal pill
+  // (white icons, a thin divider between), so each button itself is bare.
   const headerChip: React.CSSProperties = onBand
-    ? { background: 'var(--home-chip)', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }
+    ? { background: 'transparent', border: 'none', width: 34, height: 34 }
     : { background: 'var(--glass-fill)', border: '1px solid var(--glass-edge)', boxShadow: 'var(--glass-chip)' }
-  const headerIcon = onBand ? '#12665F' : 'var(--brand-text)'
+  const headerIcon = onBand ? '#fff' : 'var(--brand-text)'
 
   return (
     <div ref={scrollContainerRef} style={{
@@ -3884,11 +3885,16 @@ export function HomePage() {
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                {/* Search + bell: one pill on the band, two circles elsewhere. */}
+                <div style={onBand
+                  ? { display: 'flex', alignItems: 'center', gap: 2, height: 38, padding: '0 3px', borderRadius: 19, background: 'var(--home-pill)' }
+                  : { display: 'flex', alignItems: 'center', gap: 8 }}>
                 {/* Search */}
                 <button onClick={() => setSearchOpen(true)} aria-label="Search" className="mp-press"
                   style={{ width: 38, height: 38, borderRadius: '50%', ...headerChip, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={headerIcon} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </button>
+                {onBand && <span aria-hidden style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.25)' }} />}
                 {/* Bell - notifications */}
                 <button onClick={() => navigate('/notifications')} aria-label="Notifications" className="mp-press"
                   style={{ position: 'relative', width: 38, height: 38, borderRadius: '50%',
@@ -3903,6 +3909,7 @@ export function HomePage() {
                       background: 'var(--danger)', borderRadius: '50%' }}/>
                   )}
                 </button>
+                </div>
                 {/* Profile */}
                 {/* Same size as search and the bell, with the brand ring the
                     Chats header puts around your picture. */}
