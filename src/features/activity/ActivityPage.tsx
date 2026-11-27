@@ -1059,11 +1059,11 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     // Kirani Store" with its icon, never the UPI handle as the name).
     const bizName = type !== 'send' ? '' : biz ? shopTitle(biz) : (shop ? shopNameOf(metadata) : '')
     const theirName = bizName || (cpName ? cpName.charAt(0).toUpperCase() + cpName.slice(1) : shortAddr(counterparty))
-    // Your store that took the payment (its name, type and logo, as the payer saw it).
-    const myStoreName = (myShop ? shopTitle(myShop) : '') || shopNameOf(metadata) || 'Your store'
+    // The store the money was credited to - by its name, type and logo (never "You").
+    const myStoreName = (myShop ? shopTitle(myShop) : '') || shopNameOf(metadata) || myHandle || 'Store'
     const myStoreParty: TxParty = {
       label: 'To', name: myStoreName, handle: myHandle, verified: !!myShop,
-      sub: [myShop?.category, 'Your store'].filter(Boolean).join(' · '), photo: myShop?.avatarUrl || undefined,
+      sub: myShop?.category || undefined, photo: myShop?.avatarUrl || undefined,
     }
     const them: TxParty = {
       label: type === 'send' ? 'To' : 'From', name: theirName,
