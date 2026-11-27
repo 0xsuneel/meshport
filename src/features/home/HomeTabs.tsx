@@ -2,7 +2,7 @@
 // One card under the balance (27 Nov) with two tabs side by side; the chosen
 // one shows its single row underneath: Home's four actions + More, or the
 // latest updates as cards to swipe. The row keeps one height on both tabs, so
-// the page under it never jumps; the last tab used is remembered. Pay again
+// the page under it never jumps. Home always opens on Quick Actions. Pay again
 // (the last four people you paid, View all on the right) is its own card, under the ad.
 
 import { useEffect, useState, type ReactNode } from 'react'
@@ -23,14 +23,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'actions', label: 'Quick Actions' },
   { id: 'updates', label: 'Updates' },
 ]
-const TAB_KEY = 'mp_home_tab'
 const ROW_H = 76
 const FACE = 44
-
-function loadTab(): Tab {
-  try { const v = localStorage.getItem(TAB_KEY); if (v === 'actions' || v === 'updates') return v } catch { /* none */ }
-  return 'actions'
-}
 
 /** One of Home's actions: the icon on a soft tile of its tone, the name under it. */
 export function TabAction({ icon, label, ariaLabel, tone, onClick, dot, locked }: {
@@ -179,8 +173,16 @@ const panelStyle = (on: boolean) => ({
 })
 
 export function HomeTabs({ navigate, actions }: { navigate: NavigateFunction; actions: ReactNode }) {
-  const [tab, setTab] = useState<Tab>(loadTab)
-  const pick = (t: Tab) => { setTab(t); try { localStorage.setItem(TAB_KEY, t) } catch { /* this visit only */ } }
+  // Always opens on Quick Actions: Updates is shown only until you leave Home.
+  const [tab, setTab] = useState<Tab>('actions')
+  const pick = (t: Tab) => setTab(t)
+  // Leaving the app (another app, the home screen, a locked phone) and coming
+  // back also lands on Quick Actions.
+  useEffect(() => {
+    const back = () => { if (document.visibilityState === 'hidden') setTab('actions') }
+    document.addEventListener('visibilitychange', back)
+    return () => document.removeEventListener('visibilitychange', back)
+  }, [])
   return (
     <div style={{ background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: 20, boxShadow: 'var(--glass-card)', padding: 6 }}>
       <div role="tablist" aria-label="Home" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4, padding: 4, borderRadius: 14,
