@@ -35,7 +35,7 @@ import { filterServices } from '@/lib/searchServices'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 import { LockBadge } from '@/components/LockedFeature'
 import { RecentNewsRow } from './RecentNewsRow'
-import { HomeTabs, TabAction } from './HomeTabs'
+import { HomeTabs, TabAction, PayAgainCard } from './HomeTabs'
 import { BALANCES_STALE_EVENT, msSinceLastTx, pendingTxBalance, isLaggingRead } from '@/lib/balanceRefresh'
 import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { markBalanceRead, useStaleBalanceLabel } from '@/lib/balanceFreshness'
@@ -4158,6 +4158,7 @@ export function HomePage() {
               </>
             } />
             <FeatureBanner height={92} tile onOpen={path => navigate(path)} />
+            <PayAgainCard navigate={navigate} />
           </>
         ))}
 
