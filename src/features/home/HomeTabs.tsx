@@ -148,9 +148,11 @@ function UpdatesRow({ navigate }: { navigate: NavigateFunction }) {
     <div className="no-scrollbar" style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollSnapType: 'x mandatory', overscrollBehaviorX: 'contain', margin: '0 -12px', padding: '0 12px', scrollPaddingInline: 12 }}>
       {items.map(it => (
         <button key={it.id} type="button" className="mp-press" onClick={() => navigate(`/news/${it.id}`)}
-          style={{ flex: '0 0 210px', scrollSnapAlign: 'start', display: 'flex', gap: 9, alignItems: 'center', textAlign: 'left', padding: 6, borderRadius: 13,
-            border: 'none', cursor: 'pointer', font: 'inherit', background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }}>
-          <span style={{ position: 'relative', width: 54, height: 54, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: NEWS_SOURCE_TINT[it.source] }}>
+          style={{ flex: '0 0 262px', scrollSnapAlign: 'start', display: 'flex', gap: 10, alignItems: 'center', textAlign: 'left', padding: 6, borderRadius: 14,
+            border: '1px solid var(--border)', cursor: 'pointer', font: 'inherit', background: 'var(--surface)' }}>
+          {/* The cover at its own wide shape (16:9): covers carry their own
+              title text, and a square crop cut it off. */}
+          <span style={{ position: 'relative', width: 96, height: 54, borderRadius: 9, overflow: 'hidden', flexShrink: 0, background: NEWS_SOURCE_TINT[it.source] }}>
             {it.image_url && !broken[it.id]
               ? <img decoding="async" src={it.image_url} alt="" draggable={false} onError={() => setBroken(b => ({ ...b, [it.id]: true }))}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -163,8 +165,8 @@ function UpdatesRow({ navigate }: { navigate: NavigateFunction }) {
         </button>
       ))}
       <button type="button" className="mp-press" onClick={() => navigate('/news')}
-        style={{ flex: '0 0 76px', scrollSnapAlign: 'end', borderRadius: 13, border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 12.5, fontWeight: 650,
-          color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }}>View all ›</button>
+        style={{ flex: '0 0 76px', scrollSnapAlign: 'end', borderRadius: 14, border: '1px solid var(--border)', cursor: 'pointer', font: 'inherit', fontSize: 12.5, fontWeight: 650,
+          color: 'var(--brand-text)', background: 'var(--surface)' }}>View all ›</button>
     </div>
   )
 }
