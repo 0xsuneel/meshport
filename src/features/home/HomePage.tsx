@@ -2711,6 +2711,8 @@ export function HomePage() {
     padding: '12px 0 14px', background: 'var(--glass-fill)', border: '1px solid var(--border)', borderRadius: 20,
     boxShadow: 'var(--glass-card)', overflow: 'hidden', minWidth: 0,
     display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box',
+    // Brand-tinted text inside the card (deep teal / pale mint, not black / white).
+    ['--text-primary' as string]: 'var(--hero-ink)', ['--text-secondary' as string]: 'var(--hero-ink-2)', ['--success-text' as string]: 'var(--hero-up)',
   }
   const heroButtons = (items: ReadonlyArray<{ label: string; path: string; icon: 'pay' | 'receive' | 'swap' | 'hub' | 'recover'; accent: boolean }>) => (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 7, padding: '10px 12px 0' }}>
@@ -2719,9 +2721,9 @@ export function HomePage() {
           style={{
             position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'min(6px, 1.4vw)', height: 40, borderRadius: 16,
             border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 'min(14.5px, 3.7vw)', fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', padding: '0 4px',
-            background: a.accent ? 'var(--mustard)' : 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
-            color: a.accent ? 'var(--mustard-ink)' : 'var(--text-primary)',
-            boxShadow: a.accent ? 'none' : 'inset 0 0 0 1px var(--border)',
+            background: a.accent ? 'var(--hero-pay)' : 'var(--hero-btn)',
+            color: a.accent ? '#fff' : 'var(--hero-btn-ink)',
+            boxShadow: a.accent ? 'none' : 'inset 0 0 0 1px var(--hero-btn-line)',
             opacity: accountLock.locked && isLockedPath(a.path) ? 0.45 : 1,
           }}>
           <ActionIcon name={a.icon} size={16} color="currentColor" />{a.label}

@@ -187,6 +187,9 @@
   --tile-mint:       #0F2421;  --tile-mint-ink:   #24A193;
   --tile-butter:     #2A2210;  --tile-butter-ink: #E9BC4C;
   --mustard:         #E9BC4C;  --mustard-ink:     #3A2C06;
+  /* Home hero cards (27 Nov): brand-tinted text and buttons, teal Pay/Transfer. */
+  --hero-ink: #E8F5F2;  --hero-ink-2: #8FB5AE;  --hero-up: #4FD1B9;
+  --hero-btn: #0F2A27;  --hero-btn-ink: #D5EEE9;  --hero-btn-line: #1A3E3A;  --hero-pay: #1E9488;
   --shadow-1: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
   --shadow-2: 0 4px 16px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
   --shadow-3: 0 12px 32px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.08);
@@ -262,6 +265,9 @@
   --tile-mint:       #0F2421;  --tile-mint-ink:   #24A193;
   --tile-butter:     #2A2210;  --tile-butter-ink: #E9BC4C;
   --mustard:         #E9BC4C;  --mustard-ink:     #3A2C06;
+  /* Home hero cards (27 Nov): brand-tinted text and buttons, teal Pay/Transfer. */
+  --hero-ink: #E8F5F2;  --hero-ink-2: #8FB5AE;  --hero-up: #4FD1B9;
+  --hero-btn: #0F2A27;  --hero-btn-ink: #D5EEE9;  --hero-btn-line: #1A3E3A;  --hero-pay: #1E9488;
   --shadow-1: 0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.24);
   --shadow-2: 0 4px 16px rgba(0,0,0,0.40), 0 2px 6px rgba(0,0,0,0.24);
   --shadow-3: 0 12px 32px rgba(0,0,0,0.50), 0 4px 12px rgba(0,0,0,0.30);
@@ -338,6 +344,9 @@
   --tile-mint:       #E1EFE9;  --tile-mint-ink:   #12665F;
   --tile-butter:     #F8EDC9;  --tile-butter-ink: #8A6510;
   --mustard:         #E9BC4C;  --mustard-ink:     #3A2C06;
+  /* Home hero cards (27 Nov): brand-tinted text and buttons, teal Pay/Transfer. */
+  --hero-ink: #0F3D39;  --hero-ink-2: #5E7F79;  --hero-up: #12665F;
+  --hero-btn: #EEF5F3;  --hero-btn-ink: #0F4F49;  --hero-btn-line: #D9E8E4;  --hero-pay: #12665F;
   --shadow-1: 0 1px 3px rgba(16,24,32,0.06), 0 1px 2px rgba(16,24,32,0.04);
   --shadow-2: 0 4px 16px rgba(16,24,32,0.08), 0 2px 6px rgba(16,24,32,0.04);
   --shadow-3: 0 12px 32px rgba(16,24,32,0.12), 0 4px 12px rgba(16,24,32,0.06);
