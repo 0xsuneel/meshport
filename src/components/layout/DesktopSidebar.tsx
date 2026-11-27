@@ -9,7 +9,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { isSettingsPath } from './SettingsDesktopSplit'
 import { NavIcon, type NavIconName } from './navIcons'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
-import { HomeIcon, ChatsIcon, RewardsIcon, ActivityIcon, BusinessIcon, PaymentsIcon, CustomersIcon, AccountIcon, getActiveTabId } from './BottomNav'
+import { HomeIcon, ChatsIcon, RewardsIcon, ActivityIcon, BusinessIcon, PaymentsIcon, CustomersIcon, AccountIcon, BalanceIcon, getActiveTabId } from './BottomNav'
 import { useChatUnreadStore, useP2PTradesCountStore } from '@/store'
 import { useHubLabel, useBusinessTab } from '@/lib/merchant'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
@@ -29,11 +29,11 @@ const items = [
   { id: 'settings',         label: 'Settings',            path: '/profile' },
 ]
 // A business account (27 Nov): the business app's own sections, like the
-// phone's business tabs - Home, Payments, Collect, Customers, Chats, Account.
+// phone's business tabs - Home, Payments, Balance, Customers, Chats, Account.
 const businessItems = [
   { id: 'home',      label: 'Home',      path: '/' },
   { id: 'payments',  label: 'Payments',  path: '/biz/payments' },
-  { id: 'collect',   label: 'Collect',   path: '/biz/collect' },
+  { id: 'balance',   label: 'Balance',   path: '/biz/balance' },
   { id: 'customers', label: 'Customers', path: '/biz/customers' },
   { id: 'chat',      label: 'Chats',     path: '/chat' },
   { id: 'account',   label: 'Account',   path: '/biz/account' },
@@ -133,7 +133,7 @@ export function DesktopSidebar() {
                 {item.id === 'rewards'          && <RewardsIcon active={active} />}
                 {item.id === 'business'         && <BusinessIcon active={active} />}
                 {item.id === 'payments'         && <PaymentsIcon active={active} />}
-                {item.id === 'collect'          && <ReceiveIcon active={active} />}
+                {item.id === 'balance'          && <BalanceIcon active={active} />}
                 {item.id === 'customers'        && <CustomersIcon active={active} />}
                 {item.id === 'account'          && <AccountIcon active={active} />}
                 {item.id === 'settings'         && <SettingsIcon active={active} />}

@@ -507,6 +507,7 @@ const router = createBrowserRouter([
       { path: 'rewards',                    element: <Unlocked title="Rewards"><PersonalOnly><FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate></PersonalOnly></Unlocked> },
       { path: 'business',                   element: <BusinessPage /> },
       { path: 'biz/payments',               element: <BusinessOnly><BusinessPage key="payments" root="payments" /></BusinessOnly> },
+      { path: 'biz/balance',                element: <BusinessOnly><BusinessPage key="balance" root="balance" /></BusinessOnly> },
       { path: 'biz/collect',                element: <BusinessOnly><Unlocked title="Collect"><BusinessPage key="collect" root="collect" /></Unlocked></BusinessOnly> },
       { path: 'biz/customers',              element: <BusinessOnly><BusinessPage key="customers" root="customers" /></BusinessOnly> },
       { path: 'biz/account',                element: <BusinessOnly><BusinessPage key="account" root="account" /></BusinessOnly> },

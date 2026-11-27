@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore, useChatUnreadStore } from '@/store'
 import { NavIcon, type NavIconName } from './navIcons'
-import { Store, ReceiptText, Users, CircleUserRound } from 'lucide-react'
+import { Store, ReceiptText, Users, CircleUserRound, Wallet } from 'lucide-react'
 import { useBusinessTab } from '@/lib/merchant'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 import { backLayerPop } from '@/lib/backLayers'
@@ -33,6 +33,8 @@ export const PaymentsIcon = ({ active, filled }: NavIconProps) =>
   <ReceiptText size={filled === undefined ? 22 : 23} strokeWidth={active ? 2.3 : 1.8} color={colorOf(active, filled)} />
 export const CustomersIcon = ({ active, filled }: NavIconProps) =>
   <Users size={filled === undefined ? 22 : 23} strokeWidth={active ? 2.3 : 1.8} color={colorOf(active, filled)} />
+export const BalanceIcon = ({ active, filled }: NavIconProps) =>
+  <Wallet size={filled === undefined ? 22 : 23} strokeWidth={active ? 2.3 : 1.8} color={colorOf(active, filled)} />
 export const AccountIcon = ({ active, filled }: NavIconProps) =>
   <CircleUserRound size={filled === undefined ? 22 : 23} strokeWidth={active ? 2.3 : 1.8} color={colorOf(active, filled)} />
 // Business centre button: a QR (take a payment), not Scan (make one).
@@ -59,12 +61,13 @@ const tabs = [
 ]
 // Merchants: Business takes Rewards' place. Everyone else keeps Rewards.
 // A business account's app is the business (27 Nov): Home (the business
-// home), Payments, Collect (centre: show the QR, charge, bill), Customers
-// (with chats) and Account.
+// home, with Show QR / Charge / Bill), Payments, Balance (every token on
+// Arc and what's arriving from other networks), Customers (with chats) and
+// Account.
 export const businessTabs = [
   { id: 'home',      label: 'Home',      path: '/' },
   { id: 'payments',  label: 'Payments',  path: '/biz/payments' },
-  { id: 'collect',   label: 'Collect',   path: '/biz/collect' },
+  { id: 'balance',   label: 'Balance',   path: '/biz/balance' },
   { id: 'customers', label: 'Customers', path: '/biz/customers' },
   { id: 'account',   label: 'Account',   path: '/biz/account' },
 ]
@@ -177,7 +180,7 @@ export function BottomNav() {
   }, [user?.id, setUnreadChats])
 
   // Tab root paths - back button on any of these goes to Home (or exits if already Home)
-  const TAB_ROOTS = ['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/collect', '/biz/customers', '/biz/account']
+  const TAB_ROOTS = ['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/balance', '/biz/collect', '/biz/customers', '/biz/account']
 
   useEffect(() => {
     const isTabRoot = TAB_ROOTS.includes(location.pathname)
@@ -298,6 +301,7 @@ export function BottomNav() {
                       {tab.id === 'activity' && <ActivityIcon active={isActive} filled />}
                       {tab.id === 'payments' && <PaymentsIcon active={isActive} filled />}
                       {tab.id === 'customers' && <CustomersIcon active={isActive} filled />}
+                      {tab.id === 'balance' && <BalanceIcon active={isActive} filled />}
                       {tab.id === 'account'  && <AccountIcon active={isActive} filled />}
                     </motion.div>
                     {badgeCount > 0 && (

@@ -23,6 +23,7 @@ import { useBizTerms } from '@/lib/businessCategories'
 import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
 import { copyToClipboard } from '@/lib/utils'
+import { useArcAssets } from './useArcAssets'
 import { useAuthStore, useWalletStore, useNotificationStore, useChatUnreadStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
@@ -54,7 +55,7 @@ import { bridgeScope } from '@/lib/walletConfirm'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton } from '@/components/ui/DesktopHistoryPanel'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
-  BusinessHeader, SetupBanner, BizHomeView, LockedHubView, PaymentsView, PaymentDetailSheet, PaymentRow,
+  BusinessHeader, SetupBanner, BizHomeView, BizBalanceView, LockedHubView, PaymentsView, PaymentDetailSheet, PaymentRow,
   SettlementsView, SettleProgressSheet, VoiceSheet, RefundSheet, TrendChip,
   DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, ScreenLevel, PushLayer, useHubShift,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
@@ -69,6 +70,7 @@ const linkedScreenOf = (q: URLSearchParams): ScreenId | null => {
   return v && LINKABLE.includes(v) ? v : null
 }
 
+const trimZeros = (s: string) => s.includes('.') ? s.replace(/\.?0+$/, '') : s
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.method === 'own_transfer' ? 'Your transfer'
   : p.customerUsername ? `${p.customerUsername}.arc`
@@ -86,8 +88,8 @@ const bizCache = new Map<string, { raw: MerchantPayment[]; intents: MerchantInte
 /** Business accounts get their Business tab; staff of a business get staff mode. */
 /** Which business tab this page is (27 Nov: a business account's app is the
  *  business - Home, Payments, Collect, Customers and Account are its tabs). */
-const TAB_PATHS = new Set(['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/collect', '/biz/customers', '/biz/account'])
-export type BusinessRoot = 'home' | 'payments' | 'collect' | 'customers' | 'account'
+const TAB_PATHS = new Set(['/', '/chat', '/scanner', '/rewards', '/business', '/activity', '/biz/payments', '/biz/balance', '/biz/collect', '/biz/customers', '/biz/account'])
+export type BusinessRoot = 'home' | 'payments' | 'balance' | 'collect' | 'customers' | 'account'
 const ROOT_SCREEN: Partial<Record<BusinessRoot, ScreenId>> = { collect: 'receive', customers: 'customers', account: 'tools' }
 
 /** Manage orders / money: a pushed page - or, on the Payments tab, the page itself. */
@@ -289,6 +291,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
   const trend = useMemo(() => periodTrend(today.total,
     netOf(storeRaw.filter(p => inPrevious(p.createdAt, period))).reduce((s, p) => s + p.amount, 0)), [today.total, storeRaw, period, netOf])
   const arcBalance = useWalletStore(s => s.balance)
+  const arcAssets = useArcAssets(walletAddress, root === 'balance')
   // The Arc balance is read here too (on open, when the app is back in front,
   // after a settle arrives, a refund, or leaving Cash out / Payouts) - not only
   // by Home's poll. Same reads as Home; a failed read keeps the shown balance.
@@ -691,7 +694,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
               total={money(today.total)} trend={<TrendChip pct={trend} compare={period.compareLabel} />}
               stats={{ count: today.count, average: money(today.average), openOrders: pending ? pending.count : null }}
               onOpenOrders={openOrders}
-              onQr={() => navigate('/biz/collect')}
+              onQr={() => { setCollectStart('qr'); open('receive')() }}
               onCharge={() => { setCollectStart('charge'); open('receive')() }}
               onBill={() => { setCollectStart('bill'); open('receive')() }}
               onPayLink={sharePayLink}
@@ -707,6 +710,29 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
           )}
         </div>
       </div>}
+
+      {/* ── Balance tab: every token on Arc + USDC waiting on other networks ── */}
+      {root === 'balance' && (
+        <div className="absolute inset-0 flex flex-col bg-bg" style={{ zIndex: 1 }}>
+          <header className={`header-row gap-3 px-5 ${isDesktop ? 'pt-0' : 'pt-header'} pb-header`}><h1 className="header-title">Balance</h1></header>
+          <div className="flex-1 min-h-0 overflow-y-auto" style={bodyPad}>
+            <BizBalanceView
+              total={money(arcAssets.total + settle.total)} ready={money(arcAssets.total)} arriving={money(settle.total)} scanning={scanning}
+              tokens={arcAssets.rows.map(r => ({ symbol: r.symbol, name: r.name, icon: r.icon,
+                amount: `${r.symbol === 'cirBTC' ? trimZeros(r.amount.toFixed(r.amount && r.amount < 0.0001 ? 8 : 6)) : r.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${r.symbol}`,
+                value: r.usd === null ? null : money(r.usd) }))}
+              chains={(settle.chains ?? []).map(c => ({ id: c.id, label: c.label, logo: c.logo, amount: c.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+                onMove: () => beginSettleOne(c.id), moveDisabled: settle.running || c.balance < settle.singleMin }))}
+              networks={(settle.allChains ?? []).map(c => ({ id: c.id, label: c.label, logo: c.logo }))}
+              moveAll={{ enabled: !scanning && settle.ready && !settle.running && settle.due.length > 0, running: settle.running,
+                label: settle.running ? 'Moving…' : !settle.ready ? `Move all again in ${inWords(settle.nextAt - Date.now())}` : `Move all to Arc · ${money(settle.total)}` }}
+              onMoveAll={() => beginSettle()} onRefresh={settle.rescan}
+              onCashOut={open('cashout')} onPayStaff={open('payouts')} onSwap={() => navigate('/swap')}
+              footer={<AutoSettleCard schedule={autoSettle.settings.schedule} time={autoSettle.settings.time}
+                onSchedule={s => autoSettle.update({ schedule: s })} onTime={t => autoSettle.update({ time: t, lastPrompt: Date.now() })} nextLabel={autoSettle.nextLabel} />} />
+          </div>
+        </div>
+      )}
 
       {/* ── Manage orders / Manage money: a full page that slides in from the
           right over a dim veil with the edge shadow - the same page push the
