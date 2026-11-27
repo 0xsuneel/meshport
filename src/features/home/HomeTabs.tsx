@@ -126,6 +126,9 @@ function UpdatesRow({ navigate }: { navigate: NavigateFunction }) {
   const [items, setItems] = useState<NewsItem[]>(() => readCachedHomeNews())
   const [loaded, setLoaded] = useState(() => items.length > 0)
   const [broken, setBroken] = useState<Record<string, true>>({})
+  // Covers fully downloaded (by URL): until then each shows a skeleton, not a half-drawn picture.
+  const [imgLoaded, setImgLoaded] = useState<Record<string, true>>({})
+  const markLoaded = (url: string) => setImgLoaded(m => (m[url] ? m : { ...m, [url]: true }))
   const reconnects = useReconnectCount()
   useEffect(() => {
     let cancelled = false
@@ -137,7 +140,21 @@ function UpdatesRow({ navigate }: { navigate: NavigateFunction }) {
   if (!items.length) {
     return loaded
       ? <div style={{ height: ROW_H - 8, display: 'grid', placeItems: 'center', fontSize: 12.5, color: 'var(--text-secondary)' }}>Arc, Circle and MeshPort updates show here</div>
-      : <Skeleton className="rounded-[12px]" style={{ height: ROW_H - 12 }} />
+      // Loading: the cards' own shape (cover, two title lines, source).
+      : (
+        <div aria-busy="true" aria-label="Loading updates" style={{ display: 'flex', gap: 8, overflow: 'hidden', margin: '0 -12px', padding: '0 12px' }}>
+          {[0, 1].map(i => (
+            <div key={i} style={{ flex: '0 0 262px', display: 'flex', gap: 10, alignItems: 'center', padding: 6, borderRadius: 14, border: '1px solid var(--border)', background: 'var(--surface)' }}>
+              <Skeleton className="rounded-[9px]" style={{ width: 96, height: 54, flexShrink: 0 }} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <Skeleton className="rounded-full" style={{ height: 10, width: '92%' }} />
+                <Skeleton className="rounded-full" style={{ height: 10, width: '70%' }} />
+                <Skeleton className="rounded-full" style={{ height: 8, width: '45%' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )
   }
   return (
     // Cards to swipe sideways; the last one is a way into all updates.
@@ -150,8 +167,14 @@ function UpdatesRow({ navigate }: { navigate: NavigateFunction }) {
               title text, and a square crop cut it off. */}
           <span style={{ position: 'relative', width: 96, height: 54, borderRadius: 9, overflow: 'hidden', flexShrink: 0, background: NEWS_SOURCE_TINT[it.source] }}>
             {it.image_url && !broken[it.id]
-              ? <img decoding="async" src={it.image_url} alt="" draggable={false} onError={() => setBroken(b => ({ ...b, [it.id]: true }))}
-                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <>
+                  <img decoding="async" src={it.image_url} alt="" draggable={false}
+                    ref={el => { if (el && el.complete && el.naturalWidth > 0) markLoaded(it.image_url!) }}
+                    onLoad={() => markLoaded(it.image_url!)}
+                    onError={() => setBroken(b => ({ ...b, [it.id]: true }))}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: imgLoaded[it.image_url] ? 1 : 0, transition: 'opacity .25s ease' }} />
+                  {!imgLoaded[it.image_url] && <Skeleton className="rounded-none" style={{ position: 'absolute', inset: 0 }} />}
+                </>
               : <NewsArt item={it} variant="thumb" />}
           </span>
           <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
