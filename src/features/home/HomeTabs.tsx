@@ -173,6 +173,11 @@ function UpdatesRow({ navigate }: { navigate: NavigateFunction }) {
   )
 }
 
+const panelStyle = (on: boolean) => ({
+  gridArea: '1 / 1', minWidth: 0, display: 'flex', flexDirection: 'column' as const, justifyContent: 'center',
+  visibility: on ? 'visible' as const : 'hidden' as const, pointerEvents: on ? 'auto' as const : 'none' as const,
+})
+
 export function HomeTabs({ navigate, actions }: { navigate: NavigateFunction; actions: ReactNode }) {
   const [tab, setTab] = useState<Tab>(loadTab)
   const pick = (t: Tab) => { setTab(t); try { localStorage.setItem(TAB_KEY, t) } catch { /* this visit only */ } }
@@ -192,9 +197,17 @@ export function HomeTabs({ navigate, actions }: { navigate: NavigateFunction; ac
           )
         })}
       </div>
-      <div role="tabpanel" style={{ minHeight: ROW_H, padding: '12px 6px 6px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        {tab === 'actions' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 2 }}>{actions}</div>}
-        {tab === 'updates' && <UpdatesRow navigate={navigate} />}
+      {/* Both rows stay mounted, stacked in one grid cell; only the chosen one
+          shows. Mounting a row on each tap reloaded the news pictures and
+          redrew the icons - the flicker when switching tabs. The cell is as
+          tall as the taller row, so the page never jumps. */}
+      <div style={{ display: 'grid', padding: '12px 6px 6px', minHeight: ROW_H }}>
+        <div role="tabpanel" aria-hidden={tab !== 'actions'} style={panelStyle(tab === 'actions')}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 2 }}>{actions}</div>
+        </div>
+        <div role="tabpanel" aria-hidden={tab !== 'updates'} style={panelStyle(tab === 'updates')}>
+          <UpdatesRow navigate={navigate} />
+        </div>
       </div>
     </div>
   )
