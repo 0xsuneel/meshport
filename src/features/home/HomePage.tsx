@@ -37,7 +37,8 @@ import { LockBadge } from '@/components/LockedFeature'
 import { RecentNewsRow } from './RecentNewsRow'
 import { useStatusBarTint } from '@/lib/statusBarTint'
 import { useThemeStore, resolveTheme } from '@/store/themeStore'
-import { HomeTabs, TabAction, PayAgainCard } from './HomeTabs'
+import { HomeTabs, TabAction } from './HomeTabs'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { BALANCES_STALE_EVENT, msSinceLastTx, pendingTxBalance, isLaggingRead } from '@/lib/balanceRefresh'
 import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { markBalanceRead, useStaleBalanceLabel } from '@/lib/balanceFreshness'
@@ -1963,6 +1964,27 @@ function AvailableBalanceCard({
       </div>
       )}
     </BowedShapeCard>
+  )
+}
+
+// Phone Home's asset box: icon + name, the value, the coin amount; taps to the coin's page.
+function AssetBox({ icon, fallbackColor, fallbackChar, name, value, amount, hidden, onClick }: {
+  icon: string; fallbackColor: string; fallbackChar: string; name: string; value: string; amount: string; hidden: boolean; onClick: () => void
+}) {
+  const [ok, setOk] = useState(true)
+  return (
+    <button type="button" onClick={onClick} className="mp-press" aria-label={`${name}: ${hidden ? 'hidden' : value}`}
+      style={{ minWidth: 0, textAlign: 'left', padding: '9px 10px', borderRadius: 18, border: '1px solid var(--border)', background: 'var(--glass-fill)',
+        boxShadow: 'var(--glass-card)', cursor: 'pointer', font: 'inherit', color: 'var(--text-primary)' }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {ok
+          ? <img src={icon} alt="" width={22} height={22} decoding="async" onError={() => setOk(false)} style={{ borderRadius: '50%', flexShrink: 0 }} />
+          : <span style={{ width: 22, height: 22, borderRadius: '50%', background: fallbackColor, color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{fallbackChar}</span>}
+        <span style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+      </span>
+      <span style={{ display: 'block', marginTop: 5, fontSize: 16, fontWeight: 750, letterSpacing: '-0.3px', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums' }}>{hidden ? '••••' : value}</span>
+      <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums' }}>{hidden ? '••••' : amount}</span>
+    </button>
   )
 }
 
@@ -4211,11 +4233,11 @@ export function HomePage() {
               </>
             } />
             <FeatureBanner height={92} tile onOpen={path => navigate(path)} />
-            <PayAgainCard navigate={navigate} />
           </>
         ))}
 
         {/* ── ASSETS - all 3 tokens ────────────────────────────────────────── */}
+        {isDesktop ? (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isDesktop ? 6 : 12 }}>
             {/* Same heading size as Quick Actions on the phone. */}
@@ -4277,6 +4299,59 @@ export function HomePage() {
             />
           </div>
         </div>
+        ) : (
+          // Phone (27 Nov): the three assets as boxes, then Recent activity
+          // (your last 3 transactions) right under them, in place of Pay again.
+          <>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.3px' }}>Assets</span>
+              <button onClick={handleFaucet} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 15, color: 'var(--brand-text)', fontWeight: 500 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3s6 6.5 6 10.5a6 6 0 01-12 0C6 9.5 12 3 12 3z" stroke="var(--brand-text)" strokeWidth="1.8" strokeLinejoin="round"/></svg>
+                Faucet
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+              <AssetBox icon="/logos/tokens/usdc.png" fallbackColor="var(--usdc-icon)" fallbackChar="$" name="USDC"
+                value={`$${fmt(balance)}`} amount={`${fmt(balance)} USDC`} hidden={balanceHidden} onClick={() => navigate('/asset/USDC')} />
+              <AssetBox icon="/logos/tokens/eurc.png" fallbackColor="var(--usdc-icon)" fallbackChar="€" name="EURC"
+                value={`$${fmt(eurcBalance * eurcPrice)}`} amount={`${fmt(eurcBalance)} EURC`} hidden={balanceHidden} onClick={() => navigate('/asset/EURC')} />
+              <AssetBox icon="/logos/tokens/cirbtc.png" fallbackColor="#F7931A" fallbackChar="₿" name="cirBTC"
+                value={cirBtcBalance > 0 && btcPrice === 0 ? 'Fetching...' : `$${trimTrailingZeros((cirBtcBalance * btcPrice).toFixed(2)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`} amount={`${cirBtcBalance > 0 ? trimTrailingZeros(cirBtcBalance < 0.0001 ? cirBtcBalance.toFixed(8) : cirBtcBalance.toFixed(6)) : '0'} cirBTC`} hidden={balanceHidden} onClick={() => navigate('/asset/cirBTC')} />
+            </div>
+          </div>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-0.3px' }}>Recent activity</span>
+              <button type="button" onClick={() => navigate('/activity')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 15, fontWeight: 500, color: 'var(--brand-text)' }}>View all ›</button>
+            </div>
+            <div style={{ background: 'var(--glass-fill)', borderRadius: 22, border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--glass-card)', padding: '2px 0' }}>
+              {!homeActivityLoaded ? (
+                <div aria-busy="true" aria-label="Loading recent activity">
+                  {[0, 1, 2].map(i => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px' }}>
+                      <Skeleton className="rounded-full" style={{ width: 40, height: 40, flexShrink: 0 }} />
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <Skeleton className="rounded-full" style={{ height: 11, width: '55%' }} />
+                        <Skeleton className="rounded-full" style={{ height: 9, width: '35%' }} />
+                      </div>
+                      <Skeleton className="rounded-full" style={{ height: 11, width: 56 }} />
+                    </div>
+                  ))}
+                </div>
+              ) : homeRecentActivity.length === 0 ? (
+                <div style={{ padding: '18px 16px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>No payments yet</div>
+                  <button type="button" onClick={() => navigate('/pay')} style={{ marginTop: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>Pay someone ›</button>
+                </div>
+              ) : homeRecentActivity.slice(0, 3).map((r, i, list) => (
+                <ActivityRow key={r.id} record={r} isFirst={i === 0} isLast={i === list.length - 1}
+                  onSelect={() => { recentFlash.opened(); setSelectedActivity(r) }} flash={r.id === recentFlash.flashId} />
+              ))}
+            </div>
+          </div>
+          </>
+        )}
 
         {/* ── Biometric row - desktop: right below Assets card. ────────────── */}
         {isDesktop && <BiometricFooterRow isDesktop />}
