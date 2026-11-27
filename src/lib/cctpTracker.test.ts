@@ -83,3 +83,14 @@ describe('fetchCctpProgress - which Iris answers', () => {
     expect(await fetchCctpProgress('Base_Sepolia', HASH)).toBeNull()
   })
 })
+
+import { delayReasonText } from './cctpTracker'
+describe('delayReasonText', () => {
+  it("explains Circle's documented hold reasons and nothing else", () => {
+    expect(delayReasonText('insufficient_fee')).toMatch(/standard speed/)
+    expect(delayReasonText('amount_above_max')).toMatch(/standard speed/)
+    expect(delayReasonText('insufficient_allowance_available')).toMatch(/capacity/)
+    expect(delayReasonText(null)).toBeNull()
+    expect(delayReasonText('something_new')).toBeNull()
+  })
+})

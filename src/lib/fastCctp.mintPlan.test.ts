@@ -32,8 +32,8 @@ describe('transferMintPlan', () => {
 
 describe('routerFee', () => {
   it("includes the destination mint gas in the floor (never below gas x 1.15)", () => {
-    const amount = 10_000_000n // $10: 0.2% = $0.02, min $0.05
-    expect(routerFee(0n, amount)).toBe(50_000n)
+    const amount = 10_000_000n // $10: 0.2% = $0.02 (above the $0.01 minimum)
+    expect(routerFee(0n, amount)).toBe(20_000n)
     // $1 of destination gas (an Ethereum mainnet mint): the fee covers it.
     expect(routerFee(0n, amount, 1_000_000n)).toBeGreaterThanOrEqual(1_150_000n)
   })

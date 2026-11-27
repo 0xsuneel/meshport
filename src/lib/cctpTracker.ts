@@ -46,6 +46,50 @@ export function isBurnTxId(srcChain: string, id: string): boolean {
     : /^0x[0-9a-fA-F]{64}$/.test(id)
 }
 
+/**
+ * Circle's reason for holding a burn (Iris delayReason), in plain words - or
+ * null when there is none / it isn't one Circle documents. A held Fast
+ * Transfer isn't lost: Circle attests it at standard finality instead.
+ * Pure - unit tested.
+ */
+export function delayReasonText(reason: string | null | undefined): string | null {
+  switch ((reason ?? '').toLowerCase()) {
+    case 'insufficient_fee':
+      return "Circle's fast-transfer fee rose above the cap this transfer signed, so it moves at standard speed instead - usually 15–20 minutes. Nothing is lost."
+    case 'amount_above_max':
+      return 'This amount is above what Circle sends at fast speed, so it moves at standard speed - usually 15–20 minutes. Nothing is lost.'
+    case 'insufficient_allowance_available':
+      return "Circle's fast-transfer capacity is used up right now, so this moves at standard speed - usually 15–20 minutes. Nothing is lost."
+    default:
+      return null
+  }
+}
+
+/** Chains whose standard CCTP attestation waits for Ethereum finality (~15-20
+ *  min), so a Fast Transfer matters (Circle: finality-and-block-confirmations). */
+export const SLOW_STANDARD_CHAINS = new Set([
+  'Ethereum_Sepolia', 'Base_Sepolia', 'Arbitrum_Sepolia', 'Optimism_Sepolia', 'Unichain_Sepolia',
+  'World_Chain_Sepolia', 'Linea_Sepolia', 'Ink_Testnet', 'Codex_Testnet', 'Plume_Testnet', 'Morph_Testnet', 'Edge_Testnet',
+])
+
+let allowanceCache: { at: number; value: Promise<number | null> } | null = null
+/**
+ * Circle's Fast Transfer allowance left right now, in USDC (GET
+ * /v2/fastBurn/USDC/allowance). A fast burn above it isn't refused - Circle
+ * attests it at standard speed instead - so Review can say so up front.
+ * null when Iris can't say. Cached 60 s.
+ */
+export function fastBurnAllowance(): Promise<number | null> {
+  if (allowanceCache && Date.now() - allowanceCache.at < 60_000) return allowanceCache.value
+  const value = fetch(`${IRIS}/v2/fastBurn/USDC/allowance`, { signal: AbortSignal.timeout(5000) })
+    .then(r => (r.ok ? r.json() : null))
+    .then(j => { const n = Number(j?.allowance); return Number.isFinite(n) ? n : null })
+    .catch(() => null)
+  allowanceCache = { at: Date.now(), value }
+  void value.then(v => { if (v === null && allowanceCache?.value === value) allowanceCache = null })
+  return value
+}
+
 export type CctpStage = 'burning' | 'attesting' | 'minting' | 'done' | 'error'
 export interface CctpProgress {
   stage: CctpStage

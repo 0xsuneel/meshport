@@ -16,10 +16,10 @@
  * exactly where the money started.
  *
  * ── Design ───────────────────────────────────────────────────────────────
- * - initiateUBRecovery(): called once, immediately, the moment a UB spend
- *   is confirmed to have failed with no resumable path. Starts the 7-day
- *   clock right away rather than waiting for the user to notice or ask -
- *   the sooner it's initiated, the sooner it's recoverable. Safe to call
+ * - initiateUBRecovery(): the trustless last resort, started only when the
+ *   user taps "Withdraw without Circle" in Recover (MultichainRecoveryPage)
+ *   and confirms - a failed spend is first offered an instant send on or
+ *   back to Arc (resolveUbStuckTransfer), with no 7-day lock. Safe to call
  *   even if spend secretly DID succeed despite the error (a real
  *   possibility on a bad connection - see MultichainTransferPage.tsx's
  *   mintMayHaveSucceeded): Circle's own ledger is the source of truth for

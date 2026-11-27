@@ -502,12 +502,14 @@ Deno.serve(async (req: Request) => {
       }
       await markCompleted(row, mintTx, ownsRow && b.selfMinted === true)
     }
-    // An in-flight claim whose attestation expired can never finish on its
-    // own - show it as failed (with the way out) instead of "Processing…".
-    if (d.state === 'needs_reattest' && row.kind === 'claim' && row.status !== 'failed' && row.status !== 'completed') {
-      await db.from('claims').update({
-        status: 'failed', error: 'Attestation expired - open Recover, request a new attestation, then finish the claim.',
-      }).eq('id', row.id).neq('status', 'completed')
+    // An in-flight claim whose attestation expired: MeshPort asks Circle for a
+    // new one right away (POST /v2/reattest - Circle's documented way to
+    // revive an expired Fast Transfer burn) instead of failing the claim; the
+    // claim worker mints it once Circle re-signs (27 Nov audit).
+    if (d.state === 'needs_reattest' && d.nonce && row.kind === 'claim' && row.status !== 'failed' && row.status !== 'completed'
+      && activeAction(row.status, row.action)?.kind !== 'reattest') {
+      const r = await fetch(`${IRIS}/v2/reattest/${d.nonce}`, { method: 'POST', signal: AbortSignal.timeout(10000) }).catch(() => null)
+      if (r?.ok) await saveAction(row, 'reattest', 'meshport')
     }
 
     // A step already running (user or MeshPort) → report it as still

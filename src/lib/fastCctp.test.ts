@@ -123,8 +123,8 @@ describe('maxFeeFromIris', () => {
   ]
   it('fast + forwarder: protocol bps plus the high forward fee, with headroom', () => {
     // 100 USDC * 1.3 bps = 13_000 units; + 80_000 = 93_000; * 1.2 + 1_000
-    expect(maxFeeFromIris(rows, 100_000_000n, { fast: true, forward: true, l1: false })).toBe(112_600n)
-    expect(maxFeeFromIris(rows, 100_000_000n, { fast: true, forward: true, l1: true })).toBe(140_500n)
+    expect(maxFeeFromIris(rows, 100_000_000n, { fast: true, forward: true, l1: false })).toBe(76_600n)
+    expect(maxFeeFromIris(rows, 100_000_000n, { fast: true, forward: true, l1: true })).toBe(80_500n)
   })
   it('slow, relayer mint: only the (zero) protocol fee', () => {
     expect(maxFeeFromIris(rows, 100_000_000n, { fast: false, forward: false, l1: false })).toBe(1_000n)

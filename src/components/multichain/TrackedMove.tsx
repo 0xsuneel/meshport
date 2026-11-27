@@ -15,7 +15,7 @@ import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { isDesktopNow } from '@/lib/motion'
-import { useCctpProgress } from '@/lib/cctpTracker'
+import { useCctpProgress, delayReasonText } from '@/lib/cctpTracker'
 import { subscribeToClaim, type Claim } from '@/lib/claimService'
 import {
   moveSteps, indexFromCctpStage, indexFromClaimStatus, indexFromUbIntent, safeFromIndex,
@@ -219,8 +219,18 @@ export function TrackedMove({ info, onClose, onViewHub, onArrived, backIcon = 'b
       kind={kind} route={route} fromLabel={from} toLabel={to} amount={info.amount}
       steps={steps} current={current} failed={failed} loading={loading}
       safe={safe} txs={txs}
+      notes={delayNote(cctp?.stage === 'attesting' ? cctp.delayReason : null)}
       holdText={`MeshPort mints on ${to} while the transfer screen is open. If it doesn't arrive, finish it from Multichain Hub → Recover.`}
       onBack={onClose} backIcon={backIcon} onViewHub={onViewHub ?? onClose} trackButton={false}
     />
   )
+}
+
+/** Circle's reason for holding a fast transfer, under the steps. */
+export function delayNote(reason: string | null | undefined) {
+  const text = delayReasonText(reason)
+  return text ? (
+    <div role="status" style={{ marginTop: 12, fontSize: 13, lineHeight: 1.5, padding: '10px 12px', borderRadius: 14,
+      color: 'var(--warning-text)', background: 'color-mix(in srgb, var(--warning) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)' }}>{text}</div>
+  ) : null
 }

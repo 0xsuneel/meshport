@@ -60,6 +60,8 @@ const MAX_FEE_ABS = 2_000_000n    // …and never over 2 USDC
 const MAX_CCTP_SHARE = 0.02       // CCTP maxFee ≤ 2% of the amount…
 const MAX_CCTP_SMALL = 250_000n   // …or up to 0.25 USDC
 const AUTH_WINDOW_SEC = 60 * 60   // signature valid for 1 hour
+/** Same as api/bridge-relay MIN_TOTAL_UNITS (1 USDC). */
+export const MIN_BRING_UNITS = 1_000_000n
 
 function configuredRouters(): Record<string, Hex> {
   try {
@@ -204,6 +206,10 @@ export async function bringFundsGasless(p: {
   const router = gaslessRouter(p.chainId)
   if (!chain || !router) throw new Error('Gasless bridging is not available for this chain')
   const total = toUnits(p.amountUsdc)
+  // The relayer's own floor (api/bridge-relay MIN_TOTAL_UNITS), checked
+  // before anything is quoted or signed: a 0.000075 USDC Bring reached the
+  // relayer (21 Nov) and came back as an unreadable error.
+  if (total < MIN_BRING_UNITS) throw new Error(`The minimum to bring is ${Number(MIN_BRING_UNITS) / 1e6} USDC - nothing was sent.`)
 
   p.onStatus?.('Getting fee…')
   const { quote, fee, maxFee, hookData } = await fetchCheckedQuote(p.chainId, total)

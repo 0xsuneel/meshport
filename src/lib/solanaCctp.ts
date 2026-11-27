@@ -83,15 +83,18 @@ export async function quoteSolanaToArc(amount: bigint, fetchImpl: typeof fetch =
     try {
       const r = await fetchImpl(`${host}/v2/burn/USDC/fees/${SOLANA_DOMAIN}/${ARC_DOMAIN}?forward=true`)
       if (!r.ok) continue
-      const rows = await r.json() as Array<{ finalityThreshold: number; minimumFee: number; forwardFee?: { high?: number } }>
+      const rows = await r.json() as Array<{ finalityThreshold: number; minimumFee: number; forwardFee?: { med?: number; high?: number } }>
       const fast = rows.find(x => x.finalityThreshold === FAST_FINALITY)
-      if (!fast?.forwardFee?.high) continue
-      const forwardFee = BigInt(Math.ceil(fast.forwardFee.high))
+      const fwdQuote = fast?.forwardFee?.med ?? fast?.forwardFee?.high
+      if (!fwdQuote) continue
+      const forwardFee = BigInt(Math.ceil(fwdQuote))
       // minimumFee is in basis points of the amount; round up.
       const protocolFee = (amount * BigInt(Math.round(fast.minimumFee * 100)) + 999_999n) / 1_000_000n
-      // 10% headroom on the forwarding fee: the burn's maxFee is a cap, the
-      // actual fee is what Circle charges.
-      return { forwardFee, protocolFee, maxFee: protocolFee + forwardFee + forwardFee / 10n }
+      // No headroom on the forwarding fee: Circle's forwarder spends all of
+      // maxFee above the protocol fee (as priority fee, never refunded), so a
+      // padded cap was simply charged (~$0.022 on every Solana Bring). 'med'
+      // is Circle's recommended quote.
+      return { forwardFee, protocolFee, maxFee: protocolFee + forwardFee }
     } catch { /* next host */ }
   }
   throw new Error("Couldn't get Circle's fee for Solana → Arc - try again")

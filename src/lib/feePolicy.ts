@@ -24,6 +24,10 @@ export const GAS_MARGIN_PCT = 115n
 // ── The fee list ─────────────────────────────────────────────────────────────
 /** Transfer / Bring / UB / Solana Bring: 0.2%, min $0.05, cap $5. */
 export const CROSS_CHAIN_FEE: UsdFeeRule = { bps: 20, minUsd: 0.05, capUsd: 5 }
+/** Transfer out of Arc (MeshPortRouter on Arc): 0.2%, min $0.01, cap $5. Arc
+ *  gas is ~$0.005 and the gas floor below still covers the relayer's Arc call
+ *  and its destination mint - the $0.05 minimum was 5% of a $1 transfer. */
+export const ARC_OUT_FEE: UsdFeeRule = { bps: 20, minUsd: 0.01, capUsd: 5 }
 /** Swap (USDC ↔ EURC ↔ cirBTC): 0.35% in the rate, cap $10. */
 export const SWAP_FEE: UsdFeeRule = { bps: 35, minUsd: 0, capUsd: 10 }
 /** Merchant payments: 0.6%, cap $3, paid by the merchant. */

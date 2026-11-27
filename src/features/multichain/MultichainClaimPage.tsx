@@ -59,7 +59,8 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForBring, bringRoutes, bringKeys } from '@/lib/featureFilters'
 import { useAccountKind } from '@/lib/merchant'
 import { readExternalBalances, refreshScope, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
-import { mintedOnArc as isMintedOnArc, useCctpProgress, waitForForwardTx } from '@/lib/cctpTracker'
+import { mintedOnArc as isMintedOnArc, useCctpProgress, waitForForwardTx, fastBurnAllowance, SLOW_STANDARD_CHAINS } from '@/lib/cctpTracker'
+import { delayNote } from '@/components/multichain/TrackedMove'
 import { ARC_RPCS } from '@/lib/arc'
 import { UB_CLAIM_CHAINS, runUbClaim, ubBringTime, ubClaimEta, estimateUbClaimFee, ubConfirmedOn } from '@/lib/ubClaim'
 import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
@@ -1664,6 +1665,17 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const feeRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 11, color: COLORS.muted, fontVariantNumeric: 'tabular-nums' }
   const fmtFee = (n: number) => `$${trimTrailingZeros(n.toFixed(4))} USDC`
   // Sits inside the amount card, under the amount it applies to.
+  // Circle's Fast Transfer allowance: above it, a CCTP Bring from a slow-
+  // finality chain moves at standard speed (~15-20 min) - said up front.
+  const [fastAllowance, setFastAllowance] = useState<number | null>(null)
+  const watchAllowance = !token && !!selectedSdkId && SLOW_STANDARD_CHAINS.has(selectedSdkId) && claimAmt > 0
+  useEffect(() => {
+    if (!watchAllowance) return
+    let live = true
+    void fastBurnAllowance().then(v => { if (live) setFastAllowance(v) })
+    return () => { live = false }
+  }, [watchAllowance, selectedSdkId])
+  const slowBecauseAllowance = watchAllowance && fastAllowance !== null && claimAmt > fastAllowance
   const receiveSummaryCard = (
     <div style={{ width: '100%', marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1699,6 +1711,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               </div>
             </>
           )}
+        </div>
+      )}
+      {slowBecauseAllowance && (
+        <div role="status" style={{ marginTop: 8, fontSize: 12, lineHeight: 1.45, color: 'var(--warning-text)' }}>
+          Circle's fast-transfer capacity is lower than this amount right now, so it will move at standard speed - usually 15–20 minutes. Nothing is lost.
         </div>
       )}
     </div>
@@ -2366,6 +2383,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 kind="bring" route={route} token={coin} fromLabel={chainProgress.length > 1 ? `${chainProgress.length} chains` : srcLabel} toLabel="Arc"
                 amount={displayTotal || trackClaimRow?.amount || 0}
                 steps={steps} current={current} failed={failed} safe={safe} timeSteps
+                notes={!isUbRoute && bringIris?.stage === 'attesting' ? delayNote(bringIris.delayReason) : undefined}
                 loading={!cp0 && !trackClaimRow}
                 txs={isUbRoute ? [srcLink, undefined, undefined, mintLink] : [undefined, srcLink, undefined, mintLink]}
                 holdText="Please wait – don't close this screen until the bring is submitted."

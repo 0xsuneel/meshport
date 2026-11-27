@@ -78,7 +78,12 @@ export function classifyFailure(err: unknown, opts: { reverted?: boolean } = {})
 
   if (e?.name === 'UserRejectedRequestError' || e?.code === 4001 || has(s, 'user rejected', 'user denied', 'rejected the request')) return fail('cancelled', false)
   // It may still land - never a failure (Architecture rule 5).
-  if (e?.name === 'WaitForTransactionReceiptTimeoutError' || has(s, 'may still complete', 'not confirmed yet', 'timed out while waiting', 'status unclear', 'still be processing'))
+  // A move that may have left (a timeout after sending, "it will still
+  // arrive", "check … before trying again") is never "nothing was sent":
+  // a CCTPx transfer that timed out was recorded as failed + "nothing was
+  // sent" although its EURC may have left Arc (25 Nov).
+  if (e?.name === 'WaitForTransactionReceiptTimeoutError' || has(s, 'may still complete', 'not confirmed yet', 'timed out while waiting', 'status unclear', 'still be processing',
+    'taking longer than expected', 'will still arrive', 'arrive on its own', 'may have already', 'still confirming', 'still settling', 'already sent', 'before trying again'))
     return fail('uncertain', false)
   if (has(s, 'reverted', 'always failing transaction', 'rejected on-chain', 'execution reverted')) {
     const why = revertReason(raw)

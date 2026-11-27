@@ -55,7 +55,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { EXTERNAL_CHAINS } from '../src/blockchain/chains'
 import { relayerAccount, relayerAddress, keyRelayerAccount, relayerMode } from './_lib/relayerSigner'
-import { CROSS_CHAIN_FEE, usdRule, meshportFee, feeAcceptable, arcWeiToUsdcUnits } from '../src/lib/feePolicy'
+import { CROSS_CHAIN_FEE, ARC_OUT_FEE, usdRule, meshportFee, feeAcceptable, arcWeiToUsdcUnits } from '../src/lib/feePolicy'
 import { waitUntil } from '@vercel/functions'
 import { hedgedTransport } from './_lib/hedgedTransport'
 import { matchUsdcDomain } from './_lib/usdcDomain'
@@ -632,7 +632,7 @@ async function arcTransfer(req: VercelRequest, res: VercelResponse) {
   const destKey = hook === '0x' ? chainKeyForDomain(Number(b.destinationDomain)) : null
   const destGas = destKey ? await destMintGasCost(destKey).catch(() => 0n) : 0n
   const gasUnits = arcWeiToUsdcUnits(gas * gasPrice) + destGas
-  const required = meshportFee(value - fee, gasUnits, usdRule(CROSS_CHAIN_FEE, 6))
+  const required = meshportFee(value - fee, gasUnits, usdRule(ARC_OUT_FEE, 6))
   if (!feeAcceptable(fee, required, gasUnits)) return res.status(400).json({ error: 'Fee too low - please try again' })
 
   const txHash = await wallet.writeContract({ ...request, ...(await relayFees(pub, pub.chain.id)) })
@@ -1003,8 +1003,12 @@ async function cctpMaxFee(srcDomain: number, burn: bigint, rowsIn?: IrisFeeRow[]
   // minimumFee is in basis points (may be fractional); forwardFee in USDC base units.
   const protocol = (burn * BigInt(Math.ceil((fast.minimumFee ?? 0) * 100))) / 1_000_000n
   const ff = fast.forwardFee
-  const fwd = forward ? BigInt(Math.ceil(typeof ff === 'number' ? ff : (ff?.high ?? ff?.med ?? ff?.low ?? 0))) : 0n
-  return ((protocol + fwd) * 120n) / 100n + 1n
+  // Circle's forwarder keeps all of maxFee above the protocol fee (spent as
+  // destination priority fee, never refunded - Circle docs, Forwarding
+  // Service): the 'med' quote Circle recommends, no headroom on it. Only the
+  // protocol fee (refunded if unused) gets 20%.
+  const fwd = forward ? BigInt(Math.ceil(typeof ff === 'number' ? ff : (ff?.med ?? ff?.high ?? ff?.low ?? 0))) : 0n
+  return (protocol * 120n) / 100n + fwd + 1n
 }
 
 /** The chain's gas price, cached 10 s (a quote and the relay right after it share one read). */
@@ -1177,6 +1181,59 @@ export async function mintOnArcAfterBurn(chainKey: string, burnTx: string, deadl
   const txHash = await cl.wallet.sendTransaction({ to: MESSAGE_TRANSMITTER_V2 as `0x${string}`, data, ...(await relayFees(cl.pub, cl.pub.chain.id)) })
   console.log('[bridge-relay] arc mint', JSON.stringify({ chain: chainKey, burnTx, mintTx: txHash, attestMs: attestedAt - started, sendMs: Date.now() - attestedAt }))
   return txHash
+}
+
+// ── Bring catch-up: the claim worker asks for the Arc mint (27 Nov audit) ──
+// A hookless Bring is minted on Arc by mintOnArcAfterBurn while this
+// function's 60 s run lasts; when Circle attests later than that, the mint
+// waited for the app to come back (or Recover) - Base / Arbitrum Brings took
+// 5-15 min. The claim worker (every few seconds while a claim is open) now
+// calls this, authorised with the internal secret it shares with /api/push.
+// Circle's attestation fixes recipient and amount and a message mints once,
+// so a repeat call costs nothing (simulated first). An expired fast
+// attestation ("Message expired and must be re-signed") is re-attested
+// through Circle's documented POST /v2/reattest/{nonce}; the next call mints it.
+function internalSecretOk(req: VercelRequest): boolean {
+  const secret = (process.env.PUSH_INTERNAL_SECRET || '').trim()
+  const h = req.headers['authorization'] || ''
+  const provided = (Array.isArray(h) ? h[0] : h).replace(/^Bearer\s+/i, '').trim()
+  if (!secret || provided.length !== secret.length) return false
+  let diff = 0
+  for (let i = 0; i < secret.length; i++) diff |= secret.charCodeAt(i) ^ provided.charCodeAt(i)
+  return diff === 0
+}
+async function arcMintClaim(req: VercelRequest, res: VercelResponse) {
+  if (!internalSecretOk(req)) return res.status(403).json({ error: 'Forbidden' })
+  const { chain: chainKey, burnTx, reattest } = (req.body ?? {}) as { chain?: string; burnTx?: string; reattest?: boolean }
+  const domain = chainKey ? CHAINS[chainKey]?.domain : undefined
+  if (domain === undefined || typeof burnTx !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(burnTx)) return res.status(400).json({ error: 'Bad request' })
+  let msg: any = null
+  try {
+    const r = await fetch(`${IRIS}/v2/messages/${domain}?transactionHash=${burnTx}`, { signal: AbortSignal.timeout(6_000) })
+    msg = r.ok ? (await r.json())?.messages?.[0] : null
+  } catch { msg = null }
+  if (!(msg?.status === 'complete' && msg.message && msg.attestation && msg.attestation !== 'PENDING')) {
+    return res.status(200).json({ state: 'waiting', delayReason: msg?.delayReason ?? null })
+  }
+  const cl = await callClients('Arc_Testnet')
+  if (!cl?.wallet) return res.status(503).json({ state: 'unavailable' })
+  const { encodeFunctionData } = await import('viem')
+  const data = encodeFunctionData({ abi: RECEIVE_MESSAGE_ABI, functionName: 'receiveMessage', args: [msg.message, msg.attestation] })
+  try {
+    await cl.pub.call({ account: cl.wallet.account, to: MESSAGE_TRANSMITTER_V2 as `0x${string}`, data })
+  } catch (e: any) {
+    const why = String(e?.shortMessage || e?.message || e)
+    if (/expired/i.test(why) && reattest !== false && typeof msg.eventNonce === 'string' && /^0x[0-9a-fA-F]{64}$/.test(msg.eventNonce)) {
+      const rr = await fetch(`${IRIS}/v2/reattest/${msg.eventNonce}`, { method: 'POST', signal: AbortSignal.timeout(8_000) }).catch(() => null)
+      console.log('[bridge-relay] claim reattest', JSON.stringify({ chain: chainKey, burnTx, ok: !!rr?.ok, status: rr?.status ?? 0 }))
+      return res.status(200).json({ state: rr?.ok ? 'reattest_requested' : 'reattest_failed' })
+    }
+    // Already minted (nonce used) or not mintable by anyone right now.
+    return res.status(200).json({ state: 'not_needed', detail: why.slice(0, 160) })
+  }
+  const txHash = await cl.wallet.sendTransaction({ to: MESSAGE_TRANSMITTER_V2 as `0x${string}`, data, ...(await relayFees(cl.pub, cl.pub.chain.id)) })
+  console.log('[bridge-relay] claim catch-up mint', JSON.stringify({ chain: chainKey, burnTx, mintTx: txHash }))
+  return res.status(200).json({ state: 'minted', txHash })
 }
 
 // ── Transfer: the relayer mints on the destination as soon as Circle attests ─
@@ -1836,6 +1893,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // making the scan triggerable by anyone who read the anon key from the
     // bundle). The actual work is still done by the Supabase Edge Function;
     // this is just a server-side proxy that adds real authentication.
+    if ((req.body as any)?.action === 'arc_mint_claim') return await arcMintClaim(req, res)
+
     if ((req.body as any)?.action === 'claim_recovery_scan') {
       const wallet = await sessionWallet(req)
       if (!wallet) return res.status(401).json({ error: 'Not authenticated' })

@@ -67,8 +67,9 @@ describe('Transfer from Arc through MeshPortRouter: one signature', () => {
     expect(r.steps.find(s => s.name === 'burn')?.txHash).toBe(H(9))
   })
 
-  it('the fee: 0.2% of the amount, min $0.05, cap $5 - never below the gas × 1.15', () => {
-    expect(routerFee(GAS_PRICE, 10_000_000n)).toBe(50_000n)          // $10 → 0.2% = $0.02 → the $0.05 minimum
+  it('the fee: 0.2% of the amount, min $0.01, cap $5 - never below the gas × 1.15', () => {
+    expect(routerFee(GAS_PRICE, 10_000_000n)).toBe(20_000n)          // $10 → 0.2% = $0.02
+    expect(routerFee(GAS_PRICE, 1_000_000n)).toBe(10_000n)           // $1 → 0.2% = $0.002 → the $0.01 minimum
     expect(routerFee(GAS_PRICE, 1_000_000_000n)).toBe(2_000_000n)    // $1,000 → $2
     expect(routerFee(GAS_PRICE, 10_000_000_000n)).toBe(5_000_000n)   // $10,000 → $20 → the $5 cap
     // Gas alone above the cap (absurd gas price): the fee follows the gas, × 1.15 - never a loss.

@@ -407,6 +407,9 @@ type Claim = {
   bridging_at?: string | null
   verifying_at?: string | null
   settling_at?: string | null
+  recovery_action?: string | null
+  recovery_action_at?: string | null
+  delay_reason?: string | null
 }
 function logSettlementMetrics(claim: Claim) {
   try {
@@ -539,9 +542,17 @@ async function waitForBridge(supabase: SupabaseClient, claim: Claim) {
     if (msg?.status === 'complete' && msg?.attestation && msg?.message) {
       await updateClaim(supabase, claim.id, { status: 'verifying', message_hash: msg.message, verifying_at: new Date().toISOString() })
     } else {
+      // Circle's own reason for holding it (insufficient_fee, amount_above_max,
+      // insufficient_allowance_available) - kept on the claim, so a slow Bring
+      // can be explained afterwards (27 Nov audit: 4 of 10 Base / Arbitrum
+      // Brings took 5-15 min with no record why).
+      const delay = typeof msg?.delayReason === 'string' && msg.delayReason ? msg.delayReason.slice(0, 60) : null
+      if (delay && delay !== claim.delay_reason) {
+        await supabase.from('claims').update({ delay_reason: delay }).eq('id', claim.id).then(() => {}, () => {})
+      }
       await persistErrorBestEffort(
         supabase, claim.id,
-        `waiting-on-attestation: http=${res.status}, messages=${data?.messages?.length ?? 0}, msgStatus=${msg?.status ?? 'none'}`
+        `waiting-on-attestation: http=${res.status}, messages=${data?.messages?.length ?? 0}, msgStatus=${msg?.status ?? 'none'}${delay ? `, delay=${delay}` : ''}`
       )
     }
   } catch (e) {
@@ -570,6 +581,36 @@ async function findForwardedMint(claim: Claim): Promise<CctpReceiveLog | null> {
   } catch (e) {
     console.error(`[claim-worker] findForwardedMint failed for ${claim.id} (non-fatal):`, e instanceof Error ? e.message : e)
     return null
+  }
+}
+// Attested but not minted on Arc 45 s later: MeshPort's relayer mints it
+// (api/bridge-relay arc_mint_claim) instead of waiting for the app to come
+// back - a hookless Bring otherwise sat 5-15 min once Circle attested after
+// the relay call's own 60 s. An expired fast attestation is re-attested there
+// (Circle's POST /v2/reattest), at most once every 10 min per claim.
+const CATCH_UP_AFTER_MS = 45_000
+const REATTEST_EVERY_MS = 10 * 60_000
+async function arcMintCatchUp(supabase: SupabaseClient, claim: Claim) {
+  if (!PUSH_INTERNAL_SECRET || !claim.tx_hash) return
+  const since = Date.parse(claim.settling_at ?? claim.verifying_at ?? '')
+  if (!since || Date.now() - since < CATCH_UP_AFTER_MS) return
+  const reattestAt = claim.recovery_action === 'reattest' && claim.recovery_action_at ? Date.parse(claim.recovery_action_at) : 0
+  try {
+    const r = await fetch(`${APP_BASE_URL}/api/bridge-relay`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${PUSH_INTERNAL_SECRET}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'arc_mint_claim', chain: claim.source_chain, burnTx: claim.tx_hash, reattest: Date.now() - reattestAt > REATTEST_EVERY_MS }),
+      signal: AbortSignal.timeout(20_000),
+    })
+    const j = await r.json().catch(() => null) as { state?: string; txHash?: string } | null
+    if (j?.state === 'minted') console.log(`[claim-worker] catch-up mint for ${claim.id}: ${j.txHash}`)
+    if (j?.state === 'reattest_requested') {
+      await supabase.from('claims').update({
+        recovery_action: 'reattest', recovery_action_at: new Date().toISOString(), recovery_action_by: 'meshport',
+      }).eq('id', claim.id).then(() => {}, () => {})
+    }
+  } catch (e) {
+    console.error(`[claim-worker] catch-up mint call failed for ${claim.id} (non-fatal):`, e instanceof Error ? e.message : e)
   }
 }
 async function confirmArrival(supabase: SupabaseClient, claim: Claim) {
@@ -620,6 +661,7 @@ async function confirmArrival(supabase: SupabaseClient, claim: Claim) {
         // v2 message not received on Arc yet: nothing to find - skip every
         // scan below until it is (keeps this sweep to one RPC call).
         if (decoded.version === 1 && await isNonceUsedOnArc(decoded.nonce) === false) {
+          await arcMintCatchUp(supabase, claim)
           await persistErrorBestEffort(supabase, claim.id, 'waiting: CCTP message not yet received on Arc')
           return
         }

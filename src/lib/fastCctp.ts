@@ -30,9 +30,9 @@
 import { encodeFunctionData, decodeFunctionResult, pad, parseUnits, toHex, type Hex } from 'viem'
 import type { WalletAccount } from '@/wallet'
 import { arcRpcJson } from './arc'
-import { CCTP_DOMAINS, IRIS, fetchIrisMessage, forwardDone, type IrisMessage } from './cctpTracker'
+import { CCTP_DOMAINS, IRIS, fetchIrisMessage, forwardDone, delayReasonText, type IrisMessage } from './cctpTracker'
 import { FORWARD_HOOK, FAST_FINALITY, ARC_DOMAIN, bridgeNonce, type BridgeParams } from './gaslessBridge'
-import { CROSS_CHAIN_FEE, usdRule, meshportFee, arcWeiToUsdcUnits } from './feePolicy'
+import { ARC_OUT_FEE, usdRule, meshportFee, arcWeiToUsdcUnits } from './feePolicy'
 
 export const TOKEN_MESSENGER_V2 = '0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA' as Hex
 export const ARC_USDC = '0x3600000000000000000000000000000000000000' as Hex // ERC-20 view, 6 decimals
@@ -78,12 +78,17 @@ export function maxFeeFromIris(rows: IrisFeeRow[], amount: bigint, o: { fast: bo
   if (!row || typeof row.minimumFee !== 'number') return null
   const bpsX100 = BigInt(Math.ceil(row.minimumFee * 100))
   const protocol = (amount * bpsX100 + 999_999n) / 1_000_000n
-  const fwdRaw = o.forward ? row.forwardFee?.high ?? row.forwardFee?.med : 0
+  // Circle's forwarder spends whatever of maxFee is left after the protocol
+  // fee (as destination priority fee - nothing is refunded; Circle docs,
+  // Forwarding Service "Fees and execution"): a cap above its quote is simply
+  // charged. So the forwarding part is Circle's recommended 'med' quote, with
+  // no headroom; only the protocol fee (refunded if unused) gets headroom.
+  const fwdRaw = o.forward ? row.forwardFee?.med ?? row.forwardFee?.high : 0
   if (o.forward && typeof fwdRaw !== 'number') return null
   const fwd = BigInt(Math.ceil(fwdRaw ?? 0))
-  // Ethereum's gas moves most between quote and mint: 50% headroom there, 20% elsewhere.
+  // Ethereum's fee moves most between quote and burn: 50% headroom there, 20% elsewhere.
   const headroom = o.l1 ? 15n : 12n
-  return ((protocol + fwd) * headroom) / 10n + 1_000n
+  return (protocol * headroom) / 10n + fwd + 1_000n
 }
 
 // Circle's fee table per route, kept 20 s: Review and Confirm read the same one.
@@ -203,12 +208,12 @@ export function arcRouterAddress(): Hex | null {
   return /^0x[0-9a-fA-F]{40}$/.test(r) ? r as Hex : null
 }
 /**
- * MeshPort's fee for one transfer of `amount` (USDC units): 0.2%, min $0.05,
+ * MeshPort's fee for one transfer of `amount` (USDC units): 0.2%, min $0.01,
  * cap $5 - never below the router call's gas at today's price × 1.15
  * (lib/feePolicy - the relayer checks the same number).
  */
 export function routerFee(gasPrice: bigint, amount: bigint, destMintGas: bigint = 0n): bigint {
-  return meshportFee(amount, arcWeiToUsdcUnits(ROUTER_TRANSFER_GAS * gasPrice) + destMintGas, usdRule(CROSS_CHAIN_FEE, 6))
+  return meshportFee(amount, arcWeiToUsdcUnits(ROUTER_TRANSFER_GAS * gasPrice) + destMintGas, usdRule(ARC_OUT_FEE, 6))
 }
 
 // ── Who mints on the destination (api/bridge-relay transfer_mint) ──────────
@@ -485,7 +490,9 @@ async function settle(p: FastCctpParams, burnHash: string, approveHash: string |
     await sleep(pollMs)
   }
   if (!attested(msg) && !forwarded(msg)) {
-    throw new FastCctpError('Circle is still confirming this transfer. It will arrive on its own - check your balance in a few minutes.', 'settling')
+    // Circle's own reason when it is holding the transfer (e.g. its fast fee rose).
+    const why = delayReasonText(msg?.delayReason)
+    throw new FastCctpError(why ? `${why} It will arrive on its own.` : 'Circle is still confirming this transfer. It will arrive on its own - check your balance in a few minutes.', 'settling')
   }
   p.onStep('attestation', { values: { state: 'success' } })
 

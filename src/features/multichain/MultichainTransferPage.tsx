@@ -1136,12 +1136,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const routesOf = (id: string) => transferRoutes(settingsMap, id, accountKind)
   const ENABLED_CHAINS = ALL_CHAINS
     .filter(c => routesOf(c.id).length > 0)
-    .map(c => ({ ...c, ub: routesOf(c.id)[0] === 'ub' }))
+    .map(c => ({ ...c, ub: !routesOf(c.id).includes('cctp') }))
   const baseChain = ENABLED_CHAINS.find(c => c.id === selectedChain)
     ?? (() => {
       // The selected chain was just switched off while open: same shape.
       const c = ALL_CHAINS.find(c => c.id === selectedChain)!
-      return { ...c, ub: routesOf(c.id)[0] === 'ub' }
+      return { ...c, ub: !routesOf(c.id).includes('cctp') }
     })()
 
   // If the admin disables the currently-selected chain, fall back to the
@@ -1175,11 +1175,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   // Final mechanism actually used for this transfer: the user's pick when
   // both routes are available, otherwise whichever single route the admin
-  // left enabled. Defaults to UB (today's existing default) until the user
-  // opens the picker and chooses CCTP v2 instead.
+  // left enabled. Defaults to CCTP (27 Nov audit): out of Arc, CCTP's
+  // standard transfer is free and attests in ~0.5 s (Arc has deterministic
+  // finality), while Unified Balance adds Gateway's 0.005% fee, Arc gas for
+  // the burn intent and usually the forwarding fee - same speed, never cheaper.
   const effectiveUb = isTokenRoute ? false // EURC / cirBTC: CCTPx only
     : availableMechanisms.length > 1
-    ? (selectedRoute ?? 'ub') === 'ub'
+    ? selectedRoute === 'ub'
     : availableMechanisms[0] === 'ub'
   // The destination chips: every enabled chain for USDC; for EURC / cirBTC
   // only the enabled chains Circle supports that token on (with Arc).
@@ -3255,10 +3257,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       if (!burnTxHashRef.current && !ubDepositedAmountRef.current && !ubDepositTxRef.current) {
         const { walletAddress: failWa } = useAuthStore.getState()
         import('@/lib/failure').then(({ classifyFailure, recordFailure }) => recordFailure({
-          feature: 'transfer', walletAddress: failWa, amount: parseFloat(amount) || 0, token: 'USDC',
+          feature: 'transfer', walletAddress: failWa, amount: parseFloat(amount) || 0, token: tokenSym || 'USDC',
           sourceChain: ARC_CHAIN_KEY, destinationChain: chain.sdk || chain.name || selectedChain,
           counterparty: address || undefined, failure: classifyFailure(err),
-          metadata: { route: chain.ub ? 'ub' : 'cctp' },
+          metadata: { route: isTokenRoute ? 'cctpx' : chain.ub ? 'ub' : 'cctp' },
         })).catch(() => {})
       }
 
