@@ -4193,7 +4193,25 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   // not by the fee values, so the card never changes height.
                   const usd = (n: number) => n > 0 ? `${trimTrailingZeros(n.toFixed(4))} USDC` : 'Free'
                   const forwarderRow = isTokenRoute || chain.ub || circleForwarderMintsTo(chain.sdk) || feeEstimate.forwarderFee > 0
-                  const rows: Array<[string, string | null, string]> = [
+                  // Unified Balance: the same rows as a Unified Balance Bring -
+                  // Circle Gateway's fee (its 0.005% + the burn intent's gas,
+                  // what Gateway takes from the balance), the forwarding fee
+                  // when Circle's forwarder mints, Arc gas for the deposit
+                  // (paid from the wallet), the total, and "at least" for what
+                  // arrives (Gateway's maxFee is a cap).
+                  const fee4 = (n: number) => `${trimTrailingZeros(n.toFixed(4))} USDC`
+                  const ubGatewayFee = feeEstimate.bridgeFee + feeEstimate.networkFee
+                  const ubTotal = ubGatewayFee + feeEstimate.forwarderFee + feeEstimate.kitFee + feeEstimate.onTop
+                  const ubRows: Array<[string, string | null, string]> = [
+                    ['You Send', `${fmtTok(numAmount)} ${tokenSym}`, 'var(--text-primary)'],
+                    ['Circle Gateway fee', loading ? null : `${feeEstimate.approx ? 'Up to ' : ''}${fee4(ubGatewayFee)}`, 'var(--warning)'],
+                    ...(loading || feeEstimate.forwarderFee > 0 ? [['Forwarding fee', loading ? null : fee4(feeEstimate.forwarderFee), 'var(--warning)'] as [string, string | null, string]] : []),
+                    ...((!loading && feeEstimate.kitFee > 0) ? [['Service Fee', fee4(feeEstimate.kitFee), 'var(--warning)'] as [string, string | null, string]] : []),
+                    ['Arc gas (deposit)', loading ? null : feeEstimate.onTop > 0 ? fee4(feeEstimate.onTop) : '~$0.01', 'var(--success)'],
+                    ['Total fees', loading ? null : `Up to ${fee4(ubTotal)}`, 'var(--text-primary)'],
+                    ['Est. Time', '~60s', 'var(--accent)'],
+                  ]
+                  const rows: Array<[string, string | null, string]> = !isTokenRoute && chain.ub ? ubRows : [
                     ['You Send', `${fmtTok(numAmount)} ${tokenSym}`, 'var(--text-primary)'],
                     // UB/Gateway doesn't bridge (no lock-and-mint) - this
                     // field holds the Gateway protocol fee there, not a
@@ -4219,7 +4237,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                       <div className="flex justify-between items-center px-3 py-2.5 mt-1"
                         style={{background:'color-mix(in srgb, var(--brand) 8%, transparent)', borderRadius: 14}}>
                         <span className="text-sm font-bold text-text-primary">Receiver Gets</span>
-                        {loading ? bar(92) : <span className="text-sm font-bold" style={{color:'var(--success-text)'}}>{feeEstimate.approx ? '≈ ' : ''}{isTokenRoute ? `${fmtTok(feeEstimate.receiverGets)} ${tokenSym}` : `${trimTrailingZeros(feeEstimate.receiverGets.toFixed(4))} USDC`}</span>}
+                        {loading ? bar(92) : <span className="text-sm font-bold" style={{color:'var(--success-text)'}}>{!isTokenRoute && chain.ub ? 'At least ' : feeEstimate.approx ? '≈ ' : ''}{isTokenRoute ? `${fmtTok(feeEstimate.receiverGets)} ${tokenSym}` : `${trimTrailingZeros(feeEstimate.receiverGets.toFixed(4))} USDC`}</span>}
                       </div>
                       {/* Stand-in numbers (the live fee couldn't be fetched): say so - they're retried every few seconds. */}
                       {!loading && feeEstimate.approx && (

@@ -25,6 +25,14 @@ import { ARC_EXPLORER, explorerTxUrl } from './chainExplorers'
  * explorers (docs.arc.io) are explorer.testnet.arc.io / explorer.arc.io.
  * Old rows are shown with the official one - same /tx/<hash> path. Pure.
  */
+/** A transaction hash as stored: EVM hex lowercased; a Solana signature
+ *  (base58, case-sensitive) kept exactly - lowercasing broke its explorer
+ *  link (Arc → Solana transfer, 27 Nov). */
+function hashKey(h: string | null | undefined): string | null {
+  if (!h) return null
+  return /^0x[0-9a-fA-F]+$/.test(h) ? h.toLowerCase() : h
+}
+
 export function officialArcExplorer(url: string | undefined): string | undefined {
   if (!url) return url
   return url
@@ -208,7 +216,7 @@ export async function saveActivity(p: SaveParams): Promise<boolean> {
     wallet_address:       p.walletAddress.toLowerCase(),
     user_id:              p.userId ?? null,
     tx_hash:              p.txHash?.toLowerCase() ?? null,
-    destination_tx_hash:  p.destinationTxHash?.toLowerCase() ?? null,
+    destination_tx_hash:  hashKey(p.destinationTxHash),
     activity_type:        p.activityType,
     amount:               p.amount,
     usd_value:            p.amount,
@@ -311,7 +319,7 @@ export async function setActivityDestinationTx(txHash: string, walletAddress: st
       {
         method: 'PATCH',
         headers: { ...(await authHeaders()), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-        body: JSON.stringify({ destination_tx_hash: destinationTxHash.toLowerCase() }),
+        body: JSON.stringify({ destination_tx_hash: hashKey(destinationTxHash) }),
       },
     )
     invalidateActivityMirror(walletAddress)
@@ -510,7 +518,7 @@ export const Activity = {
           headers: { ...(await authHeaders()), 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
           body: JSON.stringify({
             status: 'completed',
-            destination_tx_hash: p.destinationTxHash?.toLowerCase() ?? null,
+            destination_tx_hash: hashKey(p.destinationTxHash),
           }),
         }
       )
