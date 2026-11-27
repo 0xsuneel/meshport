@@ -7,7 +7,8 @@
 // "Back" isn't only the browser's back button (POP): many screens return with
 // their own button (navigate('/p2p'), navigate('/')), which is a PUSH to the
 // router - so going UP the hierarchy (to a parent path or to a tab root from
-// deeper) also counts as back, the way it reads to the user.
+// deeper) also counts as back, the way it reads to the user, and so does a
+// navigate(path, { state: { navBack: true } }) from a screen's back button.
 import { useLocation, useNavigationType } from 'react-router-dom'
 
 export type NavKind = 'forward' | 'back' | 'tab' | 'none'
@@ -20,11 +21,13 @@ const isAncestor = (a: string, b: string) => a !== '/' && b.startsWith(a.endsWit
 
 let last: { path: string; kind: NavKind } = { path: '', kind: 'none' }
 
-function classify(pathname: string, navType: string): NavKind {
+function classify(pathname: string, navType: string, navBack = false): NavKind {
   if (last.path === pathname) return last.kind // same page re-rendering
   const prev = last.path
   let kind: NavKind
   if (!prev) kind = 'none'
+  // A screen's own back button that navigates (a PUSH) to where it came from.
+  else if (navBack && !(TAB_ROOTS.has(pathname) && TAB_ROOTS.has(prev))) kind = 'back'
   else if (TAB_ROOTS.has(pathname) && TAB_ROOTS.has(prev)) kind = 'tab'
   else if (navType === 'POP') kind = 'back'
   else if (TAB_ROOTS.has(pathname)) kind = 'back'
@@ -36,7 +39,7 @@ function classify(pathname: string, navType: string): NavKind {
 }
 
 export function useNavDirection(): NavKind {
-  const { pathname } = useLocation()
+  const { pathname, state } = useLocation()
   const navType = useNavigationType()
-  return classify(pathname, navType)
+  return classify(pathname, navType, !!(state as { navBack?: boolean } | null)?.navBack)
 }

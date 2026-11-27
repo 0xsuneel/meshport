@@ -759,7 +759,7 @@ export function PaySendPage() {
       if (rt === '/') { navigate('/'); return }
       if (rt === 'contacts') { navigate('/contacts'); return }
       if (rt === 'chat' && returnConvId) { navigate(`/chat/${returnConvId}`); return }
-      if (rt === '/recent-paid') { navigate('/recent-paid'); return }
+      if (rt === '/recent-paid') { navigate('/recent-paid', { state: { navBack: true } }); return }
       if (rt === '/payment-link') { navigate(-1); return }
       goBack2('search')
       return

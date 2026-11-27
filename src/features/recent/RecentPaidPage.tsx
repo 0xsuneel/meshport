@@ -202,7 +202,7 @@ export function RecentPaidPage() {
         display: 'flex', alignItems: 'center', gap: 12,
       }}>
         {!isDesktop && (
-          <button onClick={() => navigate(backTo)} className="back-btn">
+          <button onClick={() => navigate(backTo, { state: { navBack: true } })} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
         )}
