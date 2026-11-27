@@ -1,6 +1,7 @@
 // A settlement from Business → Settlements as the app's history card
 // (19 Nov 2026): the same card Activity shows for it.
 import type { TxDetail } from '@/components/ui/TxDetailPage'
+import { ownAccountName } from '@/lib/ownName'
 import type { Claim } from '@/lib/claimService'
 import { arcExplorerTxUrl, explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLabel } from './settlement'
@@ -24,7 +25,7 @@ export function settlementDetail(c: Claim, me: { handle?: string; address?: stri
     amountLabel: 'Amount settled', amount: `+$${exact(amount)}`, unit: 'USDC',
     pill: { icon: 'hub', text: ok ? 'Settled to Arc' : failed ? 'Settlement' : 'Settling to Arc' },
     parties: [
-      { label: 'From', name: 'Your wallet', address: c.walletAddress || undefined, chain: other },
+      { label: 'From', name: ownAccountName(), address: c.walletAddress || undefined, chain: other },
       { label: 'To', name: 'You', you: true, handle: me.handle, address: me.address, chain: 'Arc' },
     ],
     steps: ['Settlement approved', <>Sent on <b>{other}</b></>, <>Confirmed by <b>Circle</b></>, <>Delivered on <b>Arc</b></>],

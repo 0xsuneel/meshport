@@ -16,6 +16,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useSingleFlight } from '@/hooks/useSingleFlight'
 import { readRewardsCache, writeRewardsCache } from '@/lib/rewardsCache'
 import { TxDetailPage } from '@/components/ui/TxDetailPage'
+import { ownAccountName } from '@/lib/ownName'
 import { AmountField } from '@/components/ui/AmountField'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
@@ -93,7 +94,7 @@ function RewardClaimReceipt({ claim, onClose }: { claim: ClaimRecord; onClose: (
         { label: 'From', name: 'MeshPort Rewards', sub: 'Rewards contract' },
         { label: 'To', name: 'You', you: true, handle: myHandle, address: me.walletAddress || undefined },
       ],
-      steps: ['Claim approved', <>Paid by <b>MeshPort Rewards</b></>, <>Received by <b>you</b></>],
+      steps: ['Claim approved', <>Paid by <b>MeshPort Rewards</b></>, <>Received by <b>{ownAccountName()}</b></>],
       whenLabel: 'Claimed at', when: ((d: Date) => `${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`)(new Date(claim.claimed_at || claim.created_at)),
       hashes: hash ? [{ label: 'Transaction hash', hash }] : [],
       detailsTitle: 'Claim details',

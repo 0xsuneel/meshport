@@ -23,6 +23,7 @@ import { SearchField } from '@/components/ui/SearchField'
 import { useMerchant, isMerchantClaim } from '@/lib/merchant'
 import { receiptNumber } from '@/lib/receiptNumber'
 import { getShopInfo, shopTitle, type ShopInfo } from '@/lib/shop'
+import { ownAccountName } from '@/lib/ownName'
 import { orderTitle, shopReceivedTitle, displayOrderNumber, shortOrderNumber, type OrderKind } from '@/lib/merchantPay'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
@@ -960,7 +961,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   ) : null
   const me = personal ? (
     <div style={cardStyle}>
-      {person('You', [myUsername ? `${String(myUsername).replace(/\.arc$/i, '')}.arc` : '', record.walletAddress ? shortAddr(String(record.walletAddress)) : '', `${tokenSymbol || 'USDC'} on ${chain || 'Arc'}`].filter(Boolean).join(' · '), record.walletAddress ? String(record.walletAddress) : undefined, true)}
+      {person(ownAccountName(), [myUsername ? `${String(myUsername).replace(/\.arc$/i, '')}.arc` : '', record.walletAddress ? shortAddr(String(record.walletAddress)) : '', `${tokenSymbol || 'USDC'} on ${chain || 'Arc'}`].filter(Boolean).join(' · '), record.walletAddress ? String(record.walletAddress) : undefined, true)}
     </div>
   ) : null
   const pageSections = personal ? (
@@ -1045,7 +1046,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
           actions: [{ label: 'Open Rewards', onClick: () => { onClose(); navigate('/rewards') } }] },
         youParty('To'),
       ],
-      steps: ['Claim approved', <>Paid by <b>MeshPort Rewards</b></>, <>Received by <b>you</b></>],
+      steps: ['Claim approved', <>Paid by <b>MeshPort Rewards</b></>, <>Received by <b>{ownAccountName()}</b></>],
       whenLabel: 'Claimed at', when: whenFull,
       hashes: txHash ? [{ label: 'Transaction hash', hash: txHash }] : [],
       detailsTitle: 'Claim details',
@@ -1085,8 +1086,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       reason: reasonNote ?? undefined,
       parties: type === 'send' ? [them, youParty('From')] : [them, shopReceipt ? myStoreParty : youParty('To')],
       steps: ['Payment approved',
-        <>Payment made by <b>{type === 'send' ? 'you' : theirLabel}</b></>,
-        <>Payment received by <b>{type === 'send' ? theirLabel : 'you'}</b></>],
+        <>Payment made by <b>{type === 'send' ? ownAccountName() : theirLabel}</b></>,
+        <>Payment received by <b>{type === 'send' ? theirLabel : shopReceipt ? myStoreName : ownAccountName()}</b></>],
       whenLabel: type === 'send' ? 'Paid at' : 'Received at', when: whenFull,
       hashes: txHash ? [{ label: 'Transaction hash', hash: txHash }] : [],
       detailsTitle: 'Payment details',
@@ -1115,14 +1116,14 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     // A business's settlement: its money on another chain moved to its Arc balance.
     const biz = !out && (!!(metadata as any)?.merchant || isMerchantClaim(record as any))
     const other = chainLabel(out ? destinationChain : sourceChain) || 'the other chain'
-    const toName = out ? (isSelfTransferDetail ? 'Your wallet' : transferCpName || shortAddr(transferCp)) : ''
+    const toName = out ? (isSelfTransferDetail ? ownAccountName() : transferCpName || shortAddr(transferCp)) : ''
     txDetail = {
       title: out ? 'Transfer details' : biz ? 'Settlement details' : 'Bridge details', status: receiptStatus,
       amountLabel: out ? 'Amount sent' : biz ? 'Amount settled' : 'Amount received', amount: `${out ? '' : '+'}${amtOf(amount, tokenSymbol)}`, unit: tokenSymbol || 'USDC',
       pill: out ? { icon: 'hub', text: 'Multichain transfer' } : biz ? { icon: 'hub', text: receiptStatus === 'success' ? 'Settled to Arc' : receiptStatus === 'failed' ? 'Settlement' : 'Settling to Arc' } : { icon: 'hub', text: 'Brought in to Arc' }, reason: reasonNote ?? undefined,
       parties: out
         ? [{ label: 'To', name: toName, handle: transferCpName || undefined, address: transferCp || undefined, chain: other }, youParty('From', 'Arc')]
-        : [{ label: 'From', name: 'Your wallet', address: counterparty || undefined, chain: other }, youParty('To', 'Arc')],
+        : [{ label: 'From', name: ownAccountName(), address: counterparty || undefined, chain: other }, youParty('To', 'Arc')],
       steps: out
         ? ['Transfer approved', <>{isCctpx ? 'Sent' : 'Burned'} on <b>Arc</b></>, <>Confirmed by <b>Circle</b></>, <>Delivered on <b>{other}</b></>]
         : [biz ? 'Settlement approved' : 'Bridge approved', <>{isCctpx ? 'Sent' : 'Burned'} on <b>{other}</b></>, <>Confirmed by <b>Circle</b></>, <>{isCctpx ? 'Delivered' : 'Minted'} on <b>Arc</b></>],
@@ -1159,13 +1160,13 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     const kind = String(md?.kind ?? '')
     const ref = String(md?.tradeId || md?.offerId || '')
     const escrow: TxParty = { label: isP2PSellOrder ? 'To' : 'From', name: 'P2P escrow',
-      sub: isP2PPurchase ? 'Released by the seller' : isP2PRefund ? 'Returned to you' : 'Held until a buyer pays',
+      sub: isP2PPurchase ? 'Released by the seller' : isP2PRefund ? 'Returned to the wallet' : 'Held until a buyer pays',
       address: counterparty || undefined,
       actions: [{ label: 'Open P2P', onClick: () => { onClose(); navigate('/p2p') } }] }
     const topUp = kind === 'offer_topped_up'
     txDetail = {
       title: 'P2P details', status: receiptStatus,
-      amountLabel: isP2PSellOrder ? (topUp ? 'Added to escrow' : 'Locked in escrow') : isP2PRefund ? 'Returned to you' : 'USDC bought',
+      amountLabel: isP2PSellOrder ? (topUp ? 'Added to escrow' : 'Locked in escrow') : isP2PRefund ? 'Returned' : 'USDC bought',
       amount: `${isP2PSellOrder ? '' : '+'}${amtOf(amount, tokenSymbol)}`, unit: tokenSymbol || 'USDC',
       pill: { icon: isP2PRefund ? 'recover' : 'p2p', text: isP2PSellOrder ? (topUp ? 'Escrow top-up' : 'Sell order created')
         : isP2PRefund ? (kind === 'admin_cancelled_offer' ? 'Cancelled by admin' : 'Sell order cancelled') : 'P2P purchase' },
@@ -1174,8 +1175,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       steps: isP2PSellOrder
         ? [topUp ? 'Top-up approved' : 'Sell order created', <>USDC locked in <b>escrow</b></>, 'Waiting for buyers']
         : isP2PRefund
-        ? ['Sell order cancelled', <>USDC released from <b>escrow</b></>, <>Received by <b>you</b></>]
-        : [<>Payment sent to the <b>seller</b></>, 'Seller confirmed', <>USDC released to <b>you</b></>],
+        ? ['Sell order cancelled', <>USDC released from <b>escrow</b></>, <>Received by <b>{ownAccountName()}</b></>]
+        : [<>Payment sent to the <b>seller</b></>, 'Seller confirmed', <>USDC released to <b>{ownAccountName()}</b></>],
       whenLabel: isP2PSellOrder ? 'Locked at' : isP2PRefund ? 'Returned at' : 'Bought at', when: whenFull,
       hashes: txHash ? [{ label: 'Transaction hash', hash: txHash }] : [],
       detailsTitle: 'P2P details',
@@ -1190,7 +1191,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC', note: noteText || undefined,
       pill: { icon: 'wallet', text: 'To yourself' }, reason: reasonNote ?? undefined,
       parties: [youParty('From'), youParty('To')],
-      steps: ['Payment approved', <>Sent from <b>your wallet</b></>, <>Received in <b>your wallet</b></>],
+      steps: ['Payment approved', <>Sent from <b>{ownAccountName()}</b></>, <>Received by <b>{ownAccountName()}</b></>],
       whenLabel: type === 'send' ? 'Paid at' : 'Received at', when: whenFull,
       hashes: txHash ? [{ label: 'Transaction hash', hash: txHash }] : [],
       detailsTitle: 'Payment details',

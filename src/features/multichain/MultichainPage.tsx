@@ -48,6 +48,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSharedKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TxDetailPage, type TxDetail, type TxParty } from '@/components/ui/TxDetailPage'
+import { ownAccountName } from '@/lib/ownName'
 import { ChainScanner } from '@/components/ui/ChainScanner'
 import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpinner'
 import { DesktopHistoryPanel } from '@/components/ui/DesktopHistoryPanel'
@@ -1540,10 +1541,10 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
             parties: kind === 'chainPay'
               ? [{ label: 'From', name: 'Customer', chain: chainName }, { ...you('To'), chain: chainName }]
               : out
-              ? [{ label: 'To', name: toSelf ? 'Your wallet' : sentTo ? `${sentTo.slice(0, 6)}…${sentTo.slice(-4)}` : chainName, address: sentTo || undefined, chain: chainName }, you('From')]
-              : [{ label: 'From', name: 'Your wallet', chain: chainName }, you('To')],
+              ? [{ label: 'To', name: toSelf ? ownAccountName() : sentTo ? `${sentTo.slice(0, 6)}…${sentTo.slice(-4)}` : chainName, address: sentTo || undefined, chain: chainName }, you('From')]
+              : [{ label: 'From', name: ownAccountName(), chain: chainName }, you('To')],
             steps: kind === 'chainPay'
-              ? [<>Paid on <b>{chainName}</b></>, <>Received by <b>you</b></>, it.chainReceipt === 'converted' ? <>Moved to <b>Arc</b></> : it.chainReceipt === 'converting' ? 'Moving to Arc' : <>Kept on <b>{chainName}</b> until you settle</>]
+              ? [<>Paid on <b>{chainName}</b></>, <>Received by <b>{ownAccountName()}</b></>, it.chainReceipt === 'converted' ? <>Moved to <b>Arc</b></> : it.chainReceipt === 'converting' ? 'Moving to Arc' : <>Kept on <b>{chainName}</b> until you settle</>]
               : kind === 'refund' ? ['Move did not finish', <>Recovered by <b>{it.recoveredVia ? it.recoveredVia.toUpperCase() : 'MeshPort'}</b></>, <>Refunded on <b>Arc</b></>]
               : kind === 'settle' ? ['Settlement approved', <>Sent on <b>{chainName}</b></>, <>Confirmed by <b>Circle</b></>, <>Delivered on <b>Arc</b></>]
               : out

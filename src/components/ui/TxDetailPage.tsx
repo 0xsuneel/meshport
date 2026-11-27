@@ -19,6 +19,7 @@ import type { PromoFeature } from './SuccessPromo'
 import { PoweredByFooter } from './PoweredByFooter'
 import { ActionIcon, type ActionIconName } from './ActionIcon'
 import { UserPhoto } from './PhotoFill'
+import { ownAccountName } from '@/lib/ownName'
 
 export interface TxParty {
   label: 'From' | 'To'
@@ -144,7 +145,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
       'MeshPort receipt', '',
       `${d.amount}${d.unit ? ` ${d.unit}` : ''}`,
       `Status: ${d.status === 'success' ? 'Successful' : d.status === 'pending' ? 'Processing' : 'Failed'}`,
-      ...(d.parties ?? []).map(p => `${p.label}: ${p.you ? 'You' : p.name}${p.handle ? ` (${p.handle})` : ''}${p.address ? ` ${p.address}` : ''}${p.chain ? ` on ${p.chain}` : ''}`),
+      ...(d.parties ?? []).map(p => `${p.label}: ${p.you ? ownAccountName() : p.name}${p.handle ? ` (${p.handle})` : ''}${p.address ? ` ${p.address}` : ''}${p.chain ? ` on ${p.chain}` : ''}`),
       `${d.whenLabel}: ${d.when}`,
       ...d.hashes.map(h => `${h.label}: ${h.hash}`),
       ...d.details.filter(r => typeof r.value === 'string' && !r.href).map(r => `${r.label}: ${r.value}`),
@@ -247,7 +248,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: muted }}>{p.label}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 19, fontWeight: 800, letterSpacing: '-.3px', marginTop: 4, minWidth: 0 }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.you ? 'You' : p.name}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.you ? ownAccountName() : p.name}</span>
                       {p.verified && <BadgeCheck size={19} color="#fff" fill="var(--success)" aria-label="Verified business" style={{ flexShrink: 0 }} />}
                       {p.tag && <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 6, color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 12%, transparent)', flexShrink: 0 }}>{p.tag}</span>}
                     </div>
@@ -282,7 +283,7 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
                   <span aria-hidden style={{ position: 'relative', overflow: 'hidden', width: 50, height: 50, borderRadius: '50%', flex: 'none', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 17,
                     color: p.you ? 'var(--warning-text)' : 'var(--brand-text)',
                     background: p.you ? 'color-mix(in srgb, var(--warning) 16%, transparent)' : 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>
-                    {initials(p.photo ? p.name : p.handle || p.name)}
+                    {initials(p.photo ? p.name : p.you ? ownAccountName() : p.handle || p.name)}
                     {p.photo
                       ? <img src={p.photo} alt="" onError={e => { e.currentTarget.style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', background: 'var(--surface)' }} />
                       : <UserPhoto name={p.handle} />}

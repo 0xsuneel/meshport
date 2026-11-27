@@ -39,6 +39,7 @@ import { drawMeshportQr } from '@/lib/qrLogo'
 import { QrCard } from '@/features/business/ui/QrCard'
 import { qrCardFile } from '@/lib/qrCardImage'
 import { SearchField } from '@/components/ui/SearchField'
+import { ownAccountName } from '@/lib/ownName'
 
 /** Chat text for a request / bill - the chat renders it as a live card. */
 const chatMessageFor = (i: MerchantIntent): string => chatCardMessage(i, formatAmount(i.amount))
@@ -819,7 +820,7 @@ function MerchantPaymentReceipt({ p, orderNumber, note, onViewOrder, onClose }: 
       ],
       steps: [
         <>Paid by <b>{handle || short(p.from)}</b>{onArc ? null : <> on <b>{chainName}</b></>}</>,
-        arriving ? paymentStageLabel(p) : <>Received by <b>you</b></>,
+        arriving ? paymentStageLabel(p) : <>Received by <b>{ownAccountName()}</b></>,
       ],
       whenLabel: arriving ? 'Sent at' : 'Received at', when: whenFull,
       hashes: p.txHash ? [{ label: 'Transaction hash', hash: p.txHash }] : [],
