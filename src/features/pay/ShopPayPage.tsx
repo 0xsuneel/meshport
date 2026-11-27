@@ -148,6 +148,7 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
         const to = `${shop.username}|${wallet}|${shopTitle(shop)}|${shop.avatarUrl ?? ''}`
         // &store: kept on the payment in history, so "Pay again" reopens this store.
         const storeQ = (shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : '')
+          + (note.trim() ? `&note=${encodeURIComponent(note.trim().slice(0, 140))}` : '')
           // What the payment screens show under the name instead of the username.
           + (shopSubline(shop) ? `&shopline=${encodeURIComponent(shopSubline(shop))}` : '')
         navigate(`/pay?to=${encodeURIComponent(to)}&amount=${encodeURIComponent(String(value))}&merchantPay=${encodeURIComponent(String(data))}&review=1${storeQ}`)
@@ -156,7 +157,7 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
       if (useAuthStore.getState().isAuthenticated) {
         const { getPayment, orderPaySendUrl, isOrderPayable } = await import('@/lib/merchantPay')
         const v = await getPayment(String(data)).catch(() => null)
-        if (v && isOrderPayable(v)) { navigate(`${orderPaySendUrl(v)}&review=1${shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : ''}${shopSubline(shop) ? `&shopline=${encodeURIComponent(shopSubline(shop))}` : ''}`, { state: { merchantView: v } }); return }
+        if (v && isOrderPayable(v)) { navigate(`${orderPaySendUrl(v)}&review=1${shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : ''}${note.trim() ? `&note=${encodeURIComponent(note.trim().slice(0, 140))}` : ''}${shopSubline(shop) ? `&shopline=${encodeURIComponent(shopSubline(shop))}` : ''}`, { state: { merchantView: v } }); return }
       }
       navigate(`/paylink/r/${data}`)
     } catch (e) {
@@ -236,7 +237,8 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
         )}
         <button type="button" disabled={!(value >= 0.01) || !!limitError || busy} onClick={go}
           className="w-full min-h-[52px] rounded-2xl bg-brand text-white font-bold text-base disabled:opacity-40 transition-opacity">
-          {busy ? 'Starting…' : value >= 0.01 ? `Pay ${money(value)}` : 'Enter amount'}
+          {/* In the app the next screen is Review; a payment link's visitor pays from their own wallet. */}
+          {busy ? 'Starting…' : value >= 0.01 ? (signedIn ? 'Review' : `Pay ${money(value)}`) : 'Enter amount'}
         </button>
         <p className="mt-2 text-[11px] text-center text-text-muted">Pay in USDC from Arc or any supported chain</p>
       </div>

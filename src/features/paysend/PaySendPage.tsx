@@ -159,7 +159,8 @@ export function PaySendPage() {
   const amountBoxRef = useRef<HTMLDivElement>(null)
   const keypadLift = useKeypadLift(showAmountPad && screen === 'amount', amountBoxRef, !isDesktop)
   // Optional message the payer adds on the amount page (saved with the payment).
-  const [note, setNote] = useState('')
+  // A note typed on the Shop QR page comes along (&note=), shown on Review and kept on the payment.
+  const [note, setNote] = useState(() => (searchParams.get('note') || '').slice(0, 140))
   const [, setAmountError] = useState('')
   // ?token= - opened from a token's own page (Home → Assets), so the amount
   // screen starts on that token.
