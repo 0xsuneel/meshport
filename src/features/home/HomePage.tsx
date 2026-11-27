@@ -1996,11 +1996,13 @@ function AdTile({ ad, idx, count, title, height, moved, swipe, onOpen }: {
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}
       style={{ position: 'relative', overflow: 'hidden', height, borderRadius: 20, cursor: 'pointer', boxSizing: 'border-box',
         background: 'var(--glass-fill)', border: '1px solid var(--border)', boxShadow: 'var(--glass-card)',
-        display: 'flex', alignItems: 'center', gap: 14, padding: '0 14px 0 0' }}>
+        display: 'flex', alignItems: 'center', gap: 14, padding: '6px 14px 6px 6px' }}>
       <div key={idx} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0, alignSelf: 'stretch',
         animation: moved ? 'mpBannerIn 220ms var(--ease-out)' : undefined }}>
-        <div style={{ width: height, alignSelf: 'stretch', flexShrink: 0, background: panel, borderRadius: `0 ${height / 2}px ${height / 2}px 0`, display: 'grid', placeItems: 'center' }}>
-          <AdArt ad={ad} size={Math.round(height * 0.58)} round onBrand />
+        {/* Inside the box with a 6px gap all round (touching the card's edges it
+            covered the border and looked bigger than the box). */}
+        <div style={{ width: height - 12, alignSelf: 'stretch', flexShrink: 0, background: panel, borderRadius: `15px ${(height - 12) / 2}px ${(height - 12) / 2}px 15px`, display: 'grid', placeItems: 'center' }}>
+          <AdArt ad={ad} size={Math.round(height * 0.5)} round onBrand />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>

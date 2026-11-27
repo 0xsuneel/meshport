@@ -89,14 +89,16 @@ function PayAgainRow({ navigate }: { navigate: NavigateFunction }) {
     return () => { cancelled = true }
   }, [walletAddress, cacheKey, reconnects, changed])
 
-  if (!loaded && people.length === 0) {
+  // Pay again is for paying others: your own account (a self-payment) is left out here.
+  const shown = people.filter(p => !p.isSelf)
+  if (!loaded && shown.length === 0) {
     return (
       <div aria-busy="true" aria-label="Loading recent people" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', justifyItems: 'center', paddingBottom: 18 }}>
         {Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="rounded-full" style={{ width: FACE, height: FACE }} />)}
       </div>
     )
   }
-  if (people.length === 0) {
+  if (shown.length === 0) {
     return (
       <button type="button" onClick={() => navigate('/pay')} className="mp-press"
         style={{ width: '100%', height: 62, border: 'none', background: 'none', cursor: 'pointer', font: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
@@ -107,14 +109,14 @@ function PayAgainRow({ navigate }: { navigate: NavigateFunction }) {
   }
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
-      {people.slice(0, 4).map((c, i) => (
+      {shown.slice(0, 4).map((c, i) => (
         <button key={c.wallet_address} type="button" className="mp-press" aria-label={`Pay ${recentShortName(c)}`} style={cell}
           onClick={() => navigate(`/pay?to=${encodeURIComponent(recentSendTarget(c))}`, { state: { returnTo: '/' } })}>
           <Face c={c} i={i} />
           <span style={cellLabel}>{recentShortName(c)}</span>
         </button>
       ))}
-      {Array.from({ length: Math.max(0, 4 - people.length) }, (_, i) => <span key={`gap-${i}`} />)}
+      {Array.from({ length: Math.max(0, 4 - shown.length) }, (_, i) => <span key={`gap-${i}`} />)}
       {/* View all: a round button at the right end of the row. */}
       <button type="button" className="mp-press" style={cell} onClick={() => navigate('/recent-paid', { state: { from: '/' } })}>
         <span style={{ width: FACE, height: FACE, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', boxShadow: 'inset 0 0 0 1px var(--border)', display: 'grid', placeItems: 'center', color: 'var(--text-primary)' }}>
