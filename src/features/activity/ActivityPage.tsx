@@ -781,15 +781,20 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const isBusinessPayment = !!((metadata as any)?.merchantPayment || (metadata as any)?.merchantVia === 'shop_qr' || (metadata as any)?.merchantOrderKind)
   // The business on the other side (Paytm / PhonePe show a shop's name, type
   // and logo on its payment - never its username). Personal accounts: null.
+  // A payment you made: the business you paid. A Shop QR payment you got:
+  // your own store, so the receipt reads "From <customer> -> To <your store>".
   const [biz, setBiz] = useState<ShopInfo | null>(null)
+  const [myShop, setMyShop] = useState<ShopInfo | null>(null)
+  const storeIdMd = typeof (metadata as any)?.merchantStoreId === 'string' ? String((metadata as any).merchantStoreId) : null
+  const shopReceipt = type === 'receive' && activityOrderKind(metadata) === 'shop'
   useEffect(() => {
-    const u = String(cpUsername || '').replace(/\.arc$/i, '')
-    if (!u || (type !== 'send' && type !== 'receive')) return
-    const sid = typeof (metadata as any)?.merchantStoreId === 'string' ? (metadata as any).merchantStoreId : null
+    const own = shopReceipt
+    const u = String((own ? myUsername : type === 'send' ? cpUsername : '') || '').replace(/\.arc$/i, '')
+    if (!u) return
     let live = true
-    getShopInfo(u, sid).then(i => { if (live && i?.verified) setBiz(i) }).catch(() => {})
+    getShopInfo(u, storeIdMd).then(i => { if (live && i?.verified) (own ? setMyShop : setBiz)(i) }).catch(() => {})
     return () => { live = false }
-  }, [cpUsername, type, (metadata as any)?.merchantStoreId])
+  }, [cpUsername, myUsername, type, storeIdMd, shopReceipt])
   const rows = [
     { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Settlement from ${chain || 'other chain'}` : merchantOrderDetail ? orderWord : activityOrderKind(metadata) === 'shop' && (type === 'receive' || type === 'send') ? 'Payment' : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? bulkWord(metadata) : cashOutTitle(type, metadata) ?? type },
     { label: 'Chain',  value: chain },
@@ -1052,15 +1057,21 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     const theirLabel = (biz ? shopTitle(biz) : '') || (shop ? shopNameOf(metadata) : '') || theirHandle || shortAddr(counterparty)
     // A business: its store's name, type and logo (as Paytm shows "Madivaleshvar
     // Kirani Store" with its icon, never the UPI handle as the name).
-    const bizName = biz ? shopTitle(biz) : (shop ? shopNameOf(metadata) : '')
+    const bizName = type !== 'send' ? '' : biz ? shopTitle(biz) : (shop ? shopNameOf(metadata) : '')
     const theirName = bizName || (cpName ? cpName.charAt(0).toUpperCase() + cpName.slice(1) : shortAddr(counterparty))
+    // Your store that took the payment (its name, type and logo, as the payer saw it).
+    const myStoreName = (myShop ? shopTitle(myShop) : '') || shopNameOf(metadata) || 'Your store'
+    const myStoreParty: TxParty = {
+      label: 'To', name: myStoreName, handle: myHandle, verified: !!myShop,
+      sub: [myShop?.category, 'Your store'].filter(Boolean).join(' · '), photo: myShop?.avatarUrl || undefined,
+    }
     const them: TxParty = {
       label: type === 'send' ? 'To' : 'From', name: theirName,
-      handle: theirHandle, address: biz || shop ? undefined : counterparty || undefined,
-      sub: biz?.category || (shop ? 'Business' : undefined),
+      handle: theirHandle, address: biz || (shop && type === 'send') ? undefined : counterparty || undefined,
+      sub: biz?.category || (shop ? (type === 'send' ? 'Business' : 'Customer') : undefined),
       verified: !!biz, photo: biz?.avatarUrl || undefined,
       actions: [
-        { label: type === 'send' ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(type === 'send' ? payAgainUrl(cpName, counterparty, metadata) : payAgainUrl(cpName, counterparty, null)) } },
+        ...(shop && type === 'receive' ? [] : [{ label: type === 'send' ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(type === 'send' ? payAgainUrl(cpName, counterparty, metadata) : payAgainUrl(cpName, counterparty, null)) } }]),
         // A shop is paid, not chatted with (no chat card for Shop QR payments).
         ...(cpName && !biz && !shop ? [{ label: 'Chat', onClick: () => { void openChatWith(cpName) }, busy: openingChat }] : []),
         ...(counterparty && !inHistory ? [{ label: 'View history', onClick: () => setHistoryWith({ address: counterparty, name: theirName, handle: theirHandle }) }] : []),
@@ -1072,7 +1083,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
         : viaChat ? { icon: 'chat', text: type === 'send' ? 'Paid' : 'Received' }
         : type === 'send' ? { icon: 'pay', text: 'Paid' } : { icon: 'receive', text: 'Received' },
       reason: reasonNote ?? undefined,
-      parties: type === 'send' ? [them, youParty('From')] : [them, youParty('To')],
+      parties: type === 'send' ? [them, youParty('From')] : [them, shopReceipt ? myStoreParty : youParty('To')],
       steps: ['Payment approved',
         <>Payment made by <b>{type === 'send' ? 'you' : theirLabel}</b></>,
         <>Payment received by <b>{type === 'send' ? theirLabel : 'you'}</b></>],
