@@ -10,8 +10,9 @@ export function ChainScanSpinner({ chain, size = 18 }: { chain: string | null; s
   return (
     <span aria-label="Loading balances" style={{ position: 'relative', width: size, height: size, flexShrink: 0, display: 'inline-block' }}>
       <style>{'@keyframes chainScanSpin{to{transform:rotate(360deg)}}'}</style>
-      <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.25)',
-        borderTopColor: '#fff', animation: 'chainScanSpin 0.8s linear infinite' }} />
+      <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1.5px solid color-mix(in srgb, currentColor 25%, transparent)',
+        // The text colour around it: white on a teal card, dark on a light one.
+        borderTopColor: 'currentColor', animation: 'chainScanSpin 0.8s linear infinite' }} />
       {chain && (
         <img decoding="async" key={chain} src={chainLogoSrc(chain)} alt="" width={logo} height={logo}
           style={{ position: 'absolute', top: inset, left: inset, borderRadius: '50%', display: 'block' }}
