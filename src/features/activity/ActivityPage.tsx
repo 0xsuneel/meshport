@@ -1069,7 +1069,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     const them: TxParty = {
       label: type === 'send' ? 'To' : 'From', name: theirName,
       handle: theirHandle, address: biz || (shop && type === 'send') ? undefined : counterparty || undefined,
-      sub: biz?.category || (shop ? (type === 'send' ? 'Business' : 'Customer') : undefined),
+      sub: biz?.category || (shop && type === 'send' ? 'Business' : undefined),
       verified: !!biz, photo: biz?.avatarUrl || undefined,
       actions: [
         ...(shop && type === 'receive' ? [] : [{ label: type === 'send' ? 'Pay again' : 'Pay', onClick: () => { onClose(); navigate(type === 'send' ? payAgainUrl(cpName, counterparty, metadata) : payAgainUrl(cpName, counterparty, null)) } }]),
@@ -1080,7 +1080,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     }
     txDetail = {
       title: 'Payment details', status: receiptStatus, amountLabel: 'Amount', amount: amtOf(amount, tokenSymbol), unit: tokenSymbol || 'USDC',
-      note: noteText || undefined, pill: shop ? { icon: 'qr', text: type === 'receive' ? shopReceivedTitle(shopNameOf(metadata)) : biz?.category || 'Shop payment' } : merchantOrderDetail ? { icon: 'list', text: orderWord }
+      note: noteText || undefined, pill: shop ? { icon: 'qr', text: type === 'receive' ? 'Paid via Shop QR' : biz?.category || 'Shop payment' } : merchantOrderDetail ? { icon: 'list', text: orderWord }
         : viaChat ? { icon: 'chat', text: type === 'send' ? 'Paid' : 'Received' }
         : type === 'send' ? { icon: 'pay', text: 'Paid' } : { icon: 'receive', text: 'Received' },
       reason: reasonNote ?? undefined,
