@@ -5,6 +5,7 @@
 // highlighted" can never drift between the mobile and desktop nav. Does NOT
 // import BottomNav's mobile-only concerns (unread realtime subscription,
 // Android back-button interception) - those stay exactly where they are.
+import { useBizTerms } from '@/lib/businessCategories'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isSettingsPath } from './SettingsDesktopSplit'
 import { NavIcon, type NavIconName } from './navIcons'
@@ -57,7 +58,9 @@ export function DesktopSidebar() {
   const businessTab = useBusinessTab()
   // Business not approved yet: the locked features are left out.
   const { locked } = useAccountLock()
-  const navItems = (businessTab ? businessItems : items).filter(i => !locked || !isLockedPath(i.path))
+  const terms = useBizTerms()
+  const navItems = (businessTab ? businessItems.map(i => i.id === 'customers' ? { ...i, label: terms.customers } : i) : items)
+    .filter(i => !locked || !isLockedPath(i.path))
   const location = useLocation()
   const navigate = useNavigate()
   // Every Settings page (Security, Appearance, About…) keeps Settings highlighted.

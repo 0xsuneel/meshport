@@ -1,4 +1,5 @@
 import { CONTROL_MOTION } from '@/lib/motion'
+import { useBizTerms } from '@/lib/businessCategories'
 import { useEffect, useRef } from 'react'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -89,7 +90,10 @@ export function BottomNav() {
   const businessTab = useBusinessTab()
   // Business not approved yet: only Home, Business and Activity.
   const { locked } = useAccountLock()
-  const tabList = (businessTab ? businessTabs : tabs).filter(t => !locked || !isLockedPath(t.path))
+  // The Customers tab in the business's own word (Guests, Patients, Clients…), as its screen says.
+  const terms = useBizTerms()
+  const tabList = (businessTab ? businessTabs.map(t => t.id === 'customers' ? { ...t, label: terms.customers } : t) : tabs)
+    .filter(t => !locked || !isLockedPath(t.path))
 
   useEffect(() => {
     if (!user?.id) return

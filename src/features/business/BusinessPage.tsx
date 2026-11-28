@@ -24,7 +24,7 @@ import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
 import { copyToClipboard } from '@/lib/utils'
 import { useArcAssets } from './useArcAssets'
-import { QrCode, BadgeDollarSign, ReceiptText, Link2, UserRound, Store as StoreIcon, Users, BarChart2, Wallet, Banknote, Send, ArrowDownToLine } from 'lucide-react'
+import { QrCode, BadgeDollarSign, ReceiptText, Link2, Store as StoreIcon, Users, BarChart2, Wallet, Banknote, Send, BookOpen, ArrowLeftRight } from 'lucide-react'
 import type { PaymentVia } from './ui/types'
 import { getBusinessAlerts, saveBusinessAlerts, alertsSummary, hourLabel, WEEKDAYS, DEFAULT_ALERTS, type BusinessAlerts } from '@/lib/businessAlerts'
 import { useAuthStore, useWalletStore, useNotificationStore, useChatUnreadStore } from '@/store'
@@ -780,16 +780,17 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
                   { id: 'link', icon: Link2, label: 'Pay links', tint: 'sky', onClick: open('links') },
                 ] },
                 { id: 'manage', title: 'Manage business', onViewAll: () => navigate('/biz/account'), items: [
-                  { id: 'customers', icon: UserRound, label: terms.customers, tint: 'sky', onClick: () => navigate('/biz/customers') },
+                  // Nothing that's already a tab below (Customers, Balance) - 28 Nov.
+                  { id: 'credit', icon: BookOpen, label: 'Credit book', tint: 'sky', onClick: open('credit') },
                   { id: 'counters', icon: StoreIcon, label: 'Counters', tint: 'mint', onClick: open('counters') },
                   { id: 'staff', icon: Users, label: 'Staff', tint: 'butter', onClick: open('team') },
                   { id: 'reports', icon: BarChart2, label: 'Reports', tint: 'peach', onClick: open('reports') },
                 ] },
                 { id: 'money', title: 'Money', onViewAll: () => navigate('/biz/balance'), items: [
-                  { id: 'balance', icon: Wallet, label: 'Balance', tint: 'mint', onClick: () => navigate('/biz/balance') },
-                  { id: 'cashout', icon: Banknote, label: 'Cash out', tint: 'butter', onClick: open('cashout') },
-                  { id: 'paystaff', icon: Send, label: 'Pay staff', tint: 'peach', onClick: open('payouts') },
-                  { id: 'move', icon: ArrowDownToLine, label: 'Move to Arc', tint: 'sky', onClick: () => navigate('/biz/balance') },
+                  { id: 'cashout', icon: Banknote, label: 'Cash out', tint: 'mint', onClick: open('cashout') },
+                  { id: 'paystaff', icon: Send, label: 'Pay staff', tint: 'butter', onClick: open('payouts') },
+                  { id: 'pay', icon: Wallet, label: 'Pay someone', tint: 'peach', onClick: () => navigate('/pay') },
+                  { id: 'swap', icon: ArrowLeftRight, label: 'Swap', tint: 'sky', onClick: () => navigate('/swap') },
                 ] },
               ]}
               onOpenOrders={openOrders}
