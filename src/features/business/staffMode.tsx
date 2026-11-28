@@ -11,7 +11,7 @@ import { chainLogoSrc } from '@/lib/chainLogos'
 import { myMemberships, acceptInvite, staffCreateRequest, staffPayments, staffRefunds, type Membership } from '@/lib/businessTeam'
 import type { MerchantRefund } from '@/lib/merchantRefunds'
 import { ChevronRight, ClipboardList, FileText, QrCode, BadgeDollarSign, ReceiptText, ListChecks } from 'lucide-react'
-import { displayOrderNumber, myAuthUid, type MerchantPayment } from '@/lib/merchantPay'
+import { myAuthUid, type MerchantPayment } from '@/lib/merchantPay'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, StatementBody } from './screens'
 import { setDueDate } from '@/lib/businessBills'
 import { listCounters, counterQrUrl, type Counter } from '@/lib/businessCounters'
@@ -72,7 +72,7 @@ export function StaffModePage() {
   }, [active?.id])
 
   const payments: Payment[] = useMemo(() => raw.map(p => ({ id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain),
-    chainLogo: chainLogoSrc(p.chain), time: p.createdAt, order: p.orderNumber ? displayOrderNumber(p.orderNumber) : undefined, late: !!p.late, blocked: !!p.screenFlag, status: 'received' as const })), [raw])
+    chainLogo: chainLogoSrc(p.chain), time: p.createdAt, late: !!p.late, blocked: !!p.screenFlag, status: 'received' as const })), [raw])
   const today = raw.filter(p => new Date(p.createdAt).toDateString() === new Date().toDateString())
   const total = today.reduce((s, p) => s + p.amount, 0)
   // Like the owner's hub: the home (and the bottom tab bar) parallaxes left

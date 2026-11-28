@@ -11,7 +11,7 @@ import { formatAmount, copyToClipboard } from '@/lib/utils'
 import {
   discoverWallets, payArcFromBrowserWallet, payWithBrowserWallet, walletAppLinks, submitPayment, gasCoin, txExplorerUrl,
   ARC_PAY_CHAIN, type BrowserWallet, type PayChain,
-  displayOrderNumber, } from '@/lib/merchantPay'
+  } from '@/lib/merchantPay'
 import { MERCHANT_QR_NETWORK_NAME } from '@/lib/merchantQr'
 import { ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -94,7 +94,7 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
       <div style={{ ...box, alignItems: 'center', textAlign: 'center' }}>
         <CheckCircle2 size={44} color="var(--success)" />
         <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Payment sent</div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>${formatAmount(value)} USDC on {chain.label}{orderNumber ? ` · ${displayOrderNumber(orderNumber)}` : ''}</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>${formatAmount(value)} USDC on {chain.label}</div>
         {unconfirmed && (
           <div style={{ fontSize: 13, color: 'var(--warning-text)' }}>
             We&apos;re confirming it with the shop. Keep the transaction link below in case they ask for it.

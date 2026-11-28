@@ -39,8 +39,9 @@ export function BillDocument({ intent, details, business, taxId, link, qr, paid 
           {taxId && <div style={{ fontSize: 12.5, color: muted, marginTop: 2 }}>Tax ID {taxId}</div>}
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 0.5 }}>{`${paid ? 'RECEIPT' : 'BILL'} ${num}`.trim()}</div>
-          <div style={{ fontSize: 12.5, color: muted, marginTop: 4 }}>{day(intent.createdAt)}</div>
+          <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 0.5 }}>{paid ? 'RECEIPT' : 'BILL'}</div>
+          {num && <div style={{ fontSize: 12.5, color: muted, marginTop: 4 }}>Order ID {num}</div>}
+          <div style={{ fontSize: 12.5, color: muted, marginTop: num ? 2 : 4 }}>{day(intent.createdAt)}</div>
           {intent.dueDate && !paid && <div style={{ fontSize: 12.5, color: muted }}>Due {day(intent.dueDate)}</div>}
           {paid && intent.paidAt && <div style={{ fontSize: 12.5, color: '#047857', fontWeight: 700 }}>Paid {day(intent.paidAt)}</div>}
         </div>

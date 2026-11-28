@@ -184,9 +184,9 @@ export function PaymentDetailSheet({
             {via && <div className="col-span-2"><Tile label="Collected via" value={via} /></div>}
             {staff && <Tile label="Taken by" value={staff} />}
             {reference && (
-              <button type="button" className="text-left" aria-label="Copy reference number"
+              <button type="button" className="text-left" aria-label="Copy Order ID"
                 onClick={() => { void navigator.clipboard?.writeText(reference).then(() => { setRefCopied(true); setTimeout(() => setRefCopied(false), 1500) }).catch(() => {}) }}>
-                <Tile label={refCopied ? 'Copied' : 'Reference no. · tap to copy'} value={reference} mono />
+                <Tile label={refCopied ? 'Copied' : 'Order ID · tap to copy'} value={reference} mono />
               </button>
             )}
             <Tile label="Network" value={payment.chainLabel} />

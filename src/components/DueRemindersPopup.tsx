@@ -13,7 +13,6 @@ import { useAuthStore } from '@/store'
 import { Avatar } from '@/components/ui/Avatar'
 import { PopupDim } from '@/components/ui/PopupDim'
 import { useBackLayer } from '@/lib/backLayers'
-import { shortOrderNumber } from '@/lib/orderLabels'
 import {
   fetchDueRequests, hideReminder, snoozeReminders, remindersToShow, visibleReminders, hiddenCodes,
   agoText, dueChip, type DueRequest,
@@ -159,8 +158,8 @@ export function DueRemindersPopup({ enabled = true }: { enabled?: boolean }) {
   const body = (x: DueRequest, idx: number, fill: boolean) => {
     const what = x.kind === 'split' && x.split
       ? `${x.split.emoji ? x.split.emoji + ' ' : ''}${x.split.title || 'Split Expense'} · split with ${x.split.people} people`
-      : x.kind === 'bill' ? `Bill ${shortOrderNumber(x.orderNumber) || ''}`.trim()
-      : x.note ? `“${x.note}”` : `Request ${shortOrderNumber(x.orderNumber) || ''}`.trim()
+      : x.kind === 'bill' ? 'Bill'
+      : x.note ? `“${x.note}”` : 'Payment Request'
     const sub = x.kind === 'split' && x.split ? `Your share of ${money(x.split.total)} · USDC` : `USDC${x.fromUsername ? ' · ' + x.fromUsername : ''}`
     const chip = x.kind === 'split' && x.split
       ? { text: `${x.split.paid} of ${x.split.people} already paid`, late: false, ok: true }

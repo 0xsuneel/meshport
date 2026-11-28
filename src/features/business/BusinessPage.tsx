@@ -304,17 +304,17 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
     switch (p.orderKind) {
       case 'shop': return { kind: 'shop', tag: 'Shop QR', detail: st }
       case 'merchant_request': return { kind: 'charge', tag: 'Charge', detail: p.purpose || st }
-      case 'bill': return { kind: 'bill', tag: p.orderNumber ? `Bill ${displayOrderNumber(p.orderNumber)}` : 'Bill', detail: p.purpose || st }
+      case 'bill': return { kind: 'bill', tag: 'Bill', detail: p.purpose || st }
       case 'request': return { kind: 'request', tag: 'Request', detail: p.purpose }
       default: return { kind: 'transfer', tag: p.method === 'own_transfer' ? 'Your transfer' : 'Direct', detail: st }
     }
   }
   const toRow = (p: MerchantPayment): Payment => ({
     via: viaOf(p), store: (p.counterId ? counters.find(c => c.id === p.counterId)?.name : null) ?? stores.find(st => st.id === storeOf(p))?.name ?? null,
-    staff: p.staffUid ? staffNames.get(p.staffUid) ?? 'Staff' : null, reference: p.reference ?? null,
+    staff: p.staffUid ? staffNames.get(p.staffUid) ?? 'Staff' : null, reference: p.reference ? displayOrderNumber(p.reference) : null,
     avatar: p.customerUsername ? avatars.get(p.customerUsername.toLowerCase().replace(/\.arc$/, '')) ?? null : null,
     id: p.id, from: !p.customerUsername && p.payerName ? p.payerName : who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain), chainLogo: chainLogoSrc(p.chain),
-    time: p.createdAt, order: p.orderKind === 'bill' && p.orderNumber ? displayOrderNumber(p.orderNumber) : undefined, wallet: p.from, late: !!p.late, blocked: !!p.screenFlag,
+    time: p.createdAt, wallet: p.from, late: !!p.late, blocked: !!p.screenFlag,
     status: refundedIds.has(p.id) ? 'refunded' as const
       : p.chain !== 'Arc_Testnet' && p.status !== 'collected' && waitingOn.has(p.chain) ? 'to_settle' as const : 'received' as const,
     partlyRefunded: !refundedIds.has(p.id) && refundedOf(p.id) > 0 ? money(refundedOf(p.id)) : undefined,
@@ -390,7 +390,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
     const list = storeRaw.filter(p => p.method !== 'own_transfer' && Date.parse(p.createdAt) >= start.getTime())
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     const where = (p: MerchantPayment) => p.orderKind === 'shop' ? 'Shop QR'
-      : p.orderNumber ? (p.orderKind ? orderTitle(p.orderKind, p.orderNumber, { short: true }) : displayOrderNumber(p.orderNumber))
+      : p.orderKind ? orderTitle(p.orderKind, null, { short: true })
       : p.chain !== 'Arc_Testnet' ? `from ${chainLabel(p.chain)}` : 'Payment'
     return {
       total: money(list.reduce((t, p) => t + kept(p), 0)),

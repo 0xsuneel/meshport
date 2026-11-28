@@ -1,14 +1,13 @@
 // How bills and payment requests are named on screen. Pure (no network), so
 // chat text helpers and tests can use it.
 //
-// Order numbers count from 100001 in the database; people see them as a
-// short #N: ORD-100042 → #42. This is the one number people see everywhere
-// (bills, requests, receipts, Manage money, chat, exports). Display only -
-// links, card anchors, the text stored in chat messages and payment
-// verification keep the stored ORD-100042.
+// Every order has an Order ID (28 Nov, like Paytm's): MP + date + 6 random
+// letters/digits, e.g. MP261128K7Q2XA. It is a reference - shown labelled
+// "Order ID" in details, receipts, PDFs and exports, never in a title
+// ("Bill", "Payment Request", "Shop Payment"). Orders made before that
+// carry ORD-100042, shown as #42. Links, card anchors, chat text and
+// payment checks keep the stored value.
 export function displayOrderNumber(n: string | null | undefined): string {
-  // Kept as a named helper so call sites read clearly; same #N form as
-  // shortOrderNumber (the number format is the same everywhere now).
   return shortOrderNumber(n)
 }
 
@@ -20,7 +19,7 @@ export function shopFrom(name: string | null | undefined, store?: string | null)
   return n ? `${n} · ${s}` : s
 }
 
-/** The number people see for an order: ORD-100042 → #42. */
+/** The Order ID people see: MP261128K7Q2XA as it is; an older ORD-100042 → #42. */
 export function shortOrderNumber(n: string | null | undefined): string {
   const m = /^ORD-(\d+)$/i.exec(n || '')
   if (!m) return n || ''
@@ -39,31 +38,27 @@ export function orderKindOf(v: { kind?: string | null; personal?: boolean | null
   return v.personal === false ? 'merchant_request' : 'request'
 }
 /**
- * Waiting: "Bill ORD-00042" / "Request ORD-00043" / "Requested Payment ORD-00044".
- * Paid, payer's side: "Paid Bill ORD-00042" / "Request Amount Paid ORD-00043" /
- * "Requested Payment Paid ORD-00044".
- * Paid, receiver's side (`received`): "Bill ORD-00042 Received" /
- * "Request ORD-00043 Amount Received" / "Requested ORD-00044 Payment Received".
- * Shop QR (nobody requested it - no number shown): "Shop Payment" (both
- * before and after paying) / "Received on Royal Salons" - the business name
- * the merchant registered (`business`, else this device's own registered
- * name; "Shop Payment Received" when neither is known).
- * `short` (history rows, card bands): "#42" numbers - "Bill #42", "Requested #44",
- * "Request Paid · #43", "Request #43 Received".
+ * Titles never carry the Order ID (28 Nov, like Paytm).
+ * Waiting: "Bill" / "Payment Request" (a person's request or a business's
+ * charge). Paid, payer's side: "Paid Bill" / "Request Paid" / "Payment
+ * Request Paid". Paid, receiver's side (`received`): "Bill Received" /
+ * "Request Received" / "Charge Received" ("Charge Payment Received" in full).
+ * Shop QR: "Shop Payment" (both before and after paying) / "Received on
+ * Royal Salons" - the business name the merchant registered (`business`,
+ * else this device's own registered name; "Shop Payment Received" when
+ * neither is known). `number` is accepted for older callers and ignored.
  */
-export function orderTitle(kind: OrderKind, number: string | null | undefined, opts: { paid?: boolean; received?: boolean; short?: boolean; business?: string | null } = {}): string {
-  const no = opts.short ? shortOrderNumber(number) : displayOrderNumber(number)
+export function orderTitle(kind: OrderKind, _number?: string | null, opts: { paid?: boolean; received?: boolean; short?: boolean; business?: string | null } = {}): string {
   if (opts.received) {
-    if (kind === 'bill') return `Bill ${no} Received`
+    if (kind === 'bill') return 'Bill Received'
     if (kind === 'shop') return shopReceivedTitle(opts.business)
     if (kind === 'merchant_request') return opts.short ? 'Charge Received' : 'Charge Payment Received'
-    return opts.short ? `Request ${no} Received` : `Request ${no} Amount Received`
+    return 'Request Received'
   }
-  if (kind === 'bill') return opts.paid ? `Paid Bill ${no}` : `Bill ${no}`
+  if (kind === 'bill') return opts.paid ? 'Paid Bill' : 'Bill'
   if (kind === 'shop') return 'Shop Payment'
-  // A business's charge (27 Nov): named by what it's for, never a number.
   if (kind === 'merchant_request') return opts.paid ? 'Payment Request Paid' : 'Payment Request'
-  return opts.paid ? (opts.short ? `Request Paid · ${no}` : `Request Amount Paid ${no}`) : `Request ${no}`
+  return opts.paid ? 'Request Paid' : 'Payment Request'
 }
 
 // The business name this device's merchant registered (lib/merchant.ts sets
@@ -103,11 +98,10 @@ export function parsePaymentOrderTag(text: string): { number: string; kind: Orde
   const kind: OrderKind | null = word === 'Request' ? 'request' : word === 'Requested' ? 'merchant_request' : word === 'Bill' ? 'bill' : word === 'Payment' ? 'shop' : null
   return { number: m[2] ?? '', kind, index: m.index }
 }
-/** Title for a paid order from a payment tag; an older untyped tag reads "Paid ORD-00042". */
-/** `received`: the receiver's side ("Bill ORD-00042 Received"); older untyped tags read "ORD-00042 Received". */
+/** Title for a paid order from a payment tag ("Paid Bill"); `received`: the
+ *  receiver's side ("Bill Received"). An older untyped tag reads "Paid" / "Received". */
 export function paidTitleFromTag(t: { number: string; kind: OrderKind | null }, short = false, received = false): string {
-  const no = short ? shortOrderNumber(t.number) : displayOrderNumber(t.number)
-  if (!t.kind) return received ? `${no} Received` : `Paid ${no}`
+  if (!t.kind) return received ? 'Received' : 'Paid'
   return orderTitle(t.kind, t.number, received ? { received: true, short } : { paid: true, short })
 }
 
@@ -120,7 +114,7 @@ export function splitNoteOf(text: string): string | null {
 
 /** A bill / request card's text → its one-line preview (chat list, reply
  *  quotes, search): "💸 Payment request · Order #ORD-100010 · $5.3 USDC…" →
- *  "💸 Request ORD-00010 · $5.3 USDC" (a Split Expense share: "🧾 Split
+ *  "💸 Payment Request · $5.3 USDC" (a Split Expense share: "🧾 Split
  *  Expense · 🍕 Dinner · $5 USDC"). null for any other text. */
 export function orderCardPreview(text: string): string | null {
   const m = /^(🧾 Bill|💸 Payment request)(?: · Order #([A-Z0-9-]{3,20}))? · \$([\d.,]+) USDC/u.exec(text)
@@ -128,8 +122,7 @@ export function orderCardPreview(text: string): string | null {
   const split = m[1].startsWith('💸') ? splitNoteOf(text) : null
   if (split) return `🧾 Split Expense · ${split} · $${m[3]} USDC`
   const bill = m[1].startsWith('🧾')
-  const no = m[2] ? ' ' + displayOrderNumber(m[2]) : ''
-  return `${bill ? '🧾 Bill' : '💸 Request'}${no} · $${m[3]} USDC`
+  return `${bill ? '🧾 Bill' : '💸 Payment Request'} · $${m[3]} USDC`
 }
 
 /** The chat's pending strip: "1 pending bill" / "2 pending requests" /

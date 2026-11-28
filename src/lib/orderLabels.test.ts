@@ -7,6 +7,7 @@ describe('displayOrderNumber', () => {
     expect(displayOrderNumber('ORD-100001')).toBe('#1')
     expect(displayOrderNumber('ORD-100042')).toBe('#42')
     expect(displayOrderNumber('ORD-223456')).toBe('#123456')
+    expect(displayOrderNumber('MP261128K7Q2XA')).toBe('MP261128K7Q2XA')
   })
   it('leaves anything else alone', () => {
     expect(displayOrderNumber('ABC123')).toBe('ABC123')
@@ -27,34 +28,22 @@ describe('shortOrderNumber', () => {
 })
 
 describe('orderTitle', () => {
-  it('names each kind, waiting and paid', () => {
-    expect(orderTitle('bill', 'ORD-100042')).toBe('Bill #42')
-    expect(orderTitle('bill', 'ORD-100042', { paid: true })).toBe('Paid Bill #42')
-    expect(orderTitle('request', 'ORD-100043')).toBe('Request #43')
-    expect(orderTitle('request', 'ORD-100043', { paid: true })).toBe('Request Amount Paid #43')
+  it('names each kind, waiting and paid - never the Order ID', () => {
+    expect(orderTitle('bill', 'MP261128K7Q2XA')).toBe('Bill')
+    expect(orderTitle('bill', 'ORD-100042', { paid: true })).toBe('Paid Bill')
+    expect(orderTitle('request', 'MP261128K7Q2XA')).toBe('Payment Request')
+    expect(orderTitle('request', 'ORD-100043', { paid: true })).toBe('Request Paid')
     expect(orderTitle('merchant_request', 'ORD-100044')).toBe('Payment Request')
     expect(orderTitle('merchant_request', 'ORD-100044', { paid: true })).toBe('Payment Request Paid')
   })
   it('receiver side says Received', () => {
-    expect(orderTitle('bill', 'ORD-100042', { received: true })).toBe('Bill #42 Received')
-    expect(orderTitle('request', 'ORD-100043', { received: true })).toBe('Request #43 Amount Received')
+    expect(orderTitle('bill', 'ORD-100042', { received: true })).toBe('Bill Received')
+    expect(orderTitle('request', 'ORD-100043', { received: true })).toBe('Request Received')
     expect(orderTitle('merchant_request', 'ORD-100044', { received: true })).toBe('Charge Payment Received')
-    expect(orderTitle('request', 'ORD-100043', { received: true, short: true })).toBe('Request #43 Received')
-    expect(paidTitleFromTag({ number: 'ORD-100042', kind: 'bill' }, false, true)).toBe('Bill #42 Received')
-    expect(paidTitleFromTag({ number: 'ORD-100042', kind: null }, false, true)).toBe('#42 Received')
-  })
-  it('short form for history rows and card bands', () => {
-    expect(orderTitle('bill', 'ORD-100042', { short: true })).toBe('Bill #42')
-    expect(orderTitle('bill', 'ORD-100042', { paid: true, short: true })).toBe('Paid Bill #42')
-    expect(orderTitle('bill', 'ORD-100042', { received: true, short: true })).toBe('Bill #42 Received')
-    expect(orderTitle('request', 'ORD-100043', { short: true })).toBe('Request #43')
-    expect(orderTitle('request', 'ORD-100043', { paid: true, short: true })).toBe('Request Paid · #43')
-    expect(orderTitle('merchant_request', 'ORD-100044', { short: true })).toBe('Payment Request')
-    expect(orderTitle('merchant_request', 'ORD-100044', { paid: true, short: true })).toBe('Payment Request Paid')
-    expect(orderTitle('merchant_request', 'ORD-100044', { received: true, short: true })).toBe('Charge Received')
-    expect(paidTitleFromTag({ number: 'ORD-100042', kind: null }, true, true)).toBe('#42 Received')
-    expect(paidTitleFromTag({ number: 'ORD-100042', kind: null }, true)).toBe('Paid #42')
-    expect(orderTitle('bill', 'A1B2C3', { short: true })).toBe('Bill A1B2C3')
+    expect(orderTitle('merchant_request', null, { received: true, short: true })).toBe('Charge Received')
+    expect(paidTitleFromTag({ number: 'ORD-100042', kind: 'bill' }, false, true)).toBe('Bill Received')
+    expect(paidTitleFromTag({ number: 'ORD-100042', kind: null }, false, true)).toBe('Received')
+    expect(paidTitleFromTag({ number: 'ORD-100042', kind: null })).toBe('Paid')
   })
   it('kind: bill, normal user request, merchant request', () => {
     expect(orderKindOf({ kind: 'invoice' })).toBe('bill')
@@ -70,20 +59,20 @@ describe('payment tags', () => {
     expect(msg).toBe('Sent 3 USDC to bob.arc · Bill #ORD-100042')
     const t = parsePaymentOrderTag(msg)!
     expect(t).toMatchObject({ number: 'ORD-100042', kind: 'bill' })
-    expect(paidTitleFromTag(t)).toBe('Paid Bill #42')
+    expect(paidTitleFromTag(t)).toBe('Paid Bill')
     expect(paidTitleFromTag(parsePaymentOrderTag('Sent 3 USDC to bob.arc · Requested #ORD-100044')!)).toBe('Payment Request Paid')
   })
-  it('older "Order #" payments read "Paid #…"', () => {
+  it('older "Order #" payments read "Paid"', () => {
     const t = parsePaymentOrderTag('Sent 3 USDC to bob.arc · Order #ORD-100042')!
     expect(t.kind).toBeNull()
-    expect(paidTitleFromTag(t)).toBe('Paid #42')
+    expect(paidTitleFromTag(t)).toBe('Paid')
   })
 })
 
 describe('orderCardPreview', () => {
   it('previews stored card text', () => {
-    expect(orderCardPreview('💸 Payment request · Order #ORD-100010 · $5.3 USDC\nnote\nhttps://x')).toBe('💸 Request #10 · $5.3 USDC')
-    expect(orderCardPreview('🧾 Bill · Order #ORD-100008 · $20.6 USDC\nShoes × 1')).toBe('🧾 Bill #8 · $20.6 USDC')
+    expect(orderCardPreview('💸 Payment request · Order #ORD-100010 · $5.3 USDC\nnote\nhttps://x')).toBe('💸 Payment Request · $5.3 USDC')
+    expect(orderCardPreview('🧾 Bill · Order #ORD-100008 · $20.6 USDC\nShoes × 1')).toBe('🧾 Bill · $20.6 USDC')
     expect(orderCardPreview('hello')).toBeNull()
   })
 })
@@ -107,7 +96,7 @@ describe('Shop QR payments', () => {
       expect(shopReceivedTitle()).toBe('Received on Royal Salons')
       expect(paidTitleFromTag(parsePaymentOrderTag('Sent 1 USDC to royal.arc · Payment')!, true, true)).toBe('Received on Royal Salons')
       expect(orderTitle('shop', null, { paid: true })).toBe('Shop Payment')
-      expect(orderTitle('bill', 'ORD-100042', { received: true })).toBe('Bill #42 Received')
+      expect(orderTitle('bill', 'ORD-100042', { received: true })).toBe('Bill Received')
     } finally { setRegisteredBusinessName(null) }
     expect(shopReceivedTitle()).toBe('Shop Payment Received')
   })
@@ -142,7 +131,7 @@ describe('a Split Expense share in previews', () => {
     expect(orderCardPreview(card)).toBe('🧾 Split Expense · 🍕 Dinner · $5 USDC')
   })
   it('a plain request still reads as a request', () => {
-    expect(orderCardPreview('💸 Payment request · Order #ORD-100152 · $5 USDC\nFor the cake\nhttps://meshport.xyz/pay/r/abc')).toBe('💸 Request #152 · $5 USDC')
+    expect(orderCardPreview('💸 Payment request · Order #ORD-100152 · $5 USDC\nFor the cake\nhttps://meshport.xyz/pay/r/abc')).toBe('💸 Payment Request · $5 USDC')
   })
 })
 

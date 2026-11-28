@@ -24,7 +24,7 @@ import { useMerchant, isMerchantClaim } from '@/lib/merchant'
 import { receiptNumber } from '@/lib/receiptNumber'
 import { getShopInfo, shopTitle, type ShopInfo } from '@/lib/shop'
 import { ownAccountName } from '@/lib/ownName'
-import { orderTitle, shopReceivedTitle, displayOrderNumber, shortOrderNumber, type OrderKind } from '@/lib/merchantPay'
+import { orderTitle, shopReceivedTitle, displayOrderNumber, type OrderKind } from '@/lib/merchantPay'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { TokenMenu } from '@/components/ui/TokenMenu'
@@ -256,7 +256,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   const counterpartyUsername = meta.toUsername || meta.fromUsername || ''
 
   const refund = merchantRefundInfo(record)
-  const counterpartyLabel = refund ? `${refund.from}${refund.order ? ` · ${displayOrderNumber(refund.order)}` : ''}`
+  const counterpartyLabel = refund ? refund.from
     : counterpartyUsername
     ? (SYSTEM_LABELS[counterpartyUsername] ?? `${counterpartyUsername.replace(/\.arc$/i, '')}.arc`)
     : counterparty
@@ -435,12 +435,10 @@ export function payAgainUrl(cpName: string | null | undefined, counterparty: str
   }
   return `/pay?to=${encodeURIComponent(cpName && counterparty ? `${cpName}|${counterparty}` : cpName || counterparty || '')}`
 }
-/** Payer: "Paid Bill ORD-00042"; receiver: "Bill ORD-00042 Received".
- *  `short` (history rows): "Paid Bill #42". */
+/** Payer: "Paid Bill"; receiver: "Bill Received" - no Order ID in titles. */
 const paidOrderTitle = (md: any, number: string, received: boolean, short = false) => {
   const kind = activityOrderKind(md)
-  const no = short ? shortOrderNumber(number) : displayOrderNumber(number)
-  if (!kind) return received ? `${no} Received` : `Paid ${no}`
+  if (!kind) return received ? 'Received' : 'Paid'
   return orderTitle(kind, number, received ? { received: true, short } : { paid: true, short })
 }
 
@@ -802,7 +800,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const rows = [
     { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Settlement from ${chain || 'other chain'}` : merchantOrderDetail ? orderWord : activityOrderKind(metadata) === 'shop' && (type === 'receive' || type === 'send') ? 'Payment' : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? bulkWord(metadata) : cashOutTitle(type, metadata) ?? type },
     { label: 'Chain',  value: chain },
-    ...(merchantOrderDetail ? [{ label: activityOrderKind(metadata) === 'bill' ? 'Bill' : activityOrderKind(metadata) === 'merchant_request' ? 'Requested Payment' : 'Request', value: displayOrderNumber(merchantOrderDetail) }] : []),
+    ...(merchantOrderDetail ? [{ label: 'Order ID', value: displayOrderNumber(merchantOrderDetail) }] : []),
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Business', value: String((metadata as any).merchantName) }] : []),
     // The business's store that took the payment (merchant side).
     ...(type === 'receive' && storeNameOf(metadata) ? [{ label: 'Store', value: storeNameOf(metadata) }] : []),
@@ -901,7 +899,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     ...(nameInSubtitle && (cpUsername || (isTransfer && !isSelfTransferDetail)) && counterparty && !isSwapType
       ? [toReceiptRow({ label: 'Wallet', value: `${counterparty.slice(0, 6)}…${counterparty.slice(-6)}`, copy: counterparty })]
       : []),
-    ...(refundDetail?.order ? [toReceiptRow({ label: 'For', value: `Order ${displayOrderNumber(refundDetail.order)}` })] : []),
+    ...(refundDetail?.order ? [toReceiptRow({ label: 'Order ID', value: displayOrderNumber(refundDetail.order) })] : []),
     ...(refundDetail?.reason ? [toReceiptRow({ label: 'Reason', value: refundDetail.reason })] : []),
     ...(type === 'bulk' && Array.isArray(metadata.recipients)
       ? metadata.recipients.map((r: any, i: number) => ({
@@ -1095,7 +1093,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       hashes: txHash ? [{ label: 'Transaction hash', hash: txHash }] : [],
       detailsTitle: 'Payment details',
       details: [statusDetail, networkDetail, ...(anyFee ? [{ label: 'Network fee', value: anyFee.value }] : []),
-        ...(merchantOrderDetail ? [{ label: 'Order', value: displayOrderNumber(merchantOrderDetail) }] : []), ...arcExplorer],
+        ...(merchantOrderDetail ? [{ label: 'Order ID', value: displayOrderNumber(merchantOrderDetail) }] : []), ...arcExplorer],
     }
   } else if (isSwapType) {
     const tIn = String(metadata.tokenIn || tokenSymbol || 'USDC'), tOut = String(metadata.tokenOut || '')

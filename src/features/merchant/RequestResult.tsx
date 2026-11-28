@@ -184,9 +184,9 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
   const qr = useQr(ended ? null : link)
   const bill = intent.kind === 'invoice'
   const num = intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''
-  // A business's charge has no number (27 Nov): it's named by what it's for.
+  // Named by what it is, never the Order ID (28 Nov) - that's in the details.
   const charge = !bill && intent.personal === false
-  const orderName = bill ? `Bill ${num}` : charge ? (intent.note ? `Charge · ${intent.note}` : 'Charge') : `Request ${num}`
+  const orderName = bill ? 'Bill' : charge ? (intent.note ? `Charge · ${intent.note}` : 'Charge') : 'Payment Request'
   const d = dueText(intent.dueDate ?? null, !paid)
   const dueShare = dueText(intent.dueDate ?? null, true)
   const valid = intent.expiresAt && !intent.dueDate ? (bill ? '7 days' : validLabel) : 'until paid'
@@ -202,7 +202,7 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
   // two boxes on the card over the QR, the share buttons in one row - so it
   // all fits on a phone without scrolling. Paid / ended keep the big amount.
   const open = !paid && !ended
-  const shareText = `${from}: ${bill ? `bill ${num} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}${dueShare ? ` (${dueShare.text.toLowerCase()})` : ''}. Pay in USDC:`
+  const shareText = `${from}: ${bill ? 'bill for' : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}${dueShare ? ` (${dueShare.text.toLowerCase()})` : ''}. Pay in USDC:`
   // A waiting bill: who it's for goes in the header, its items (and note)
   // open from the amount box.
   const billLine = open && bill && (intent.items?.length ?? 0) > 0
@@ -229,7 +229,7 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
               {d && !open && <p className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${dueTone[d.tone]}`}><CalendarClock className="size-3.5" /> {d.text}</p>}
             </div>
           )}
-          {billLine && <BillItemsSheet open={itemsOpen} onClose={() => setItemsOpen(false)} items={intent.items!} taxPercent={intent.taxPercent} note={intent.note} title={`Bill ${num}`} total={intent.amount} bill={intent.bill} />}
+          {billLine && <BillItemsSheet open={itemsOpen} onClose={() => setItemsOpen(false)} items={intent.items!} taxPercent={intent.taxPercent} note={intent.note} title="Bill" total={intent.amount} bill={intent.bill} />}
           {bill && !open && (intent.items?.length ?? 0) > 0 && (
             <div className="w-full text-left"><DetailList rows={intent.items!.map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
           )}
@@ -249,7 +249,7 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
               ...(tx ? [{ label: 'Transaction hash', value: short(tx) }] : []),
             ]} /></div>
           )}
-          {open && <ShareRow url={link} text={shareText} subject={`${from}: ${bill ? 'bill' : 'payment'} ${num} for ${money(intent.amount)}`} to={intent.billToContact} />}
+          {open && <ShareRow url={link} text={shareText} subject={`${from}: ${bill ? 'bill' : 'payment'} for ${money(intent.amount)}`} to={intent.billToContact} />}
           {bill && (intent.items?.length ?? 0) > 0 && !ended && (
             <button type="button" onClick={savePdf}
               className="w-full max-w-[340px] min-h-[44px] inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface text-[13.5px] font-semibold text-text-primary active:scale-[0.98] transition-transform">

@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useBusinessTab } from '@/lib/merchant'
-import { listMyPayments, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, subscribeChainReceipts, displayOrderNumber, orderTitle, type MerchantPayment } from '@/lib/merchantPay'
+import { listMyPayments, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, subscribeChainReceipts, orderTitle, type MerchantPayment } from '@/lib/merchantPay'
 import { speakPayment, prefetchVoicePack, useVoiceAlerts, setVoiceAlerts, spokenLine, isSpoken } from '@/lib/voiceAlerts'
 import { useNavigate } from 'react-router-dom'
 import { PaymentReceivedOverlay } from './ui'
@@ -194,10 +194,9 @@ export function PaymentReceivedWatcher() {
   const p = shown ?? lastShown.current
 
   if (!business) return null
-  // Which order it paid: "Bill #138" / "Request #138". A Shop QR payment had
-  // no order the customer saw - no number.
-  const order = !p?.orderNumber || p.orderKind === 'shop' ? undefined
-    : p.orderKind ? orderTitle(p.orderKind, p.orderNumber, { short: true }) : displayOrderNumber(p.orderNumber)
+  // What it paid: "Bill" / "Payment Request" - never the Order ID. A Shop
+  // QR payment had no order the customer saw.
+  const order = !p?.orderKind || p.orderKind === 'shop' ? undefined : orderTitle(p.orderKind, null, { short: true })
   return (
     <PaymentReceivedOverlay open={!!shown} amount={p ? money(p.amount) : ''}
       from={p ? (p.customerUsername ? `${p.customerUsername}.arc` : (/^0x0{40}$/i.test(p.from) ? 'a bridge' : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`)) : ''}

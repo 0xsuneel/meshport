@@ -1855,7 +1855,7 @@ const MessageBubble = memo(function MessageBubble({
                   borderLeft: `3px solid ${isMine ? 'var(--brand)' : 'var(--success)'}`,
                   background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
                 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: isMine ? 'var(--brand-text)' : 'var(--success-text)' }}>{orderTag?.kind ? orderTitle(orderTag.kind, billRef) : `Order ${displayOrderNumber(billRef)}`}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: isMine ? 'var(--brand-text)' : 'var(--success-text)' }}>{orderTag?.kind ? orderTitle(orderTag.kind, billRef) : 'Order'}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{isMine ? 'Paid in full' : 'Paid by customer'}</div>
               </div>
             )}

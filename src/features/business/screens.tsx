@@ -317,10 +317,10 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   // just the tabs here.
   // Phone: the title is the business - its logo and name, with the store
   // under it (tap to switch) or, with one store, its handle.
-  // An order made: the title names it ("Bill #124 · Cutting Edge") in place
+  // An order made: the title names it ("Bill · Cutting Edge") in place
   // of the store switch, and the order screen drops its own person row.
   const heading = isDesktop ? undefined : intent
-    ? <BusinessTitle business={storeName} avatar={avatar} line={[intent.kind === 'invoice' ? `Bill ${intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''}`.trim() : intent.note ? `Charge · ${intent.note}` : 'Charge',
+    ? <BusinessTitle business={storeName} avatar={avatar} line={[intent.kind === 'invoice' ? 'Bill' : intent.note ? `Charge · ${intent.note}` : 'Charge',
         intent.kind === 'invoice' && intent.customerUsername ? `for ${cleanUsername(intent.customerUsername)}.arc` : null, outlet].filter(Boolean).join(' · ')} />
     : businessHeading(storeName, avatar, only === 'charge' ? 'Charge' : only === 'bill' ? 'Bill' : shopQr?.handle ?? 'Collect payment', storePick)
   const head = (compact: boolean) => (
@@ -528,14 +528,14 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
     .filter(p => !p.screenFlag && leftOn(p) + 1e-9 >= Math.max(amount, MIN_REFUND)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0]
   const shareText = (i: MerchantIntent) => {
     const d = dueText(i.dueDate, true)
-    return `${shopFrom(storeName, storeNameOf?.(i))}: ${i.kind === 'invoice' ? 'bill' : t.order} ${i.orderNumber ? displayOrderNumber(i.orderNumber) : ''} for ${money(Math.max(0, i.amount - i.received))}${i.note ? ` - ${i.note}` : ''}${d ? ` (${d.text.toLowerCase()})` : ''}. Pay in USDC:`
+    return `${shopFrom(storeName, storeNameOf?.(i))}: ${i.kind === 'invoice' ? 'bill' : t.order} for ${money(Math.max(0, i.amount - i.received))}${i.note ? ` - ${i.note}` : ''}${d ? ` (${d.text.toLowerCase()})` : ''}. Pay in USDC:`
   }
 
   return (
     <>
-      {sharing && <ShareSheet open onClose={() => setSharing(null)} title={`Share ${sharing.orderNumber ? displayOrderNumber(sharing.orderNumber) : cap(t.order)}`}
+      {sharing && <ShareSheet open onClose={() => setSharing(null)} title={`Share ${sharing.kind === 'invoice' ? 'bill' : t.order}`}
         url={paymentLink(sharing.code)} text={shareText(sharing)}
-        subject={`${shopFrom(storeName, storeNameOf?.(sharing))}: ${sharing.kind === 'invoice' ? 'bill' : t.order} ${sharing.orderNumber ? displayOrderNumber(sharing.orderNumber) : ''}`} />}
+        subject={`${shopFrom(storeName, storeNameOf?.(sharing))}: ${sharing.kind === 'invoice' ? 'bill' : t.order}`} />}
       <div className="px-5 pt-3">
         <SearchField value={query} onChange={setQuery} ariaLabel={`Search ${orders}`} placeholder={[`Search ${t.order}, ${t.customer.toLowerCase()} or note`, `${cap(t.order)}, ${t.customer.toLowerCase()}, note`, 'Search']} />
       </div>
@@ -593,8 +593,8 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
               return (
                 <RequestRow key={i.id} kind={i.kind} status={status} amount={money(i.amount)} badges={badges} note={note}
                   title={i.kind === 'invoice' ? (i.note || 'Bill') : i.via === 'shop_qr' ? 'Shop QR' : i.note ? `Charge · ${i.note}` : 'Charge'}
-                  // Only a bill shows its number (a document); a charge is named by what it's for.
-                  sub={[i.kind === 'invoice' && i.orderNumber && `Bill ${displayOrderNumber(i.orderNumber)}`, status === 'part' && `${money(i.received)} received`, i.customerUsername && `${i.customerUsername}.arc`,
+                  // Named by what it's for - the Order ID is in its details.
+                  sub={[status === 'part' && `${money(i.received)} received`, i.customerUsername && `${i.customerUsername}.arc`,
                     new Date(i.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })].filter(Boolean).join(' · ')}
                   expanded={openId === i.id} onToggle={() => setOpenId(openId === i.id ? null : i.id)}
                   actions={[
@@ -994,10 +994,9 @@ export function ReceiptScreen({ open, onBack, storeName, handle, payment, refund
   const terms = useBizTerms()
   if (!payment) return <BusinessScreen open={false} title="Receipt" onBack={onBack}>{null}</BusinessScreen>
   const from = payment.customerUsername ? `${payment.customerUsername}.arc` : `${payment.from.slice(0, 6)}…${payment.from.slice(-4)}`
-  // What it paid: "Bill #170", "Requested #44", a Shop QR payment (no number).
+  // What it paid: "Bill", "Payment Request", a Shop QR payment.
   const forWhat = payment.orderKind === 'shop' ? 'Shop QR payment'
-    : payment.orderNumber ? (payment.orderKind ? orderTitle(payment.orderKind, payment.orderNumber, { short: true }) : displayOrderNumber(payment.orderNumber))
-    : undefined
+    : payment.orderKind ? orderTitle(payment.orderKind, null, { short: true }) : undefined
   const card = (printable: boolean) => (
     <ReceiptCard storeName={storeName} handle={handle} avatar={avatar} outlet={outlet} taxId={taxId} amount={money(payment.amount)} from={from}
       chainLabel={chainLabel(payment.chain)} order={forWhat} time={payment.createdAt} txHash={payment.txHash}
@@ -1006,7 +1005,7 @@ export function ReceiptScreen({ open, onBack, storeName, handle, payment, refund
       printable={printable} />
   )
   const text = [`Receipt from ${storeName} (${handle})`, `${money(payment.amount)} USDC${refunded ? ' - refunded' : ''}`,
-    payment.orderNumber ? `${cap(terms.order)} ${displayOrderNumber(payment.orderNumber)}` : '', `Paid by ${from} on ${chainLabel(payment.chain)}`,
+    payment.orderNumber ? `Order ID ${displayOrderNumber(payment.orderNumber)}` : '', `Paid by ${from} on ${chainLabel(payment.chain)}`,
     new Date(payment.createdAt).toLocaleString(), `Transaction ${payment.txHash}`].filter(Boolean).join('\n')
   return (
     <BusinessScreen open={open} title="Receipt" onBack={onBack}
@@ -1018,7 +1017,7 @@ export function ReceiptScreen({ open, onBack, storeName, handle, payment, refund
         {card(false)}
         <div className="w-full max-w-[360px]">
           <p className="text-xs text-text-muted mb-2">Send it on</p>
-          <ShareChannels subject={`Receipt from ${storeName}${payment.orderNumber ? ` · ${displayOrderNumber(payment.orderNumber)}` : ''}`} text={text} />
+          <ShareChannels subject={`Receipt from ${storeName}`} text={text} />
         </div>
       </div>
       {printer.portal}
@@ -1254,7 +1253,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
                     return (
                       <div key={i.id} className="flex items-center gap-3 px-4 py-3">
                         <span className="flex-1 min-w-0">
-                          <span className="block text-sm font-medium text-text-primary truncate">{i.orderNumber ? displayOrderNumber(i.orderNumber) : cap(t.order)}{i.note ? ` · ${i.note}` : ''}</span>
+                          <span className="block text-sm font-medium text-text-primary truncate">{i.note || (i.kind === 'invoice' ? 'Bill' : 'Payment Request')}</span>
                           <span className={`block text-xs truncate ${d ? dueTone[d.tone] : 'text-text-muted'}`}>
                             {[d?.text, i.received > 0 && `${money(i.received)} of ${money(i.amount)} paid`].filter(Boolean).join(' · ') || new Date(i.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}
                           </span>
@@ -1288,7 +1287,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
                     className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-border/20">
                     <img decoding="async" src={chainLogoSrc(p.chain)} alt="" className="size-8 rounded-full shrink-0" />
                     <span className="flex-1 min-w-0">
-                      <span className="block text-sm font-medium text-text-primary truncate">{p.orderNumber ? displayOrderNumber(p.orderNumber) : chainLabel(p.chain)}</span>
+                      <span className="block text-sm font-medium text-text-primary truncate">{p.orderKind ? orderTitle(p.orderKind, null, { short: true }) : 'Payment'}</span>
                       <span className="block text-xs text-text-muted">{chainLabel(p.chain)} · {new Date(p.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
                     </span>
                     <span className={`text-sm font-semibold tabular-nums ${refundedIds.has(p.id) ? 'text-text-muted line-through' : 'text-brand-text'}`}>+{money(p.amount)}</span>
