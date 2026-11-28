@@ -853,9 +853,9 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
             </button>
           </div>
           {!canApply && (
-            <Field label="Business name" hint={pendingName ? `“${pendingName}” is waiting for MeshPort’s review. Customers see your current name until then.`
-              : status === 'approved' ? 'Customers see this. A new name is reviewed by MeshPort before customers see it.'
-              : `Customers see this. Leave empty to show ${handle}.`}>
+            <Field label="Display name" hint={pendingName ? `“${pendingName}” is waiting for MeshPort’s review. Customers see your current name until then.`
+              : status === 'approved' ? 'Your customers see this when they make payment - everywhere: search, chats, the pay screen and receipts. A new name is reviewed by MeshPort first.'
+              : `Your customers see this when they make payment. Leave empty to show ${handle}.`}>
               <div className="flex gap-2">
                 <TextInput value={bizName} onChange={e => setBizName(e.target.value)} maxLength={60} placeholder="e.g. Sharma Chai Corner" />
                 <button type="button" onClick={saveName} disabled={savingName || bizName.trim() === (storeName ?? '')}
@@ -865,13 +865,20 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
               </div>
             </Field>
           )}
+          {/* The registered name from the application (as Paytm's "Registered Business Name"): the owner's own record. */}
+          {!canApply && application?.businessName && (
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-text-muted">Registered business name</span>
+              <span className="font-semibold text-text-primary text-right truncate">{application.businessName}</span>
+            </div>
+          )}
         </div>
         {status === 'approved' && <ShopContactCard open={open} />}
         {status === 'approved' && <ShopLimitsCard open={open} handle={handle} />}
         <ProfileStatusCard {...card} />
         {canApply ? (
           <>
-            <Field label="Business name" hint="Your store or business name. Customers see this on the pay page and receipts.">
+            <Field label="Registered business name" hint="As on your registration documents. It's also your display name - the name customers see when they pay - until you change it.">
               <TextInput value={bizName} onChange={e => setBizName(e.target.value)} maxLength={60} placeholder="e.g. Royal Bakes" />
             </Field>
             <Field label="Type">

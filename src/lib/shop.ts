@@ -15,18 +15,20 @@ export type ShopInfo = {
   contact: string | null
 }
 
-/** What a shop is called to its customers: the store's own (reviewed) name,
- *  like Square's per-location business name - else the business name. */
+/** What a business is called to its customers (28 Nov, like Paytm's
+ *  Display Name - "your customers see this when they make payment"): its
+ *  one reviewed display name, everywhere. A store is never the title. */
 export function shopTitle(s: Pick<ShopInfo, 'businessName' | 'storeName'>): string {
-  return s.storeName?.trim() || s.businessName
+  return s.businessName?.trim() || s.storeName?.trim() || ''
 }
 
-/** The line under a shop's name: its category, and the business it belongs
- *  to when that's a different name - "Retail store · Shop". Never the username. */
+/** The line under a business's name: its category, and the store being
+ *  paid when it's named differently - "Retail store · Sharma Jeneral Store".
+ *  Never the username. */
 export function shopSubline(s: Pick<ShopInfo, 'businessName' | 'storeName' | 'category'>): string {
   const title = shopTitle(s).trim().toLowerCase()
-  const brand = s.businessName.trim() && s.businessName.trim().toLowerCase() !== title ? s.businessName.trim() : ''
-  return [s.category?.trim() || '', brand].filter(Boolean).join(' · ')
+  const store = s.storeName?.trim() && s.storeName.trim().toLowerCase() !== title ? s.storeName.trim() : ''
+  return [s.category?.trim() || '', store].filter(Boolean).join(' · ')
 }
 
 const shopCache = new Map<string, ShopInfo | null>()
