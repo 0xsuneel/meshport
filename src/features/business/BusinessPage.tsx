@@ -24,7 +24,8 @@ import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
 import { copyToClipboard } from '@/lib/utils'
 import { useArcAssets } from './useArcAssets'
-import { QrCode, BadgeDollarSign, ReceiptText, Link2, Store as StoreIcon, Users, BarChart2, Wallet, Banknote, Send, BookOpen, ArrowLeftRight } from 'lucide-react'
+import { QrCode, BadgeDollarSign, ReceiptText, Link2, Store as StoreIcon, Users, BarChart2, Banknote, Send, BookOpen, ArrowLeftRight, Undo2, ScanLine, UserRound, ChevronRight, X } from 'lucide-react'
+import { ActionSheet } from '@/components/ui/ActionSheet'
 import type { PaymentVia } from './ui/types'
 import { getBusinessAlerts, saveBusinessAlerts, alertsSummary, hourLabel, WEEKDAYS, DEFAULT_ALERTS, type BusinessAlerts } from '@/lib/businessAlerts'
 import { useAuthStore, useWalletStore, useNotificationStore, useChatUnreadStore } from '@/store'
@@ -361,6 +362,8 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
 
   // ── Sheets ────────────────────────────────────────────────────────────
   const [detail, setDetail] = useState<Payment | null>(null)
+  // Home → Pay: who to pay (one person, a QR, or staff & suppliers at once).
+  const [payChoice, setPayChoice] = useState(false)
   // ?pay=<tx hash> (the payment card's "View payment"): open that payment
   // once the list has it, then drop the parameter. Matched by transaction -
   // the card and this list name other-chain payments differently.
@@ -787,10 +790,11 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
                   { id: 'reports', icon: BarChart2, label: 'Reports', tint: 'peach', onClick: open('reports') },
                 ] },
                 { id: 'money', title: 'Money', onViewAll: () => navigate('/biz/balance'), items: [
+                  // One Pay (one person, a QR, or staff & suppliers at once) and Refund (28 Nov).
                   { id: 'cashout', icon: Banknote, label: 'Cash out', tint: 'mint', onClick: open('cashout') },
-                  { id: 'paystaff', icon: Send, label: 'Pay staff', tint: 'butter', onClick: open('payouts') },
-                  { id: 'pay', icon: Wallet, label: 'Pay someone', tint: 'peach', onClick: () => navigate('/pay') },
+                  { id: 'pay', icon: Send, label: 'Pay', tint: 'butter', onClick: () => setPayChoice(true) },
                   { id: 'swap', icon: ArrowLeftRight, label: 'Swap', tint: 'sky', onClick: () => navigate('/swap') },
+                  { id: 'refund', icon: Undo2, label: 'Refund', tint: 'peach', onClick: () => navigate('/biz/payments?refund=1') },
                 ] },
               ]}
               onOpenOrders={openOrders}
@@ -867,8 +871,17 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
                   storeName={storeName} storeNameOf={i => stores.find(st => st.id === (i.storeId ?? mainStoreId))?.name ?? null} paymentsOf={i => paymentsByIntent.get(i.id) ?? []} refundedOf={p => refundedOf(p.id)} onRefund={refundFromOrder} />}
                 {tab === 'payments' && payView === 'payments' && (subRoot
                   ? <BizPaymentsView loading={!loaded} payments={payList} onPayment={setDetail} refundedOf={refundedOf} initialStore={query.get('counter') ?? ''}
-                      initialDate={period.id === 'yesterday' ? 'yesterday' : period.id === 'week' ? 'week' : period.id === 'month' ? 'month' : 'today'}
-                      openOrders={pending ? { count: pending.count, onOpen: () => setPayView('requests') } : undefined} onDownload={open('reports')} />
+                      initialDate={query.get('refund') === '1' ? 'week' : period.id === 'yesterday' ? 'yesterday' : period.id === 'week' ? 'week' : period.id === 'month' ? 'month' : 'today'}
+                      openOrders={pending ? { count: pending.count, onOpen: () => setPayView('requests') } : undefined} onDownload={open('reports')}
+                      header={query.get('refund') === '1' ? (
+                        <div className="mx-5 mt-2 mb-1 flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3">
+                          <Undo2 className="size-5 text-brand-text shrink-0" />
+                          <span className="flex-1 min-w-0 text-[13px] text-text-secondary"><b className="block text-text-primary text-sm">Refund a payment</b>Tap the payment to refund, then Refund.</span>
+                          <button type="button" aria-label="Close" onClick={() => navigate('/biz/payments', { replace: true })} className="size-8 rounded-full flex items-center justify-center active:bg-border/40">
+                            <X className="size-4 text-text-muted" />
+                          </button>
+                        </div>
+                      ) : undefined} />
                   : <PaymentsView key={payFilter} initialFilter={payFilter} loading={!loaded} payments={payList} onPayment={setDetail} />)}
                 {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out"
                   action={<span className="flex gap-2 shrink-0">
@@ -908,6 +921,26 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
         refunds={detailRefunds.map(r => ({ id: r.id, amount: money(r.amount), reason: r.reason, when: r.createdAt, chainLabel: chainLabel(r.chain),
           txUrl: explorerTxUrl(r.route === 'chain' ? r.chain : 'Arc_Testnet', r.txHash) ?? undefined }))}
         refundTotals={rawDetail && detailRefunds.length ? { refunded: money(refundedOf(rawDetail.id)), left: money(kept(rawDetail)) } : undefined} />
+
+      <ActionSheet open={payChoice} onClose={() => setPayChoice(false)} id="biz-pay-choice">
+        <div className="px-5 pt-2 pb-5">
+          <p className="text-base font-bold text-text-primary mb-3">Pay</p>
+          <div className="rounded-2xl border border-border bg-surface divide-y divide-border overflow-hidden">
+            {[
+              { icon: <UserRound className="size-5" />, label: 'Pay one person', hint: 'Username, address or contact', go: () => navigate('/pay') },
+              { icon: <ScanLine className="size-5" />, label: 'Scan & pay', hint: "A supplier's or shop's QR", go: () => navigate('/scanner') },
+              { icon: <Users className="size-5" />, label: 'Pay staff & suppliers', hint: 'Many people at once - salaries, bills', go: () => open('payouts')() },
+            ].map(o => (
+              <button key={o.label} type="button" onClick={() => { setPayChoice(false); o.go() }}
+                className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-card">
+                <span className="size-9 rounded-xl flex items-center justify-center bg-brand/10 text-brand-text shrink-0">{o.icon}</span>
+                <span className="flex-1 min-w-0"><span className="block text-sm font-semibold text-text-primary">{o.label}</span><span className="block text-xs text-text-muted truncate">{o.hint}</span></span>
+                <ChevronRight className="size-4 text-text-muted shrink-0" />
+              </button>
+            ))}
+          </div>
+        </div>
+      </ActionSheet>
 
       <RefundSheet open={!!refundFor} amount={refundShown ? money(refundShownLeft) : ''} customer={refundShown ? who(refundShown) : ''}
         already={refundShown && refundedOf(refundShown.id) > 0 ? `${money(refundedOf(refundShown.id))} of ${money(refundShown.amount)} already refunded` : undefined}
