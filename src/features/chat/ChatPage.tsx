@@ -26,7 +26,7 @@ import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { SearchField } from '@/components/ui/SearchField'
 import { readPeople, writePeople } from '@/lib/peopleCache'
-import { Search, ArrowLeft, Paperclip, Image, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, Trash2, Archive, ArchiveRestore, MessageCirclePlus, Users, UserPlus, Receipt } from 'lucide-react'
+import { Search, ArrowLeft, Paperclip, Image, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, Trash2, Archive, ArchiveRestore, MessageCirclePlus, Users, UserPlus, Receipt, Store, BadgeCheck } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { TxDetailPage, type TxParty } from '@/components/ui/TxDetailPage'
@@ -1635,8 +1635,10 @@ function DateSeparator({ iso }: { iso: string }) {
 
 const MessageBubble = memo(function MessageBubble({
   msg, isMine, isPayment, showTime, isFirstInGroup, isLastInGroup, recipientClean, userId, onImageTap,
-  onLongPress, onLongPressEnd, convKey, onRetry, onReply, getMsg, onJumpTo, otherName, onCancelUpload,
+  onLongPress, onLongPressEnd, convKey, onRetry, onReply, getMsg, onJumpTo, otherName, onCancelUpload, bizPeer,
 }: {
+  /** The other side is a business: its name - payments to it are "Paid to <business>". */
+  bizPeer?: string | null
   msg: any, isMine: boolean, isPayment: boolean, showTime: boolean,
   isFirstInGroup: boolean, isLastInGroup: boolean,
   recipientClean: string, userId: string,
@@ -1830,10 +1832,14 @@ const MessageBubble = memo(function MessageBubble({
             }}>
               <span aria-hidden style={{ position: 'absolute', right: -18, top: -18, width: 72, height: 72, borderRadius: '50%', border: '12px solid rgba(255,255,255,0.12)' }} />
               <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 12, fontWeight: 700, lineHeight: 1.3, opacity: 0.9 }}>
-                {isMine ? <ArrowUpRight className="w-3 h-3 flex-shrink-0" style={{ marginTop: 1.5 }} /> : <ArrowDownLeft className="w-3 h-3 flex-shrink-0" style={{ marginTop: 1.5 }} />}
+                {bizPeer && isMine ? <Store className="w-3 h-3 flex-shrink-0" style={{ marginTop: 1.5 }} />
+                  : isMine ? <ArrowUpRight className="w-3 h-3 flex-shrink-0" style={{ marginTop: 1.5 }} /> : <ArrowDownLeft className="w-3 h-3 flex-shrink-0" style={{ marginTop: 1.5 }} />}
                 {/* An order's name wraps rather than being cut; a plain payment stays on one line. */}
                 <span style={orderTag ? { minWidth: 0, overflowWrap: 'anywhere' } : { minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {orderTag ? paidTitleFromTag(orderTag, true, !isMine) : (isMine ? `Paid to ${recipientClean}.arc` : `Received from ${recipientClean}.arc`)}
+                  {/* Paying a business (no bill or request): "Paid to <business>", as a merchant payment. */}
+                  {bizPeer && (!orderTag || !orderTag.kind || orderTag.kind === 'shop')
+                    ? (isMine ? `Paid to ${bizPeer}` : `Received from ${bizPeer}`)
+                    : orderTag ? paidTitleFromTag(orderTag, true, !isMine) : (isMine ? `Paid to ${recipientClean}.arc` : `Received from ${recipientClean}.arc`)}
                 </span>
               </div>
               <p style={{ position: 'relative', fontSize: 22, lineHeight: 1.1, fontWeight: 800, letterSpacing: '-0.4px', marginTop: 3 }}>
@@ -2753,14 +2759,21 @@ export function ChatConversationPage() {
   // and Pay quietly opens a Shop QR order for the amount, so the payment
   // carries it and the business gets it at once.
   const [chatBiz, setChatBiz] = useState<string | null>(null)
+  // A business's chat (28 Nov, like Paytm's payments to a merchant): its own
+  // name and logo, a business badge, and payments read "Paid to <business>".
+  const [chatBizName, setChatBizName] = useState<string | null>(null)
   const [chatBizOrder, setChatBizOrder] = useState<{ code: string; amount: number } | null>(null)
   useEffect(() => {
-    setChatBiz(null); setChatBizOrder(null)
+    setChatBiz(null); setChatBizOrder(null); setChatBizName(null)
     const u: string | undefined = otherUser?.username
     if (!u || otherUser?.account_type === 'personal') return
     let live = true
-    import('@/lib/shop').then(({ getShopInfo }) => getShopInfo(String(u).replace(/\.arc$/i, ''), null))
-      .then(s => { if (live && s?.verified) { setChatBiz(s.username); setPayToken('USDC') } }).catch(() => {})
+    import('@/lib/shop').then(async ({ getShopInfo, shopTitle }) => {
+      const s = await getShopInfo(String(u).replace(/\.arc$/i, ''), null)
+      if (!live || !s?.verified) return
+      setChatBiz(s.username); setChatBizName(shopTitle(s)); setPayToken('USDC')
+      if (s.avatarUrl) setOtherUser((cur: any) => cur && cur.username === u && !cur.avatar_url ? { ...cur, avatar_url: s.avatarUrl } : cur)
+    }).catch(() => {})
     return () => { live = false }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [otherUser?.username])
@@ -4788,11 +4801,12 @@ export function ChatConversationPage() {
               {otherUser ? (
                 <div className="min-w-0 flex flex-col justify-center text-left">
                   <p className="text-[14px] font-semibold text-text-primary leading-tight truncate flex items-center gap-1">
-                    {otherUser.display_name || recipientClean}
+                    <span className="truncate">{chatBizName || otherUser.display_name || recipientClean}</span>
+                    {chatBizName && <BadgeCheck className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--brand-text)' }} aria-label="Business" />}
                   </p>
                   {otherTyping
                     ? <p className="text-[12px] leading-tight" style={{ color: 'var(--success-text)' }}>typing…</p>
-                    : <p className="text-[12px] text-link leading-tight">{recipientClean}.arc</p>}
+                    : <p className="text-[12px] text-link leading-tight">{chatBizName ? `Business · ${recipientClean}.arc` : `${recipientClean}.arc`}</p>}
                 </div>
               ) : (
                 // Not known yet (first open with nothing cached): placeholder
@@ -5052,7 +5066,8 @@ export function ChatConversationPage() {
                     onReply={selecting ? undefined : startReply}
                     getMsg={getMsgById}
                     onJumpTo={jumpToMessage}
-                    otherName={otherUser?.display_name || undefined}
+                    otherName={chatBizName || otherUser?.display_name || undefined}
+                    bizPeer={chatBizName}
                     onCancelUpload={cancelUpload}
                   />
                 </div>
