@@ -35,6 +35,9 @@ import { listMyPayments, listMyIntents, isAskedOrder, listChainReceipts, subscri
 import { listStores, listStaff, activeStoreId, setActiveStoreId, type Store, type StaffMember } from '@/lib/businessTeam'
 import { listCounters, listPayLinks, type Counter, type PayLink } from '@/lib/businessCounters'
 import { CountersScreen, PayLinksScreen } from './countersLinks'
+import { CreditBookScreen, CheckQrScreen, AttendanceScreen, LimitsScreen } from './creditStaff'
+import { listLedger, listAttendance, type LedgerCustomer, type LedgerEntry, type Shift } from '@/lib/businessLedger'
+import { getShopLimits } from '@/lib/shop'
 import { StorePicker } from '@/features/merchant/StorePicker'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, spokenLine, MIN_AMOUNTS } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockSigner } from './settlement'
@@ -67,9 +70,9 @@ import {
 } from './ui'
 import { errorText } from '@/lib/errorText'
 
-type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools' | 'activity' | 'counters' | 'links'
+type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools' | 'activity' | 'counters' | 'links' | 'credit' | 'checkqr' | 'attendance' | 'limits'
 /** Screens a link (?screen=) can open - all but a payment's receipt. */
-const LINKABLE: ScreenId[] = ['qr', 'receive', 'customers', 'reports', 'profile', 'help', 'cashout', 'team', 'payouts', 'tools', 'activity', 'counters', 'links']
+const LINKABLE: ScreenId[] = ['qr', 'receive', 'customers', 'reports', 'profile', 'help', 'cashout', 'team', 'payouts', 'tools', 'activity', 'counters', 'links', 'credit', 'checkqr', 'attendance', 'limits']
 const linkedScreenOf = (q: URLSearchParams): ScreenId | null => {
   const v = q.get('screen') as ScreenId | null
   return v && LINKABLE.includes(v) ? v : null
@@ -233,7 +236,14 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
   useEffect(() => { listStores().then(setStores).catch(() => {}) }, [])
   // Staff names, for who took a payment (payments name the staff member).
   const [staffList, setStaffList] = useState<StaffMember[]>([])
-  useEffect(() => { listStaff().then(setStaffList).catch(() => {}) }, [])
+  const reloadStaff = useCallback(() => { listStaff().then(setStaffList).catch(() => {}) }, [])
+  useEffect(reloadStaff, [reloadStaff])
+  // Credit book, attendance and the Shop QR limits (28 Nov).
+  const [ledger, setLedger] = useState<{ customers: LedgerCustomer[]; entries: LedgerEntry[] }>({ customers: [], entries: [] })
+  const reloadLedger = useCallback(() => { listLedger().then(setLedger).catch(() => {}) }, [])
+  const [shifts, setShifts] = useState<Shift[]>([])
+  const reloadShifts = useCallback(() => { listAttendance(7).then(setShifts).catch(() => {}) }, [])
+  const [shopLimits, setShopLimitsState] = useState<{ min: number | null; max: number | null }>({ min: null, max: null })
   const staffNames = useMemo(() => new Map(staffList.filter(s => s.authUid).map(s => [s.authUid!, `${s.username}.arc`])), [staffList])
   // Counters (a QR each) and payment links (28 Nov).
   const [counters, setCounters] = useState<Counter[]>([])
@@ -414,6 +424,13 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
   })
   const screen = stack.length ? stack[stack.length - 1] : null
   // Back from Cash out or Payouts: USDC may have moved (escrow, staff pay).
+  // Credit book, attendance and limits load when their screen opens.
+  useEffect(() => {
+    if (screen === 'credit') reloadLedger()
+    if (screen === 'attendance') { reloadShifts(); reloadStaff() }
+    if (screen === 'limits' && handle) getShopLimits(handle.replace(/\.arc$/i, '')).then(setShopLimitsState).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- when the screen changes
+  }, [screen])
   const prevScreen = useRef(screen)
   useEffect(() => {
     if ((prevScreen.current === 'cashout' || prevScreen.current === 'payouts') && screen !== prevScreen.current) refreshArc(true)
@@ -953,6 +970,9 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
               { id: 'team', label: `${terms.stores} & staff`, hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers' },
               { id: 'counters', label: 'Counters', hint: counters.length ? `${counters.length} counter${counters.length === 1 ? '' : 's'} · a QR each` : 'A QR for each till, window or table' },
               { id: 'links', label: 'Payment links', hint: payLinks.length ? `${payLinks.filter(l => l.active).length} active` : 'Sell a product or a fixed price by link' },
+              { id: 'credit', label: 'Credit book', hint: 'Who owes you · reminders and pay links' },
+              { id: 'attendance', label: 'Attendance', hint: 'Staff check-in · payment alerts for staff' },
+              { id: 'checkqr', label: 'Check a QR', hint: 'Is the QR at your counter really yours?' },
               { id: 'reports', label: 'Reports', hint: 'Sales and statement · CSV and PDF' },
               { id: 'activity', label: 'Activity log', hint: 'Who billed, refunded, settled' },
             ] },
@@ -966,6 +986,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
             { title: 'Settings', rows: [
               { id: 'voice', label: 'Payment alerts', hint: voice.enabled ? `Voice on${voice.minAmount ? ` · above $${voice.minAmount}` : ''}` : 'Voice off' },
               { id: 'summaries', label: 'Summaries & cash-out day', hint: alerts ? alertsSummary(alerts) : 'Daily and weekly sales, a cash-out reminder' },
+              { id: 'limits', label: 'Limits & charges', hint: 'What MeshPort charges · payment limits' },
               { id: 'settings', label: 'Security & app settings', hint: 'Passcode, appearance, backup, sign out' },
               { id: 'help', label: 'Help & disputes', hint: 'Customer says they paid' },
             ] },
@@ -1051,6 +1072,18 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
       {level('links', (
         <PayLinksScreen open={stack.includes('links')} onBack={back} links={payLinks} counters={counters} payments={raw}
           handle={handle} storeName={storeName} onChanged={reloadLinks} />
+      ))}
+      {level('credit', (
+        <CreditBookScreen open={stack.includes('credit')} onBack={back} customers={ledger.customers} entries={ledger.entries} storeName={storeName} onChanged={reloadLedger} />
+      ))}
+      {level('checkqr', (
+        <CheckQrScreen open={stack.includes('checkqr')} onBack={back} me={{ username: handle, wallet: walletAddress }} counters={counters} storeName={storeName} onPrint={() => { back(); open('qr')() }} />
+      ))}
+      {level('attendance', (
+        <AttendanceScreen open={stack.includes('attendance')} onBack={back} staff={staffList} shifts={shifts} counters={counters} onChanged={() => { reloadStaff(); reloadShifts() }} />
+      ))}
+      {level('limits', (
+        <LimitsScreen open={stack.includes('limits')} onBack={back} shopLimits={shopLimits} onEditShopLimits={open('profile')} />
       ))}
       {level('help', (
         <HelpScreen open={stack.includes('help')} onBack={back} />

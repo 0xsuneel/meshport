@@ -194,6 +194,14 @@ export default defineConfig({
           { src: 'pwa-any-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'pwa-any-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
         ],
+        // Press and hold the app icon (28 Nov, like Paytm's QR shortcut): /go/*
+        // opens the business screen for a business, the personal one otherwise.
+        shortcuts: [
+          { name: 'Show QR', short_name: 'Show QR', url: '/go/qr', icons: [{ src: 'pwa-any-192x192.png', sizes: '192x192' }] },
+          { name: 'Charge', short_name: 'Charge', url: '/go/charge', icons: [{ src: 'pwa-any-192x192.png', sizes: '192x192' }] },
+          { name: 'Payments', short_name: 'Payments', url: '/go/payments', icons: [{ src: 'pwa-any-192x192.png', sizes: '192x192' }] },
+          { name: 'Balance', short_name: 'Balance', url: '/go/balance', icons: [{ src: 'pwa-any-192x192.png', sizes: '192x192' }] },
+        ],
       },
     }),
   ],

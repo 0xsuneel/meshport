@@ -446,6 +446,8 @@ export async function createPaymentRequest(p: { amount: number; customer?: strin
   discountType?: 'percent' | 'amount' | null; discountValue?: number
   taxName?: string | null; taxInclusive?: boolean
   billToName?: string | null; billToContact?: string | null
+  /** A pay link from the credit book: entered there when it's paid. */
+  ledgerCustomerId?: string | null
   /** Pay-by date (YYYY-MM-DD) */ dueDate?: string | null }): Promise<MerchantIntent> {
   const items = p.items?.filter(i => i.name.trim() && i.qty > 0 && i.price >= 0).map(i => ({ name: i.name.trim().slice(0, 80), qty: i.qty, price: i.price }))
   const amount = items?.length ? invoiceTotal(items) : p.amount
@@ -456,6 +458,7 @@ export async function createPaymentRequest(p: { amount: number; customer?: strin
     ...(items?.length ? { items } : {}),
     ...(taxPercent ? { tax_percent: taxPercent, tax_name: p.taxName?.trim().slice(0, 20) || null, tax_inclusive: !!p.taxInclusive } : {}),
     ...(items?.length && p.discountType && p.discountValue && p.discountValue > 0 ? { discount_type: p.discountType, discount_value: p.discountValue } : {}),
+    ...(p.ledgerCustomerId ? { ledger_customer_id: p.ledgerCustomerId } : {}),
     ...(items?.length && !p.customer && p.billToName?.trim() ? { bill_to_name: p.billToName.trim().slice(0, 80), bill_to_contact: p.billToContact?.trim().slice(0, 120) || null } : {}),
     customer_username: p.customer?.trim().replace(/^@/, '') || null,
     note: p.note?.trim().slice(0, 140) || null,

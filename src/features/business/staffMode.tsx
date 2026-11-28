@@ -15,6 +15,7 @@ import { displayOrderNumber, myAuthUid, type MerchantPayment } from '@/lib/merch
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, StatementBody } from './screens'
 import { setDueDate } from '@/lib/businessBills'
 import { listCounters, counterQrUrl, type Counter } from '@/lib/businessCounters'
+import { StaffCheckIn } from './creditStaff'
 import { logBusiness } from '@/lib/businessActivity'
 import { StaffBanner, StaffModeHeader, PaymentsView, BizHomeView, PaymentRow, Skeleton, BusinessScreen, useHubShift, type Payment } from './ui'
 import { chainLabel } from './settlement'
@@ -126,6 +127,8 @@ export function StaffModePage() {
         <div className="relative" style={{ paddingTop: isDesktop ? 0 : 'var(--safe-top)' }}>
           <StaffModeHeader onBand={!isDesktop} store={active.storeName ? `${active.ownerName} · ${active.storeName}` : active.ownerName} role={active.role} onExit={() => setActiveId(null)} />
         </div>
+        {/* Check in / out for the shift (28 Nov). */}
+        <div className="relative mb-3"><StaffCheckIn owner={active.ownerAuthUid} counterName={myCounter?.name ?? null} /></div>
         <BizHomeView loading={false} periodLabel="Today" total={money(total)}
           stats={{ count: today.length, average: money(today.length ? total / today.length : 0), openOrders: null }}
           third={{ value: new Set(today.map(who)).size, label: 'Customers' }}

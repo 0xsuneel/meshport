@@ -20,7 +20,7 @@ export type Store = { id: string; name: string; publicName: string | null; nameI
   tax: StoreTax; billFooter: string | null }
 export type StoreTax = { enabled: boolean; name: string; rate: number; inclusive: boolean }
 export type StaffRole = 'cashier' | 'manager'
-export type StaffMember = { id: string; username: string; role: StaffRole; status: 'invited' | 'active'; storeId: string | null; createdAt: string; authUid?: string | null }
+export type StaffMember = { id: string; username: string; role: StaffRole; status: 'invited' | 'active'; storeId: string | null; createdAt: string; authUid?: string | null; paymentAlerts?: boolean }
 export type Membership = { id: string; ownerAuthUid: string; ownerName: string; ownerUsername: string; role: StaffRole; status: 'invited' | 'active'; storeId: string | null; storeName: string | null; storePublicName: string | null }
 
 const mapStore = (r: any): Store => ({ id: r.id, name: r.name, publicName: r.public_name ?? null, nameInReview: !!r.name_review_since, logoUrl: r.logo_url ?? null, publicLogoUrl: r.public_logo_url ?? null, logoInReview: !!r.logo_review_since, type: r.type ?? null, address: r.address ?? null, taxId: r.tax_id ?? null, isDefault: !!r.is_default, createdAt: r.created_at,
@@ -92,7 +92,7 @@ export async function listStaff(): Promise<StaffMember[]> {
   if (!uid) return []
   const { data, error } = await supabase.from('business_staff').select('*').eq('owner_auth_uid', uid).order('created_at')
   fail(error)
-  return (data ?? []).map((r: any) => ({ id: r.id, username: r.staff_username, role: r.role, status: r.status, storeId: r.store_id ?? null, createdAt: r.created_at, authUid: r.staff_auth_uid ?? null }))
+  return (data ?? []).map((r: any) => ({ id: r.id, username: r.staff_username, role: r.role, status: r.status, storeId: r.store_id ?? null, createdAt: r.created_at, authUid: r.staff_auth_uid ?? null, paymentAlerts: !!r.payment_alerts }))
 }
 
 export async function inviteStaff(username: string, role: StaffRole, storeId: string | null): Promise<void> {

@@ -1,7 +1,7 @@
 import { awayPastAutoLock } from '@/lib/autoLock'
 import { useState, useEffect, Suspense } from 'react'
 import { useIsStandalone } from './hooks/useIsStandalone'
-import { createBrowserRouter, RouterProvider, Navigate, useLocation } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Navigate, useLocation, useParams } from 'react-router-dom'
 import { useBusinessTab } from './lib/merchant'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store'
@@ -130,6 +130,16 @@ function BusinessLink() {
   if (tab === 'payments') return <Navigate to="/biz/payments" replace />
   if (tab === 'settlements' || q.get('claim')) return <Navigate to="/biz/balance" replace />
   return <Navigate to={`/${location.search}`} replace />
+}
+
+// App-icon shortcuts (/go/qr, /go/charge, /go/payments, /go/balance): the
+// business screen for a business account, the personal one otherwise.
+function GoShortcut() {
+  const business = useBusinessTab()
+  const { what = '' } = useParams<{ what: string }>()
+  const biz: Record<string, string> = { qr: '/?screen=qr', charge: '/?screen=receive', payments: '/biz/payments', balance: '/biz/balance' }
+  const personal: Record<string, string> = { qr: '/receive', charge: '/receive?request=1', payments: '/activity', balance: '/' }
+  return <Navigate to={(business ? biz : personal)[what] ?? '/'} replace />
 }
 
 function RenamedPathRedirect({ from, to }: { from: string; to: string }) {
@@ -523,6 +533,7 @@ const router = createBrowserRouter([
       { path: 'rewards',                    element: <Unlocked title="Rewards"><PersonalOnly><FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate></PersonalOnly></Unlocked> },
       { path: 'business',                   element: <BusinessLink /> },
       { path: 'biz/payments',               element: <BusinessOnly><BusinessPage key="payments" root="payments" /></BusinessOnly> },
+      { path: 'go/:what',                   element: <GoShortcut /> },
       { path: 'biz/balance',                element: <BusinessOnly><BusinessPage key="balance" root="balance" /></BusinessOnly> },
       { path: 'biz/collect',                element: <Navigate to="/?screen=qr" replace /> },
       { path: 'biz/customers',              element: <BusinessOnly><BusinessPage key="customers" root="customers" /></BusinessOnly> },
