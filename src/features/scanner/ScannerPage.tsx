@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getShopInfo } from '@/lib/shop'
+import { getShopInfo, shopTitle } from '@/lib/shop'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {Zap, Camera, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, Flashlight, X} from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -306,7 +306,7 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
 
       // Try to extract wallet address from MeshPort QR URL format
       // e.g. meshport.xyz/paylink/sunil (older: /pay/sunil) OR /pay?to=username OR /pay?to=0x...
-      let shopLink: { username: string; store: string | null; amount: string | null } | null = null
+      let shopLink: { username: string; store: string | null; counter: string | null; amount: string | null } | null = null
       // A business's Personal QR (?personal=1): the owner chose a normal payment.
       let personalQr = false
       let linkAmount: string | null = null
@@ -318,7 +318,7 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
           const seg = urlObj.pathname.split('/').filter(Boolean)
           // A business's Personal QR (?personal=1) is a normal payment, not the shop.
           if (seg.length === 2 && (seg[0] === 'paylink' || seg[0] === 'pay') && !isValidAddress(seg[1]) && !urlObj.searchParams.get('token') && urlObj.searchParams.get('personal') !== '1') {
-            shopLink = { username: seg[1], store: urlObj.searchParams.get('store'), amount: urlObj.searchParams.get('amount') }
+            shopLink = { username: seg[1], store: urlObj.searchParams.get('store'), counter: urlObj.searchParams.get('counter'), amount: urlObj.searchParams.get('amount') }
           }
           const toParam = urlObj.searchParams.get('to')
           const addrParam = urlObj.searchParams.get('address') || urlObj.searchParams.get('wallet')
@@ -337,20 +337,6 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
           else if (toParam) value = toParam
           else if (pathUser && pathUser !== 'pay' && pathUser !== 'paylink' && pathUser !== 'send') value = pathUser
         } catch {}
-      }
-
-      // Business Shop QR → the shop's amount page, so the payment is
-      // recorded as an order for that store (see ShopPayPage).
-      if (shopLink && !walletMode) {
-        const shop = await getShopInfo(shopLink.username, shopLink.store).catch(() => null)
-        if (shop) {
-          const q = new URLSearchParams()
-          if (shopLink.store) q.set('store', shopLink.store)
-          if (shopLink.amount && Number(shopLink.amount) > 0) q.set('amount', shopLink.amount)
-          setResolving(false)
-          navigate(`/paylink/${shop.username}${q.toString() ? `?${q}` : ''}`)
-          return
-        }
       }
 
       // Re-extract address if embedded in value
@@ -413,15 +399,21 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
         user = results[0] || null
       }
 
-      // Paying a business is a business payment whatever the QR looked like -
-      // its wallet address, a /pay?to= link, its username (as UPI apps treat
-      // any payment to a merchant's ID). Only an approved business; its
-      // Personal QR stays a normal payment, as the owner chose.
-      if (user?.username && !personalQr) {
-        const shop = await getShopInfo(user.username, null).catch(() => null)
+      // Paying a business, whatever the QR looked like - its Shop QR, a
+      // counter's QR, its wallet address, its username: the normal pay screen,
+      // shown as the business (28 Nov, as UPI apps do). The Shop QR's store
+      // and counter ride along, so the payment is that counter's. Only an
+      // approved business; its Personal QR stays a normal payment.
+      if (user?.username && user.wallet_address && !personalQr) {
+        const shop = await getShopInfo(user.username, shopLink?.store ?? null).catch(() => null)
         if (shop?.verified) {
+          const q = new URLSearchParams({ to: `${user.username}|${user.wallet_address}|${shopTitle(shop)}|${shop.avatarUrl ?? ''}` })
+          if (shopLink?.store) q.set('store', shopLink.store)
+          if (shopLink?.counter) q.set('counter', shopLink.counter)
+          const amt = shopLink?.amount ?? linkAmount
+          if (amt && Number(amt) > 0) q.set('amount', amt)
           setResolving(false)
-          navigate(`/paylink/${shop.username}${linkAmount ? `?amount=${encodeURIComponent(linkAmount)}` : ''}`)
+          navigate(`/pay?${q}`)
           return
         }
       }

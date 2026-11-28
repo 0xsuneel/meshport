@@ -389,7 +389,7 @@ async function restInsertMessage(row: Record<string, unknown>): Promise<{ data: 
 // Public profile columns. users.email is private: other people's email is
 // never selected (and isn't readable by the app); your own comes from the
 // sign-in (supabase.auth) or the my_profile() RPC.
-const USER_COLS = 'id, username, display_name, wallet_address, avatar_url, created_at'
+const USER_COLS = 'id, username, display_name, wallet_address, avatar_url, created_at, account_type, store_name'
 // Plus the account's type (personal / business) - for sign-in decisions.
 const ACCOUNT_COLS = 'id, username, display_name, wallet_address, avatar_url, created_at, account_type'
 
@@ -402,8 +402,10 @@ export interface DbUser {
   wallet_address: string
   avatar_url: string | null
   created_at: string
-  /** 'personal' | 'business' - only selected where sign-in needs it. */
+  /** 'personal' | 'business' (28 Nov: read with every profile, so a business shows as one). */
   account_type?: string | null
+  /** A business's own name for customers (its store name), when it set one. */
+  store_name?: string | null
 }
 
 export interface DbConversation {

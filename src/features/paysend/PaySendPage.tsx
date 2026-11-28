@@ -12,7 +12,7 @@ import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Wallet,
-  AlertCircle, Loader2, QrCode,
+  AlertCircle, Loader2, QrCode, BadgeCheck,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
@@ -27,7 +27,8 @@ import { formatAmount, shortenAddress, midShortenAddress, copyToClipboard, trimT
 import { sendUSDC, sendEURC, estimateTransferFee, isValidAddress, trackPendingSend } from '@/lib/arcService'
 import { classifyFailure, recordFailure, FAILURE_MESSAGES } from '@/lib/failure'
 import { arcRpcJson } from '@/lib/arc'
-import { getUserByWalletAddress, getUserByUsername, type DbUser } from '@/lib/supabase'
+import { getUserByWalletAddress, getUserByUsername, supabase, type DbUser } from '@/lib/supabase'
+import { getShopInfo, shopTitle, shopSubline, type ShopInfo } from '@/lib/shop'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isCoinEnabled } from '@/lib/featureFilters'
 import { fetchRecentContacts } from '@/lib/recentContacts'
@@ -85,7 +86,17 @@ interface Recipient {
   // not yet been checked against that username's registered wallet. Nothing
   // can be signed until it is (see the verification effect below).
   verified?: boolean
+  /** A business account (shown with its badge and name before it's picked). */
+  business?: boolean
 }
+
+/** A profile's name as people know it: a business by its own (store) name. */
+function profileName(u: Pick<DbUser, 'display_name' | 'username' | 'account_type' | 'store_name'>): string {
+  return (u.account_type === 'business' ? u.store_name?.trim() : '') || u.display_name || u.username
+}
+const BizBadge = ({ size = 16 }: { size?: number }) => (
+  <BadgeCheck style={{ width: size, height: size, color: 'var(--brand-text)', flexShrink: 0 }} aria-label="Business" />
+)
 
 const QUICK_AMOUNTS = [10, 20, 50, 100]
 
@@ -153,6 +164,8 @@ export function PaySendPage() {
 
   // Amount screen
   const [amount, setAmount] = useState(() => initialRecipient ? (searchParams.get('amount') || '') : '')
+  const amountRef = useRef(amount)
+  amountRef.current = amount
   const [showAmountPad, setShowAmountPad] = useState(false)
   // Desktop: the QR scanner open over the search column (PanelScanner).
   const [scanAnchor, setScanAnchor] = useState<HTMLElement | null>(null)
@@ -216,8 +229,14 @@ export function PaySendPage() {
   // Paying an order in USDC: the order rides along on-chain (Arc memo).
   // A Shop QR payment has no order number: its memo just says "Shop Payment"
   // (the code still goes in the memo id, which the server matches on).
-  const orderMemo = (t: string) => merchantPayCode && t === 'USDC'
-    ? { code: merchantPayCode, label: merchantOrderKind === 'shop' ? 'Shop Payment' : displayOrderNumber(merchantOrderNumber || merchantPayCode.slice(0, 6).toUpperCase()) }
+  // Paying a business by its username, address or Shop QR (28 Nov, like UPI
+  // apps): the normal pay flow, shown as the business. Review quietly opens a
+  // Shop QR order for the amount, so the payment carries it on-chain and the
+  // business gets it at once ("Received on <shop>", voice, its Payments).
+  const [bizOrder, setBizOrder] = useState<{ code: string; amount: number } | null>(null)
+  const orderMemo = (t: string) => t !== 'USDC' ? null
+    : merchantPayCode ? { code: merchantPayCode, label: merchantOrderKind === 'shop' ? 'Shop Payment' : displayOrderNumber(merchantOrderNumber || merchantPayCode.slice(0, 6).toUpperCase()) }
+    : bizOrder && bizOrder.amount === (parseFloat(amountRef.current) || 0) ? { code: bizOrder.code, label: 'Shop Payment' }
     : null
   // The order handed over by the shop page (in-app navigation state - a link
   // can't set it), so its kind and checks don't wait on a second fetch.
@@ -235,7 +254,12 @@ export function PaySendPage() {
   // A Shop QR payment: what kind of business and which branch ("Restaurant /
   // Café · Andheri branch"), shown under the name instead of the username.
   const shopLineParam = (searchParams.get('shopline') || '').slice(0, 120)
-  const shopLine = merchantOrderKind === 'shop' ? (shopLineParam || 'Business') : null
+  // The business being paid (an approved one), and the counter whose QR was scanned.
+  const [biz, setBiz] = useState<ShopInfo | null>(null)
+  const bizCounterId = searchParams.get('counter')
+  const isBizPay = !!biz || (!!merchantPayCode && merchantOrderKind === 'shop')
+  const shopLine = merchantOrderKind === 'shop' && merchantPayCode ? (shopLineParam || 'Business')
+    : biz ? (shopSubline(biz) || 'Business') : null
   // Paying a business by its username is a normal payment on this page (27 Nov):
   // only its Shop QR / payment link opens the shop page.
   // Order payments: amount, order number and recipient come from the order on
@@ -313,6 +337,46 @@ export function PaySendPage() {
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [recipient?.id, recipient?.walletAddress, merchantPayCode])
+  useEffect(() => {
+    setBiz(null); setBizOrder(null)
+    const r = recipient
+    if (!r || merchantPayCode) return
+    let cancelled = false
+    void (async () => {
+      let username = r.isUsername ? r.display.replace(/\.arc$/i, '') : null
+      if (!username && isValidAddress(r.walletAddress)) username = (await getUserByWalletAddress(r.walletAddress).catch(() => null))?.username ?? null
+      if (!username || cancelled) return
+      const shop = await getShopInfo(username, merchantStoreId).catch(() => null)
+      if (cancelled || !shop?.verified) return
+      setBiz(shop)
+      // Named as the business, its logo; an address entered for it shows the business too.
+      setRecipient(cur => cur && cur.walletAddress === r.walletAddress
+        ? { ...cur, isUsername: true, display: `${shop.username}.arc`, displayName: shopTitle(shop), avatarUrl: shop.avatarUrl ?? cur.avatarUrl } : cur)
+    })()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
+  }, [recipient?.walletAddress, merchantPayCode])
+  // Review on a business: its order for this amount (the shop's own limits
+  // apply). null: pay without one (the server still counts it, a little
+  // later); false: the amount isn't allowed - stay on the amount.
+  const [bizOpening, setBizOpening] = useState(false)
+  const openBizOrder = async (): Promise<{ code: string; label: string } | null | false> => {
+    if (!biz || merchantPayCode || token !== 'USDC' || !(numAmount > 0)) return null
+    if (bizOrder && bizOrder.amount === numAmount) return { code: bizOrder.code, label: 'Shop Payment' }
+    setBizOpening(true)
+    try {
+      const { data, error } = await supabase.rpc('shop_open_order', {
+        p_username: biz.username, p_amount: numAmount, p_store: merchantStoreId, p_note: note.trim() ? note.trim().slice(0, 140) : null,
+        ...(bizCounterId ? { p_counter: bizCounterId } : {}),
+      })
+      if (error) {
+        if (/smallest payment|largest payment/i.test(error.message)) { showToastMessage(error.message, 'error'); return false }
+        return null
+      }
+      setBizOrder({ code: String(data), amount: numAmount })
+      return { code: String(data), label: 'Shop Payment' }
+    } catch { return null } finally { setBizOpening(false) }
+  }
   const payBlockedMessage = blockedMe
     ? BLOCKED_YOU(recipient?.display || 'This person')
     : STRANGER_PAY_BLOCKED(recipient?.display || 'This person')
@@ -686,7 +750,7 @@ export function PaySendPage() {
     getUserByWalletAddress(raw).then(profile => {
       if (latestQuery.current !== raw) return
       setAddressPreview(profile
-        ? { id: profile.id, display: profile.username?.endsWith('.arc') ? profile.username : profile.username + '.arc', displayName: profile.display_name || profile.username, walletAddress: profile.wallet_address, isUsername: true, avatarUrl: profile.avatar_url, enteredViaAddress: true }
+        ? { id: profile.id, display: profile.username?.endsWith('.arc') ? profile.username : profile.username + '.arc', displayName: profileName(profile), walletAddress: profile.wallet_address, isUsername: true, avatarUrl: profile.avatar_url, enteredViaAddress: true, business: profile.account_type === 'business' }
         : { display: midShortenAddress(raw), displayName: 'External Wallet', walletAddress: raw, isUsername: false, enteredViaAddress: true }
       )
     }).catch(() => {
@@ -979,11 +1043,12 @@ export function PaySendPage() {
         counterparty: toAddr, txHash, failure: classifyFailure(err, { reverted: !!txHash }),
         metadata: { toUsername: recipient?.isUsername ? recipient.display : undefined, ...(merchantPayCode ? { merchantOrder: merchantOrderNumber ?? undefined, merchantOrderKind: merchantOrderKind === 'bill' ? 'invoice' : 'request', merchantPersonal: merchantOrderKind === 'bill' ? undefined : merchantOrderKind === 'request', merchantVia: merchantOrderKind === 'shop' ? 'shop_qr' : undefined, merchantStoreId: merchantOrderKind === 'shop' ? merchantStoreId ?? undefined : undefined } : {}) },
       })
+      const memoNow = token === 'USDC' ? orderMemo('USDC') : null
       const result = await (token === 'EURC'
         ? sendEURC({ signer: activeSigner, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
         : token === 'cirBTC' && arcMod.sendCirBTC
         ? arcMod.sendCirBTC({ signer: activeSigner, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
-        : sendUSDC({ signer: activeSigner, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername, memo: orderMemo('USDC') })
+        : sendUSDC({ signer: activeSigner, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername, memo: memoNow })
       ).catch((e: unknown) => { noteFailed(e); throw e })
 
       // The send now waits for the real receipt (see waitForConfirmation in
@@ -998,8 +1063,8 @@ export function PaySendPage() {
       setPayPending(result.state === 'pending')
       setProcessStage('confirming')
       setTxHash(result.txHash)
-      if (merchantPayCode && token === 'USDC' && result.txHash) {
-        import('@/lib/merchantPay').then(({ submitPayment }) => submitPayment(merchantPayCode, ARC_CHAIN_KEY, result.txHash, { orderNumber: merchantOrderNumber ?? undefined, amount: numAmount }))
+      if (memoNow && result.txHash) {
+        import('@/lib/merchantPay').then(({ submitPayment }) => submitPayment(memoNow.code, ARC_CHAIN_KEY, result.txHash, { orderNumber: merchantPayCode ? merchantOrderNumber ?? undefined : undefined, amount: numAmount }))
           .catch(e => console.warn('[PaySend] merchant payment submit failed (merchant can verify by tx):', e))
       }
 
@@ -1330,9 +1395,9 @@ export function PaySendPage() {
                             </div>
                         }
                         <div className="flex-1 min-w-0">
-                          <p className="text-[15px] font-semibold text-text-primary truncate">{addressPreview.displayName}</p>
+                          <p className="text-[15px] font-semibold text-text-primary flex items-center gap-1 min-w-0"><span className="truncate">{addressPreview.displayName}</span>{addressPreview.business && <BizBadge />}</p>
                           {addressPreview.isUsername
-                            ? <p className="text-[12px] font-mono mt-0.5 truncate text-link">{addressPreview.display}</p>
+                            ? <p className="text-[12px] font-mono mt-0.5 truncate text-link">{addressPreview.business ? `Business · ${addressPreview.display}` : addressPreview.display}</p>
                             : <p className="text-[11px] font-mono mt-0.5 truncate" style={{ color: 'var(--text-secondary)' }}>{midShortenAddress(addressPreview.walletAddress)}</p>
                           }
                         </div>
@@ -1355,12 +1420,13 @@ export function PaySendPage() {
                       <button key={u.id} onClick={() => pickResult(u)}
                         className="w-full flex items-center gap-3 px-4 py-3 active:bg-text-primary/5 transition-colors"
                         style={{ borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : undefined }}>
-                        <Avatar name={u.display_name} src={u.avatar_url} size="sm" />
+                        <Avatar name={profileName(u)} src={u.avatar_url} size="sm" />
                         <div className="flex-1 text-left min-w-0">
-                          <p className="text-[15px] font-semibold text-text-primary truncate">
-                            {u.id === user?.id ? 'You' : u.display_name}
+                          <p className="text-[15px] font-semibold text-text-primary flex items-center gap-1 min-w-0">
+                            <span className="truncate">{u.id === user?.id ? 'You' : profileName(u)}</span>
+                            {u.account_type === 'business' && u.id !== user?.id && <BizBadge />}
                           </p>
-                          <p className="text-[12px] font-mono mt-0.5 truncate text-link">{u.username?.endsWith('.arc') ? u.username : `${u.username}.arc`}</p>
+                          <p className="text-[12px] font-mono mt-0.5 truncate text-link">{u.account_type === 'business' ? 'Business · ' : ''}{u.username?.endsWith('.arc') ? u.username : `${u.username}.arc`}</p>
                         </div>
                       </button>
                     )) : (
@@ -1402,7 +1468,7 @@ export function PaySendPage() {
                       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                         {savedContacts.map((c, i) => {
                           const isSelf = c.id === user?.id
-                          const name = c.display_name || c.username
+                          const name = profileName(c)
                           const letter = isSelf ? '' : contactLetter(name)
                           const prev = i > 0 && savedContacts[i - 1].id !== user?.id ? contactLetter(savedContacts[i - 1].display_name || savedContacts[i - 1].username) : null
                           const header = !isSelf && letter !== prev
@@ -1412,7 +1478,7 @@ export function PaySendPage() {
                                 <p className="px-4 pt-2.5 pb-0.5 text-[12px] font-extrabold text-link"
                                   style={{ borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : undefined }}>{letter}</p>
                               )}
-                              <PersonRow first={i === 0 || header} name={name} self={isSelf} usernameBelow
+                              <PersonRow first={i === 0 || header} name={name} self={isSelf} usernameBelow business={c.account_type === 'business'}
                                 username={c.username?.endsWith('.arc') ? c.username : `${c.username}.arc`}
                                 avatarName={name} avatarUrl={c.avatar_url}
                                 onClick={() => pickResult(c)} />
@@ -1478,7 +1544,7 @@ export function PaySendPage() {
                 <div className="flex-1 min-w-0">
                   {recipient.isUsername ? (
                     <>
-                      <p className="text-[15px] font-bold text-text-primary truncate">{recipient.displayName}</p>
+                      <p className="text-[15px] font-bold text-text-primary flex items-center gap-1 min-w-0"><span className="truncate">{recipient.displayName}</span>{isBizPay && <BadgeCheck className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--brand-text)' }} aria-label="Verified business" />}</p>
                       {shopLine
                         ? <p className="text-[12px] mt-0.5 truncate" style={{ color: 'var(--text-secondary)' }}>{shopLine}</p>
                         : <p className="text-[12px] font-mono mt-0.5 truncate text-link">{recipient.display}</p>}
@@ -1625,8 +1691,10 @@ export function PaySendPage() {
                     <p role="alert" className="text-[13px] text-center mb-3" style={{ color: 'var(--danger-text)' }}>{payBlockedMessage}</p>
                   )}
                   <button
-                    onClick={() => {
-                      if (!ready) return
+                    onClick={async () => {
+                      if (!ready || bizOpening) return
+                      const bizMemo = await openBizOrder()
+                      if (bizMemo === false) return
                       // PERF FIX: start the preflight (server intent/nonce
                       // reservation + gas estimate) the instant the user taps
                       // Review, not when they tap the first PIN digit. This
@@ -1646,12 +1714,12 @@ export function PaySendPage() {
                           amount: numAmount,
                           idempotencyKey,
                           recipientUsername: recipient.isUsername ? recipient.display : undefined,
-                          memo: orderMemo(token),
+                          memo: bizMemo ?? orderMemo(token),
                         })).catch(() => {})
                       }
                       goForward('review')
                     }}
-                    disabled={!ready}
+                    disabled={!ready || bizOpening}
                     className="w-full py-4 rounded-2xl text-[15px] font-bold active:scale-[.98]"
                     style={{
                       background: ready ? 'var(--brand)' : 'var(--border)',
@@ -1873,7 +1941,7 @@ export function PaySendPage() {
                         <div className="min-w-0 flex-1">
                           {recipient.isUsername ? (
                             <>
-                              <p className="text-[15px] font-bold text-text-primary truncate">{recipient.displayName}</p>
+                              <p className="text-[15px] font-bold text-text-primary flex items-center gap-1 min-w-0"><span className="truncate">{recipient.displayName}</span>{isBizPay && <BadgeCheck className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--brand-text)' }} aria-label="Verified business" />}</p>
                               {shopLine
                         ? <p className="text-[12px] mt-0.5 truncate" style={{ color: 'var(--text-secondary)' }}>{shopLine}</p>
                         : <p className="text-[12px] font-mono mt-0.5 truncate text-link">{recipient.display}</p>}
@@ -2051,8 +2119,9 @@ export function lastPaymentLine(info: LastPayment): string {
   return `${icon} ${amt}${verb}${when ? ` · ${when}` : ''}`
 }
 // One Pay-page person row: avatar, name + username, optional last payment, Pay pill.
-function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast, first, usernameBelow, onClick }: {
+function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast, first, usernameBelow, business, onClick }: {
   name: string; username: string; avatarName: string; avatarUrl?: string | null; self?: boolean
+  business?: boolean
   /** Name on the first line, username on its own line under it. */
   usernameBelow?: boolean
   last?: LastPayment; showLast?: boolean; first?: boolean; onClick: () => void
@@ -2065,13 +2134,14 @@ function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-1.5 min-w-0">
           <span className="text-[15px] font-semibold text-text-primary truncate" style={{ maxWidth: '60%' }}>{name}</span>
+          {business && <span className="self-center"><BizBadge size={15} /></span>}
           {!usernameBelow && <span className="text-[13px] truncate text-link">{username}</span>}
           {self && (
             <span className="flex-shrink-0 self-center text-[11px] font-bold uppercase tracking-wide px-1.5 py-[1px] rounded-md"
               style={{ color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>You</span>
           )}
         </div>
-        {usernameBelow && <p className="text-[13px] mt-0.5 truncate text-link">{username}</p>}
+        {usernameBelow && <p className="text-[13px] mt-0.5 truncate text-link">{business ? `Business · ${username}` : username}</p>}
         {showLast && (
           <p className="text-[13px] mt-0.5 truncate" style={{ color: last?.dir === 'received' ? 'var(--success-text)' : last?.dir === 'failed' ? 'var(--danger-text)' : 'var(--text-secondary)' }}>
             {last ? lastPaymentLine(last) : 'No payments yet'}
