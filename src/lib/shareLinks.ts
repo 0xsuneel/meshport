@@ -14,11 +14,22 @@ export const mailtoUrl = (subject: string, body: string) =>
 
 export type ShareChannel = { id: 'whatsapp' | 'sms' | 'email'; label: string; href: string }
 
-/** The three channels for one message. */
-export function shareChannels(subject: string, text: string): ShareChannel[] {
+/** A phone number (digits, with its country code) or an email, as typed. */
+export function contactOf(raw: string | null | undefined): { phone?: string; email?: string } {
+  const v = (raw ?? '').trim()
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return { email: v }
+  const digits = v.replace(/[^\d]/g, '')
+  return digits.length >= 7 && digits.length <= 15 ? { phone: digits } : {}
+}
+
+/** The three channels for one message - addressed to the person when their
+ *  phone or email is known (someone billed who isn't on MeshPort). */
+export function shareChannels(subject: string, text: string, to?: string | null): ShareChannel[] {
+  const c = contactOf(to)
+  const t = encodeURIComponent(text)
   return [
-    { id: 'whatsapp', label: 'WhatsApp', href: whatsappUrl(text) },
-    { id: 'sms', label: 'SMS', href: smsUrl(text) },
-    { id: 'email', label: 'Email', href: mailtoUrl(subject, text) },
+    { id: 'whatsapp', label: 'WhatsApp', href: c.phone ? `https://wa.me/${c.phone}?text=${t}` : whatsappUrl(text) },
+    { id: 'sms', label: 'SMS', href: c.phone ? `sms:+${c.phone}?&body=${t}` : smsUrl(text) },
+    { id: 'email', label: 'Email', href: c.email ? `mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(subject)}&body=${t}` : mailtoUrl(subject, text) },
   ]
 }

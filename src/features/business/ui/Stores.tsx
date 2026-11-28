@@ -223,11 +223,80 @@ export interface StoreFormProps {
   onSave: () => void
   onDelete?: () => void
   onCancel: () => void
+  /** Bills from this store: tax set once (name, rate, prices include it) and a footer note. */
+  bills?: {
+    tax: { enabled: boolean; name: string; rate: number; inclusive: boolean }
+    onTax: (t: { enabled: boolean; name: string; rate: number; inclusive: boolean }) => void
+    footer: string
+    onFooter: (v: string) => void
+  }
+}
+
+const BILL_TAX_NAMES = ['VAT', 'GST', 'Sales tax'] as const
+
+function BillSettings({ tax, onTax, footer, onFooter }: NonNullable<StoreFormProps['bills']>) {
+  const [rate, setRate] = React.useState(tax.rate ? String(tax.rate) : '')
+  const custom = !BILL_TAX_NAMES.includes(tax.name as typeof BILL_TAX_NAMES[number])
+  const toggle = (on: boolean, label: string, onClick: () => void) => (
+    <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={onClick}
+      className="relative inline-flex items-center h-7 w-12 rounded-full shrink-0 transition-colors" style={{ background: on ? 'var(--brand)' : 'var(--border)' }}>
+      <span className="absolute size-5 rounded-full bg-white shadow transition-transform" style={{ transform: `translateX(${on ? 24 : 4}px)` }} />
+    </button>
+  )
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs text-text-muted font-medium">Bills from this store</span>
+      <div className="rounded-2xl bg-card border border-border divide-y divide-border">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold text-text-primary">Charge tax</span>
+            <span className="block text-[11px] text-text-muted">Filled in on every bill - you can still change it on one bill</span>
+          </span>
+          {toggle(tax.enabled, 'Charge tax', () => onTax({ ...tax, enabled: !tax.enabled }))}
+        </div>
+        {tax.enabled && <>
+          <div className="px-4 py-3 flex flex-col gap-2">
+            <span className="text-[11px] text-text-muted font-medium">Tax name</span>
+            <div className="flex flex-wrap gap-1.5">
+              {BILL_TAX_NAMES.map(n => (
+                <button key={n} type="button" onClick={() => onTax({ ...tax, name: n })}
+                  className="h-8 px-3 rounded-full text-[13px] font-semibold border"
+                  style={{ borderColor: 'var(--border)', background: tax.name === n ? 'var(--brand)' : 'var(--bg)', color: tax.name === n ? '#fff' : 'var(--text-secondary)' }}>{n}</button>
+              ))}
+              <input value={custom && tax.name !== 'Tax' ? tax.name : ''} onChange={e => onTax({ ...tax, name: e.target.value.slice(0, 20) || 'Tax' })}
+                placeholder="Other…" aria-label="Other tax name"
+                className="h-8 w-28 px-3 rounded-full border border-border bg-bg text-[13px] text-text-primary focus:outline-none focus:ring-2 focus:ring-brand/40" />
+            </div>
+          </div>
+          <div className="px-4 py-3 flex items-center gap-2">
+            <span className="text-[11px] text-text-muted font-medium mr-auto">Rate</span>
+            <input value={rate} inputMode="decimal" aria-label="Tax rate" placeholder="0"
+              onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').slice(0, 6); setRate(v); onTax({ ...tax, rate: Math.min(100, Number(v) || 0) }) }}
+              className="w-24 h-10 px-3 rounded-xl border border-border bg-bg text-right text-sm font-semibold tabular-nums text-text-primary focus:outline-none focus:ring-2 focus:ring-brand/40" />
+            <span className="text-sm text-text-muted">%</span>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-semibold text-text-primary">Prices include tax</span>
+              <span className="block text-[11px] text-text-muted">{tax.inclusive ? 'On: the tax is already in your item prices' : 'Off: tax is added on top of item prices'}</span>
+            </span>
+            {toggle(tax.inclusive, 'Prices include tax', () => onTax({ ...tax, inclusive: !tax.inclusive }))}
+          </div>
+        </>}
+      </div>
+      <label className="flex flex-col gap-1.5 mt-2">
+        <span className="text-xs text-text-muted font-medium">Footer note on bills <span className="normal-case font-normal opacity-60">(optional)</span></span>
+        <input type="text" value={footer} onChange={e => onFooter(e.target.value.slice(0, 200))} maxLength={200}
+          placeholder="e.g. Thank you! Payment due within 7 days."
+          className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] focus:outline-none focus:ring-2 focus:ring-brand/40" />
+      </label>
+    </div>
+  )
 }
 
 export function StoreForm({
   name, onName, type, types, onType, address, onAddress, taxId, onTaxId,
-  logoUrl, onLogo, onRemoveLogo, logoBusy, busy, onSave, onDelete, onCancel,
+  logoUrl, onLogo, onRemoveLogo, logoBusy, busy, onSave, onDelete, onCancel, bills,
 }: StoreFormProps) {
   const pick = React.useRef<HTMLInputElement>(null)
   return (
@@ -303,6 +372,8 @@ export function StoreForm({
         />
         <span className="text-xs text-text-muted">This store's own tax number — leave empty to use the business's.</span>
       </label>
+
+      {bills && <BillSettings {...bills} />}
 
       <div className="flex gap-3 pt-2">
         <button

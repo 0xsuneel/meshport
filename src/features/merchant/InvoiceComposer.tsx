@@ -10,9 +10,10 @@
 // stay put. With the phone keyboard up, the header and footer shrink to one
 // line each and Next walks name → price → next item.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Plus, Receipt, X, ScanBarcode } from 'lucide-react'
+import { Plus, Receipt, X, ScanBarcode, Pencil } from 'lucide-react'
 import { formatAmount } from '@/lib/utils'
-import { createPaymentRequest, invoiceBreakdown, type InvoiceItem, type MerchantIntent } from '@/lib/merchantPay'
+import { createPaymentRequest, billBreakdown, type InvoiceItem, type MerchantIntent } from '@/lib/merchantPay'
+import type { StoreTax } from '@/lib/businessTeam'
 import { ActionSheet, SheetPerson, SheetLabel, SheetChips, sheetInputClass, sheetInputStyle } from '@/components/ui/ActionSheet'
 import { DUE_PRESETS, duePresetDate, dueText, isoDay, type DuePresetId } from '@/lib/businessBills'
 import type { SavedItem } from '@/lib/businessItems'
@@ -45,9 +46,15 @@ const field: React.CSSProperties = {
 }
 
 /** What BillComposer hands back on Send / Create. */
-export type BillDraft = { items: InvoiceItem[]; total: number; taxPercent?: number; note?: string; dueDate: string | null }
+export type BillDraft = { items: InvoiceItem[]; total: number; taxPercent?: number; taxName?: string; taxInclusive?: boolean
+  discountType?: 'percent' | 'amount'; discountValue?: number; note?: string; dueDate: string | null }
 
-export function BillComposer({ open, isDesktop, header, footerNote, submitLabel = 'Send bill', busyLabel = 'Sending…', saved, extra, onCreate }: {
+// A due date only matters when the bill goes to someone: None, a week, a month, or a day you pick.
+const DUE_CHOICES = DUE_PRESETS.filter(p => p.id === 'none' || p.id === '7' || p.id === '30' || p.id === 'custom')
+  .map(p => p.id === 'none' ? { ...p, label: 'None' } : p)
+const TAX_NAMES = ['VAT', 'GST', 'Sales tax'] as const
+
+export function BillComposer({ open, isDesktop, header, footerNote, submitLabel = 'Send bill', busyLabel = 'Sending…', saved, extra, onCreate, storeTax, askDue = true }: {
   /** Reset to a blank bill whenever this turns true. */
   open: boolean
   isDesktop: boolean
@@ -61,15 +68,27 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
   saved?: { items: SavedItem[]; onRemove: (it: SavedItem) => void; hint?: string
     /** Saves a scanned product that isn't saved yet (shows the Scan button). */
     onSaveBarcode?: (name: string, price: number, barcode: string) => Promise<SavedItem> }
-  /** More fields after the note (Business: Bill to), kept while typing. */
+  /** More fields after the tax (Business: Bill to), kept while typing. */
   extra?: ReactNode
+  /** The store's tax (set once in the store's settings): filled in on every bill. */
+  storeTax?: StoreTax | null
+  /** Show the due date (the bill goes to someone). A counter bill has none. */
+  askDue?: boolean
   /** Creates the bill; throws with a message to show. */
   onCreate: (bill: BillDraft) => Promise<void>
 }) {
   const [rows, setRows] = useState<Row[]>([{ id: 1, name: '', qty: '1', price: '' }])
   const [editing, setEditing] = useState<number | null>(1)
   const [note, setNote] = useState('')
+  const [noteOpen, setNoteOpen] = useState(false)
+  const [discType, setDiscType] = useState<'percent' | 'amount'>('percent')
+  const [disc, setDisc] = useState('')
+  // Tax: the store's, unless changed for this bill.
+  const [taxOn, setTaxOn] = useState(false)
+  const [taxName, setTaxName] = useState('Tax')
   const [tax, setTax] = useState('')
+  const [taxIncl, setTaxIncl] = useState(false)
+  const [taxEdit, setTaxEdit] = useState(false)
   const [dueId, setDueId] = useState<DuePresetId>('none')
   const [customDue, setCustomDue] = useState('')
   const [typing, setTyping] = useState(false)
@@ -85,8 +104,13 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
   // A fresh bill every time the sheet opens.
   useEffect(() => {
     if (!open) return
-    setRows([{ id: 1, name: '', qty: '1', price: '' }]); setEditing(1); setNote(''); setTax(''); setDueId('none'); setCustomDue(''); setError(null); setBusy(false); setTyping(false); setEditSaved(false); setScanning(false)
-  }, [open])
+    setRows([{ id: 1, name: '', qty: '1', price: '' }]); setEditing(1); setNote(''); setNoteOpen(false); setDisc(''); setDiscType('percent')
+    setTaxOn(!!storeTax?.enabled); setTaxName(storeTax?.name || 'Tax'); setTax(storeTax?.rate ? String(storeTax.rate) : ''); setTaxIncl(!!storeTax?.inclusive); setTaxEdit(false)
+    setDueId('none'); setCustomDue(''); setError(null); setBusy(false); setTyping(false); setEditSaved(false); setScanning(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- a fresh bill on open (the store's tax as it is then)
+  }, [open, storeTax?.enabled, storeTax?.rate, storeTax?.name, storeTax?.inclusive])
+  // No due date on a counter bill.
+  useEffect(() => { if (!askDue) { setDueId('none'); setCustomDue('') } }, [askDue])
   // The item being edited stays in view (keyboard opening, Next, Add item).
   useEffect(() => {
     if (editing == null) return
@@ -95,9 +119,11 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
   }, [editing, typing])
 
   const valid: InvoiceItem[] = rows.filter(isComplete).map(r => ({ name: r.name.trim(), qty: num(r.qty), price: num(r.price) }))
-  const taxPct = Math.min(100, Math.max(0, num(tax)))
-  const bill = invoiceBreakdown(valid, taxPct)
+  const taxPct = taxOn ? Math.min(100, Math.max(0, num(tax))) : 0
+  const discValue = Math.max(0, num(disc))
+  const bill = billBreakdown(valid, { discountType: discValue ? discType : null, discountValue: discValue, taxPercent: taxPct, taxInclusive: taxIncl })
   const total = bill.total
+  const storeDefault = !!storeTax?.enabled && taxOn && num(tax) === storeTax.rate && taxName === storeTax.name && taxIncl === storeTax.inclusive
   // A bill with a due date stays open until it's paid; without one it's
   // valid for 7 days.
   const dueDate = dueId === 'custom' ? (customDue || null) : duePresetDate(dueId)
@@ -155,9 +181,12 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
     }
     if (valid.length === 0 || !(total > 0)) { setError('Add at least one item with a price.'); return }
     if (dueId === 'custom' && !customDue) { setError('Pick a due date.'); return }
+    if (discValue && bill.discount >= bill.subtotal) { setError('The discount can’t be the whole bill.'); return }
     setBusy(true); setError(null)
     try {
-      await onCreate({ items: valid, total, taxPercent: taxPct || undefined, note: note.trim() || undefined, dueDate })
+      await onCreate({ items: valid, total, taxPercent: taxPct || undefined, taxName: taxPct ? taxName.trim() || 'Tax' : undefined,
+        taxInclusive: taxPct ? taxIncl : undefined, discountType: discValue ? discType : undefined, discountValue: discValue || undefined,
+        note: note.trim() || undefined, dueDate })
     } catch (e) {
       setError(errorText(e, 'Could not send the bill'))
     } finally { setBusy(false) }
@@ -186,7 +215,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
         {saved && (saved.items.length > 0 || saved.onSaveBarcode) && !compact && (
           <div className="mb-3">
             <div className="flex items-center justify-between px-0.5 mb-1.5 gap-3">
-              <span className="text-[12px] font-semibold text-text-muted truncate">{editSaved ? 'Tap to remove' : saved.items.length ? 'Saved items · tap to add' : 'Scan products to add them'}</span>
+              <span className="text-[12px] font-semibold text-text-muted truncate">{editSaved ? 'Tap to remove' : saved.items.length ? 'Saved items' : ''}</span>
               <span className="flex items-center gap-4 shrink-0">
                 {saved.onSaveBarcode && !editSaved && (
                   <button type="button" onClick={() => setScanning(true)} className="inline-flex items-center gap-1 text-[13px] font-bold" style={{ color: 'var(--brand-text)', background: 'none', border: 'none', cursor: 'pointer' }}>
@@ -281,23 +310,81 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
             <Plus size={16} /> {atLimit ? `${MAX_BILL_ITEMS} items is the most for one bill` : 'Add item'}
           </button>
         </div>
-        {saved?.hint && saved.items.length === 0 && !compact && <p className="text-[12px] text-text-muted mt-1.5 px-0.5">{saved.hint}</p>}
-        <input value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="What's it for? (optional)" aria-label="Note"
-          enterKeyHint="done" onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-          className={`${sheetInputClass} mt-3 mb-1`} style={sheetInputStyle} />
-        {extra}
-        {!compact && (
-          <div className="flex items-center justify-between mt-3 px-0.5">
-            <SheetLabel>Tax %</SheetLabel>
-            <input value={tax} onChange={e => { setTax(e.target.value.replace(/[^0-9.]/g, '').slice(0, 5)); setError(null) }}
-              inputMode="decimal" placeholder="0" aria-label="Tax percent"
-              className="w-20 h-9 px-3 rounded-xl bg-surface border border-border text-right text-[14px] tabular-nums text-text-primary focus:outline-none focus:ring-2 focus:ring-brand/40" />
+        {/* Discount: a percent or an amount. */}
+        <div className="flex items-center gap-2 mt-3">
+          <span className="text-[13px] font-semibold text-text-secondary mr-auto px-0.5">Discount</span>
+          <div className="flex p-0.5 rounded-xl" role="radiogroup" aria-label="Discount type" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            {(['percent', 'amount'] as const).map(t => (
+              <button key={t} type="button" role="radio" aria-checked={discType === t} onClick={() => { setDiscType(t); setError(null) }}
+                className="w-10 h-8 rounded-[10px] text-[13px] font-bold"
+                style={{ background: discType === t ? 'var(--brand)' : 'transparent', color: discType === t ? '#fff' : 'var(--text-muted)' }}>
+                {t === 'percent' ? '%' : '$'}
+              </button>
+            ))}
           </div>
+          <input value={disc} onChange={e => { setDisc(decimal(e.target.value, discType === 'percent' ? 2 : 6)); setError(null) }}
+            inputMode="decimal" placeholder="0" aria-label={discType === 'percent' ? 'Discount percent' : 'Discount amount'}
+            className="w-24 px-3 text-right tabular-nums font-semibold focus:border-[var(--brand-text)]" style={field} />
+        </div>
+        {/* Tax: the store's, switched off or changed for this bill. */}
+        <div className="mt-3 rounded-2xl" style={{ border: '1px solid var(--border)', background: 'var(--bg)' }}>
+          <div className="flex items-center gap-3 px-3.5" style={{ minHeight: 52 }}>
+            <div className="flex-1 min-w-0">
+              <p className="text-[14.5px] font-semibold text-text-primary truncate">
+                {taxOn && num(tax) > 0 ? `${taxName || 'Tax'} ${Number(num(tax))}%` : 'Tax'}
+                {storeDefault && <span className="ml-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>Store default</span>}
+              </p>
+              <p className="text-[12px] text-text-muted">{taxOn && num(tax) > 0 ? (taxIncl ? 'Already in the prices' : 'Added on top of prices') : 'No tax on this bill'}</p>
+            </div>
+            <button type="button" onClick={() => setTaxEdit(e => !e)} aria-label="Change tax" className="size-8 inline-flex items-center justify-center rounded-lg" style={{ color: 'var(--brand-text)' }}>
+              <Pencil size={15} />
+            </button>
+            <button type="button" role="switch" aria-checked={taxOn} aria-label="Tax on this bill"
+              onClick={() => { const on = !taxOn; setTaxOn(on); if (on && !num(tax)) setTaxEdit(true); setError(null) }}
+              className="relative inline-flex items-center h-7 w-12 rounded-full shrink-0" style={{ background: taxOn ? 'var(--brand)' : 'var(--border)' }}>
+              <span className="absolute size-5 rounded-full bg-white shadow transition-transform" style={{ transform: `translateX(${taxOn ? 24 : 4}px)` }} />
+            </button>
+          </div>
+          {taxEdit && (
+            <div className="px-3.5 pb-3.5 flex flex-col gap-2.5" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <div className="flex flex-wrap gap-1.5">
+                {TAX_NAMES.map(n => (
+                  <button key={n} type="button" onClick={() => { setTaxName(n); setTaxOn(true) }}
+                    className="h-8 px-3 rounded-full text-[13px] font-semibold"
+                    style={{ border: '1px solid var(--border)', background: taxName === n ? 'var(--brand)' : 'var(--card)', color: taxName === n ? '#fff' : 'var(--text-secondary)' }}>{n}</button>
+                ))}
+                <input value={TAX_NAMES.includes(taxName as typeof TAX_NAMES[number]) ? '' : taxName === 'Tax' ? '' : taxName}
+                  onChange={e => { setTaxName(e.target.value.slice(0, 20) || 'Tax'); setTaxOn(true) }} placeholder="Other name" aria-label="Tax name"
+                  className="h-8 w-28 px-3 rounded-full text-[13px] focus:border-[var(--brand-text)]" style={{ ...field, height: 32, borderRadius: 999, fontSize: 13 }} />
+              </div>
+              <div className="flex items-center gap-2">
+                <input value={tax} onChange={e => { setTax(decimal(e.target.value, 2).slice(0, 6)); setTaxOn(true); setError(null) }}
+                  inputMode="decimal" placeholder="Rate" aria-label="Tax percent"
+                  className="w-24 px-3 text-right tabular-nums font-semibold focus:border-[var(--brand-text)]" style={field} />
+                <span className="text-[14px] text-text-muted">%</span>
+                <button type="button" onClick={() => setTaxIncl(v => !v)} role="switch" aria-checked={taxIncl}
+                  className="ml-auto h-8 px-3 rounded-full text-[12.5px] font-semibold"
+                  style={{ border: '1px solid var(--border)', background: taxIncl ? 'var(--brand)' : 'var(--card)', color: taxIncl ? '#fff' : 'var(--text-secondary)' }}>
+                  Prices include tax
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        {extra}
+        {!noteOpen && !note ? (
+          <button type="button" onClick={() => setNoteOpen(true)} className="inline-flex items-center gap-1 mt-3 px-0.5 text-[14px] font-bold" style={{ color: 'var(--brand-text)' }}>
+            <Plus size={15} /> Add note
+          </button>
+        ) : (
+          <input value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="Note on the bill" aria-label="Note" autoFocus={noteOpen && !note}
+            enterKeyHint="done" onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+            className={`${sheetInputClass} mt-3 mb-1`} style={sheetInputStyle} />
         )}
-        {!compact && (
+        {!compact && askDue && (
           <div className="mt-3 mb-1">
             <SheetLabel>Due date</SheetLabel>
-            <SheetChips label="Due date" options={DUE_PRESETS} value={dueId} onChange={pickDue} />
+            <SheetChips label="Due date" options={DUE_CHOICES} value={dueId} onChange={pickDue} />
             {dueId === 'custom' && (
               <input type="date" value={customDue} min={isoDay(new Date())} max={isoDay(new Date(Date.now() + 365 * 86_400_000))}
                 onChange={e => { setCustomDue(e.target.value); setError(null) }} aria-label="Custom due date"
@@ -306,19 +393,26 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
             {dueDate && <p className="text-[12px] text-text-muted mt-1.5 px-0.5">The bill stays open until it's paid.</p>}
           </div>
         )}
-        {!compact && <p className="text-[12px] text-text-muted mt-3 mb-2 px-0.5">{footerNote(due?.text ?? null)}</p>}
+        {/* The sums, as the bill will show them. */}
+        {!compact && valid.length > 0 && (bill.discount > 0 || bill.tax > 0) && (
+          <div className="mt-3 mb-2 rounded-2xl px-3.5 py-2.5 text-[13.5px] tabular-nums" style={{ border: '1px solid var(--border)', background: 'var(--bg)' }}>
+            <div className="flex justify-between py-0.5 text-text-secondary"><span>Subtotal</span><span>${billMoney(bill.subtotal)}</span></div>
+            {bill.discount > 0 && <div className="flex justify-between py-0.5" style={{ color: 'var(--success-text, var(--brand-text))' }}><span>Discount{discType === 'percent' ? ` ${Number(discValue)}%` : ''}</span><span>−${billMoney(bill.discount)}</span></div>}
+            {bill.tax > 0 && <div className="flex justify-between py-0.5 text-text-secondary"><span>{taxName || 'Tax'} {Number(taxPct)}%{bill.inclusive ? ' (included)' : ''}</span><span>{bill.inclusive ? '' : '+'}${billMoney(bill.tax)}</span></div>}
+            <div className="flex justify-between pt-1.5 mt-1 font-extrabold text-[15px] text-text-primary" style={{ borderTop: '1px solid var(--border)' }}><span>Total</span><span>${billMoney(total)}</span></div>
+          </div>
+        )}
+        <div className="h-3" />
       </div>
 
       {/* Total + Send - always on screen. */}
       <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: compact ? 8 : 10, paddingBottom: compact ? 10 : 'calc(var(--safe-bottom) + 18px)' }}>
         {error && <p role="alert" className="text-[13px] text-danger mb-2">{error}</p>}
         {/* One row - the total and the button - so the items get the screen. */}
-        {!compact && taxPct > 0 && valid.length > 0 && (
-          <p className="text-[12px] text-text-muted tabular-nums mb-1.5 px-0.5">Subtotal ${billMoney(bill.subtotal)} · Tax ({taxPct}%) + ${billMoney(bill.tax)}</p>
-        )}
+
         <div className="flex items-center gap-3">
           <div className="min-w-0">
-            <p className="text-[12px] font-semibold text-text-secondary">Total{valid.length ? ` · ${valid.length} item${valid.length === 1 ? '' : 's'}` : ''}</p>
+            <p className="text-[12px] font-semibold text-text-secondary truncate">{compact ? `Total${valid.length ? ` · ${valid.length} item${valid.length === 1 ? '' : 's'}` : ''}` : footerNote(due?.text ?? null)}</p>
             <p className="text-[22px] font-extrabold tabular-nums leading-tight" style={{ color: total > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>${billMoney(total)} <span className="text-[12px] font-bold text-text-secondary">USDC</span></p>
           </div>
           <button type="button" onClick={send} disabled={sendDisabled} onMouseDown={e => { if (compact) e.preventDefault() }}
@@ -337,7 +431,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
 }
 
 /** Merchant chat → Bill: the bill goes to this chat's person as a bill card. */
-export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer, store, onSend }: {
+export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer, store, onSend, storeTax }: {
   open: boolean
   onClose: () => void
   isDesktop: boolean
@@ -345,6 +439,8 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
   customer: { name: string; username: string; avatar?: string | null }
   /** Several stores: which one the bill is from. */
   store?: { list: PickerStore[]; value: string; onChange: (id: string) => void }
+  /** The store's tax, filled in on the bill. */
+  storeTax?: StoreTax | null
   /** Called with the created bill; the caller posts it into the chat. */
   onSend: (invoice: MerchantIntent) => Promise<void> | void
 }) {
@@ -358,8 +454,9 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
           {!compact && store && store.list.length > 1 && <StorePicker stores={store.list} value={store.value} onChange={store.onChange} label="Bill from store" />}
         </div>}
         footerNote={due => `${firstName} gets a bill card with a Pay button${due ? ` · ${due}` : ''}`}
-        onCreate={async ({ items, total, taxPercent, note, dueDate }) => {
-          const inv = await createPaymentRequest({ amount: total, items, taxPercent, note, customer: customer.username,
+        storeTax={storeTax}
+        onCreate={async ({ items, total, taxPercent, taxName, taxInclusive, discountType, discountValue, note, dueDate }) => {
+          const inv = await createPaymentRequest({ amount: total, items, taxPercent, taxName, taxInclusive, discountType, discountValue, note, customer: customer.username,
             storeId: store?.value ?? null, expiresInMinutes: dueDate ? null : 7 * 24 * 60, dueDate })
           await onSend(inv)
           onClose()

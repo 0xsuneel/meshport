@@ -18,9 +18,11 @@ import { WalletPayPanel } from '@/features/pay/WalletPayPanel'
 import { SolanaPayPanel } from '@/features/pay/SolanaPayPanel'
 import { SOLANA_PAY_OPTION } from '@/lib/solanaPay'
 import { formatAmount } from '@/lib/utils'
+import { useBillDetails } from './useBillDetails'
 import {
   watchPayment, STATUS_LABEL, orderPaySendUrl, isOrderPayable, ARC_PAY_CHAIN, expiryText, type PaymentView,
-  orderKindOf, orderTitle, } from '@/lib/merchantPay'
+  orderKindOf, orderTitle,   billLines,
+} from '@/lib/merchantPay'
 
 // Every chain merchant-pay accepts has a logo in the shared map (Arc is separate).
 const logo = (id: string) => id === 'Arc_Testnet' ? '/logos/chains/arc.svg' : chainLogoSrc(id)
@@ -32,6 +34,8 @@ export function MerchantPayPage() {
   const myWallet = useAuthStore(s => s.walletAddress)
   const arcBalance = useWalletStore(s => s.balance)
   const [view, setView] = useState<PaymentView | null>(null)
+  // A bill's discount, tax name and footer (bill_details).
+  const billInfo = useBillDetails(code, view?.kind === 'invoice')
   const [notFound, setNotFound] = useState(false)
   const [walletPaid, setWalletPaid] = useState(false)
 
@@ -135,18 +139,20 @@ export function MerchantPayPage() {
                 </div>
               ))}
               {(() => {
-                const sub = view.items!.reduce((s, i) => s + Number(i.total ?? Number(i.qty) * Number(i.price)), 0)
+                const lines = billLines(view.items!, view.amount, view.taxPercent, billInfo)
                 return (
                   <div className="border-t border-border mt-2 pt-2">
-                    {!!view.taxPercent && (
-                      <>
-                        <div className="flex justify-between text-sm text-text-secondary py-0.5"><span>Subtotal</span><span>${formatAmount(sub)}</span></div>
-                        <div className="flex justify-between text-sm text-text-secondary py-0.5"><span>Tax ({view.taxPercent}%)</span><span>+ ${formatAmount(Math.max(0, view.amount - sub))}</span></div>
-                      </>
-                    )}
+                    {lines.filter(l => l.kind !== 'total').map((l, k) => (
+                      <div key={k} className="flex justify-between text-sm text-text-secondary py-0.5">
+                        <span>{l.label}{l.note ? ` (${l.note})` : ''}</span>
+                        <span>{l.kind === 'discount' ? `− $${formatAmount(-l.amount)}` : l.kind === 'tax' && !l.note ? `+ $${formatAmount(l.amount)}` : `$${formatAmount(l.amount)}`}</span>
+                      </div>
+                    ))}
                     <div className="flex justify-between text-sm font-bold text-text-primary py-0.5"><span>Total</span><span>${formatAmount(view.amount)} USDC</span></div>
                     {/* The seller's tax ID - a tax invoice needs it (GST, VAT …). */}
                     {view.storeTaxId && <div className="flex justify-between text-xs text-text-secondary pt-1"><span>Tax ID</span><span className="font-mono">{view.storeTaxId}</span></div>}
+                    {billInfo?.billToName && <div className="flex justify-between text-xs text-text-secondary pt-1"><span>Bill to</span><span>{billInfo.billToName}</span></div>}
+                    {billInfo?.footer && <p className="text-xs text-text-secondary pt-2">{billInfo.footer}</p>}
                   </div>
                 )
               })()}

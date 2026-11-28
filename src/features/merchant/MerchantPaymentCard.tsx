@@ -15,11 +15,13 @@ import { CheckCircle2, Clock, Receipt } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import { cardInnerWidth } from '@/features/chat/chatCard'
 import { formatAmount } from '@/lib/utils'
+import { useBillDetails } from './useBillDetails'
 import { dueText } from '@/lib/businessBills'
 import { TxDetailPage, type TxDetail, type TxParty } from '@/components/ui/TxDetailPage'
 import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
   watchPayment, getPayment, withLocalPayment, orderLabel, orderKindOf, orderTitle, expiryText, STATUS_LABEL, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type PaymentView,
+  billLines,
 } from '@/lib/merchantPay'
 
 const CHAIN_LABEL: Record<string, string> = {
@@ -105,6 +107,8 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
     return () => window.removeEventListener(BILL_UPDATED_EVENT, onUpdated)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [code])
+  // A bill's discount and tax name (bill_details) - read once.
+  const billInfo = useBillDetails(code, live?.kind === 'invoice' || !!text?.startsWith('🧾'))
   if (!v) return null
 
   const paid = v.status === 'paid'
@@ -183,15 +187,12 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
               </div>
             ))}
             {v.items!.length > 8 && <span style={{ color: muted }}>+{v.items!.length - 8} more</span>}
-            {!!v.taxPercent && (() => {
-              const sub = v.items!.reduce((s, i) => { const t = Number(i.total ?? Number(i.qty) * Number(i.price)); return s + (Number.isFinite(t) ? t : 0) }, 0)
-              return sub > 0 ? (
-                <div style={{ display: 'contents' }}>
-                  <span style={{ color: muted }}>Tax ({v.taxPercent}%)</span>
-                  <span style={{ textAlign: 'right', fontWeight: 700 }}>+ ${formatAmount(Math.max(0, v.amount - sub))}</span>
-                </div>
-              ) : null
-            })()}
+            {billLines(v.items!, v.amount, v.taxPercent, billInfo).filter(l => l.kind === 'discount' || l.kind === 'tax').map((l, k) => (
+              <div key={`l${k}`} style={{ display: 'contents' }}>
+                <span style={{ color: muted }}>{l.label}{l.note ? ` (${l.note})` : ''}</span>
+                <span style={{ textAlign: 'right', fontWeight: 700 }}>{l.kind === 'discount' ? `− $${formatAmount(-l.amount)}` : `${l.note ? '' : '+ '}$${formatAmount(l.amount)}`}</span>
+              </div>
+            ))}
             {v.storeTaxId && (
               <div style={{ display: 'contents' }}>
                 <span style={{ color: muted }}>Tax ID</span>

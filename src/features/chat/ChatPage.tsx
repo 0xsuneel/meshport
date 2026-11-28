@@ -2397,7 +2397,7 @@ export function ChatConversationPage() {
   const merchant = useMerchant()
   // A business's stores (main first): its chat Request / Bill pick which
   // store they're for, like Receive → Request.
-  const [bizStores, setBizStores] = useState<{ id: string; name: string; isDefault: boolean }[]>([])
+  const [bizStores, setBizStores] = useState<{ id: string; name: string; isDefault: boolean; tax?: import('@/lib/businessTeam').StoreTax }[]>([])
   const [bizStoreId, setBizStoreId] = useState('')
   useEffect(() => {
     if (!merchant.isMerchant) return
@@ -5266,6 +5266,7 @@ export function ChatConversationPage() {
           onClose={() => { setShowAttach(false); setAttachMode('attachments') }}
           merchantName={merchant.application?.businessName}
           store={storePick}
+          storeTax={bizStores.find(st => st.id === bizStoreId)?.tax ?? null}
           customer={{ name: otherUser?.display_name || recipientClean, username: otherUser?.username || recipientClean, avatar: otherUser?.avatar_url ?? null }}
           onSend={async inv => {
             void handleSend(billCardMessage(inv, formatAmount(inv.amount)))

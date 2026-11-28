@@ -3,10 +3,13 @@
 // payment and Receive → Request show this same screen, so a request looks and
 // works the same for a shop and a person.
 import { useEffect, useState } from 'react'
-import { CalendarClock, Share2, MessageCircle, MessageSquare, Mail } from 'lucide-react'
+import { CalendarClock, Share2, MessageCircle, MessageSquare, Mail, FileDown } from 'lucide-react'
+import { usePrint } from '@/features/business/printArea'
+import { BillDocument } from './BillDocument'
+import { useBillDetails } from './useBillDetails'
 import { useUIStore } from '@/store'
 import { drawMeshportQr } from '@/lib/qrLogo'
-import { paymentLink, watchPayment, displayOrderNumber, invoiceBreakdown, type InvoiceItem, type MerchantIntent, type PaymentView } from '@/lib/merchantPay'
+import { paymentLink, watchPayment, displayOrderNumber, billLines, type BillDetails, type InvoiceItem, type MerchantIntent, type PaymentView } from '@/lib/merchantPay'
 import { dueText } from '@/lib/businessBills'
 import { shareChannels } from '@/lib/shareLinks'
 import { SheetPerson } from '@/components/ui/ActionSheet'
@@ -71,13 +74,13 @@ const CHANNEL_ICON = { whatsapp: MessageCircle, sms: MessageSquare, email: Mail 
 
 /** Share · WhatsApp · SMS · Email in one row - a waiting request's link
  *  (the card's Pay link box copies it). */
-function ShareRow({ url, text, subject }: { url: string; text: string; subject: string }) {
+function ShareRow({ url, text, subject, to }: { url: string; text: string; subject: string; to?: string | null }) {
   const { share } = useShare()
   const cls = 'min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-2xl border border-border bg-surface text-[12px] font-semibold text-text-primary active:scale-[0.97] transition-transform'
   return (
     <div className="grid grid-cols-4 gap-2 w-full max-w-[340px]">
       <button type="button" onClick={() => void share(text, url)} className={cls}><Share2 className="size-4 text-brand-text" />Share</button>
-      {shareChannels(subject, `${text}\n${url}`).map(c => {
+      {shareChannels(subject, `${text}\n${url}`, to).map(c => {
         const Icon = CHANNEL_ICON[c.id]
         return <a key={c.id} href={c.href} target={c.id === 'whatsapp' ? '_blank' : undefined} rel="noreferrer" className={cls}><Icon className="size-4 text-brand-text" />{c.label}</a>
       })}
@@ -88,10 +91,11 @@ function ShareRow({ url, text, subject }: { url: string; text: string; subject: 
 /** A waiting bill's items, from its amount box on the card: the list with
  *  subtotal, tax and total, in a sheet - so the QR and share buttons stay on
  *  screen. */
-function BillItemsSheet({ open, onClose, items, taxPercent, note, title }: {
+function BillItemsSheet({ open, onClose, items, taxPercent, note, title, total, bill }: {
   open: boolean; onClose: () => void; items: InvoiceItem[]; taxPercent?: number; note?: string | null; title: string
+  total: number; bill?: BillDetails | null
 }) {
-  const b = invoiceBreakdown(items, taxPercent)
+  const lines = billLines(items, total, taxPercent, bill)
   return (
     <Sheet open={open} onClose={onClose} id="bill-items" stagger>
       <div className="px-5 pt-1 pb-[calc(var(--safe-bottom)+18px)]">
@@ -104,11 +108,12 @@ function BillItemsSheet({ open, onClose, items, taxPercent, note, title }: {
               <span className="font-medium text-text-primary">{money(i.total ?? i.qty * i.price)}</span>
             </div>
           ))}
-          {b.tax > 0 && <>
-            <div className="flex justify-between gap-3 text-text-muted pt-2 border-t border-border"><span>Subtotal</span><span>{money(b.subtotal)}</span></div>
-            <div className="flex justify-between gap-3 text-text-muted"><span>Tax ({taxPercent}%)</span><span>+ {money(b.tax)}</span></div>
-          </>}
-          <div className="flex justify-between gap-3 pt-2 border-t border-border text-[15px] font-bold text-text-primary"><span>Total</span><span>{money(b.total)}</span></div>
+          {lines.map((l, k) => l.kind === 'total'
+            ? <div key={k} className="flex justify-between gap-3 pt-2 border-t border-border text-[15px] font-bold text-text-primary"><span>Total</span><span>{money(l.amount)}</span></div>
+            : <div key={k} className={`flex justify-between gap-3 text-text-muted ${l.kind === 'subtotal' ? 'pt-2 border-t border-border' : ''}`}>
+                <span>{l.label}{l.note ? ` (${l.note})` : ''}</span>
+                <span>{l.kind === 'discount' ? `− ${money(-l.amount)}` : l.kind === 'tax' && !l.note ? `+ ${money(l.amount)}` : money(l.amount)}</span>
+              </div>)}
         </div>
       </div>
     </Sheet>
@@ -186,6 +191,10 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
   const paidBy = view?.customerUsername ?? intent.customerUsername
   const { copied, copy } = useShare()
   const [itemsOpen, setItemsOpen] = useState(false)
+  // Bills: Save PDF - the bill as a document (address and footer from bill_details).
+  const printer = usePrint()
+  const details = useBillDetails(intent.code, bill)
+  const savePdf = () => printer.print(<BillDocument intent={intent} details={details} business={from} taxId={view?.storeTaxId ?? null} link={link} qr={qr} paid={paid} />)
   // Waiting: laid out like Receive → My QR - the amount and the pay link in
   // two boxes on the card over the QR, the share buttons in one row - so it
   // all fits on a phone without scrolling. Paid / ended keep the big amount.
@@ -194,7 +203,7 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
   // A waiting bill: who it's for goes in the header, its items (and note)
   // open from the amount box.
   const billLine = open && bill && (intent.items?.length ?? 0) > 0
-  const forWho = intent.customerUsername ? `${intent.customerUsername.replace(/\.arc$/i, '')}.arc` : null
+  const forWho = intent.customerUsername ? `${intent.customerUsername.replace(/\.arc$/i, '')}.arc` : intent.billToName ?? null
   // Waiting, the due date goes in the card's caption.
   const extras = (!billLine && (intent.note || intent.customerUsername)) || sender || (!open && d)
   return (
@@ -217,7 +226,7 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
               {d && !open && <p className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${dueTone[d.tone]}`}><CalendarClock className="size-3.5" /> {d.text}</p>}
             </div>
           )}
-          {billLine && <BillItemsSheet open={itemsOpen} onClose={() => setItemsOpen(false)} items={intent.items!} taxPercent={intent.taxPercent} note={intent.note} title={`Bill ${num}`} />}
+          {billLine && <BillItemsSheet open={itemsOpen} onClose={() => setItemsOpen(false)} items={intent.items!} taxPercent={intent.taxPercent} note={intent.note} title={`Bill ${num}`} total={intent.amount} bill={intent.bill} />}
           {bill && !open && (intent.items?.length ?? 0) > 0 && (
             <div className="w-full text-left"><DetailList rows={intent.items!.map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
           )}
@@ -237,7 +246,14 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
               ...(tx ? [{ label: 'Transaction hash', value: short(tx) }] : []),
             ]} /></div>
           )}
-          {open && <ShareRow url={link} text={shareText} subject={`${from}: ${bill ? 'bill' : 'payment'} ${num} for ${money(intent.amount)}`} />}
+          {open && <ShareRow url={link} text={shareText} subject={`${from}: ${bill ? 'bill' : 'payment'} ${num} for ${money(intent.amount)}`} to={intent.billToContact} />}
+          {bill && (intent.items?.length ?? 0) > 0 && !ended && (
+            <button type="button" onClick={savePdf}
+              className="w-full max-w-[340px] min-h-[44px] inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface text-[13.5px] font-semibold text-text-primary active:scale-[0.98] transition-transform">
+              <FileDown className="size-4 text-brand-text" /> {paid ? 'Save receipt as PDF' : 'Save bill as PDF'}
+            </button>
+          )}
+          {printer.portal}
         </div>
       </div>
       <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: 10, paddingBottom: 'calc(var(--safe-bottom) + 18px)' }}>

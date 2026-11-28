@@ -276,6 +276,11 @@ export type MerchantIntent = {
   overpaid?: number
   /** Tax rate on a bill (percent). The amount is tax-inclusive. 0 = none. */
   taxPercent?: number
+  /** A bill's lines as the server worked them out (null on older bills). */
+  bill?: BillDetails | null
+  /** Someone not on MeshPort the bill is for: a name and a phone or email. */
+  billToName?: string | null
+  billToContact?: string | null
   /** The staff member (auth uid) who made it, when staff did. */
   createdByStaff?: string | null
 }
@@ -350,8 +355,65 @@ export function mapIntent(r: any): MerchantIntent {
     dueDate: r.due_date ?? null, reminderCount: Number(r.reminder_count) || 0, lastRemindedAt: r.last_reminded_at ?? null,
     overpaid: Number(r.overpaid_amount) > 0 ? Number(r.overpaid_amount) : 0,
     taxPercent: Number(r.tax_percent) || 0, createdByStaff: r.created_by_staff ?? null,
+    bill: r.kind === 'invoice' ? mapBillDetails({ subtotal: r.subtotal_amount, discountType: r.discount_type, discountValue: r.discount_value,
+      discountAmount: r.discount_amount, taxName: r.tax_name, taxInclusive: r.tax_inclusive, taxAmount: r.tax_amount,
+      billToName: r.bill_to_name, footer: r.footer_note, storeAddress: null }) : null,
+    billToName: r.bill_to_name ?? null, billToContact: r.bill_to_contact ?? null,
     items: Array.isArray(r.items) ? r.items.map((i: any) => ({ name: i.name, qty: Number(i.qty), price: Number(i.price), total: Number(i.total) })) : null,
   }
+}
+
+/** A bill's lines beyond its items (bill_details / the intent's columns). */
+export type BillDetails = {
+  subtotal: number | null
+  discountType: 'percent' | 'amount' | null; discountValue: number | null; discountAmount: number | null
+  taxName: string | null; taxInclusive: boolean; taxAmount: number | null
+  billToName: string | null; footer: string | null; storeAddress: string | null
+}
+const numOrNull = (v: unknown) => v === null || v === undefined || v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null)
+export function mapBillDetails(r: any): BillDetails {
+  return {
+    subtotal: numOrNull(r?.subtotal),
+    discountType: r?.discountType === 'percent' || r?.discountType === 'amount' ? r.discountType : null,
+    discountValue: numOrNull(r?.discountValue), discountAmount: numOrNull(r?.discountAmount),
+    taxName: r?.taxName || null, taxInclusive: !!r?.taxInclusive, taxAmount: numOrNull(r?.taxAmount),
+    billToName: r?.billToName || null, footer: r?.footer || null, storeAddress: r?.storeAddress || null,
+  }
+}
+/** The pay page / chat card: a bill's discount, tax name, address and footer. */
+export async function fetchBillDetails(code: string): Promise<BillDetails | null> {
+  const { data, error } = await supabase.rpc('bill_details', { p_code: code })
+  if (error || !data) return null
+  return mapBillDetails(data)
+}
+
+export type BillLine = { label: string; amount: number; kind: 'subtotal' | 'discount' | 'tax' | 'total'; note?: string }
+/** The lines under a bill's items - Subtotal, Discount, Tax, Total - from what
+ *  the server stored, else (older bills) from the tax rate alone. */
+export function billLines(items: InvoiceItem[], total: number, taxPercent = 0, d?: BillDetails | null): BillLine[] {
+  const subtotal = d?.subtotal ?? invoiceTotal(items)
+  const lines: BillLine[] = []
+  const disc = d?.discountAmount ?? 0
+  const tax = d?.taxAmount ?? (taxPercent > 0 ? Math.max(0, Number((total - subtotal).toFixed(6))) : 0)
+  if (disc > 0 || tax > 0) lines.push({ label: 'Subtotal', amount: subtotal, kind: 'subtotal' })
+  if (disc > 0) lines.push({ label: d?.discountType === 'percent' ? `Discount ${Number(d.discountValue)}%` : 'Discount', amount: -disc, kind: 'discount' })
+  if (tax > 0) lines.push({ label: `${d?.taxName || 'Tax'} ${Number(taxPercent)}%`, amount: tax, kind: 'tax', note: d?.taxInclusive ? 'included' : undefined })
+  lines.push({ label: 'Total', amount: total, kind: 'total' })
+  return lines
+}
+
+/** What the composer shows before the bill is made - the server's sums. */
+export function billBreakdown(items: InvoiceItem[], o: { discountType?: 'percent' | 'amount' | null; discountValue?: number; taxPercent?: number; taxInclusive?: boolean } = {}) {
+  const cents = (n: number) => Math.round(n * 100) / 100
+  const subtotal = invoiceTotal(items)
+  const v = o.discountValue && o.discountValue > 0 ? o.discountValue : 0
+  const discount = o.discountType === 'percent' && v ? cents(subtotal * Math.min(v, 100) / 100)
+    : o.discountType === 'amount' && v ? Math.min(v, subtotal) : 0
+  const base = Number((subtotal - discount).toFixed(6))
+  const pct = Math.min(100, Math.max(0, o.taxPercent || 0))
+  if (pct > 0 && o.taxInclusive) return { subtotal, discount, tax: cents(base - base / (1 + pct / 100)), total: base, inclusive: true }
+  const tax = pct > 0 ? cents(base * pct / 100) : 0
+  return { subtotal, discount, tax, total: Number((base + tax).toFixed(6)), inclusive: false }
 }
 
 /** Bill subtotal = Σ qty × price (rounded like the server). */
@@ -369,6 +431,10 @@ export function invoiceBreakdown(items: InvoiceItem[], taxPercent = 0): { subtot
 
 export async function createPaymentRequest(p: { amount: number; customer?: string; note?: string; expiresInMinutes?: number | null; items?: InvoiceItem[]; storeId?: string | null
   /** Tax rate on a bill (percent); the server makes the total tax-inclusive. */ taxPercent?: number
+  /** Bills: discount, the tax's name and whether prices include it, and someone not on MeshPort. */
+  discountType?: 'percent' | 'amount' | null; discountValue?: number
+  taxName?: string | null; taxInclusive?: boolean
+  billToName?: string | null; billToContact?: string | null
   /** Pay-by date (YYYY-MM-DD) */ dueDate?: string | null }): Promise<MerchantIntent> {
   const items = p.items?.filter(i => i.name.trim() && i.qty > 0 && i.price >= 0).map(i => ({ name: i.name.trim().slice(0, 80), qty: i.qty, price: i.price }))
   const amount = items?.length ? invoiceTotal(items) : p.amount
@@ -377,7 +443,9 @@ export async function createPaymentRequest(p: { amount: number; customer?: strin
   const { data, error } = await supabase.from('merchant_payment_intents').insert({
     requested_amount: Number(amount.toFixed(6)),
     ...(items?.length ? { items } : {}),
-    ...(taxPercent ? { tax_percent: taxPercent } : {}),
+    ...(taxPercent ? { tax_percent: taxPercent, tax_name: p.taxName?.trim().slice(0, 20) || null, tax_inclusive: !!p.taxInclusive } : {}),
+    ...(items?.length && p.discountType && p.discountValue && p.discountValue > 0 ? { discount_type: p.discountType, discount_value: p.discountValue } : {}),
+    ...(items?.length && !p.customer && p.billToName?.trim() ? { bill_to_name: p.billToName.trim().slice(0, 80), bill_to_contact: p.billToContact?.trim().slice(0, 120) || null } : {}),
     customer_username: p.customer?.trim().replace(/^@/, '') || null,
     note: p.note?.trim().slice(0, 140) || null,
     expires_at: p.expiresInMinutes ? new Date(Date.now() + p.expiresInMinutes * 60_000).toISOString() : null,

@@ -955,7 +955,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
         <ShopQrScreen open={stack.includes('qr')} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.publicName : null} handle={handle} storePick={screenStorePick} avatar={qrStore?.publicLogoUrl ?? userAvatar} />
       ))}
       {level('receive', (
-        <ReceiveScreen key={collectStart ?? 'qr'} only={collectStart} open={stack.includes('receive')} onBack={() => { back(); reloadIntents(); setCollectStart(undefined) }} onChanged={reloadIntents} storeName={storeName}
+        <ReceiveScreen key={collectStart ?? 'qr'} only={collectStart} storeTax={(qrStore ?? stores.find(st => st.isDefault))?.tax ?? null} open={stack.includes('receive')} onBack={() => { back(); reloadIntents(); setCollectStart(undefined) }} onChanged={reloadIntents} storeName={storeName}
           shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.publicName : null }} storePick={screenStorePick} avatar={qrStore?.publicLogoUrl ?? userAvatar} />
       ))}
       {level('customers', (

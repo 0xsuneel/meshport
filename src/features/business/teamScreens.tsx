@@ -2,7 +2,9 @@
 // Visuals from the Arc Studio kit in ./ui; data from lib/businessTeam.
 import { useEffect, useMemo, useState } from 'react'
 import { useUIStore } from '@/store'
-import { listStores, saveStore, uploadStoreLogo, deleteStore, setDefaultStore, listStaff, inviteStaff, updateStaff, removeStaff, type Store, type StaffMember, type StaffRole } from '@/lib/businessTeam'
+import { listStores, saveStore, uploadStoreLogo, deleteStore, setDefaultStore, listStaff, inviteStaff, updateStaff, removeStaff, type Store, type StaffMember, type StaffRole, type StoreTax } from '@/lib/businessTeam'
+
+const NO_TAX: StoreTax = { enabled: false, name: 'VAT', rate: 0, inclusive: false }
 import { BUSINESS_CATEGORIES, toCategory, useBizTerms } from '@/lib/businessCategories'
 import { useMerchant } from '@/lib/merchant'
 import {
@@ -27,7 +29,7 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
   // A new store starts with the category the business applied with.
   const defaultType = toCategory(useMerchant().application?.businessType)
   const [stores, setStores] = useState<Store[] | null>(null)
-  const [edit, setEdit] = useState<{ id?: string; name: string; type: string; address: string; taxId: string; logoUrl?: string | null } | null>(null)
+  const [edit, setEdit] = useState<{ id?: string; name: string; type: string; address: string; taxId: string; logoUrl?: string | null; tax: StoreTax; billFooter: string } | null>(null)
   const [logoBusy, setLogoBusy] = useState(false)
   const pickLogo = async (file: File) => {
     if (!edit) return
@@ -71,6 +73,7 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
             address={edit.address} onAddress={v => setEdit({ ...edit, address: v })} taxId={edit.taxId} onTaxId={v => setEdit({ ...edit, taxId: v })}
             logoUrl={edit.logoUrl ?? null} onLogo={pickLogo} onRemoveLogo={() => setEdit({ ...edit, logoUrl: null })} logoBusy={logoBusy}
             busy={busy || logoBusy} onSave={save}
+            bills={{ tax: edit.tax, onTax: t => setEdit({ ...edit, tax: t }), footer: edit.billFooter, onFooter: v => setEdit({ ...edit, billFooter: v }) }}
             onDelete={edit.id ? remove : undefined} onCancel={() => changeEdit(null)} />
         ) : stores === null ? <Skeleton className="h-40 w-full" /> : (
           <StoresView stores={stores.map(s => {
@@ -78,8 +81,8 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
             return { id: s.id, name: s.name, type: s.type ?? 'Store', address: s.address ?? undefined, taxId: s.taxId ?? undefined, isDefault: s.isDefault, nameInReview: s.nameInReview, publicName: s.publicName, logoUrl: s.logoUrl, logoInReview: s.logoInReview,
               payments: p ? `${money(p.total)} · ${p.count} payment${p.count === 1 ? '' : 's'}` : 'No payments yet' }
           })}
-            onAdd={() => changeEdit({ name: '', type: defaultType, address: '', taxId: '' })}
-            onEdit={id => { const s = stores.find(x => x.id === id); if (s) changeEdit({ id, name: s.name, type: s.type ?? STORE_TYPES[0], address: s.address ?? '', taxId: s.taxId ?? '', logoUrl: s.logoUrl }) }}
+            onAdd={() => changeEdit({ name: '', type: defaultType, address: '', taxId: '', tax: NO_TAX, billFooter: '' })}
+            onEdit={id => { const s = stores.find(x => x.id === id); if (s) changeEdit({ id, name: s.name, type: s.type ?? STORE_TYPES[0], address: s.address ?? '', taxId: s.taxId ?? '', logoUrl: s.logoUrl, tax: s.tax.rate ? s.tax : { ...NO_TAX, ...s.tax, name: s.tax.name === 'Tax' ? 'VAT' : s.tax.name }, billFooter: s.billFooter ?? '' }) }}
             onSetPrimary={async id => { try { await setDefaultStore(id); await load(); toast('Main store updated', 'success') } catch (e) { toast(errorText(e, 'Could not update'), 'error') } }}
             onQr={onQr} addLockedNote={addLockedNote} />
         )}

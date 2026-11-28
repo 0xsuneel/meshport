@@ -18,7 +18,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { shopPayLink } from '@/lib/payLinks'
 import { qrCardFile } from '@/lib/qrCardImage'
 import { staffIntents } from '@/lib/businessTeam'
-import { Clock, Printer, Download, Share2, MessageCircle } from 'lucide-react'
+import { Clock, Printer, Download, Share2, MessageCircle, X } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName, setShopContact, type BusinessDoc } from '@/lib/merchant'
 import { receiptNumber } from '@/lib/receiptNumber'
@@ -42,6 +42,7 @@ import { RequestResult, money, OPEN, VALID_FOR, dueTone, useQr, useShare, LinkSh
 import { BillComposer } from '@/features/merchant/InvoiceComposer'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { UserPicker, exactPick, pickerProblem, type PickedUser } from '@/components/ui/UserPicker'
+import type { StoreTax } from '@/lib/businessTeam'
 import { useChatCardSender } from '@/hooks/useChatCardSender'
 import type { DbUser } from '@/lib/supabase'
 import {
@@ -191,12 +192,14 @@ const cleanUsername = (v: string) => v.trim().replace(/^@/, '').replace(/\.arc$/
  *  composer (BillComposer), so they look and work the same; the order they
  *  make then shows here as a counter QR and a link, live until it's paid.
  *  Without `shopQr` (staff mode) only Request (and Bill for managers). */
-export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, storePick, avatar, startTab, only }: {
+export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, storePick, avatar, startTab, only, storeTax }: {
   open: boolean; onBack: () => void; storeName: string
   /** Opened on this part (Home's Charge / Bill shortcuts); default the Shop QR. */
   startTab?: CollectTab
   /** Its own page (business app): just this part - Shop QR, Charge or Bill - no tabs. */
   only?: CollectTab
+  /** The store's tax, filled in on every bill. */
+  storeTax?: StoreTax | null
   /** The business's logo, in the phone's title. */
   avatar?: string | null
   shopQr?: { outlet?: string | null; handle: string }
@@ -222,6 +225,8 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   // real MeshPort user can be named on an order.
   const [customerQuery, setCustomerQuery] = useState('')
   const [picked, setPicked] = useState<PickedUser | null>(null)
+  // Billing someone not on MeshPort: their name, and a phone or email for the pay link.
+  const [outsider, setOutsider] = useState<{ name: string; contact: string } | null>(null)
   const [found, setFound] = useState<{ results: DbUser[]; searching: boolean }>({ results: [], searching: false })
   // With a named customer the order's card is posted into your chat with them.
   const sender = useChatCardSender()
@@ -246,7 +251,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { if (paid && !owner) speakPayment(view!.received) }, [paid])
-  const reset = () => { setTab(only ?? (shopQr ? 'qr' : 'charge')); setCustomerQuery(''); setPicked(null); setExpiry('15'); setIntent(null); sender.reset() }
+  const reset = () => { setTab(only ?? (shopQr ? 'qr' : 'charge')); setCustomerQuery(''); setPicked(null); setOutsider(null); setExpiry('15'); setIntent(null); sender.reset() }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   useEffect(() => { if (!open) reset() }, [open])
   const newPayment = () => { setIntent(null); sender.reset() }
@@ -258,6 +263,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   const resolveCustomer = (): PickedUser | null => {
     if (!canBill) return null
     if (picked) return picked
+    if (outsider) return null
     if (!customerQuery.trim()) return null
     const exact = exactPick(customerQuery, found.results)
     if (exact) { const u = { id: exact.id, username: cleanUsername(exact.username), display_name: exact.display_name, avatar_url: exact.avatar_url }; setPicked(u); setCustomerQuery(''); return u }
@@ -268,7 +274,9 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
    *  customer, posts its card into your chat with them in the background. */
   const create = async (p: RequestInput, kind: 'charge' | 'bill') => {
     const person = resolveCustomer()
-    const it = await make({ ...p, customer: person ? cleanUsername(person.username) : undefined })
+    if (kind === 'bill' && outsider && !outsider.name.trim()) throw new Error('Add their name')
+    const it = await make({ ...p, customer: person ? cleanUsername(person.username) : undefined,
+      ...(kind === 'bill' && outsider ? { billToName: outsider.name.trim(), billToContact: outsider.contact.trim() || null } : {}) })
     setIntent(it)
     onChanged?.()
     if (chat && person) {
@@ -346,13 +354,44 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
     )
   } else if (tab === 'bill' && canBill) {
     body = (
-      <BillComposer open={open} isDesktop={isDesktop} header={head} submitLabel="Create bill" busyLabel="Creating…"
-        footerNote={due => `${who ? `${who}.arc gets it ${chat ? 'in your chat' : 'in their notifications'}` : 'Show the QR or send the link'}${due ? ` · ${due}` : ''}`}
-        saved={savedItems ? { items: catalog, onRemove: removeSaved, hint: 'Items you bill are saved here for next time', onSaveBarcode: saveScanned } : undefined}
-        extra={<div className="mt-3 mb-1">{customerInput('Bill to (optional)')}</div>}
-        onCreate={async ({ items, total, taxPercent, note, dueDate }) => {
+      <BillComposer open={open} isDesktop={isDesktop} header={head} submitLabel={outsider ? 'Send bill' : 'Create bill'} busyLabel="Creating…"
+        storeTax={storeTax} askDue={!!(picked || outsider)}
+        footerNote={due => `${who ? `${who}.arc gets it ${chat ? 'in your chat' : 'in their notifications'}` : outsider ? `A pay link for ${outsider.name.trim() || 'them'}` : 'Show the QR at the counter'}${due ? ` · ${due}` : ''}`}
+        saved={savedItems ? { items: catalog, onRemove: removeSaved, onSaveBarcode: saveScanned } : undefined}
+        extra={<div className="mt-3 mb-1">{outsider ? (
+          <div>
+            <SheetLabel>Bill to</SheetLabel>
+            <div className="rounded-2xl" style={{ border: '1px solid var(--border)', background: 'var(--bg)' }}>
+              <div className="flex items-center gap-3 px-3.5 py-2.5">
+                <span className="size-9 rounded-full inline-flex items-center justify-center font-extrabold text-[14px] shrink-0" style={{ background: 'var(--tile-butter)', color: 'var(--tile-butter-ink)' }}>
+                  {(outsider.name.trim()[0] || '?').toUpperCase()}
+                </span>
+                <input value={outsider.name} onChange={e => setOutsider(o => o && { ...o, name: e.target.value.slice(0, 80) })} placeholder="Their name" aria-label="Their name"
+                  className="flex-1 min-w-0 bg-transparent outline-none text-[15px] font-semibold text-text-primary" />
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0" style={{ color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>Not on MeshPort</span>
+                <button type="button" aria-label="Remove" onClick={() => setOutsider(null)} className="shrink-0 text-text-muted"><X className="size-4" /></button>
+              </div>
+              <input value={outsider.contact} onChange={e => setOutsider(o => o && { ...o, contact: e.target.value.slice(0, 120) })}
+                placeholder="Phone (with country code) or email" aria-label="Their phone or email" inputMode="email" autoComplete="off"
+                className="w-full bg-transparent outline-none px-3.5 py-3 text-[14.5px] text-text-primary" style={{ borderTop: '1px solid var(--border)' }} />
+            </div>
+            <p className="text-[12px] text-text-muted mt-1.5 px-0.5">They get a pay link - any wallet, no app needed.</p>
+          </div>
+        ) : (
+          <>
+            {customerInput('Bill to (optional)')}
+            {!picked && customerQuery.trim().length >= 2 && !found.searching && !exactPick(customerQuery, found.results) && (
+              <button type="button" onClick={() => { setOutsider({ name: customerQuery.trim().replace(/^@/, ''), contact: '' }); setCustomerQuery('') }}
+                className="w-full mt-2 text-left rounded-2xl px-3.5 py-3 text-[13.5px]" style={{ border: '1px dashed var(--border)' }}>
+                <span className="font-bold" style={{ color: 'var(--brand-text)' }}>Not on MeshPort?</span>{' '}
+                <span className="text-text-secondary">Bill “{customerQuery.trim()}” by phone or email</span>
+              </button>
+            )}
+          </>
+        )}</div>}
+        onCreate={async ({ items, total, taxPercent, taxName, taxInclusive, discountType, discountValue, note, dueDate }) => {
           // Same as a chat bill: open 7 days, or until paid with a due date.
-          await create({ amount: total, items, taxPercent, note, expiresInMinutes: dueDate ? null : 7 * 24 * 60, dueDate }, 'bill')
+          await create({ amount: total, items, taxPercent, taxName, taxInclusive, discountType, discountValue, note, expiresInMinutes: dueDate ? null : 7 * 24 * 60, dueDate }, 'bill')
           if (savedItems) void rememberItems(items)
         }} />
     )

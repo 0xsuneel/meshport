@@ -15,12 +15,17 @@ import type { MerchantRefund } from '@/lib/merchantRefunds'
  *  `nameInReview`: a new name is waiting for that review. */
 export type Store = { id: string; name: string; publicName: string | null; nameInReview: boolean
   /** The owner's logo for this store, what customers see (after review), and whether a new one is waiting. */
-  logoUrl: string | null; publicLogoUrl: string | null; logoInReview: boolean; type: string | null; address: string | null; taxId: string | null; isDefault: boolean; createdAt: string }
+  logoUrl: string | null; publicLogoUrl: string | null; logoInReview: boolean; type: string | null; address: string | null; taxId: string | null; isDefault: boolean; createdAt: string
+  /** Bills from this store: tax (name, rate, prices include it) and a footer note. */
+  tax: StoreTax; billFooter: string | null }
+export type StoreTax = { enabled: boolean; name: string; rate: number; inclusive: boolean }
 export type StaffRole = 'cashier' | 'manager'
 export type StaffMember = { id: string; username: string; role: StaffRole; status: 'invited' | 'active'; storeId: string | null; createdAt: string }
 export type Membership = { id: string; ownerAuthUid: string; ownerName: string; ownerUsername: string; role: StaffRole; status: 'invited' | 'active'; storeId: string | null; storeName: string | null; storePublicName: string | null }
 
-const mapStore = (r: any): Store => ({ id: r.id, name: r.name, publicName: r.public_name ?? null, nameInReview: !!r.name_review_since, logoUrl: r.logo_url ?? null, publicLogoUrl: r.public_logo_url ?? null, logoInReview: !!r.logo_review_since, type: r.type ?? null, address: r.address ?? null, taxId: r.tax_id ?? null, isDefault: !!r.is_default, createdAt: r.created_at })
+const mapStore = (r: any): Store => ({ id: r.id, name: r.name, publicName: r.public_name ?? null, nameInReview: !!r.name_review_since, logoUrl: r.logo_url ?? null, publicLogoUrl: r.public_logo_url ?? null, logoInReview: !!r.logo_review_since, type: r.type ?? null, address: r.address ?? null, taxId: r.tax_id ?? null, isDefault: !!r.is_default, createdAt: r.created_at,
+  tax: { enabled: !!r.tax_enabled && Number(r.tax_rate) > 0, name: r.tax_name || 'Tax', rate: Number(r.tax_rate) || 0, inclusive: !!r.tax_inclusive },
+  billFooter: r.bill_footer ?? null })
 const fail = (e: { message: string } | null) => { if (e) throw new Error(e.message.replace(/^.*?ERROR:\s*/, '')) }
 
 async function myUid(): Promise<string | null> {
@@ -37,13 +42,16 @@ export async function listStores(): Promise<Store[]> {
   return (data ?? []).map(mapStore)
 }
 
-export async function saveStore(s: { id?: string; name: string; type?: string; address?: string; taxId?: string; isDefault?: boolean; logoUrl?: string | null }): Promise<Store> {
+export async function saveStore(s: { id?: string; name: string; type?: string; address?: string; taxId?: string; isDefault?: boolean; logoUrl?: string | null; tax?: StoreTax; billFooter?: string }): Promise<Store> {
   const name = s.name.trim()
   if (name.length < 2) throw new Error('Enter the store name')
   const row = { name: name.slice(0, 60), type: s.type || null, address: s.address?.trim().slice(0, 160) || null,
     ...(s.taxId !== undefined ? { tax_id: s.taxId.trim().toUpperCase().slice(0, 40) || null } : {}),
     ...(s.isDefault !== undefined ? { is_default: s.isDefault } : {}),
-    ...(s.logoUrl !== undefined ? { logo_url: s.logoUrl } : {}) }
+    ...(s.logoUrl !== undefined ? { logo_url: s.logoUrl } : {}),
+    ...(s.tax ? { tax_enabled: s.tax.enabled && s.tax.rate > 0, tax_name: s.tax.name.trim().slice(0, 20) || null,
+      tax_rate: Math.min(100, Math.max(0, s.tax.rate)) || null, tax_inclusive: s.tax.inclusive } : {}),
+    ...(s.billFooter !== undefined ? { bill_footer: s.billFooter.trim().slice(0, 200) || null } : {}) }
   const q = s.id ? supabase.from('business_stores').update(row).eq('id', s.id) : supabase.from('business_stores').insert(row)
   const { data, error } = await q.select('*').single()
   fail(error)
