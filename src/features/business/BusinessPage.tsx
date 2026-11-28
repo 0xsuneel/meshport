@@ -19,7 +19,7 @@ import { useStatusBarTint } from '@/lib/statusBarTint'
 import { useThemeStore, resolveTheme } from '@/store/themeStore'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useBackLayer } from '@/lib/backLayers'
-import { useBizTerms } from '@/lib/businessCategories'
+import { useBizTerms, setActiveStoreCategory } from '@/lib/businessCategories'
 import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
 import { copyToClipboard } from '@/lib/utils'
@@ -255,6 +255,8 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
   useEffect(reloadIntents, [raw.length, tab, reloadIntents])
   // The picked store, else the main store (also after its store was removed).
   const activeStore = stores.find(s => s.id === storeId) ?? stores.find(s => s.isDefault) ?? stores[0] ?? null
+  // Its category sets the words the Business tab uses (Guests, Patients…).
+  useEffect(() => { setActiveStoreCategory(activeStore?.type ?? null) }, [activeStore?.type])
   // Requests and the Shop QR belong to the store being viewed.
   const qrStore = activeStore
   const pickStore = (id: string) => { setStoreId(id); setActiveStoreId(id) }

@@ -2,6 +2,7 @@
 // application and for each store - and the words the Business tab uses for
 // each (a café has guests, a freelancer sends invoices to clients).
 
+import { useSyncExternalStore } from 'react'
 import { useMerchant } from './merchant'
 
 export const BUSINESS_CATEGORIES = [
@@ -51,6 +52,34 @@ const TERMS: Partial<Record<BusinessCategory, Partial<BizTerms>>> = {
   'Wholesale': { customers: 'Buyers', customer: 'Buyer', stores: 'Warehouses' },
 }
 
+/** Sign-up asks the name in the category's own words (28 Nov, like Paytm):
+ *  "Restaurant name - e.g. Corner Café". It becomes the display name. */
+const NAME_ASK: Record<BusinessCategory, [label: string, example: string]> = {
+  'Retail store': ['Shop name', 'Main Street Store'], 'Grocery / Supermarket': ['Store name', 'Green Grocers'],
+  'Restaurant / Café': ['Restaurant name', 'Corner Café'], 'Online shop': ['Shop name', 'Urban Threads'],
+  'Pharmacy': ['Pharmacy name', 'City Pharmacy'], 'Salon / Beauty': ['Salon name', 'Glow Salon'],
+  'Clinic / Healthcare': ['Clinic name', 'Bright Smile Clinic'], 'Education / Tutoring': ['Institute name', 'Bright Minds Tutoring'],
+  'Hotel / Stay': ['Hotel name', 'Lakeview Stay'], 'Events / Tickets': ['Event or organiser name', 'City Music Fest'],
+  'Repair / Workshop': ['Workshop name', 'QuickFix Repairs'], 'Transport / Delivery': ['Business name', 'Swift Couriers'],
+  'Services': ['Business name', 'Sparkle Cleaning'], 'Freelancer': ['Your name or brand', 'Anita Designs'],
+  'Kiosk / Counter': ['Stall name', 'Corner Kiosk'], 'Non-profit / Donations': ['Organisation name', 'Hope Foundation'],
+  'Wholesale': ['Business name', 'Metro Traders'], 'Other': ['Business name', 'Your business'],
+}
+export function nameAskFor(category: string | null | undefined): { label: string; example: string } {
+  const c = BUSINESS_CATEGORIES.find(x => x === category)
+  const [label, example] = c ? NAME_ASK[c] : ['Business name', 'Your business']
+  return { label, example }
+}
+/** A display name customers will see: 2-50 characters; letters, numbers,
+ *  spaces and & ' . , - only (Paytm: "between 2-50 chars, no special char"). */
+export function displayNameError(name: string): string | null {
+  const n = name.trim()
+  if (n.length < 2) return 'Use at least 2 characters'
+  if (n.length > 50) return 'Keep it to 50 characters'
+  if (!/^[\p{L}\p{N}][\p{L}\p{N} &'’.,-]*$/u.test(n)) return "Use letters, numbers, spaces and & ' . , - only"
+  return null
+}
+
 /** The categories in groups, as big cards at sign-up (28 Nov, like Paytm's "Select Business Type"). */
 export const BUSINESS_GROUPS: { title: string; tint: 'mint' | 'butter' | 'peach' | 'sky'; items: BusinessCategory[] }[] = [
   { title: 'Shops', tint: 'mint', items: ['Retail store', 'Grocery / Supermarket', 'Pharmacy', 'Online shop', 'Kiosk / Counter', 'Wholesale'] },
@@ -69,9 +98,25 @@ export function bizTerms(category: string | null | undefined): BizTerms {
   return { ...DEFAULT, ...(c ? TERMS[c] : undefined) }
 }
 
-/** The signed-in business's words, from the category it applied with. */
+// The category of the store the Business tab works as (28 Nov: a category
+// belongs to each store, like Paytm's shops) - BusinessPage sets it when the
+// store changes. null until then: the category the business applied with.
+let activeCategory: string | null = null
+const categoryListeners = new Set<() => void>()
+export function setActiveStoreCategory(category: string | null | undefined): void {
+  const c = category?.trim() || null
+  if (c === activeCategory) return
+  activeCategory = c
+  categoryListeners.forEach(l => l())
+}
+const subscribeCategory = (l: () => void) => { categoryListeners.add(l); return () => { categoryListeners.delete(l) } }
+
+/** The signed-in business's words: the selected store's category (a clinic
+ *  branch says "Patients", a restaurant "Guests"), else the one it applied with. */
 export function useBizTerms(): BizTerms {
-  return bizTerms(useMerchant().application?.businessType)
+  const applied = useMerchant().application?.businessType
+  const store = useSyncExternalStore(subscribeCategory, () => activeCategory, () => null)
+  return bizTerms(store ?? applied)
 }
 
 /** "invoice" → "Invoice" */

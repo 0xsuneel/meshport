@@ -13,7 +13,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useUIStore } from '@/store'
 import { useMerchant, applyForMerchant, type BusinessDoc } from '@/lib/merchant'
 import { BusinessDocsField } from './BusinessDocsField'
-import { toCategory } from '@/lib/businessCategories'
+import { toCategory, nameAskFor, displayNameError } from '@/lib/businessCategories'
 import { CategoryCards } from './CategoryCards'
 import { errorText } from '@/lib/errorText'
 
@@ -32,12 +32,18 @@ export function MerchantApplyPage() {
   const [registration, setRegistration] = useState('')
   const [docs, setDocs] = useState<BusinessDoc[]>([])
   const [submitting, setSubmitting] = useState(false)
+  // Like Paytm's sign-up (28 Nov): the category first, then the name in that
+  // category's words ("Restaurant name"), then the details.
+  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const ask = nameAskFor(businessType)
+  const nameError = businessName.trim() ? displayNameError(businessName) : null
 
   const showForm = status === 'none' || ((status === 'rejected' || status === 'revoked') && reapply)
   const upgrading = accountType === 'personal'
 
   const submit = async () => {
-    if (businessName.trim().length < 2) { showToastMessage('Enter your business name', 'error'); return }
+    const nErr = displayNameError(businessName)
+    if (nErr) { showToastMessage(nErr, 'error'); setStep(2); return }
     if (description.trim().length < 10) { showToastMessage('Tell us why you need a business account', 'error'); return }
     if (!docs.length) { showToastMessage('Add at least one document - an ID or a photo of your shop', 'error'); return }
     setSubmitting(true)
@@ -91,22 +97,47 @@ export function MerchantApplyPage() {
               </div>
             </div>
 
+            <p className="text-xs font-semibold text-text-muted px-1">Step {step} of 3</p>
+            {step === 1 && (
+              <div className="bg-surface border border-border rounded-3xl p-5 space-y-4">
+                <div>
+                  <p className="text-[15px] font-bold text-text-primary">What kind of business?</p>
+                  <p className="text-xs text-text-muted mt-0.5 mb-3">Pick the closest - customers see it, and it sets the words MeshPort uses for you.</p>
+                  <CategoryCards value={businessType} onChange={setBusinessType} />
+                </div>
+                <button onClick={() => setStep(2)}
+                  className="w-full py-3 rounded-2xl text-white text-sm font-semibold active:scale-95 transition-transform"
+                  style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>Continue</button>
+              </div>
+            )}
+            {step === 2 && (
+              <div className="bg-surface border border-border rounded-3xl p-5 space-y-4">
+                <div>
+                  <p className="text-[15px] font-bold text-text-primary">{ask.label}</p>
+                  <p className="text-xs text-text-muted mt-0.5 mb-3">Your customers see this when they make payment. It's your display name.</p>
+                  <input value={businessName} onChange={e => setBusinessName(e.target.value)} maxLength={50} placeholder={`e.g. ${ask.example}`} className={input} autoFocus />
+                  <p className={`text-xs mt-2 ${nameError ? 'text-danger' : 'text-text-muted'}`}>{nameError ?? "2–50 characters. Letters, numbers, spaces and & ' . , -"}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => setStep(1)} className="py-3 rounded-2xl text-sm font-semibold border border-border text-text-primary active:scale-95 transition-transform">Back</button>
+                  <button onClick={() => { const e = displayNameError(businessName); if (e) { showToastMessage(e, 'error'); return } setStep(3) }}
+                    className="py-3 rounded-2xl text-white text-sm font-semibold active:scale-95 transition-transform"
+                    style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>Continue</button>
+                </div>
+              </div>
+            )}
+            {step === 3 && (
             <div className="bg-surface border border-border rounded-3xl p-5 space-y-4">
-              <div>
-                <p className="text-xs font-semibold text-text-secondary mb-2">Business name</p>
-                <input value={businessName} onChange={e => setBusinessName(e.target.value)} maxLength={80} placeholder="e.g. Sunil Store" className={input} />
-              </div>
-              <div>
-                <p className="text-[15px] font-bold text-text-primary">What kind of business?</p>
-                <p className="text-xs text-text-muted mt-0.5 mb-3">Pick the closest - it sets the words MeshPort uses for you.</p>
-                <CategoryCards value={businessType} onChange={setBusinessType} />
-              </div>
+              <button type="button" onClick={() => setStep(2)} className="w-full text-left rounded-2xl border border-border px-4 py-3 active:bg-border/30">
+                <span className="block text-[15px] font-bold text-text-primary">{businessName.trim()}</span>
+                <span className="block text-xs text-text-muted mt-0.5">{businessType} · tap to change</span>
+              </button>
               <div>
                 <p className="text-xs font-semibold text-text-secondary mb-2">Contact (email or phone) - optional</p>
                 <input value={contact} onChange={e => setContact(e.target.value)} maxLength={120} placeholder="How can we reach you?" className={input} />
               </div>
               <div>
-                <p className="text-xs font-semibold text-text-secondary mb-2">Why do you need a business account?</p>
+                <p className="text-xs font-semibold text-text-secondary mb-2">What do you sell, and why do you need a business account?</p>
                 <textarea value={description} onChange={e => setDescription(e.target.value)} maxLength={500} rows={3}
                   placeholder="What you sell and how customers will pay you" className={`${input} resize-none`} />
               </div>
@@ -124,6 +155,7 @@ export function MerchantApplyPage() {
                 {submitting ? 'Submitting…' : 'Apply for business account'}
               </button>
             </div>
+            )}
           </>
         ) : application && (
           <div className="bg-surface border border-border rounded-3xl p-6 flex flex-col items-center text-center gap-3">

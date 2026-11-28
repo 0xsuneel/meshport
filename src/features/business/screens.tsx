@@ -23,7 +23,7 @@ import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName, setShopContact, type BusinessDoc } from '@/lib/merchant'
 import { receiptNumber } from '@/lib/receiptNumber'
 import { BusinessDocsField } from '@/features/merchant/BusinessDocsField'
-import { BUSINESS_CATEGORIES, toCategory, useBizTerms, cap } from '@/lib/businessCategories'
+import { BUSINESS_CATEGORIES, toCategory, useBizTerms, cap, nameAskFor, displayNameError } from '@/lib/businessCategories'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/ui/Avatar'
 import { chainLogoSrc } from '@/lib/chainLogos'
@@ -836,7 +836,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
 
   return (
     <BusinessScreen open={open} title="Business profile" onBack={onBack}
-      footer={canApply ? <PrimaryBtn disabled={busy || bizName.trim().length < 2 || reason.trim().length < 10 || !docs.length} onClick={submit}>{busy ? 'Sending…' : 'Send for review'}</PrimaryBtn>
+      footer={canApply ? <PrimaryBtn disabled={busy || !!displayNameError(bizName) || reason.trim().length < 10 || !docs.length} onClick={submit}>{busy ? 'Sending…' : 'Send for review'}</PrimaryBtn>
         : closed ? <PrimaryBtn onClick={() => { setBizName(n => n || appliedName); setAgain(true) }}>Apply again</PrimaryBtn> : undefined}>
       <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
         {/* Name and logo customers see on the pay page, receipts and notifications */}
@@ -878,11 +878,12 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
         <ProfileStatusCard {...card} />
         {canApply ? (
           <>
-            <Field label="Registered business name" hint="As on your registration documents. It's also your display name - the name customers see when they pay - until you change it.">
-              <TextInput value={bizName} onChange={e => setBizName(e.target.value)} maxLength={60} placeholder="e.g. Royal Bakes" />
-            </Field>
-            <Field label="Type">
+            {/* As Paytm: the category first, then the name in its words (it becomes the display name). */}
+            <Field label="What kind of business?">
               <ChipSelect options={BUSINESS_CATEGORIES.map(t => ({ id: t, label: t }))} value={bizType} onChange={setBizType} />
+            </Field>
+            <Field label={nameAskFor(bizType).label} hint={(bizName.trim() && displayNameError(bizName)) || 'Your customers see this when they make payment. 2–50 characters.'}>
+              <TextInput value={bizName} onChange={e => setBizName(e.target.value)} maxLength={50} placeholder={`e.g. ${nameAskFor(bizType).example}`} />
             </Field>
             <Field label="Why do you need a business account?" hint={`${reason.trim().length}/10 characters minimum`}>
               <textarea value={reason} onChange={e => setReason(e.target.value)} maxLength={500} rows={4}
