@@ -11,7 +11,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { splitForCode, type SplitSummary } from '@/lib/splits'
-import { CheckCircle2, Clock, Receipt } from 'lucide-react'
+import { CheckCircle2, Clock, Receipt, FileDown } from 'lucide-react'
+import { usePrint } from '@/features/business/printArea'
+import { BillDocument } from './BillDocument'
+import { useQr } from './RequestResult'
 import { AnimatePresence } from 'framer-motion'
 import { cardInnerWidth } from '@/features/chat/chatCard'
 import { formatAmount } from '@/lib/utils'
@@ -22,6 +25,7 @@ import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
   watchPayment, getPayment, withLocalPayment, orderLabel, orderKindOf, orderTitle, expiryText, STATUS_LABEL, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type PaymentView,
   billLines,
+  paymentLink,
 } from '@/lib/merchantPay'
 
 const CHAIN_LABEL: Record<string, string> = {
@@ -263,6 +267,12 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
   v: PaymentView; isMine: boolean; isBill: boolean; loading: boolean; canPay: boolean
   onPay: () => void; onClose: () => void
 }) {
+  // A bill: Save as PDF (the bill, or its receipt once paid) - for the
+  // business and the customer alike.
+  const printer = usePrint()
+  const billInfo = useBillDetails(v.code, isBill)
+  const payLink = paymentLink(v.code)
+  const pdfQr = useQr(isBill && v.status !== 'paid' ? payLink : null)
   const paid = v.status === 'paid'
   const closed = ['expired', 'cancelled', 'failed'].includes(v.status)
   const orderKind = orderKindOf(v)
@@ -331,7 +341,12 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
       ...(hash && explorerHref ? [{ label: 'Explorer', value: 'View on ArcScan', href: explorerHref }] : []),
     ],
     action: canPay ? { label: `${isBill ? 'Pay invoice' : 'Pay'} · $${formatAmount(due)}`, onClick: onPay } : undefined,
+    secondaryAction: isBill && v.items?.length && !loading ? {
+      label: paid ? 'Save receipt as PDF' : 'Save bill as PDF', icon: <FileDown size={17} color="var(--brand-text)" />,
+      onClick: () => printer.print(<BillDocument intent={{ ...v, billToName: billInfo?.billToName ?? null }} details={billInfo}
+        business={v.storeName ? `${v.merchantName} · ${v.storeName}` : v.merchantName} taxId={v.storeTaxId ?? null} link={payLink} qr={pdfQr} paid={paid} />),
+    } : undefined,
     promo: false,
   }
-  return <TxDetailPage detail={detail} onClose={onClose} />
+  return <>{printer.portal}<TxDetailPage detail={detail} onClose={onClose} /></>
 }

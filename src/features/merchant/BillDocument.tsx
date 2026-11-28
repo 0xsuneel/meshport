@@ -4,11 +4,18 @@
 // link and its QR). Printed on white (printArea), so its colours are fixed.
 import { billLines, displayOrderNumber, type BillDetails, type MerchantIntent } from '@/lib/merchantPay'
 
+/** What a bill document needs - a MerchantIntent, or a PaymentView (the chat card). */
+export type BillDocSource = Pick<MerchantIntent, 'amount' | 'createdAt' | 'paidAt'> & {
+  items?: MerchantIntent['items'] | null; taxPercent?: number; orderNumber?: string | null; dueDate?: string | null
+  customerUsername?: string | null; note?: string | null
+  billToName?: string | null; billToContact?: string | null; bill?: BillDetails | null
+}
+
 const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
 const day = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 
 export function BillDocument({ intent, details, business, taxId, link, qr, paid }: {
-  intent: MerchantIntent
+  intent: BillDocSource
   details?: BillDetails | null
   business: string
   taxId?: string | null
@@ -32,7 +39,7 @@ export function BillDocument({ intent, details, business, taxId, link, qr, paid 
           {taxId && <div style={{ fontSize: 12.5, color: muted, marginTop: 2 }}>Tax ID {taxId}</div>}
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 0.5 }}>{paid ? 'RECEIPT' : 'BILL'} {num}</div>
+          <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 0.5 }}>{`${paid ? 'RECEIPT' : 'BILL'} ${num}`.trim()}</div>
           <div style={{ fontSize: 12.5, color: muted, marginTop: 4 }}>{day(intent.createdAt)}</div>
           {intent.dueDate && !paid && <div style={{ fontSize: 12.5, color: muted }}>Due {day(intent.dueDate)}</div>}
           {paid && intent.paidAt && <div style={{ fontSize: 12.5, color: '#047857', fontWeight: 700 }}>Paid {day(intent.paidAt)}</div>}

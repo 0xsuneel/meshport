@@ -68,6 +68,8 @@ export interface TxDetail {
   reason?: ReactNode
   /** A button at the foot (e.g. "Open Recover"). */
   action?: { label: string; onClick: () => void }
+  /** A second, outlined button under it (a bill's Save as PDF). */
+  secondaryAction?: { label: string; onClick: () => void; icon?: ReactNode }
   /** Unused since 19 Nov 2026 (history cards show no offers); kept so callers needn't change. */
   promo?: PromoFeature | boolean
 }
@@ -372,6 +374,12 @@ export function TxDetailPage({ detail, onClose }: { detail: TxDetail; onClose: (
             <button type="button" onClick={d.action.onClick}
               style={{ width: '100%', marginTop: 14, border: 'none', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', cursor: 'pointer' }}>
               {d.action.label}
+            </button>
+          )}
+          {d.secondaryAction && (
+            <button type="button" onClick={d.secondaryAction.onClick}
+              style={{ width: '100%', marginTop: 10, borderRadius: 14, padding: 13, fontSize: 14.5, fontWeight: 700, color: 'var(--text-primary)', background: 'var(--surface)', border: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              {d.secondaryAction.icon}{d.secondaryAction.label}
             </button>
           )}
           {/* No "For you" offers on a history card (19 Nov 2026) - only on success screens. */}
