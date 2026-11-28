@@ -2,16 +2,16 @@
 // taking payments (stores, staff, customers, reports, payouts, cash out,
 // profile and limits, voice alerts, help, activity log). Opened from the home tile and
 // the header's menu button.
-import { ChevronRight, Store, Users, UserRound, BarChart2, Send, Banknote, ShieldCheck, Mic, HelpCircle, History, SendHorizontal, ArrowLeftRight, Globe, Settings, CalendarClock } from 'lucide-react'
+import { ChevronRight, Store, Users, UserRound, BarChart2, Send, Banknote, ShieldCheck, Mic, HelpCircle, History, SendHorizontal, ArrowLeftRight, Globe, Settings, CalendarClock, QrCode, Link2 } from 'lucide-react'
 import { BusinessScreen } from './ui'
 
 export type ToolId = 'team' | 'customers' | 'reports' | 'activity' | 'payouts' | 'cashout' | 'profile' | 'voice' | 'help'
   // Account tab (27 Nov): links out of Business - pay, swap, cross-chain, the app's settings.
-  | 'pay' | 'swap' | 'multichain' | 'settings' | 'summaries'
+  | 'pay' | 'swap' | 'multichain' | 'settings' | 'summaries' | 'counters' | 'links'
 
 const ICONS: Record<ToolId, React.ElementType> = {
   team: Store, customers: UserRound, reports: BarChart2, activity: History, payouts: Send, cashout: Banknote, profile: ShieldCheck, voice: Mic, help: HelpCircle,
-  pay: SendHorizontal, swap: ArrowLeftRight, multichain: Globe, settings: Settings, summaries: CalendarClock,
+  pay: SendHorizontal, swap: ArrowLeftRight, multichain: Globe, settings: Settings, summaries: CalendarClock, counters: QrCode, links: Link2,
 }
 
 export type ToolRow = { id: ToolId; label: string; hint: string }

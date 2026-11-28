@@ -102,7 +102,9 @@ function ShareSheet({ open, onClose, title, url, text, subject }: { open: boolea
 // ── Shop QR ──────────────────────────────────────────────────────────────
 
 /** The store's fixed QR: customers scan, type the amount and pay. */
-function ShopQrBody({ active, storeName, outlet, handle: _handle, payTo }: { active: boolean; storeName: string; outlet?: string | null; handle: string; payTo?: string }) {
+export function ShopQrBody({ active, storeName, outlet, handle: _handle, payTo, url: urlFor, place, caption = 'Scan, type the amount and pay' }: { active: boolean; storeName: string; outlet?: string | null; handle: string; payTo?: string
+  /** A counter's or a payment link's own QR: its link, what it's called ("Counter 2") and the line under it. */
+  url?: string; place?: { label: string; value: string }; caption?: string }) {
   // payTo: whose pay link (staff mode: the business owner's, never the staff's own).
   // The QR names the outlet (?store=) so each store's payments land in that
   // store; it changes as soon as the owner switches stores.
@@ -110,7 +112,7 @@ function ShopQrBody({ active, storeName, outlet, handle: _handle, payTo }: { act
   const { storeId } = useContext(RequestMaker)
   const username = payTo ?? own
   // The same link (and QR) as Receive's QR for this store.
-  const url = shopPayLink(username ?? '', storeId)
+  const url = urlFor ?? shopPayLink(username ?? '', storeId)
   const qr = useQr(active && username ? url : null)
   const sticker = usePrint()
   // Under the name: what kind of business (and which store) - not the
@@ -123,8 +125,8 @@ function ShopQrBody({ active, storeName, outlet, handle: _handle, payTo }: { act
   const { copy, copied } = useShare()
   // Download / Share QR - the same as Home's and Receive's QR card.
   // Saves the QR card (the same card as on screen, light), not the bare code.
-  const qrFile = async () => qr ? qrCardFile({ data: url, title: storeName, subtitle: sub, tag: 'USDC · any network', caption: 'Scan, type the amount and pay' },
-    `meshport-shop-qr${outlet ? `-${outlet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : ''}.png`) : null
+  const qrFile = async () => qr ? qrCardFile({ data: url, title: storeName, subtitle: place ? place.value : sub, tag: 'USDC · any network', caption },
+    `meshport-${place ? place.value.toLowerCase().replace(/[^a-z0-9]+/g, '-') : `shop-qr${outlet ? `-${outlet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : ''}`}.png`) : null
   const downloadQr = async () => {
     const f = await qrFile(); if (!f) return
     const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000)
@@ -142,16 +144,16 @@ function ShopQrBody({ active, storeName, outlet, handle: _handle, payTo }: { act
     <div className="flex flex-col items-center text-center px-5 pt-6 pb-6 gap-5">
       {/* The store and its pay link over the QR (tap the link to copy), like
           Receive's QR - in place of the name lines and the link box below. */}
-      <QrCard dataUrl={qr} caption="Scan, type the amount and pay"
+      <QrCard dataUrl={qr} caption={caption}
         top={<div className="w-full flex gap-2">
-          <QrInfoBox label="Store" value={outlet || storeName} mono={false} />
+          <QrInfoBox label={place?.label ?? 'Store'} value={place?.value ?? (outlet || storeName)} mono={false} />
           <QrInfoBox label="Pay link" value={copied ? 'Copied' : 'Tap to copy'} mono={false} onCopy={() => void copy(url)} copied={copied} />
         </div>} />
       <div className="w-full grid grid-cols-2 gap-2">
         <GhostBtn disabled={!qr} onClick={() => void downloadQr()}><span className="inline-flex items-center gap-2"><Download className="size-4" /> Download QR</span></GhostBtn>
         <GhostBtn disabled={!qr} onClick={() => void shareQr()}><span className="inline-flex items-center gap-2"><Share2 className="size-4" /> Share QR</span></GhostBtn>
       </div>
-      <GhostBtn disabled={!qr} onClick={() => sticker.print(<QrSticker dataUrl={qr} storeName={outlet ? `${storeName} · ${outlet}` : storeName} handle={category ?? 'Scan & pay'} />)}>
+      <GhostBtn disabled={!qr} onClick={() => sticker.print(<QrSticker dataUrl={qr} storeName={place ? `${storeName} · ${place.value}` : outlet ? `${storeName} · ${outlet}` : storeName} handle={category ?? 'Scan & pay'} />)}>
         <span className="inline-flex items-center gap-2"><Printer className="size-4" /> Print counter sticker</span>
       </GhostBtn>
       {sticker.portal}
@@ -171,11 +173,12 @@ function businessHeading(business: string, avatar: string | null | undefined, li
     : <BusinessTitle business={business} avatar={avatar} line={line} />
 }
 
-export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo, storePick, avatar }: { open: boolean; onBack: () => void; storeName: string; outlet?: string | null; handle: string; payTo?: string; storePick?: ScreenStorePick; avatar?: string | null }) {
+export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo, storePick, avatar, url, place }: { open: boolean; onBack: () => void; storeName: string; outlet?: string | null; handle: string; payTo?: string; storePick?: ScreenStorePick; avatar?: string | null
+  /** Staff at a counter: that counter's own QR. */ url?: string; place?: { label: string; value: string } }) {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   return (
     <BusinessScreen open={open} title="Shop QR" onBack={onBack} heading={isDesktop ? undefined : businessHeading(storeName, avatar, handle, storePick)}>
-      <ShopQrBody active={open} storeName={storeName} outlet={outlet} handle={handle} payTo={payTo} />
+      <ShopQrBody active={open} storeName={storeName} outlet={outlet} handle={handle} payTo={payTo} url={url} place={place} />
     </BusinessScreen>
   )
 }

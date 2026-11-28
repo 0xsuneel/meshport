@@ -32,7 +32,7 @@ export interface Payment {
   reference?: string | null
 }
 
-export type PaymentViaKind = 'shop' | 'charge' | 'bill' | 'request' | 'transfer'
+export type PaymentViaKind = 'shop' | 'charge' | 'bill' | 'request' | 'transfer' | 'link'
 export interface PaymentVia { kind: PaymentViaKind; tag: string; detail?: string | null }
 
 export interface Chain {

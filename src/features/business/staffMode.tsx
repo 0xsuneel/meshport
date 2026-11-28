@@ -14,6 +14,7 @@ import { ChevronRight, ClipboardList, FileText, QrCode, BadgeDollarSign, Receipt
 import { displayOrderNumber, myAuthUid, type MerchantPayment } from '@/lib/merchantPay'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, StatementBody } from './screens'
 import { setDueDate } from '@/lib/businessBills'
+import { listCounters, counterQrUrl, type Counter } from '@/lib/businessCounters'
 import { logBusiness } from '@/lib/businessActivity'
 import { StaffBanner, StaffModeHeader, PaymentsView, BizHomeView, PaymentRow, Skeleton, BusinessScreen, useHubShift, type Payment } from './ui'
 import { chainLabel } from './settlement'
@@ -34,6 +35,9 @@ export function StaffModePage() {
   const [raw, setRaw] = useState<MerchantPayment[]>([])
   const [screen, setScreen] = useState<'qr' | 'receive' | 'payments' | 'requests' | 'statement' | null>(null)
   const [me, setMe] = useState<string | null>(null)
+  // The counters this staff member is added to (only theirs are visible to them).
+  const [myCounters, setMyCounters] = useState<Counter[]>([])
+  useEffect(() => { listCounters().then(setMyCounters).catch(() => {}) }, [])
   // Charge or Bill: each its own page, like the owner's.
   const [collect, setCollect] = useState<'charge' | 'bill'>('charge')
   useEffect(() => { void myAuthUid().then(setMe) }, [])
@@ -94,6 +98,7 @@ export function StaffModePage() {
   )
 
   const manager = active.role === 'manager'
+  const myCounter = myCounters.find(c => !active.storeId || !c.storeId || c.storeId === active.storeId) ?? null
   const back = () => setScreen(null)
   const openStatement = () => { setScreen('statement'); void staffRefunds(active.ownerAuthUid).then(setRefunds).catch(() => setRefunds([])) }
   const where = active.storeName ? `${active.ownerName} · ${active.storeName}` : active.ownerName
@@ -164,7 +169,9 @@ export function StaffModePage() {
         // Staff actions go into the owner's activity log.
         log: (action, x) => { void logBusiness(action, { ...x, owner: active.ownerAuthUid }) },
       }}>
-        <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={active.ownerName} outlet={active.storePublicName} handle={`${active.ownerUsername}.arc`} payTo={active.ownerUsername} />
+        <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={active.ownerName} outlet={active.storePublicName} handle={`${active.ownerUsername}.arc`} payTo={active.ownerUsername}
+          // Staff at a counter show that counter's QR (its payments name the counter).
+          {...(myCounter ? { url: counterQrUrl(window.location.origin, active.ownerUsername, myCounter), place: { label: 'Counter', value: myCounter.name } } : {})} />
         <ReceiveScreen key={collect} only={collect} open={screen === 'receive'} onBack={back} storeName={active.ownerName} />
       </RequestMaker.Provider>
       {/* Same page push and header as every other Business screen. */}

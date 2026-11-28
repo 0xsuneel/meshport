@@ -32,7 +32,7 @@ export function PayerAvatar({ payment, size }: { payment: Payment; size: number 
   )
 }
 
-const VIA_TINT = { shop: 'mint', charge: 'butter', bill: 'peach', request: 'sky', transfer: 'sky' } as const
+const VIA_TINT = { shop: 'mint', charge: 'butter', bill: 'peach', request: 'sky', transfer: 'sky', link: 'sky' } as const
 
 export function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payment) => void }) {
   const tag = payment.status === 'to_settle' ? ' · to settle' : payment.status === 'refunded' ? ' · refunded' : payment.partlyRefunded ? ` · partly refunded ${payment.partlyRefunded}` : ''

@@ -153,7 +153,8 @@ export function PayPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (shop) return <ShopPayPage shop={shop} initialAmount={requestedAmount} wallet={recipient?.wallet_address ?? null} />
+  // A counter's QR (?counter=): the payment is tagged with that counter.
+  if (shop) return <ShopPayPage shop={shop} initialAmount={requestedAmount} wallet={recipient?.wallet_address ?? null} counterId={searchParams.get('counter')} />
 
   if (loading || shop === undefined) {
     return (

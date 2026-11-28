@@ -33,6 +33,9 @@ const shopCache = new Map<string, ShopInfo | null>()
 
 /** The business behind a username (null for personal accounts). */
 export async function getShopInfo(username: string, storeId: string | null): Promise<ShopInfo | null> {
+  if (import.meta.env.VITE_E2E === '1') {
+    try { if (localStorage.getItem('meshport_e2e_paylink') === '1') return { businessName: 'Sharma General Store', username, storeId: null, storeName: null, avatarUrl: null, verified: true, category: 'Grocery / Supermarket', address: null, mcc: '5411', contact: null } as ShopInfo } catch { /* storage off */ }
+  }
   const key = `${username}|${storeId ?? ''}`
   if (shopCache.has(key)) return shopCache.get(key)!
   const { data, error } = await supabase.rpc('shop_info', { p_username: username, p_store: storeId })

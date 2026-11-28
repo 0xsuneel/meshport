@@ -14,6 +14,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { errorText } from '@/lib/errorText'
+import { openPayLinkOrder, type PublicPayLink } from '@/lib/businessCounters'
 
 // Shop payments: cents, up to $100,000 - the same caps typed and on the keys.
 const SHOP_DECIMALS = 2
@@ -88,10 +89,14 @@ function ShopAmount({ value, onType, balance, compact = false, approx }: {
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-export function ShopPayPage({ shop, initialAmount, wallet }: {
+export function ShopPayPage({ shop, initialAmount, wallet, counterId = null, link = null }: {
   shop: ShopInfo; initialAmount?: string | null
   /** The business's wallet (PayPage already looked it up), so Pay can open the pay screen at once. */
   wallet?: string | null
+  /** A counter's own QR (?counter=): the payment is tagged with that counter. */
+  counterId?: string | null
+  /** A payment link (/l/<shop>/<slug>): its title, price (or any amount), and whether it asks for a name and phone. */
+  link?: { slug: string; info: PublicPayLink } | null
 }) {
   const navigate = useNavigate()
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -102,7 +107,9 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
   const signedIn = useAuthStore(s => s.isAuthenticated)
   // The same Arc USDC balance the pay screen shows (kept per wallet by the store).
   const balance = useWalletStore(s => s.balance)
-  const [amount, setAmount] = useState(() => initialAmount && Number(initialAmount) > 0 ? String(Number(initialAmount)) : '')
+  const fixed = link?.info.amount ?? null
+  const [amount, setAmount] = useState(() => fixed !== null ? String(fixed) : initialAmount && Number(initialAmount) > 0 ? String(Number(initialAmount)) : '')
+  const [payer, setPayer] = useState({ name: '', contact: '' })
   const localRate = useLocalRate()
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -122,17 +129,24 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
     if (Number(next) <= SHOP_MAX) setAmount(next)
   }
   const value = Number(amount) || 0
-  const limitError = !value ? null
+  const limitError = link ? (!link.info.open ? "This link isn't taking payments right now" : link.info.askContact && value && !payer.name.trim() ? 'Add your name' : null)
+    : !value ? null
     : limits.min != null && value < limits.min ? `The smallest payment here is ${money(limits.min)}`
     : limits.max != null && value > limits.max ? `The largest payment here is ${money(limits.max)}` : null
-  const limitHint = limits.min != null && limits.max != null ? `${money(limits.min)} – ${money(limits.max)}`
+  const limitHint = link ? null : limits.min != null && limits.max != null ? `${money(limits.min)} – ${money(limits.max)}`
     : limits.min != null ? `From ${money(limits.min)}` : limits.max != null ? `Up to ${money(limits.max)}` : null
 
   const go = async () => {
     setBusy(true)
     try {
-      const { data, error } = await supabase.rpc('shop_open_order', { p_username: shop.username, p_amount: value, p_store: shop.storeId, p_note: note || null })
-      if (error) throw new Error(error.message)
+      let data: string
+      if (link) data = await openPayLinkOrder(shop.username, link.slug, fixed === null ? value : null, link.info.askContact ? payer : undefined)
+      else {
+        const r = await supabase.rpc('shop_open_order', { p_username: shop.username, p_amount: value, p_store: shop.storeId, p_note: note || null, ...(counterId ? { p_counter: counterId } : {}) })
+        if (r.error) throw new Error(r.error.message)
+        data = String(r.data)
+      }
+      const noteOut = link ? link.info.title : note
       // Signed in: straight to the pay screen's Review - the amount was just
       // typed here, so there is nothing to confirm on an order page. The
       // order page stays for paying from another wallet (it picks a network).
@@ -149,7 +163,7 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
         const to = `${shop.username}|${wallet}|${shopTitle(shop)}|${shop.avatarUrl ?? ''}`
         // &store: kept on the payment in history, so "Pay again" reopens this store.
         const storeQ = (shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : '')
-          + (note.trim() ? `&note=${encodeURIComponent(note.trim().slice(0, 140))}` : '')
+          + (noteOut.trim() ? `&note=${encodeURIComponent(noteOut.trim().slice(0, 140))}` : '')
           // What the payment screens show under the name instead of the username.
           + (shopSubline(shop) ? `&shopline=${encodeURIComponent(shopSubline(shop))}` : '')
         navigate(`/pay?to=${encodeURIComponent(to)}&amount=${encodeURIComponent(String(value))}&merchantPay=${encodeURIComponent(String(data))}&review=1${storeQ}`)
@@ -158,7 +172,7 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
       if (useAuthStore.getState().isAuthenticated) {
         const { getPayment, orderPaySendUrl, isOrderPayable } = await import('@/lib/merchantPay')
         const v = await getPayment(String(data)).catch(() => null)
-        if (v && isOrderPayable(v)) { navigate(`${orderPaySendUrl(v)}&review=1${shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : ''}${note.trim() ? `&note=${encodeURIComponent(note.trim().slice(0, 140))}` : ''}${shopSubline(shop) ? `&shopline=${encodeURIComponent(shopSubline(shop))}` : ''}`, { state: { merchantView: v } }); return }
+        if (v && isOrderPayable(v)) { navigate(`${orderPaySendUrl(v)}&review=1${shop.storeId ? `&store=${encodeURIComponent(shop.storeId)}` : ''}${noteOut.trim() ? `&note=${encodeURIComponent(noteOut.trim().slice(0, 140))}` : ''}${shopSubline(shop) ? `&shopline=${encodeURIComponent(shopSubline(shop))}` : ''}`, { state: { merchantView: v } }); return }
       }
       navigate(`/paylink/r/${data}`)
     } catch (e) {
@@ -201,7 +215,13 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
               <Phone className="w-3 h-3 shrink-0" /> <span className="truncate">{shop.contact}</span>
             </p>
           )}
-          {shop.address && !short && (
+          {link && (
+            <div className="mt-3 w-full rounded-2xl bg-surface border border-border px-4 py-3 text-left">
+              <p className="text-[15px] font-bold text-text-primary">{link.info.title}</p>
+              {link.info.description && <p className="text-[13px] text-text-secondary mt-0.5">{link.info.description}</p>}
+            </div>
+          )}
+          {shop.address && !short && !link && (
             <p className="mt-0.5 text-[12px] text-text-muted flex items-center justify-center gap-1 max-w-full">
               <MapPin className="w-3 h-3 shrink-0" /> <span className="truncate">{shop.address}</span>
             </p>
@@ -211,10 +231,18 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
           {/* The amount, large and centred: typed straight in on desktop; on
               a phone the keys sit right in the page under it. */}
           <div className={isDesktop ? '' : 'flex-1 flex flex-col justify-center'}>
-            <ShopAmount value={amount} onType={isDesktop ? type : undefined} balance={signedIn ? balance : null} compact={short}
+            <ShopAmount value={amount} onType={isDesktop && fixed === null ? type : undefined} balance={signedIn ? balance : null} compact={short}
               approx={localRate && Number(amount) > 0 ? `≈ ${formatFiat(Number(amount) * localRate.rate, localRate.currency)}` : null} />
           </div>
-          <div className="shrink-0 w-full max-w-[280px] mx-auto">
+          {link?.info.askContact && (
+            <div className="shrink-0 w-full flex flex-col gap-2">
+              <input value={payer.name} onChange={e => setPayer(p => ({ ...p, name: e.target.value.slice(0, 80) }))} placeholder="Your name" aria-label="Your name"
+                className="w-full h-12 px-4 rounded-2xl bg-card border border-border text-[15px] text-text-primary focus:outline-none focus:ring-2 focus:ring-brand/40" />
+              <input value={payer.contact} onChange={e => setPayer(p => ({ ...p, contact: e.target.value.slice(0, 120) }))} placeholder="Phone (with country code) or email" aria-label="Your phone or email" inputMode="email"
+                className="w-full h-12 px-4 rounded-2xl bg-card border border-border text-[15px] text-text-primary focus:outline-none focus:ring-2 focus:ring-brand/40" />
+            </div>
+          )}
+          {!link && <div className="shrink-0 w-full max-w-[280px] mx-auto">
             <input
               type="text"
               value={note}
@@ -224,8 +252,8 @@ export function ShopPayPage({ shop, initialAmount, wallet }: {
               className="w-full bg-transparent text-sm ![font-size:max(var(--fs-field,0px),0.875rem)] text-center text-text-secondary placeholder:text-text-muted border-b border-border pb-1.5 outline-none focus:border-brand-text transition-colors"
               aria-label="Payment note"
             />
-          </div>
-          {!isDesktop && (
+          </div>}
+          {!isDesktop && fixed === null && (
             <div className="shrink-0 pb-2"><AmountKeypad variant="inline" open value={amount} onChange={setAmount} token="USDC"
               decimals={SHOP_DECIMALS} maxValue={SHOP_MAX} showMax={false} /></div>
           )}

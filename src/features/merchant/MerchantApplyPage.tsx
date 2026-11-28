@@ -13,10 +13,9 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useUIStore } from '@/store'
 import { useMerchant, applyForMerchant, type BusinessDoc } from '@/lib/merchant'
 import { BusinessDocsField } from './BusinessDocsField'
-import { BUSINESS_CATEGORIES, toCategory } from '@/lib/businessCategories'
+import { toCategory } from '@/lib/businessCategories'
+import { CategoryCards } from './CategoryCards'
 import { errorText } from '@/lib/errorText'
-
-const TYPES = BUSINESS_CATEGORIES
 
 export function MerchantApplyPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -98,15 +97,9 @@ export function MerchantApplyPage() {
                 <input value={businessName} onChange={e => setBusinessName(e.target.value)} maxLength={80} placeholder="e.g. Sunil Store" className={input} />
               </div>
               <div>
-                <p className="text-xs font-semibold text-text-secondary mb-2">Business type</p>
-                <div className="flex flex-wrap gap-2">
-                  {TYPES.map(t => (
-                    <button key={t} onClick={() => setBusinessType(t)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${businessType === t ? 'bg-brand text-white' : 'bg-surface text-text-secondary border border-border'}`}>
-                      {t}
-                    </button>
-                  ))}
-                </div>
+                <p className="text-[15px] font-bold text-text-primary">What kind of business?</p>
+                <p className="text-xs text-text-muted mt-0.5 mb-3">Pick the closest - it sets the words MeshPort uses for you.</p>
+                <CategoryCards value={businessType} onChange={setBusinessType} />
               </div>
               <div>
                 <p className="text-xs font-semibold text-text-secondary mb-2">Contact (email or phone) - optional</p>

@@ -32,7 +32,9 @@ import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { listMyPayments, listMyIntents, isAskedOrder, listChainReceipts, subscribeMerchantPayments, subscribeChainReceipts, createPaymentRequest, displayOrderNumber, orderTitle, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
-import { listStores, listStaff, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
+import { listStores, listStaff, activeStoreId, setActiveStoreId, type Store, type StaffMember } from '@/lib/businessTeam'
+import { listCounters, listPayLinks, type Counter, type PayLink } from '@/lib/businessCounters'
+import { CountersScreen, PayLinksScreen } from './countersLinks'
 import { StorePicker } from '@/features/merchant/StorePicker'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, spokenLine, MIN_AMOUNTS } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockSigner } from './settlement'
@@ -65,9 +67,9 @@ import {
 } from './ui'
 import { errorText } from '@/lib/errorText'
 
-type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools' | 'activity'
+type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools' | 'activity' | 'counters' | 'links'
 /** Screens a link (?screen=) can open - all but a payment's receipt. */
-const LINKABLE: ScreenId[] = ['qr', 'receive', 'customers', 'reports', 'profile', 'help', 'cashout', 'team', 'payouts', 'tools', 'activity']
+const LINKABLE: ScreenId[] = ['qr', 'receive', 'customers', 'reports', 'profile', 'help', 'cashout', 'team', 'payouts', 'tools', 'activity', 'counters', 'links']
 const linkedScreenOf = (q: URLSearchParams): ScreenId | null => {
   const v = q.get('screen') as ScreenId | null
   return v && LINKABLE.includes(v) ? v : null
@@ -230,8 +232,15 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
   const [payFilter, setPayFilter] = useState<'all' | 'refunded'>('all')
   useEffect(() => { listStores().then(setStores).catch(() => {}) }, [])
   // Staff names, for who took a payment (payments name the staff member).
-  const [staffNames, setStaffNames] = useState<Map<string, string>>(new Map())
-  useEffect(() => { listStaff().then(l => setStaffNames(new Map(l.filter(s => s.authUid).map(s => [s.authUid!, `${s.username}.arc`])))).catch(() => {}) }, [])
+  const [staffList, setStaffList] = useState<StaffMember[]>([])
+  useEffect(() => { listStaff().then(setStaffList).catch(() => {}) }, [])
+  const staffNames = useMemo(() => new Map(staffList.filter(s => s.authUid).map(s => [s.authUid!, `${s.username}.arc`])), [staffList])
+  // Counters (a QR each) and payment links (28 Nov).
+  const [counters, setCounters] = useState<Counter[]>([])
+  const [payLinks, setPayLinks] = useState<PayLink[]>([])
+  const reloadCounters = useCallback(() => { listCounters().then(setCounters).catch(() => {}) }, [])
+  const reloadLinks = useCallback(() => { listPayLinks().then(setPayLinks).catch(() => {}) }, [])
+  useEffect(() => { reloadCounters(); reloadLinks() }, [reloadCounters, reloadLinks])
   const reloadIntents = useCallback(() => { listMyIntents(500).then(setIntents).catch(() => setIntents(l => l ?? [])) }, [])
   useEffect(reloadIntents, [raw.length, tab, reloadIntents])
   // The picked store, else the main store (also after its store was removed).
@@ -279,7 +288,9 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
   // Bill #N (a bill is a document), or a direct transfer.
   const storeNameOf = (p: MerchantPayment) => stores.length > 1 ? stores.find(st => st.id === storeOf(p))?.name ?? null : null
   const viaOf = (p: MerchantPayment): PaymentVia => {
-    const st = storeNameOf(p)
+    const counter = p.counterId ? counters.find(c => c.id === p.counterId)?.name ?? null : null
+    const st = counter ?? storeNameOf(p)
+    if (p.linkId) return { kind: 'link', tag: 'Link', detail: payLinks.find(l => l.id === p.linkId)?.title ?? p.purpose }
     switch (p.orderKind) {
       case 'shop': return { kind: 'shop', tag: 'Shop QR', detail: st }
       case 'merchant_request': return { kind: 'charge', tag: 'Charge', detail: p.purpose || st }
@@ -289,20 +300,20 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
     }
   }
   const toRow = (p: MerchantPayment): Payment => ({
-    via: viaOf(p), store: stores.find(st => st.id === storeOf(p))?.name ?? null,
+    via: viaOf(p), store: (p.counterId ? counters.find(c => c.id === p.counterId)?.name : null) ?? stores.find(st => st.id === storeOf(p))?.name ?? null,
     staff: p.staffUid ? staffNames.get(p.staffUid) ?? 'Staff' : null, reference: p.reference ?? null,
     avatar: p.customerUsername ? avatars.get(p.customerUsername.toLowerCase().replace(/\.arc$/, '')) ?? null : null,
-    id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain), chainLogo: chainLogoSrc(p.chain),
+    id: p.id, from: !p.customerUsername && p.payerName ? p.payerName : who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain), chainLogo: chainLogoSrc(p.chain),
     time: p.createdAt, order: p.orderKind === 'bill' && p.orderNumber ? displayOrderNumber(p.orderNumber) : undefined, wallet: p.from, late: !!p.late, blocked: !!p.screenFlag,
     status: refundedIds.has(p.id) ? 'refunded' as const
       : p.chain !== 'Arc_Testnet' && p.status !== 'collected' && waitingOn.has(p.chain) ? 'to_settle' as const : 'received' as const,
     partlyRefunded: !refundedIds.has(p.id) && refundedOf(p.id) > 0 ? money(refundedOf(p.id)) : undefined,
   })
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
-  const payments: Payment[] = useMemo(() => periodRaw.map(toRow), [periodRaw, chains, refundedOf, refundedIds, avatars, stores, staffNames])
+  const payments: Payment[] = useMemo(() => periodRaw.map(toRow), [periodRaw, chains, refundedOf, refundedIds, avatars, stores, staffNames, counters, payLinks])
   // Payments screen: every payment, grouped by day (Today, Yesterday… headers).
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
-  const payList: Payment[] = useMemo(() => (root === 'payments' ? raw : storeRaw).map(toRow), [root, raw, storeRaw, chains, refundedOf, refundedIds, avatars, stores, staffNames])
+  const payList: Payment[] = useMemo(() => (root === 'payments' ? raw : storeRaw).map(toRow), [root, raw, storeRaw, chains, refundedOf, refundedIds, avatars, stores, staffNames, counters, payLinks])
 
   const today = useMemo(() => {
     const t = netOf(periodRaw)
@@ -746,11 +757,11 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
                   { id: 'qr', icon: QrCode, label: 'Show QR', tint: 'mint', onClick: () => { setCollectStart('qr'); open('receive')() } },
                   { id: 'charge', icon: BadgeDollarSign, label: 'Charge', tint: 'butter', onClick: () => { setCollectStart('charge'); open('receive')() } },
                   { id: 'bill', icon: ReceiptText, label: 'Bill', tint: 'peach', onClick: () => { setCollectStart('bill'); open('receive')() } },
-                  { id: 'link', icon: Link2, label: 'Pay link', tint: 'sky', onClick: sharePayLink },
+                  { id: 'link', icon: Link2, label: 'Pay links', tint: 'sky', onClick: open('links') },
                 ] },
                 { id: 'manage', title: 'Manage business', onViewAll: () => navigate('/biz/account'), items: [
                   { id: 'customers', icon: UserRound, label: terms.customers, tint: 'sky', onClick: () => navigate('/biz/customers') },
-                  { id: 'stores', icon: StoreIcon, label: terms.stores, tint: 'mint', onClick: open('team') },
+                  { id: 'counters', icon: StoreIcon, label: 'Counters', tint: 'mint', onClick: open('counters') },
                   { id: 'staff', icon: Users, label: 'Staff', tint: 'butter', onClick: open('team') },
                   { id: 'reports', icon: BarChart2, label: 'Reports', tint: 'peach', onClick: open('reports') },
                 ] },
@@ -834,7 +845,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
                 {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} mainStoreId={mainStoreId}
                   storeName={storeName} storeNameOf={i => stores.find(st => st.id === (i.storeId ?? mainStoreId))?.name ?? null} paymentsOf={i => paymentsByIntent.get(i.id) ?? []} refundedOf={p => refundedOf(p.id)} onRefund={refundFromOrder} />}
                 {tab === 'payments' && payView === 'payments' && (subRoot
-                  ? <BizPaymentsView loading={!loaded} payments={payList} onPayment={setDetail} refundedOf={refundedOf}
+                  ? <BizPaymentsView loading={!loaded} payments={payList} onPayment={setDetail} refundedOf={refundedOf} initialStore={query.get('counter') ?? ''}
                       initialDate={period.id === 'yesterday' ? 'yesterday' : period.id === 'week' ? 'week' : period.id === 'month' ? 'month' : 'today'}
                       openOrders={pending ? { count: pending.count, onOpen: () => setPayView('requests') } : undefined} onDownload={open('reports')} />
                   : <PaymentsView key={payFilter} initialFilter={payFilter} loading={!loaded} payments={payList} onPayment={setDetail} />)}
@@ -940,6 +951,8 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
             { title: 'Business', rows: [
               { id: 'profile', label: 'Business profile', hint: `${headerStatus === 'verified' ? 'Verified' : 'Complete your application'} · name, logo, tax ID` },
               { id: 'team', label: `${terms.stores} & staff`, hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers' },
+              { id: 'counters', label: 'Counters', hint: counters.length ? `${counters.length} counter${counters.length === 1 ? '' : 's'} · a QR each` : 'A QR for each till, window or table' },
+              { id: 'links', label: 'Payment links', hint: payLinks.length ? `${payLinks.filter(l => l.active).length} active` : 'Sell a product or a fixed price by link' },
               { id: 'reports', label: 'Reports', hint: 'Sales and statement · CSV and PDF' },
               { id: 'activity', label: 'Activity log', hint: 'Who billed, refunded, settled' },
             ] },
@@ -1030,6 +1043,14 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
           taxId={receiptFor ? (stores.find(st => st.id === storeOf(receiptFor)) ?? stores.find(st => st.isDefault))?.taxId ?? null : null}
           address={receiptFor ? (stores.find(st => st.id === storeOf(receiptFor)) ?? stores.find(st => st.isDefault))?.address ?? null : null}
           refundedAmount={receiptFor ? refundedOf(receiptFor.id) : 0} />
+      ))}
+      {level('counters', (
+        <CountersScreen open={stack.includes('counters')} onBack={back} counters={counters} stores={stores} staff={staffList} payments={raw}
+          handle={handle} storeName={storeName} onChanged={reloadCounters} onSeePayments={c => navigate(`/biz/payments?counter=${encodeURIComponent(c.name)}`)} />
+      ))}
+      {level('links', (
+        <PayLinksScreen open={stack.includes('links')} onBack={back} links={payLinks} counters={counters} payments={raw}
+          handle={handle} storeName={storeName} onChanged={reloadLinks} />
       ))}
       {level('help', (
         <HelpScreen open={stack.includes('help')} onBack={back} />

@@ -87,6 +87,7 @@ const LandingPage           = lazyRetry(() => import('./features/landing/Landing
 // lazy-chunk network round-trip on top of the initial page load matters
 // more than shaving bytes off the main bundle.
 import { PayPage } from './features/pay/PayPage'
+import { PayLinkRoute } from './features/pay/PayLinkRoute'
 import { useSettingsStore } from './store/settingsStore'
 import { FeatureGate } from './components/admin/FeatureGate'
 import { RequireUnlockedAccount as Unlocked } from './components/LockedFeature'
@@ -171,7 +172,7 @@ import { LoadingDots } from './components/ui/LoadingDots'
 // a download, then the next). Start both now, alongside the app's own startup.
 try {
   const p = window.location.pathname
-  if (localStorage.getItem('meshport-auth-v4') && !p.startsWith('/paylink') && !p.startsWith(ADMIN_PATH)) {
+  if (localStorage.getItem('meshport-auth-v4') && !p.startsWith('/paylink') && !p.startsWith('/l/') && !p.startsWith(ADMIN_PATH)) {
     import('./features/auth/PasscodeSetup').catch(() => {})
     import('./features/home/HomePage').catch(() => {})
   }
@@ -424,6 +425,8 @@ const router = createBrowserRouter([
   // Merchant payment request (QR / link) - public, no sign-in needed.
   { path: '/paylink/r/:code', element: <AuthShell><UnlockFirst><Unlocked title="Pay"><MerchantPayPage /></Unlocked></UnlockFirst></AuthShell> },
   { path: '/paylink/:username', element: <AuthShell><UnlockFirst><Unlocked title="Pay"><PayPage /></Unlocked></UnlockFirst></AuthShell> },
+  // A business's payment link (28 Nov): /l/<shop>/<link>.
+  { path: '/l/:username/:slug', element: <AuthShell><UnlockFirst><Unlocked title="Pay"><PayLinkRoute /></Unlocked></UnlockFirst></AuthShell> },
   // Old public link paths → /paylink/… (see RenamedPathRedirect).
   { path: '/pay/r/:code', element: <RenamedPathRedirect from="/pay" to="/paylink" /> },
   { path: '/pay/:username', element: <RenamedPathRedirect from="/pay" to="/paylink" /> },

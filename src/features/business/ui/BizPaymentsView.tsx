@@ -11,11 +11,11 @@ import type { Payment, PaymentViaKind } from './types'
 import { PaymentRow } from './OverviewView'
 import { Skeleton } from './primitives'
 
-type Tab = 'all' | 'shop' | 'charge' | 'bill'
+type Tab = 'all' | 'shop' | 'charge' | 'bill' | 'link'
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'all', label: 'All' }, { id: 'shop', label: 'Shop QR' }, { id: 'charge', label: 'Charges' }, { id: 'bill', label: 'Bills' },
+  { id: 'all', label: 'All' }, { id: 'shop', label: 'Shop QR' }, { id: 'charge', label: 'Charges' }, { id: 'bill', label: 'Bills' }, { id: 'link', label: 'Links' },
 ]
-const tabOf = (k: PaymentViaKind | undefined): Tab | null => k === 'shop' ? 'shop' : k === 'charge' ? 'charge' : k === 'bill' ? 'bill' : null
+const tabOf = (k: PaymentViaKind | undefined): Tab | null => k === 'shop' ? 'shop' : k === 'charge' ? 'charge' : k === 'bill' ? 'bill' : k === 'link' ? 'link' : null
 
 type DateRange = 'today' | 'yesterday' | 'week' | 'month' | 'all'
 const DATES: { id: DateRange; label: string }[] = [
@@ -65,13 +65,15 @@ export interface BizPaymentsViewProps {
   onDownload?: () => void
   /** Shown as the date chip's first pick. */
   initialDate?: DateRange
+  /** A counter or store picked to start with (from a counter's page). */
+  initialStore?: string
   header?: ReactNode
 }
 
-export function BizPaymentsView({ loading, payments, onPayment, refundedOf, openOrders, onDownload, initialDate = 'today', header }: BizPaymentsViewProps) {
+export function BizPaymentsView({ loading, payments, onPayment, refundedOf, openOrders, onDownload, initialDate = 'today', initialStore = '', header }: BizPaymentsViewProps) {
   const [tab, setTab] = useState<Tab>('all')
-  const [date, setDate] = useState<DateRange>(initialDate)
-  const [store, setStore] = useState('')
+  const [date, setDate] = useState<DateRange>(initialStore ? 'all' : initialDate)
+  const [store, setStore] = useState(initialStore)
   const [staff, setStaff] = useState('')
   const [via, setVia] = useState('')
   const [q, setQ] = useState('')
@@ -116,7 +118,7 @@ export function BizPaymentsView({ loading, payments, onPayment, refundedOf, open
       {/* Filters */}
       <div className="flex items-center gap-2 px-4 pt-3 overflow-x-auto no-scrollbar">
         <PickChip label="Date" value={date} options={DATES} onChange={v => setDate(v as DateRange)} />
-        {stores.length > 1 && <PickChip label="Counter" value={store} options={[{ id: '', label: 'All counters' }, ...stores.map(s => ({ id: s, label: s }))]} onChange={setStore} />}
+        {stores.length > 0 && <PickChip label="Counter" value={store} options={[{ id: '', label: 'All counters' }, ...stores.map(s => ({ id: s, label: s }))]} onChange={setStore} />}
         {staffList.length > 0 && <PickChip label="Staff" value={staff} options={[{ id: '', label: 'Everyone' }, { id: '_owner', label: 'You' }, ...staffList.map(s => ({ id: s, label: s }))]} onChange={setStaff} />}
         {chains.length > 1 && <PickChip label="Paid via" value={via} options={[{ id: '', label: 'Any network' }, ...chains.map(c => ({ id: c, label: c }))]} onChange={setVia} />}
         <button type="button" aria-label="Search payments" onClick={() => setSearching(s => !s)}
