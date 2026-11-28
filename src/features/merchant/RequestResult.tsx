@@ -184,6 +184,9 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
   const qr = useQr(ended ? null : link)
   const bill = intent.kind === 'invoice'
   const num = intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''
+  // A business's charge has no number (27 Nov): it's named by what it's for.
+  const charge = !bill && intent.personal === false
+  const orderName = bill ? `Bill ${num}` : charge ? (intent.note ? `Charge · ${intent.note}` : 'Charge') : `Request ${num}`
   const d = dueText(intent.dueDate ?? null, !paid)
   const dueShare = dueText(intent.dueDate ?? null, true)
   const valid = intent.expiresAt && !intent.dueDate ? (bill ? '7 days' : validLabel) : 'until paid'
@@ -209,7 +212,7 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
   return (
     <div className="flex flex-col min-h-0 flex-1">
       {!noPerson && <div className="px-5 flex-shrink-0" style={{ paddingTop: isDesktop ? 20 : 4, paddingBottom: 4 }}>
-        <SheetPerson label={`${bill ? 'Bill' : 'Request'} ${num}${billLine && forWho ? ` · for ${forWho}` : ''}`} name={name} username={username} avatar={avatar} onClose={isDesktop ? onClose : undefined} sub={sub} />
+        <SheetPerson label={`${orderName}${billLine && forWho ? ` · for ${forWho}` : ''}`} name={name} username={username} avatar={avatar} onClose={isDesktop ? onClose : undefined} sub={sub} />
       </div>}
       <div className="flex-1 min-h-0 overflow-y-auto" data-no-drag>
         <div className={`flex flex-col items-center text-center px-5 ${open ? 'pt-0.5 pb-3 gap-2.5' : 'pt-3 pb-4 gap-4'}`}>
@@ -238,7 +241,7 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
                 : <QrInfoBox label={bill ? 'Bill amount' : 'Amount'} value={money(intent.amount)} mono={false} />}
               <QrInfoBox label="Pay link" value={copied ? 'Copied' : 'Tap to copy'} mono={false} onCopy={() => void copy(link)} copied={copied} />
             </div>} />}
-          {paid && <QrCard dataUrl={qr} paid title={name} subtitle={`${bill ? 'Bill' : 'Request'} ${num}`} />}
+          {paid && <QrCard dataUrl={qr} paid title={name} subtitle={orderName} />}
           {!open && <Live view={live} />}
           {paid && (paidBy || tx) && (
             <div className="w-full text-left"><DetailList rows={[

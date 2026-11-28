@@ -184,6 +184,7 @@
   --card-soft:   inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px #1A1A1A;
   /* Pastel tiles (quick actions, recent people) and the warm accent. */
   --tile-peach:      #2B1C14;  --tile-peach-ink:  #F0A57C;
+  --tile-sky:        #14243A;  --tile-sky-ink:    #8DB8EA;
   --tile-mint:       #0F2421;  --tile-mint-ink:   #24A193;
   --tile-butter:     #2A2210;  --tile-butter-ink: #E9BC4C;
   --mustard:         #E9BC4C;  --mustard-ink:     #3A2C06;
@@ -265,6 +266,7 @@
   --card-soft:   inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px #1A1A1A;
   /* Pastel tiles (quick actions, recent people) and the warm accent. */
   --tile-peach:      #2B1C14;  --tile-peach-ink:  #F0A57C;
+  --tile-sky:        #14243A;  --tile-sky-ink:    #8DB8EA;
   --tile-mint:       #0F2421;  --tile-mint-ink:   #24A193;
   --tile-butter:     #2A2210;  --tile-butter-ink: #E9BC4C;
   --mustard:         #E9BC4C;  --mustard-ink:     #3A2C06;
@@ -347,6 +349,7 @@
   --card-soft:   0 1px 2px rgba(22,32,30,0.04), 0 8px 20px -12px rgba(22,32,30,0.12);
   /* Pastel tiles (quick actions, recent people) and the warm accent. */
   --tile-peach:      #F8E7DB;  --tile-peach-ink:  #A4532A;
+  --tile-sky:        #E1ECF8;  --tile-sky-ink:    #2F5E93;
   --tile-mint:       #E1EFE9;  --tile-mint-ink:   #12665F;
   --tile-butter:     #F8EDC9;  --tile-butter-ink: #8A6510;
   --mustard:         #E9BC4C;  --mustard-ink:     #3A2C06;

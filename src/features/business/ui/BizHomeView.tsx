@@ -6,12 +6,15 @@
  * needs attention, and the latest payments.
  */
 import React from 'react'
-import { ChevronDown, CreditCard, QrCode, BadgeDollarSign, ReceiptText, Link2, ShoppingBag, Users, ChevronRight } from 'lucide-react'
+import { ChevronDown, CreditCard, QrCode, BadgeDollarSign, ReceiptText, Link2, ShoppingBag, Users, ChevronRight, ArrowDownToLine } from 'lucide-react'
 import type { Payment, ReactNode } from './types'
 import { Skeleton } from './primitives'
 import { PaymentRow } from './OverviewView'
 
 export interface BizHomeQuick { id: string; label: string; icon: React.ElementType; tint: string; onClick: () => void }
+
+/** A titled group of four on Home (27 Nov, like Paytm's Home): "Accept payments", "Manage business", "Money". */
+export interface BizHomeSection { id: string; title: string; onViewAll?: () => void; items: BizHomeQuick[] }
 
 export interface BizHomeAttention { id: string; label: string; onClick: () => void; tone?: 'warning' | 'brand' }
 
@@ -30,6 +33,10 @@ export interface BizHomeViewProps {
   onPayLink?: () => void
   /** Staff: their own quick row in place of Show QR / Charge / Bill / Pay link. */
   quick?: BizHomeQuick[]
+  /** Titled sections in place of the quick row and the money card (the owner's Home). */
+  sections?: BizHomeSection[]
+  /** Today / Yesterday / 7 days on the sales card, in place of the period button. */
+  periodTabs?: { id: string; label: string; on: boolean; onPick: () => void }[]
   /** The third figure under the sales (default Open orders). */
   third?: { value: string | number; label: string; onClick?: () => void }
   /** Staff: no money card (balances stay with the owner). */
@@ -73,8 +80,18 @@ export function BizHomeView(p: BizHomeViewProps) {
       <div className="mx-5">
         <div className={`${card} p-4`} style={{ boxShadow: 'var(--glass-card)' }}>
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[13px] font-semibold text-text-muted">{p.periodLabel === 'Today' ? "Today's sales" : `Sales · ${p.periodLabel}`}</p>
-            {p.onPeriod && (
+            {p.periodTabs ? (
+              <div className="flex gap-1.5" role="tablist" aria-label="Sales for">
+                {p.periodTabs.map(t => (
+                  <button key={t.id} type="button" role="tab" aria-selected={t.on} onClick={t.onPick}
+                    className="h-[30px] px-3 rounded-full text-[12.5px] font-bold border"
+                    style={t.on ? { background: 'var(--brand)', color: '#fff', borderColor: 'transparent' } : { background: 'var(--surface)', color: 'var(--text-muted)', borderColor: 'var(--border)' }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            ) : <p className="text-[13px] font-semibold text-text-muted">{p.periodLabel === 'Today' ? "Today's sales" : `Sales · ${p.periodLabel}`}</p>}
+            {p.onPeriod && !p.periodTabs && (
               <button type="button" onClick={p.onPeriod} aria-label="Change period"
                 className="inline-flex items-center gap-1 min-h-[28px] px-2.5 rounded-full bg-surface border border-border text-xs font-semibold text-text-secondary active:bg-border/30">
                 {p.periodLabel} <ChevronDown className="size-3.5" />
@@ -104,7 +121,26 @@ export function BizHomeView(p: BizHomeViewProps) {
       </div>
 
       {/* Ways to get paid */}
-      {(() => {
+      {p.sections && p.sections.map(sec => (
+        <div key={sec.id} className="mx-5">
+          <div className="flex items-baseline justify-between mb-2 px-0.5">
+            <p className="text-[16px] font-bold text-text-primary">{sec.title}</p>
+            {sec.onViewAll && <button type="button" onClick={sec.onViewAll} className="text-[13px] font-semibold text-brand-text active:opacity-70">View all</button>}
+          </div>
+          <div className={`${card} grid grid-cols-4 gap-1 px-1.5 py-3`}>
+            {sec.items.map(q => (
+              <button key={q.id} type="button" onClick={q.onClick} className="flex flex-col items-center gap-1.5 py-1 rounded-xl active:scale-[0.97] transition-transform">
+                <span className="inline-flex items-center justify-center size-[44px] rounded-[14px]" style={{ background: `var(--tile-${q.tint})`, color: `var(--tile-${q.tint}-ink)` }}>
+                  <q.icon className="size-[20px]" />
+                </span>
+                <span className="text-[11.5px] font-semibold text-text-primary text-center leading-tight">{q.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {!p.sections && (() => {
         const items: BizHomeQuick[] = p.quick ?? [
           { id: 'qr', icon: QrCode, label: 'Show QR', tint: 'mint', onClick: () => p.onQr?.() },
           { id: 'charge', icon: BadgeDollarSign, label: 'Charge', tint: 'butter', onClick: () => p.onCharge?.() },
@@ -119,7 +155,7 @@ export function BizHomeView(p: BizHomeViewProps) {
       })()}
 
       {/* Money */}
-      {!p.hideMoney && <div className="mx-5">
+      {!p.hideMoney && !p.sections && <div className="mx-5">
         <div className={`${card} p-3.5`}>
           <button type="button" onClick={p.onMoney} className="w-full flex items-center justify-between gap-3 text-left active:opacity-70">
             <span className="text-[13px] font-semibold text-text-muted">{p.availableLabel ?? 'Available'}</span>
@@ -150,7 +186,7 @@ export function BizHomeView(p: BizHomeViewProps) {
               <button key={a.id} type="button" onClick={a.onClick}
                 className={`${card} shrink-0 flex items-center gap-2 px-3 py-2 text-[12.5px] font-semibold active:scale-[0.97] transition-transform`}
                 style={{ color: a.tone === 'warning' ? 'var(--warning-text)' : 'var(--text-primary)' }}>
-                {a.id === 'orders' ? <ShoppingBag className="size-4" /> : <Users className="size-4" />}
+                {a.id === 'orders' ? <ShoppingBag className="size-4" /> : a.id === 'arriving' ? <ArrowDownToLine className="size-4" /> : <Users className="size-4" />}
                 {a.label}
                 <ChevronRight className="size-3.5 opacity-60" />
               </button>

@@ -295,6 +295,12 @@ export type MerchantPayment = {
   screenFlag?: string | null
   /** What its order was (bill, request, Shop QR), when known. */
   orderKind?: OrderKind | null
+  /** What a charge or bill was for (its note), when it had one. */
+  purpose?: string | null
+  /** The staff member (auth uid) who took it, when staff did. */
+  staffUid?: string | null
+  /** The order's own number for refunds and support (even a Shop QR's); never its name. */
+  reference?: string | null
 }
 
 /** A direct deposit that matched more than one open order - the merchant picks. */
@@ -514,10 +520,14 @@ export async function adminListOrderPayments(intentId: string): Promise<Merchant
  * instead of showing no sales.
  */
 export async function listMyPayments(limit = 500, opts: { strict?: boolean } = {}): Promise<MerchantPayment[]> {
+  // Test build only (VITE_E2E): sample payments for screenshots - compiled out of the app.
+  if (import.meta.env.VITE_E2E === '1') {
+    try { if (localStorage.getItem('meshport_e2e_business') === '1') return e2eSamplePayments() } catch { /* storage off */ }
+  }
   const uid = await myAuthUid()
   if (!uid) return []
   // Payments on my own orders (mp_select_own), via the intent_id foreign key.
-  const { data, error } = await supabase.from('merchant_payments').select('*, merchant_payment_intents!inner(merchant_auth_uid, kind, via, personal)')
+  const { data, error } = await supabase.from('merchant_payments').select('*, merchant_payment_intents!inner(merchant_auth_uid, kind, via, personal, note, created_by_staff, order_number)')
     .eq('merchant_payment_intents.merchant_auth_uid', uid).order('created_at', { ascending: false }).limit(limit)
   if (error && opts.strict) throw new Error(error.message || 'Could not load payments')
   return (data ?? []).map(mapPayment)
@@ -533,6 +543,9 @@ function mapPayment(r: any): MerchantPayment {
     orderNumber: orderKind === 'shop' ? null : r.order_number ?? null, matchedBy: r.matched_by ?? null,
     late: r.late === true, screenFlag: r.screen_flag ?? null,
     orderKind,
+    purpose: r.merchant_payment_intents?.note ?? null,
+    staffUid: r.merchant_payment_intents?.created_by_staff ?? null,
+    reference: r.merchant_payment_intents?.order_number ?? r.order_number ?? null,
   }
 }
 
@@ -886,4 +899,17 @@ export async function setAutoConvert(enabled: boolean): Promise<AutoConvert> {
   const { data, error } = await supabase.rpc('merchant_auto_convert_set', { p_enabled: enabled })
   if (error) throw new Error(error.message)
   return mapAuto(data)
+}
+
+/** Test build only: a morning's payments of each kind (Shop QR, charge, bill, other network). */
+function e2eSamplePayments(): MerchantPayment[] {
+  const at = (h: number, m: number) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString() }
+  const base = { intentId: '', txHash: '0x' + '4be1'.padEnd(64, '0'), method: 'qr', status: 'collected' as PaymentStage, matchedBy: 'customer' as const, staffUid: null }
+  return [
+    { ...base, id: 'e1', chain: 'Arc_Testnet', from: '0x1111111111111111111111111111111111111111', amount: 12.5, customerUsername: 'riya', createdAt: at(14, 14), orderNumber: null, orderKind: 'shop', purpose: null, reference: 'ORD-100131' },
+    { ...base, id: 'e2', chain: 'Base_Sepolia', from: '0x8f3a00000000000000000000000000000000a21c', amount: 4, customerUsername: null, createdAt: at(13, 52), orderNumber: null, orderKind: 'shop', purpose: null, reference: 'ORD-100130' },
+    { ...base, id: 'e3', chain: 'Arc_Testnet', from: '0x2222222222222222222222222222222222222223', amount: 15, customerUsername: 'arjun', createdAt: at(13, 30), orderNumber: 'ORD-100129', orderKind: 'merchant_request', purpose: 'Haircut', reference: 'ORD-100129' },
+    { ...base, id: 'e4', chain: 'Arc_Testnet', from: '0x3333333333333333333333333333333333333333', amount: 12.29, customerUsername: 'meera', createdAt: at(12, 5), orderNumber: 'ORD-100124', orderKind: 'bill', purpose: null, reference: 'ORD-100124' },
+    { ...base, id: 'e5', chain: 'Arc_Testnet', from: '0x4444444444444444444444444444444444444444', amount: 20, customerUsername: 'kiran', createdAt: at(11, 40), orderNumber: 'ORD-100120', orderKind: 'merchant_request', purpose: 'Weekly veg box', reference: 'ORD-100120' },
+  ]
 }

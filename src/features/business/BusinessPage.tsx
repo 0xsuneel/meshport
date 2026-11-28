@@ -24,13 +24,15 @@ import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
 import { copyToClipboard } from '@/lib/utils'
 import { useArcAssets } from './useArcAssets'
+import { QrCode, BadgeDollarSign, ReceiptText, Link2, UserRound, Store as StoreIcon, Users, BarChart2, Wallet, Banknote, Send, ArrowDownToLine } from 'lucide-react'
+import type { PaymentVia } from './ui/types'
 import { getBusinessAlerts, saveBusinessAlerts, alertsSummary, hourLabel, WEEKDAYS, DEFAULT_ALERTS, type BusinessAlerts } from '@/lib/businessAlerts'
 import { useAuthStore, useWalletStore, useNotificationStore, useChatUnreadStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { listMyPayments, listMyIntents, isAskedOrder, listChainReceipts, subscribeMerchantPayments, subscribeChainReceipts, createPaymentRequest, displayOrderNumber, orderTitle, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
-import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
+import { listStores, listStaff, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
 import { StorePicker } from '@/features/merchant/StorePicker'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, spokenLine, MIN_AMOUNTS } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockSigner } from './settlement'
@@ -56,7 +58,7 @@ import { bridgeScope } from '@/lib/walletConfirm'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton } from '@/components/ui/DesktopHistoryPanel'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
-  BusinessHeader, SetupBanner, BizHomeView, BizBalanceView, SummarySheet, LockedHubView, PaymentsView, PaymentDetailSheet, PaymentRow,
+  BusinessHeader, SetupBanner, BizHomeView, BizBalanceView, BizPaymentsView, SummarySheet, LockedHubView, PaymentsView, PaymentDetailSheet, PaymentRow,
   SettlementsView, SettleProgressSheet, VoiceSheet, RefundSheet, TrendChip,
   DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, ScreenLevel, PushLayer, useHubShift,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
@@ -227,6 +229,9 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
   useEffect(() => { if (tab !== 'payments') setPayView('payments') }, [tab])
   const [payFilter, setPayFilter] = useState<'all' | 'refunded'>('all')
   useEffect(() => { listStores().then(setStores).catch(() => {}) }, [])
+  // Staff names, for who took a payment (payments name the staff member).
+  const [staffNames, setStaffNames] = useState<Map<string, string>>(new Map())
+  useEffect(() => { listStaff().then(l => setStaffNames(new Map(l.filter(s => s.authUid).map(s => [s.authUid!, `${s.username}.arc`])))).catch(() => {}) }, [])
   const reloadIntents = useCallback(() => { listMyIntents(500).then(setIntents).catch(() => setIntents(l => l ?? [])) }, [])
   useEffect(reloadIntents, [raw.length, tab, reloadIntents])
   // The picked store, else the main store (also after its store was removed).
@@ -269,19 +274,35 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
   // Payers' profile photos (MeshPort users), looked up once.
   const avatars = useUserAvatars(storeRaw.map(p => p.customerUsername))
   // A payment on another chain is "to settle" while that chain still holds USDC.
+  // How a payment was collected - what the business sees instead of an
+  // order number (27 Nov, like Paytm): Shop QR · counter, Charge · what for,
+  // Bill #N (a bill is a document), or a direct transfer.
+  const storeNameOf = (p: MerchantPayment) => stores.length > 1 ? stores.find(st => st.id === storeOf(p))?.name ?? null : null
+  const viaOf = (p: MerchantPayment): PaymentVia => {
+    const st = storeNameOf(p)
+    switch (p.orderKind) {
+      case 'shop': return { kind: 'shop', tag: 'Shop QR', detail: st }
+      case 'merchant_request': return { kind: 'charge', tag: 'Charge', detail: p.purpose || st }
+      case 'bill': return { kind: 'bill', tag: p.orderNumber ? `Bill ${displayOrderNumber(p.orderNumber)}` : 'Bill', detail: p.purpose || st }
+      case 'request': return { kind: 'request', tag: 'Request', detail: p.purpose }
+      default: return { kind: 'transfer', tag: p.method === 'own_transfer' ? 'Your transfer' : 'Direct', detail: st }
+    }
+  }
   const toRow = (p: MerchantPayment): Payment => ({
+    via: viaOf(p), store: stores.find(st => st.id === storeOf(p))?.name ?? null,
+    staff: p.staffUid ? staffNames.get(p.staffUid) ?? 'Staff' : null, reference: p.reference ?? null,
     avatar: p.customerUsername ? avatars.get(p.customerUsername.toLowerCase().replace(/\.arc$/, '')) ?? null : null,
     id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain), chainLogo: chainLogoSrc(p.chain),
-    time: p.createdAt, order: p.orderNumber ? displayOrderNumber(p.orderNumber) : undefined, wallet: p.from, late: !!p.late, blocked: !!p.screenFlag,
+    time: p.createdAt, order: p.orderKind === 'bill' && p.orderNumber ? displayOrderNumber(p.orderNumber) : undefined, wallet: p.from, late: !!p.late, blocked: !!p.screenFlag,
     status: refundedIds.has(p.id) ? 'refunded' as const
       : p.chain !== 'Arc_Testnet' && p.status !== 'collected' && waitingOn.has(p.chain) ? 'to_settle' as const : 'received' as const,
     partlyRefunded: !refundedIds.has(p.id) && refundedOf(p.id) > 0 ? money(refundedOf(p.id)) : undefined,
   })
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
-  const payments: Payment[] = useMemo(() => periodRaw.map(toRow), [periodRaw, chains, refundedOf, refundedIds, avatars])
+  const payments: Payment[] = useMemo(() => periodRaw.map(toRow), [periodRaw, chains, refundedOf, refundedIds, avatars, stores, staffNames])
   // Payments screen: every payment, grouped by day (Today, Yesterday… headers).
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
-  const payList: Payment[] = useMemo(() => storeRaw.map(toRow), [storeRaw, chains, refundedOf, refundedIds, avatars])
+  const payList: Payment[] = useMemo(() => (root === 'payments' ? raw : storeRaw).map(toRow), [root, raw, storeRaw, chains, refundedOf, refundedIds, avatars, stores, staffNames])
 
   const today = useMemo(() => {
     const t = netOf(periodRaw)
@@ -715,6 +736,31 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
             <BizHomeView loading={!loaded} banner={banner} periodLabel={period.label} onPeriod={() => setPeriodSheet(true)}
               total={money(today.total)} trend={<TrendChip pct={trend} compare={period.compareLabel} />}
               stats={{ count: today.count, average: money(today.average), openOrders: pending ? pending.count : null }}
+              // Like Paytm's Home (27 Nov): Today / Yesterday / 7 days on the sales
+              // card, then titled groups of four with View all.
+              periodTabs={(['today', 'yesterday', 'week'] as const).map(id => ({ id, label: id === 'today' ? 'Today' : id === 'yesterday' ? 'Yesterday' : '7 days',
+                on: period.id === id, onPick: () => choosePeriod({ id, from: '', to: '' }) }))}
+              third={{ value: stores.length > 1 ? money(today.onArc) : money(arcBalance), label: 'Ready to cash out', onClick: () => navigate('/biz/balance') }}
+              sections={[
+                { id: 'accept', title: 'Accept payments', onViewAll: () => navigate('/biz/account'), items: [
+                  { id: 'qr', icon: QrCode, label: 'Show QR', tint: 'mint', onClick: () => { setCollectStart('qr'); open('receive')() } },
+                  { id: 'charge', icon: BadgeDollarSign, label: 'Charge', tint: 'butter', onClick: () => { setCollectStart('charge'); open('receive')() } },
+                  { id: 'bill', icon: ReceiptText, label: 'Bill', tint: 'peach', onClick: () => { setCollectStart('bill'); open('receive')() } },
+                  { id: 'link', icon: Link2, label: 'Pay link', tint: 'sky', onClick: sharePayLink },
+                ] },
+                { id: 'manage', title: 'Manage business', onViewAll: () => navigate('/biz/account'), items: [
+                  { id: 'customers', icon: UserRound, label: terms.customers, tint: 'sky', onClick: () => navigate('/biz/customers') },
+                  { id: 'stores', icon: StoreIcon, label: terms.stores, tint: 'mint', onClick: open('team') },
+                  { id: 'staff', icon: Users, label: 'Staff', tint: 'butter', onClick: open('team') },
+                  { id: 'reports', icon: BarChart2, label: 'Reports', tint: 'peach', onClick: open('reports') },
+                ] },
+                { id: 'money', title: 'Money', onViewAll: () => navigate('/biz/balance'), items: [
+                  { id: 'balance', icon: Wallet, label: 'Balance', tint: 'mint', onClick: () => navigate('/biz/balance') },
+                  { id: 'cashout', icon: Banknote, label: 'Cash out', tint: 'butter', onClick: open('cashout') },
+                  { id: 'paystaff', icon: Send, label: 'Pay staff', tint: 'peach', onClick: open('payouts') },
+                  { id: 'move', icon: ArrowDownToLine, label: 'Move to Arc', tint: 'sky', onClick: () => navigate('/biz/balance') },
+                ] },
+              ]}
               onOpenOrders={openOrders}
               onQr={() => { setCollectStart('qr'); open('receive')() }}
               onCharge={() => { setCollectStart('charge'); open('receive')() }}
@@ -725,6 +771,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
               onMove={() => beginSettle()} onMoney={() => navigate('/biz/balance')}
               onCashOut={open('cashout')} onPayStaff={open('payouts')}
               attention={[
+                ...(settle.total > 0 ? [{ id: 'arriving', label: `${money(settle.total)} arriving from other networks · Move`, tone: 'brand' as const, onClick: () => beginSettle() }] : []),
                 ...(pending && pending.count > 0 ? [{ id: 'orders', label: `${pending.count} open ${pending.count === 1 ? terms.order.toLowerCase() : terms.orders.toLowerCase()}`, onClick: openOrders }] : []),
                 ...(pendingCredit > 0 ? [{ id: 'credit', label: `${money(pendingCredit)} owed by ${terms.customers.toLowerCase()}`, tone: 'warning' as const, onClick: () => navigate('/biz/customers') }] : []),
               ]}
@@ -767,13 +814,13 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
               {/* Payments and Settlements open from Overview (See all, the settle
                   bar, the menu) and come back with the arrow - no tab bar. */}
               <header className={`header-row gap-3 px-5 ${isDesktop ? 'pt-0' : 'pt-header'} pb-header`}>
-                {!subRoot && <button type="button" aria-label="Back to overview" onClick={closeSub} className="back-btn">
+                {(!subRoot || payView === 'requests') && <button type="button" aria-label="Back" onClick={subRoot ? () => setPayView('payments') : closeSub} className="back-btn">
                   <ArrowLeft className="w-5 h-5 text-text-primary" />
                 </button>}
-                <h1 className="header-title">{subRoot ? 'Payments' : tab === 'payments' ? `Manage ${terms.orders.toLowerCase()}` : 'Manage money'}</h1>
+                <h1 className="header-title">{subRoot ? (payView === 'requests' ? 'Waiting to be paid' : 'Payments') : tab === 'payments' ? `Manage ${terms.orders.toLowerCase()}` : 'Manage money'}</h1>
                 {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name}</span>}
               </header>
-              {tab === 'payments' && <div className="px-5 pt-2">
+              {tab === 'payments' && !subRoot && <div className="px-5 pt-2">
                 <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Orders or payments">
                   {([['requests', terms.orders], ['payments', 'Payments']] as const).map(([id, label]) => (
                     <button key={id} type="button" role="tab" aria-selected={payView === id} onClick={() => setPayView(id)}
@@ -786,8 +833,11 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
               <div className="flex-1 min-h-0 overflow-y-auto" style={subRoot ? bodyPad : panelPad}>
                 {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} mainStoreId={mainStoreId}
                   storeName={storeName} storeNameOf={i => stores.find(st => st.id === (i.storeId ?? mainStoreId))?.name ?? null} paymentsOf={i => paymentsByIntent.get(i.id) ?? []} refundedOf={p => refundedOf(p.id)} onRefund={refundFromOrder} />}
-                {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter}
-                  loading={!loaded} payments={payList} onPayment={setDetail} />}
+                {tab === 'payments' && payView === 'payments' && (subRoot
+                  ? <BizPaymentsView loading={!loaded} payments={payList} onPayment={setDetail} refundedOf={refundedOf}
+                      initialDate={period.id === 'yesterday' ? 'yesterday' : period.id === 'week' ? 'week' : period.id === 'month' ? 'month' : 'today'}
+                      openOrders={pending ? { count: pending.count, onOpen: () => setPayView('requests') } : undefined} onDownload={open('reports')} />
+                  : <PaymentsView key={payFilter} initialFilter={payFilter} loading={!loaded} payments={payList} onPayment={setDetail} />)}
                 {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out"
                   action={<span className="flex gap-2 shrink-0">
                     <button type="button" onClick={open('payouts')} className="min-h-[40px] px-3.5 rounded-xl border border-border bg-card text-text-primary text-[13px] font-semibold active:bg-border/30">Pay staff</button>
@@ -821,6 +871,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
         wallet={rawDetail && !rawDetail.customerUsername && rawDetail.method !== 'own_transfer' ? rawDetail.from : undefined}
         onCopyWallet={rawDetail ? () => { void copyToClipboard(rawDetail.from).then(ok => toast(ok ? 'Address copied' : 'Could not copy', ok ? 'success' : 'error')) } : undefined}
         customer={detailCustomer} store={rawDetail && stores.length ? stores.find(st => st.id === storeOf(rawDetail))?.name : undefined}
+        via={detail?.via ? [detail.via.tag, detail.via.detail].filter(Boolean).join(' · ') : undefined} staff={detail?.staff ?? undefined} reference={detail?.reference ?? undefined}
         onChat={rawDetail?.customerUsername ? () => { const u = rawDetail.customerUsername!; setDetail(null); void openChat(u) } : undefined}
         refunds={detailRefunds.map(r => ({ id: r.id, amount: money(r.amount), reason: r.reason, when: r.createdAt, chainLabel: chainLabel(r.chain),
           txUrl: explorerTxUrl(r.route === 'chain' ? r.chain : 'Arc_Testnet', r.txHash) ?? undefined }))}

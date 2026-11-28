@@ -24,7 +24,7 @@ export function cleanRequestAmount(raw: string, places = 6): string {
 }
 
 export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Request', busyText = 'Requesting…', places = 6,
-  ariaLabel = 'Amount to request in USDC', options, onCancel, onSubmit }: {
+  ariaLabel = 'Amount to request in USDC', options, onCancel, onSubmit, recentNotes }: {
   /** Reset to a blank form whenever this turns true. */
   open: boolean
   isDesktop: boolean
@@ -45,6 +45,8 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
   onCancel?: () => void
   /** Creates the request; throws with a message to show. */
   onSubmit: (amount: number, note: string) => Promise<void>
+  /** What recent charges were for - tap one to use it again (Business). */
+  recentNotes?: string[]
 }) {
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
@@ -120,6 +122,15 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
           onKeyDown={e => { if (e.key === 'Enter') noteRef.current?.blur() }}
           enterKeyHint="done"
           className={sheetInputClass} style={sheetInputStyle} />
+        {!compact && recentNotes && recentNotes.length > 0 && (
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mt-1 flex-shrink-0" aria-label="Recent">
+            {recentNotes.map(n => (
+              <button key={n} type="button" onClick={() => setNote(n)}
+                className="shrink-0 h-8 px-3 rounded-full text-[12.5px] font-semibold border"
+                style={note === n ? { background: 'var(--brand)', color: '#fff', borderColor: 'transparent' } : { background: 'var(--bg)', color: 'var(--text-secondary)', borderColor: 'var(--border)' }}>{n}</button>
+            ))}
+          </div>
+        )}
 
         {options && (!compact || more) && (
           <button type="button" onClick={() => setMore(m => !m)} aria-expanded={more}

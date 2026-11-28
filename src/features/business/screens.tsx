@@ -184,6 +184,11 @@ export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo, s
 
 type CollectTab = 'qr' | 'charge' | 'bill'
 
+// What recent charges were for ("Haircut", "Delivery") - tap to reuse.
+const PURPOSES_KEY = 'meshport_charge_purposes'
+const recentPurposes = (): string[] => { try { const v = JSON.parse(localStorage.getItem(PURPOSES_KEY) || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string').slice(0, 6) : [] } catch { return [] } }
+const rememberPurpose = (n: string) => { const v = n.trim(); if (!v) return; try { localStorage.setItem(PURPOSES_KEY, JSON.stringify([v, ...recentPurposes().filter(x => x.toLowerCase() !== v.toLowerCase())].slice(0, 6))) } catch { /* storage off */ } }
+
 /** "@Priya.arc " → "priya" (what the customer field holds). */
 const cleanUsername = (v: string) => v.trim().replace(/^@/, '').replace(/\.arc$/i, '').toLowerCase()
 
@@ -312,7 +317,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   // An order made: the title names it ("Bill #124 · Cutting Edge") in place
   // of the store switch, and the order screen drops its own person row.
   const heading = isDesktop ? undefined : intent
-    ? <BusinessTitle business={storeName} avatar={avatar} line={[`${intent.kind === 'invoice' ? 'Bill' : 'Request'} ${intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''}`.trim(),
+    ? <BusinessTitle business={storeName} avatar={avatar} line={[intent.kind === 'invoice' ? `Bill ${intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''}`.trim() : intent.note ? `Charge · ${intent.note}` : 'Charge',
         intent.kind === 'invoice' && intent.customerUsername ? `for ${cleanUsername(intent.customerUsername)}.arc` : null, outlet].filter(Boolean).join(' · ')} />
     : businessHeading(storeName, avatar, only === 'charge' ? 'Charge' : only === 'bill' ? 'Bill' : shopQr?.handle ?? 'Collect payment', storePick)
   const head = (compact: boolean) => (
@@ -408,7 +413,8 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
             {canBill && customerInput(`${t.customer} (optional)`, chat ? 'A MeshPort user - the request goes into your chat with them.' : 'A MeshPort user - they get it in their notifications.')}
           </>,
         }}
-        onSubmit={async (amount, note) => { await create({ amount, note: note || undefined, expiresInMinutes: Number(expiry) || null }, 'charge') }} />
+        recentNotes={open ? recentPurposes() : undefined}
+        onSubmit={async (amount, note) => { await create({ amount, note: note || undefined, expiresInMinutes: Number(expiry) || null }, 'charge'); rememberPurpose(note) }} />
     )
   }
 
@@ -583,8 +589,9 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
                 : undefined
               return (
                 <RequestRow key={i.id} kind={i.kind} status={status} amount={money(i.amount)} badges={badges} note={note}
-                  title={i.note || (i.kind === 'invoice' ? 'Bill' : i.via === 'shop_qr' ? 'Shop QR' : 'Payment request')}
-                  sub={[i.orderNumber && displayOrderNumber(i.orderNumber), status === 'part' && `${money(i.received)} received`, i.customerUsername && `${i.customerUsername}.arc`,
+                  title={i.kind === 'invoice' ? (i.note || 'Bill') : i.via === 'shop_qr' ? 'Shop QR' : i.note ? `Charge · ${i.note}` : 'Charge'}
+                  // Only a bill shows its number (a document); a charge is named by what it's for.
+                  sub={[i.kind === 'invoice' && i.orderNumber && `Bill ${displayOrderNumber(i.orderNumber)}`, status === 'part' && `${money(i.received)} received`, i.customerUsername && `${i.customerUsername}.arc`,
                     new Date(i.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })].filter(Boolean).join(' · ')}
                   expanded={openId === i.id} onToggle={() => setOpenId(openId === i.id ? null : i.id)}
                   actions={[

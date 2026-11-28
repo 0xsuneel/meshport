@@ -56,13 +56,13 @@ export function orderTitle(kind: OrderKind, number: string | null | undefined, o
   if (opts.received) {
     if (kind === 'bill') return `Bill ${no} Received`
     if (kind === 'shop') return shopReceivedTitle(opts.business)
-    if (kind === 'merchant_request') return opts.short ? `Requested ${no} Received` : `Requested ${no} Payment Received`
+    if (kind === 'merchant_request') return opts.short ? 'Charge Received' : 'Charge Payment Received'
     return opts.short ? `Request ${no} Received` : `Request ${no} Amount Received`
   }
-  const sep = opts.short ? ' · ' : ' '
   if (kind === 'bill') return opts.paid ? `Paid Bill ${no}` : `Bill ${no}`
   if (kind === 'shop') return 'Shop Payment'
-  if (kind === 'merchant_request') return opts.paid ? `Requested Payment Paid${sep}${no}` : opts.short ? `Requested ${no}` : `Requested Payment ${no}`
+  // A business's charge (27 Nov): named by what it's for, never a number.
+  if (kind === 'merchant_request') return opts.paid ? 'Payment Request Paid' : 'Payment Request'
   return opts.paid ? (opts.short ? `Request Paid · ${no}` : `Request Amount Paid ${no}`) : `Request ${no}`
 }
 

@@ -32,6 +32,8 @@ export function PayerAvatar({ payment, size }: { payment: Payment; size: number 
   )
 }
 
+const VIA_TINT = { shop: 'mint', charge: 'butter', bill: 'peach', request: 'sky', transfer: 'sky' } as const
+
 export function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payment) => void }) {
   const tag = payment.status === 'to_settle' ? ' · to settle' : payment.status === 'refunded' ? ' · refunded' : payment.partlyRefunded ? ` · partly refunded ${payment.partlyRefunded}` : ''
   return (
@@ -45,12 +47,22 @@ export function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p
       <PayerAvatar payment={payment} size={36} />
       <span className="flex-1 min-w-0">
         <span className="block text-sm font-medium text-text-primary truncate">{payment.from}</span>
-        <span className="block text-xs text-text-muted truncate">
-          {payment.chainLabel}{payment.order ? ` · ${payment.order}` : ''} · {formatTime(payment.time)}{tag}
-        </span>
+        {payment.via ? (
+          // How it was collected, not an order number (27 Nov): "Shop QR · Main
+          // counter", "Charge · Haircut", "Bill #124 · 3 items".
+          <span className="flex items-center gap-1.5 text-xs text-text-muted min-w-0">
+            <span className="shrink-0 text-[10.5px] font-bold px-1.5 py-px rounded-md" style={{ background: `var(--tile-${VIA_TINT[payment.via.kind]})`, color: `var(--tile-${VIA_TINT[payment.via.kind]}-ink)` }}>{payment.via.tag}</span>
+            <span className="truncate">{[payment.via.detail, formatTime(payment.time)].filter(Boolean).join(' · ')}{tag}</span>
+          </span>
+        ) : (
+          <span className="block text-xs text-text-muted truncate">
+            {payment.chainLabel}{payment.order ? ` · ${payment.order}` : ''} · {formatTime(payment.time)}{tag}
+          </span>
+        )}
       </span>
-      <span className={`shrink-0 text-sm font-semibold tabular-nums ${payment.status === 'refunded' ? 'text-text-muted line-through' : 'text-brand-text'}`}>
-        +{payment.amount}
+      <span className="shrink-0 text-right">
+        <span className={`block text-sm font-semibold tabular-nums ${payment.status === 'refunded' ? 'text-text-muted line-through' : 'text-brand-text'}`}>+{payment.amount}</span>
+        {payment.via && <span className="block text-[11px] text-text-muted">{payment.chainLabel === 'Arc' ? 'Arc' : `${payment.chainLabel} → Arc`}</span>}
       </span>
     </button>
   )

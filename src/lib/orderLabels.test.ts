@@ -32,13 +32,13 @@ describe('orderTitle', () => {
     expect(orderTitle('bill', 'ORD-100042', { paid: true })).toBe('Paid Bill #42')
     expect(orderTitle('request', 'ORD-100043')).toBe('Request #43')
     expect(orderTitle('request', 'ORD-100043', { paid: true })).toBe('Request Amount Paid #43')
-    expect(orderTitle('merchant_request', 'ORD-100044')).toBe('Requested Payment #44')
-    expect(orderTitle('merchant_request', 'ORD-100044', { paid: true })).toBe('Requested Payment Paid #44')
+    expect(orderTitle('merchant_request', 'ORD-100044')).toBe('Payment Request')
+    expect(orderTitle('merchant_request', 'ORD-100044', { paid: true })).toBe('Payment Request Paid')
   })
   it('receiver side says Received', () => {
     expect(orderTitle('bill', 'ORD-100042', { received: true })).toBe('Bill #42 Received')
     expect(orderTitle('request', 'ORD-100043', { received: true })).toBe('Request #43 Amount Received')
-    expect(orderTitle('merchant_request', 'ORD-100044', { received: true })).toBe('Requested #44 Payment Received')
+    expect(orderTitle('merchant_request', 'ORD-100044', { received: true })).toBe('Charge Payment Received')
     expect(orderTitle('request', 'ORD-100043', { received: true, short: true })).toBe('Request #43 Received')
     expect(paidTitleFromTag({ number: 'ORD-100042', kind: 'bill' }, false, true)).toBe('Bill #42 Received')
     expect(paidTitleFromTag({ number: 'ORD-100042', kind: null }, false, true)).toBe('#42 Received')
@@ -49,9 +49,9 @@ describe('orderTitle', () => {
     expect(orderTitle('bill', 'ORD-100042', { received: true, short: true })).toBe('Bill #42 Received')
     expect(orderTitle('request', 'ORD-100043', { short: true })).toBe('Request #43')
     expect(orderTitle('request', 'ORD-100043', { paid: true, short: true })).toBe('Request Paid · #43')
-    expect(orderTitle('merchant_request', 'ORD-100044', { short: true })).toBe('Requested #44')
-    expect(orderTitle('merchant_request', 'ORD-100044', { paid: true, short: true })).toBe('Requested Payment Paid · #44')
-    expect(orderTitle('merchant_request', 'ORD-100044', { received: true, short: true })).toBe('Requested #44 Received')
+    expect(orderTitle('merchant_request', 'ORD-100044', { short: true })).toBe('Payment Request')
+    expect(orderTitle('merchant_request', 'ORD-100044', { paid: true, short: true })).toBe('Payment Request Paid')
+    expect(orderTitle('merchant_request', 'ORD-100044', { received: true, short: true })).toBe('Charge Received')
     expect(paidTitleFromTag({ number: 'ORD-100042', kind: null }, true, true)).toBe('#42 Received')
     expect(paidTitleFromTag({ number: 'ORD-100042', kind: null }, true)).toBe('Paid #42')
     expect(orderTitle('bill', 'A1B2C3', { short: true })).toBe('Bill A1B2C3')
@@ -71,7 +71,7 @@ describe('payment tags', () => {
     const t = parsePaymentOrderTag(msg)!
     expect(t).toMatchObject({ number: 'ORD-100042', kind: 'bill' })
     expect(paidTitleFromTag(t)).toBe('Paid Bill #42')
-    expect(paidTitleFromTag(parsePaymentOrderTag('Sent 3 USDC to bob.arc · Requested #ORD-100044')!)).toBe('Requested Payment Paid #44')
+    expect(paidTitleFromTag(parsePaymentOrderTag('Sent 3 USDC to bob.arc · Requested #ORD-100044')!)).toBe('Payment Request Paid')
   })
   it('older "Order #" payments read "Paid #…"', () => {
     const t = parsePaymentOrderTag('Sent 3 USDC to bob.arc · Order #ORD-100042')!

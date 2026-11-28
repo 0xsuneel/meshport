@@ -23,7 +23,17 @@ export interface Payment {
   partlyRefunded?: string
   /** The payer's profile photo (MeshPort users who have one) */
   avatar?: string | null
+  /** How it was collected (27 Nov) - what the business sees instead of an
+   *  order number: Shop QR, a charge (by what it was for), a bill, a transfer. */
+  via?: PaymentVia
+  /** Store / counter, staff member and the reference (refunds, support). */
+  store?: string | null
+  staff?: string | null
+  reference?: string | null
 }
+
+export type PaymentViaKind = 'shop' | 'charge' | 'bill' | 'request' | 'transfer'
+export interface PaymentVia { kind: PaymentViaKind; tag: string; detail?: string | null }
 
 export interface Chain {
   id: string

@@ -41,6 +41,12 @@ export interface PaymentDetailSheetProps {
   /** Payer's full wallet when they have no MeshPort account (Copy address) */
   wallet?: string
   onCopyWallet?: () => void
+  /** How it was collected ("Shop QR · Main counter", "Charge · Haircut"). */
+  via?: string
+  /** The staff member who took it. */
+  staff?: string
+  /** Reference for refunds and support - never the payment's name. */
+  reference?: string
 }
 
 // Customer card + round actions (designs 4 and 3): who paid and how often,
@@ -73,8 +79,9 @@ function RoundAction({ label, onClick, href, tone = 'brand', children }: {
 }
 
 export function PaymentDetailSheet({
-  payment: paymentNow, explorerUrl, onClose, onSettle, onRefund, onReceipt, refundNote, refunds = [], refundTotals, customer, onChat, store, wallet, onCopyWallet,
+  payment: paymentNow, explorerUrl, onClose, onSettle, onRefund, onReceipt, refundNote, refunds = [], refundTotals, customer, onChat, store, wallet, onCopyWallet, via, staff, reference,
 }: PaymentDetailSheetProps) {
+  const [refCopied, setRefCopied] = React.useState(false)
   // Still drawn while the sheet slides away (it went empty as it closed).
   const payment = useLatched(paymentNow)
   const isRefunded = payment?.status === 'refunded'
@@ -174,6 +181,14 @@ export function PaymentDetailSheet({
 
           {/* Details */}
           <div className="grid grid-cols-2 gap-2.5">
+            {via && <div className="col-span-2"><Tile label="Collected via" value={via} /></div>}
+            {staff && <Tile label="Taken by" value={staff} />}
+            {reference && (
+              <button type="button" className="text-left" aria-label="Copy reference number"
+                onClick={() => { void navigator.clipboard?.writeText(reference).then(() => { setRefCopied(true); setTimeout(() => setRefCopied(false), 1500) }).catch(() => {}) }}>
+                <Tile label={refCopied ? 'Copied' : 'Reference no. · tap to copy'} value={reference} mono />
+              </button>
+            )}
             <Tile label="Network" value={payment.chainLabel} />
             {store ? <Tile label="Store" value={store} /> : <Tile label="Amount" value={payment.amount} />}
             <Tile label="Date" value={new Date(payment.time).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })} />
