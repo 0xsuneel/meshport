@@ -152,6 +152,17 @@ export async function staffRefunds(owner: string): Promise<MerchantRefund[]> {
     txHash: r.tx_hash, createdAt: r.created_at, chain: r.refund_chain ?? 'Arc_Testnet', route: r.route ?? 'contract' }))
 }
 
+/** Payments to the business's username or address in the last 15 minutes
+ *  (28 Nov): they count for the business, not a store, but every store's
+ *  staff see them so a cashier can confirm one. Never in a store's totals. */
+export async function staffBusinessPayments(owner: string): Promise<MerchantPayment[]> {
+  const { data, error } = await supabase.rpc('staff_business_payments', { p_owner: owner })
+  fail(error)
+  return (data ?? []).map((r: any) => ({ id: r.id, intentId: '', chain: r.source_chain, txHash: r.tx_hash, from: r.from_address, amount: Number(r.amount),
+    method: '', status: 'confirmed', customerUsername: r.customer_username, createdAt: r.created_at, orderNumber: null, matchedBy: null,
+    late: false, screenFlag: null }))
+}
+
 export async function staffPayments(owner: string): Promise<MerchantPayment[]> {
   const { data, error } = await supabase.rpc('staff_payments', { p_owner: owner, p_limit: 500 })
   fail(error)

@@ -8,7 +8,7 @@ import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { useEffect, useMemo, useState } from 'react'
 import { useUIStore } from '@/store'
 import { chainLogoSrc } from '@/lib/chainLogos'
-import { myMemberships, acceptInvite, staffCreateRequest, staffPayments, staffRefunds, type Membership } from '@/lib/businessTeam'
+import { myMemberships, acceptInvite, staffCreateRequest, staffPayments, staffBusinessPayments, staffRefunds, type Membership } from '@/lib/businessTeam'
 import type { MerchantRefund } from '@/lib/merchantRefunds'
 import { ChevronRight, ClipboardList, FileText, QrCode, BadgeDollarSign, ReceiptText, ListChecks } from 'lucide-react'
 import { myAuthUid, type MerchantPayment } from '@/lib/merchantPay'
@@ -34,6 +34,9 @@ export function StaffModePage() {
   const [list, setList] = useState<Membership[] | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [raw, setRaw] = useState<MerchantPayment[]>([])
+  // Paid to the business's username or address (not this store): shown so
+  // the cashier can confirm it, never counted in this store's sales.
+  const [bizWide, setBizWide] = useState<MerchantPayment[]>([])
   const [screen, setScreen] = useState<'qr' | 'receive' | 'payments' | 'requests' | 'statement' | null>(null)
   const [me, setMe] = useState<string | null>(null)
   // The counters this staff member is added to (only theirs are visible to them).
@@ -64,15 +67,23 @@ export function StaffModePage() {
   const active = list?.find(m => m.id === activeId && m.status === 'active') ?? null
   useEffect(() => {
     if (!active) return
-    const get = () => staffPayments(active.ownerAuthUid).then(setRaw).catch(() => {})
+    const get = () => {
+      void staffPayments(active.ownerAuthUid).then(setRaw).catch(() => {})
+      void staffBusinessPayments(active.ownerAuthUid).then(setBizWide).catch(() => setBizWide([]))
+    }
     void get()
     const t = setInterval(get, 15_000)
     return () => clearInterval(t)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
   }, [active?.id])
 
-  const payments: Payment[] = useMemo(() => raw.map(p => ({ id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain),
-    chainLogo: chainLogoSrc(p.chain), time: p.createdAt, late: !!p.late, blocked: !!p.screenFlag, status: 'received' as const })), [raw])
+  const payments: Payment[] = useMemo(() => {
+    const mine = new Set(raw.map(p => p.id))
+    const row = (p: MerchantPayment, order?: string): Payment => ({ id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain),
+      chainLogo: chainLogoSrc(p.chain), time: p.createdAt, late: !!p.late, blocked: !!p.screenFlag, status: 'received' as const, ...(order ? { order } : {}) })
+    const business = bizWide.filter(p => !mine.has(p.id)).map(p => row(p, `Paid to ${active?.ownerName ?? 'the business'} (business)`))
+    return [...raw.map(p => row(p)), ...business].sort((a, b) => Date.parse(b.time) - Date.parse(a.time))
+  }, [raw, bizWide, active?.ownerName])
   const today = raw.filter(p => new Date(p.createdAt).toDateString() === new Date().toDateString())
   const total = today.reduce((s, p) => s + p.amount, 0)
   // Like the owner's hub: the home (and the bottom tab bar) parallaxes left
