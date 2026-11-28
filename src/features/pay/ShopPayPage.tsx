@@ -105,6 +105,22 @@ export function ShopPayPage({ shop, initialAmount, wallet, counterId = null, lin
   const short = useMediaQuery('(max-height: 820px)') && !isDesktop
   const toast = useUIStore(s => s.showToastMessage)
   const signedIn = useAuthStore(s => s.isAuthenticated)
+  // Signed in to MeshPort, a shop is paid on the normal pay screen, shown as
+  // the business (28 Nov, as UPI apps do) - this page is for paying from
+  // outside MeshPort (another wallet or network). Its store and counter go
+  // along. Not a payment link (a product page), not the owner's own page.
+  const myWallet = useAuthStore(s => s.walletAddress)
+  const toPayScreen = signedIn && !link && !!wallet && /^0x[0-9a-fA-F]{40}$/.test(wallet)
+    && (!myWallet || myWallet.toLowerCase() !== wallet.toLowerCase())
+  useEffect(() => {
+    if (!toPayScreen || !wallet) return
+    const q = new URLSearchParams({ to: `${shop.username}|${wallet}|${shopTitle(shop)}|${shop.avatarUrl ?? ''}` })
+    if (shop.storeId) q.set('store', shop.storeId)
+    if (counterId) q.set('counter', counterId)
+    if (initialAmount && Number(initialAmount) > 0) q.set('amount', String(Number(initialAmount)))
+    navigate(`/pay?${q}`, { replace: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the shop is known
+  }, [toPayScreen])
   // The same Arc USDC balance the pay screen shows (kept per wallet by the store).
   const balance = useWalletStore(s => s.balance)
   const fixed = link?.info.amount ?? null
@@ -180,6 +196,9 @@ export function ShopPayPage({ shop, initialAmount, wallet, counterId = null, lin
       setBusy(false)
     }
   }
+
+  // Off to the pay screen (above) - nothing to show meanwhile.
+  if (toPayScreen) return null
 
   return (
     <div className="h-full flex flex-col bg-bg">

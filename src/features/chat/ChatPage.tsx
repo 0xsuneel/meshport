@@ -2749,12 +2749,45 @@ export function ChatConversationPage() {
   // amount + token are fixed and the payment is linked to that bill.
   // number = the order number (ORD-…); older requests fall back to the code.
   const [billPay, setBillPay] = useState<{ code: string; number: string; orderNumber: string | null; amount: number; kind: OrderKind } | null>(null)
+  // Paying a business in its chat (28 Nov, as on the pay screen): USDC only,
+  // and Pay quietly opens a Shop QR order for the amount, so the payment
+  // carries it and the business gets it at once.
+  const [chatBiz, setChatBiz] = useState<string | null>(null)
+  const [chatBizOrder, setChatBizOrder] = useState<{ code: string; amount: number } | null>(null)
+  useEffect(() => {
+    setChatBiz(null); setChatBizOrder(null)
+    const u: string | undefined = otherUser?.username
+    if (!u || otherUser?.account_type === 'personal') return
+    let live = true
+    import('@/lib/shop').then(({ getShopInfo }) => getShopInfo(String(u).replace(/\.arc$/i, ''), null))
+      .then(s => { if (live && s?.verified) { setChatBiz(s.username); setPayToken('USDC') } }).catch(() => {})
+    return () => { live = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only on the listed values
+  }, [otherUser?.username])
   // Paying an order in USDC: the order rides along on-chain (Arc memo).
-  const chatOrderMemo = () => billPay && payToken === 'USDC' ? { code: billPay.code, label: displayOrderNumber(billPay.number) } : null
+  const chatOrderMemo = () => payToken !== 'USDC' ? null
+    : billPay ? { code: billPay.code, label: displayOrderNumber(billPay.number) }
+    : chatBizOrder && chatBizOrder.amount === (parseFloat(payAmount) || 0) ? { code: chatBizOrder.code, label: 'Shop Payment' }
+    : null
+  /** The business's order for `n` (null: pay without one - still counted
+   *  by the server; false: outside the shop's limits, the reason shown). */
+  const openChatBizOrder = async (n: number): Promise<{ code: string; label: string } | null | false> => {
+    if (!chatBiz || billPay || payToken !== 'USDC') return null
+    if (chatBizOrder && chatBizOrder.amount === n) return { code: chatBizOrder.code, label: 'Shop Payment' }
+    try {
+      const { supabase } = await import('@/lib/supabase')
+      const { data, error } = await supabase.rpc('shop_open_order', { p_username: chatBiz, p_amount: n })
+      if (error) return /smallest payment|largest payment/i.test(error.message) ? (setPayError(error.message), false) : null
+      setChatBizOrder({ code: String(data), amount: n })
+      return { code: String(data), label: 'Shop Payment' }
+    } catch { return null }
+  }
   // Set when the pay sheet was opened from a personal payment link card; an
   // amount in the link is fixed (the requester set it).
   const [linkPay, setLinkPay] = useState<{ username: string; amount: string | null } | null>(null)
   const payLocked = !!billPay || !!linkPay?.amount
+  // A business takes USDC: just the token, no menu.
+  const payTokenFixed = payLocked || !!chatBiz
   // BUG FIX (2026-09-17): the confirm sheet used to hardcode "Network Fee:
   // Free" as a static label - never computed anything, just always showed
   // that regardless of token. Every send has a real, if tiny, gas cost
@@ -3888,11 +3921,12 @@ export function ChatConversationPage() {
         counterparty: payTo, txHash, failure: classifyFailure(err, { reverted: !!txHash }),
         metadata: { toUsername: otherUser?.username || undefined, ...(billPay?.orderNumber ? { merchantOrder: billPay.orderNumber, merchantOrderKind: billPay.kind === 'bill' ? 'invoice' : 'request', merchantPersonal: billPay.kind === 'bill' ? undefined : billPay.kind === 'request' } : {}) },
       })).catch(() => {})
+      const memoNow = chatOrderMemo()
       const result = await (payToken === 'EURC'
         ? sendEURC({ signer: activeSigner, to: payTo, amount: numAmount, idempotencyKey })
         : payToken === 'cirBTC'
         ? sendCirBTC({ signer: activeSigner, to: payTo, amount: numAmount, idempotencyKey })
-        : sendUSDC({ signer: activeSigner, to: payTo, amount: numAmount, idempotencyKey, memo: chatOrderMemo() })
+        : sendUSDC({ signer: activeSigner, to: payTo, amount: numAmount, idempotencyKey, memo: memoNow })
       ).catch((e: unknown) => { noteFailed(e); throw e })
 
       // The send now waits for the real receipt (waitForConfirmation in
@@ -3922,6 +3956,13 @@ export function ChatConversationPage() {
           console.error('[Chat] order payment confirm failed:', e)
           showToastMessage(errorText(e, 'Could not confirm the order payment'), 'error')
         })
+      }
+
+      // A business paid in its chat: the payment goes to its order.
+      if (!billPay && memoNow && result.txHash) {
+        const code = memoNow.code
+        import('@/lib/merchantPay').then(({ submitPayment }) => submitPayment(code, ARC_CHAIN_KEY, result.txHash, { amount: numAmount }))
+          .catch(e => console.warn('[Chat] business payment submit failed (counted by the server later):', e))
       }
 
       // Save contact payment note so both sender and receiver see it in Activity
@@ -4409,7 +4450,7 @@ export function ChatConversationPage() {
     setPayStep('closed'); setPayPassEntry(''); setShowAmountPad(false)
   }
   // The token chip (USDC / EURC / cirBTC) with its menu; just the token when the amount is fixed.
-  const renderPayTokenPicker = () => payLocked ? (
+  const renderPayTokenPicker = () => payTokenFixed ? (
                     <span className="text-sm font-bold text-text-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       <TokenLogo token={payToken} size={20} />{payToken}
                     </span>
@@ -4432,10 +4473,12 @@ export function ChatConversationPage() {
                     </div>
                   )
   // Pay on the amount step: on to Review + passcode (and start preparing the payment).
-  const startPayConfirm = () => {
+  const startPayConfirm = async () => {
     const n = parseFloat(payAmount)
     if (!n || n <= 0) { setPayError('Enter a valid amount'); return }
     if (payInsufficient) { setPayError('Insufficient balance'); return }
+    const bizMemo = await openChatBizOrder(n)
+    if (bizMemo === false) return
     setShowAmountPad(false)
     setPayPassEntry('')
     setPayStep('confirm')
@@ -4455,7 +4498,7 @@ export function ChatConversationPage() {
       const idemKey = chatPayIdempotencyKeyRef.current.key
       import('@/lib/arcService').then(({ preparePayment }) => preparePayment({
         token: payToken === 'EURC' || payToken === 'cirBTC' ? payToken : 'USDC',
-        from: fromAddr, to: toAddr, amount: n, idempotencyKey: idemKey, memo: chatOrderMemo(),
+        from: fromAddr, to: toAddr, amount: n, idempotencyKey: idemKey, memo: bizMemo ?? chatOrderMemo(),
       })).catch(() => {})
     }
   }

@@ -349,6 +349,8 @@ export function PaySendPage() {
       const shop = await getShopInfo(username, merchantStoreId).catch(() => null)
       if (cancelled || !shop?.verified) return
       setBiz(shop)
+      // A business takes USDC.
+      setToken('USDC'); setShowTokenPicker(false)
       // Named as the business, its logo; an address entered for it shows the business too.
       setRecipient(cur => cur && cur.walletAddress === r.walletAddress
         ? { ...cur, isUsername: true, display: `${shop.username}.arc`, displayName: shopTitle(shop), avatarUrl: shop.avatarUrl ?? cur.avatarUrl } : cur)
@@ -1583,7 +1585,7 @@ export function PaySendPage() {
                 symbol={tokenSymbolChar(token)}
                 tokenPicker={
                   <div className="flex-shrink-0" style={{ position: 'relative', zIndex: showTokenPicker ? 41 : undefined }}>
-                    <button onClick={e => { e.stopPropagation(); if (!merchantPayCode) setShowTokenPicker(v => !v) }}
+                    <button onClick={e => { e.stopPropagation(); if (!merchantPayCode && !biz) setShowTokenPicker(v => !v) }}
                       aria-expanded={showTokenPicker} className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full flex-shrink-0 active:opacity-70"
                       style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
                       {/* BUG FIX: this badge hardcoded the USDC "$" glyph +
@@ -1595,7 +1597,7 @@ export function PaySendPage() {
                           badges below). */}
                       <TokenLogo token={token} size={20} />
                       <span className="text-sm font-bold text-text-primary">{token}</span>
-                      {!merchantPayCode && <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)', transform: showTokenPicker ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>}
+                      {!merchantPayCode && !biz && <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)', transform: showTokenPicker ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>}
                     </button>
                     <AnimatePresence>
                       {showTokenPicker && (
