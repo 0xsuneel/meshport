@@ -592,7 +592,7 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
                 : undefined
               return (
                 <RequestRow key={i.id} kind={i.kind} status={status} amount={money(i.amount)} badges={badges} note={note}
-                  title={i.kind === 'invoice' ? (i.note || 'Bill') : i.via === 'shop_qr' ? 'Shop QR' : i.note ? `Charge · ${i.note}` : 'Charge'}
+                  title={i.kind === 'invoice' ? (i.note || 'Bill') : i.via === 'shop_qr' ? (i.direct ? 'Direct payment' : 'Shop QR') : i.note ? `Charge · ${i.note}` : 'Charge'}
                   // Named by what it's for - the Order ID is in its details.
                   sub={[status === 'part' && `${money(i.received)} received`, i.customerUsername && `${i.customerUsername}.arc`,
                     new Date(i.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })].filter(Boolean).join(' · ')}
@@ -995,7 +995,7 @@ export function ReceiptScreen({ open, onBack, storeName, handle, payment, refund
   if (!payment) return <BusinessScreen open={false} title="Receipt" onBack={onBack}>{null}</BusinessScreen>
   const from = payment.customerUsername ? `${payment.customerUsername}.arc` : `${payment.from.slice(0, 6)}…${payment.from.slice(-4)}`
   // What it paid: "Bill", "Payment Request", a Shop QR payment.
-  const forWhat = payment.orderKind === 'shop' ? 'Shop QR payment'
+  const forWhat = payment.orderKind === 'shop' ? (payment.direct ? 'Direct payment' : 'Shop QR payment')
     : payment.orderKind ? orderTitle(payment.orderKind, null, { short: true }) : undefined
   const card = (printable: boolean) => (
     <ReceiptCard storeName={storeName} handle={handle} avatar={avatar} outlet={outlet} taxId={taxId} amount={money(payment.amount)} from={from}

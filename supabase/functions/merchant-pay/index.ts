@@ -434,10 +434,17 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   // Already counted (idempotent: same answer, never a second credit).
   // (Per merchant: one tx can pay two different merchants.)
   const merchantWallet = String(i.merchant_wallet).toLowerCase()
-  const { data: dup } = await db.from('merchant_payments').select('intent_id').eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', merchantWallet).maybeSingle()
+  const { data: dup } = await db.from('merchant_payments').select('id, intent_id').eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', merchantWallet).maybeSingle()
   if (dup) {
-    if (dup.intent_id !== i.id) return { error: 'This transaction was already used for another payment.', status: 409 }
-    return { ok: true, duplicate: true }
+    if (dup.intent_id === i.id) return { ok: true, duplicate: true }
+    // Counted as a direct payment (no order fitted when it arrived) - it
+    // belongs to this order after all: it moves here (not if it was refunded).
+    const { data: prev } = await db.from('merchant_payment_intents').select('id, direct').eq('id', dup.intent_id).maybeSingle()
+    const { data: refunded } = await db.from('merchant_refunds').select('id').eq('payment_id', dup.id).limit(1)
+    if (!prev?.direct || i.direct || refunded?.length) return { error: 'This transaction was already used for another payment.', status: 409 }
+    const { error: delErr } = await db.from('merchant_payments').delete().eq('id', dup.id)
+    if (delErr) return { error: 'This transaction was already used for another payment.', status: 409 }
+    await db.from('merchant_payment_intents').delete().eq('id', prev.id)
   }
 
   // Confirm against the order: the order number must be this request's,
@@ -783,6 +790,7 @@ async function readOpenOrders(): Promise<OpenOrders> {
   const dayAgoIso = new Date(dayAgo).toISOString()
   const { data: open, error } = await db.from('merchant_payment_intents').select('*')
     .in('status', ['pending', 'partially_paid', 'expired', 'cancelled'])
+    .eq('direct', false)
     .gt('created_at', new Date(Date.now() - 30 * 86400_000).toISOString())
     .or(`and(status.eq.cancelled,updated_at.gt."${dayAgoIso}"),and(status.eq.cancelled,updated_at.is.null,created_at.gt."${dayAgoIso}"),and(status.neq.cancelled,expires_at.is.null),and(status.neq.cancelled,expires_at.gt."${dayAgoIso}")`)
   if (error) throw new Error(`open orders read failed: ${error.message}`)

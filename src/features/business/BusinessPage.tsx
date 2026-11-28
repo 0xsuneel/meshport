@@ -302,7 +302,8 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
     const st = counter ?? storeNameOf(p)
     if (p.linkId) return { kind: 'link', tag: 'Link', detail: payLinks.find(l => l.id === p.linkId)?.title ?? p.purpose }
     switch (p.orderKind) {
-      case 'shop': return { kind: 'shop', tag: 'Shop QR', detail: st }
+      // Paid to the business's username or wallet address: no QR, still a sale.
+      case 'shop': return p.direct ? { kind: 'transfer', tag: 'Direct', detail: st } : { kind: 'shop', tag: 'Shop QR', detail: st }
       case 'merchant_request': return { kind: 'charge', tag: 'Charge', detail: p.purpose || st }
       case 'bill': return { kind: 'bill', tag: 'Bill', detail: p.purpose || st }
       case 'request': return { kind: 'request', tag: 'Request', detail: p.purpose }
@@ -389,7 +390,7 @@ function OwnerBusinessPage({ root }: { root: BusinessRoot }) {
     const start = new Date(); start.setHours(0, 0, 0, 0)
     const list = storeRaw.filter(p => p.method !== 'own_transfer' && Date.parse(p.createdAt) >= start.getTime())
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    const where = (p: MerchantPayment) => p.orderKind === 'shop' ? 'Shop QR'
+    const where = (p: MerchantPayment) => p.orderKind === 'shop' ? (p.direct ? 'Direct' : 'Shop QR')
       : p.orderKind ? orderTitle(p.orderKind, null, { short: true })
       : p.chain !== 'Arc_Testnet' ? `from ${chainLabel(p.chain)}` : 'Payment'
     return {

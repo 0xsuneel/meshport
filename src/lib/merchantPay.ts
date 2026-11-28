@@ -268,6 +268,8 @@ export type MerchantIntent = {
   storeId?: string | null
   /** 'shop_qr' = opened by a customer from the Shop QR (open amount). */
   via?: string | null
+  /** Paid straight to the business's username or wallet - no QR, no order (28 Nov). */
+  direct?: boolean
   /** Pay by this local date (YYYY-MM-DD); null = no due date. */
   dueDate?: string | null
   reminderCount?: number
@@ -306,6 +308,9 @@ export type MerchantPayment = {
   linkId?: string | null
   /** A link payer's name and phone (when the link asked). */
   payerName?: string | null
+  /** Paid straight to the business's username or wallet address (28 Nov):
+   *  counted like a Shop QR payment, shown as "Direct". */
+  direct?: boolean
 }
 
 /** A direct deposit that matched more than one open order - the merchant picks. */
@@ -362,7 +367,7 @@ export function mapIntent(r: any): MerchantIntent {
     customerUsername: r.customer_username, customerWallet: r.customer_wallet, status: expired ? 'expired' : r.status,
     sourceChain: r.source_chain, paymentMethod: r.payment_method, createdAt: r.created_at, expiresAt: r.expires_at, paidAt: r.paid_at,
     kind: r.kind === 'invoice' ? 'invoice' : 'request', personal: typeof r.personal === 'boolean' ? r.personal : null,
-    completedByMerchant: !!r.completed_by_merchant, completedNote: r.completed_note ?? null, storeId: r.store_id ?? null, via: r.via ?? null,
+    completedByMerchant: !!r.completed_by_merchant, completedNote: r.completed_note ?? null, storeId: r.store_id ?? null, via: r.via ?? null, direct: r.direct === true,
     dueDate: r.due_date ?? null, reminderCount: Number(r.reminder_count) || 0, lastRemindedAt: r.last_reminded_at ?? null,
     overpaid: Number(r.overpaid_amount) > 0 ? Number(r.overpaid_amount) : 0,
     taxPercent: Number(r.tax_percent) || 0, createdByStaff: r.created_by_staff ?? null,
@@ -535,7 +540,7 @@ export async function listMyPayments(limit = 500, opts: { strict?: boolean } = {
   const uid = await myAuthUid()
   if (!uid) return []
   // Payments on my own orders (mp_select_own), via the intent_id foreign key.
-  const { data, error } = await supabase.from('merchant_payments').select('*, merchant_payment_intents!inner(merchant_auth_uid, kind, via, personal, note, created_by_staff, order_number, counter_id, link_id, payer_name)')
+  const { data, error } = await supabase.from('merchant_payments').select('*, merchant_payment_intents!inner(merchant_auth_uid, kind, via, personal, note, created_by_staff, order_number, counter_id, link_id, payer_name, direct)')
     .eq('merchant_payment_intents.merchant_auth_uid', uid).order('created_at', { ascending: false }).limit(limit)
   if (error && opts.strict) throw new Error(error.message || 'Could not load payments')
   return (data ?? []).map(mapPayment)
@@ -557,6 +562,7 @@ function mapPayment(r: any): MerchantPayment {
     counterId: r.merchant_payment_intents?.counter_id ?? null,
     linkId: r.merchant_payment_intents?.link_id ?? null,
     payerName: r.merchant_payment_intents?.payer_name ?? null,
+    direct: r.merchant_payment_intents?.direct === true,
   }
 }
 
